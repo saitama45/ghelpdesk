@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, reactive } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import { useConfirm } from '@/Composables/useConfirm';
@@ -27,6 +27,7 @@ const zoomLevel = ref(1);
 const isDragging = ref(false);
 const startPan = ref({ x: 0, y: 0 });
 const panOffset = ref({ x: 0, y: 0 });
+const failedImages = reactive(new Set());
 
 const openImageViewer = (attachment) => {
     currentImage.value = attachment;
@@ -38,6 +39,10 @@ const openImageViewer = (attachment) => {
 const closeImageViewer = () => {
     showImageViewer.value = false;
     currentImage.value = null;
+};
+
+const handleImageError = (attachmentId) => {
+    failedImages.add(attachmentId);
 };
 
 const handleZoom = (delta) => {
@@ -308,10 +313,13 @@ const formatFileSize = (bytes) => {
                                 <div v-if="comment.attachments && comment.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     <div v-for="attachment in comment.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
                                         <!-- Image Preview -->
-                                        <div v-if="isImage(attachment.file_name)" 
+                                        <div v-if="isImage(attachment.file_name) && !failedImages.has(attachment.id)" 
                                              class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
                                              @click="openImageViewer(attachment)">
-                                            <img :src="getThumbnailUrl(attachment)" class="object-cover w-full h-32" :alt="attachment.file_name">
+                                            <img :src="getThumbnailUrl(attachment)" 
+                                                 class="object-cover w-full h-32" 
+                                                 :alt="attachment.file_name"
+                                                 @error="handleImageError(attachment.id)">
                                             <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all flex items-center justify-center">
                                                 <svg class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
                                             </div>
@@ -339,14 +347,32 @@ const formatFileSize = (bytes) => {
                                 <div class="mb-1 text-sm text-gray-500">
                                     Attachments uploaded separately
                                 </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                    <div v-for="attachment in ticket.attachments.filter(a => !a.comment_id)" :key="attachment.id" class="border border-gray-200 rounded p-2 hover:bg-gray-50 transition">
-                                        <div class="flex flex-col items-center text-center space-y-1">
-                                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    <div v-for="attachment in ticket.attachments.filter(a => !a.comment_id)" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                        <!-- Image Preview -->
+                                        <div v-if="isImage(attachment.file_name) && !failedImages.has(attachment.id)" 
+                                             class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
+                                             @click="openImageViewer(attachment)">
+                                            <img :src="getThumbnailUrl(attachment)" 
+                                                 class="object-cover w-full h-32" 
+                                                 :alt="attachment.file_name"
+                                                 @error="handleImageError(attachment.id)">
+                                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all flex items-center justify-center">
+                                                <svg class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Generic File Icon -->
+                                        <div v-else class="h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
+                                            <svg class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                             </svg>
-                                            <span class="text-xs text-gray-600 truncate w-full">{{ attachment.file_name }}</span>
-                                            <span class="text-xs text-gray-400">{{ formatFileSize(attachment.file_size_bytes) }}</span>
+                                            <span class="text-xs text-gray-500 text-center truncate w-full px-2">{{ attachment.file_name }}</span>
+                                        </div>
+
+                                        <!-- File info -->
+                                        <div class="bg-gray-50 px-2 py-1 text-xs border-t border-gray-100 flex justify-between items-center">
+                                            <span class="text-gray-500 truncate w-full">{{ formatFileSize(attachment.file_size_bytes) }}</span>
                                         </div>
                                     </div>
                                 </div>

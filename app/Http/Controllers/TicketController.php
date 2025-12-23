@@ -105,29 +105,47 @@ class TicketController extends Controller
     {
         $data = $request->validated();
         
-        $maxKey = Ticket::max(DB::raw('CAST(ticket_key AS INT)'));
-        $nextKey = ($maxKey ?? 0) + 1;
-        $data['ticket_key'] = (string) $nextKey;
-        $data['reporter_id'] = auth()->id();
+        return DB::transaction(function () use ($data, $request) {
+            // Lock the company record for update to prevent concurrent ticket key generation for the same company
+            $company = Company::where('id', $data['company_id'])->lockForUpdate()->first();
+            $companyCode = $company->code;
 
-        $ticket = Ticket::create($data);
+            // Find the max ticket number for this company
+            $maxNumber = Ticket::where('company_id', $data['company_id'])
+                ->where('ticket_key', 'LIKE', "{$companyCode}-%")
+                ->get(['ticket_key'])
+                ->map(function ($ticket) {
+                    if (preg_match('/-(\d+)$/', $ticket->ticket_key, $matches)) {
+                        return (int) $matches[1];
+                    }
+                    return 0;
+                })
+                ->max();
 
-        // Handle file attachments
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                $fileName = time() . '_' . $file->getClientOriginalName();
-                $filePath = $file->storeAs('ticket-attachments', $fileName, 'public');
-                
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'file_name' => $file->getClientOriginalName(),
-                    'file_storage_path' => $filePath,
-                    'file_size_bytes' => $file->getSize(),
-                ]);
+            $nextNumber = ($maxNumber ?? 0) + 1;
+            
+            $data['ticket_key'] = "{$companyCode}-{$nextNumber}";
+            $data['reporter_id'] = auth()->id();
+
+            $ticket = Ticket::create($data);
+
+            // Handle file attachments
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $file) {
+                    $fileName = time() . '_' . $file->getClientOriginalName();
+                    $filePath = $file->storeAs('ticket-attachments', $fileName, 'public');
+                    
+                    TicketAttachment::create([
+                        'ticket_id' => $ticket->id,
+                        'file_name' => $file->getClientOriginalName(),
+                        'file_storage_path' => $filePath,
+                        'file_size_bytes' => $file->getSize(),
+                    ]);
+                }
             }
-        }
 
-        return redirect()->back()->with('success', 'Ticket created successfully.');
+            return redirect()->back()->with('success', 'Ticket created successfully.');
+        });
     }
 
     /**

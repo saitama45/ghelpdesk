@@ -19,6 +19,7 @@ const props = defineProps({
 const page = usePage();
 const showCreateModal = ref(false);
 const fileInput = ref(null);
+const isSubmitting = ref(false);
 const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
 const { showSuccess, showError } = useToast();
@@ -127,6 +128,9 @@ const handleFileSelect = (event) => {
 };
 
 const createTicket = () => {
+    if (isSubmitting.value) return;
+    isSubmitting.value = true;
+
     const formData = new FormData();
     Object.keys(createForm.data()).forEach(key => {
         if (key === 'attachments') {
@@ -148,6 +152,9 @@ const createTicket = () => {
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
             showError(errorMessage)
+        },
+        onFinish: () => {
+            isSubmitting.value = false;
         }
     });
 };
@@ -429,7 +436,7 @@ const getTypeColor = (type) => {
                         </div>
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
-                            <button type="submit" :disabled="createForm.processing" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all">Create Ticket</button>
+                            <button type="submit" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all">Create Ticket</button>
                         </div>
                     </form>
                 </div>

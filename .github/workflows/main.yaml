@@ -1,10 +1,10 @@
-name: Deploy to Hosting Server
+name: Deploy to SmarterASP.NET
 
 on: [push]
 
 jobs:
   build_and_deploy:
-    name: Build package and deploy to Cloud
+    name: Build package and deploy to SmarterASP.NET
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,19 +16,16 @@ jobs:
           extensions: fileinfo, mbstring, xml, gd, zip
           ini-values: post_max_size=256M, max_execution_time=180
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Install Dependencies
+        shell: powershell
+        run: |
+          if (Test-Path "package.json") { npm install }
+          if (Test-Path "composer.json") { composer install }
 
-      - name: Install Composer Dependencies
-        run: composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
-
-      - name: Install NPM Dependencies
-        run: npm install
-
-      - name: Build Frontend Assets
-        run: npm run build
+      - name: Build Project
+        shell: powershell
+        run: |
+          if (Test-Path "package.json") { npm run build }
 
       # New step to create the storage symbolic link
       - name: Create Storage Link
