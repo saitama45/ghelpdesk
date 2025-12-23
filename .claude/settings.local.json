@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(php artisan route:list:*)",
+      "Bash(php artisan:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(php:*)",
+      "Bash(telnet:*)",
+      "Bash(storage/logs/laravel.log)",
+      "Bash(cat:*)",
+      "Bash(findstr:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
