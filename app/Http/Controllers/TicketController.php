@@ -25,6 +25,11 @@ class TicketController extends Controller
         $user = $request->user();
         $query = Ticket::with(['reporter:id,name', 'assignee:id,name', 'company:id,name']);
 
+        // If user has 'User' role, only show tickets they reported
+        if ($user->hasRole('User')) {
+            $query->where('reporter_id', $user->id);
+        }
+
         // Filter by user's company access - temporarily disable Admin bypass for debugging
         // if ($user->hasRole('Admin')) {
         //     // Admin sees all tickets
@@ -58,7 +63,11 @@ class TicketController extends Controller
         if ($request->filled('status') && $request->status !== 'all') {
             switch ($request->status) {
                 case 'my_tickets':
-                    $query->where('assignee_id', $user->id);
+                    if ($user->hasRole('User')) {
+                        $query->where('reporter_id', $user->id);
+                    } else {
+                        $query->where('assignee_id', $user->id);
+                    }
                     break;
                 case 'unassigned':
                     $query->whereNull('assignee_id');

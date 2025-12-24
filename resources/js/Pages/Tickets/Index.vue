@@ -68,6 +68,7 @@ const filterOptions = [
     { value: 'all', label: 'All' },
     { value: 'my_tickets', label: 'My Tickets' },
     { value: 'open', label: 'Open' },
+    { value: 'in_progress', label: 'In Progress' },
     { value: 'waiting', label: 'Waiting' },
     { value: 'closed', label: 'Closed' },
     { value: 'unassigned', label: 'Unassigned' },
@@ -168,6 +169,10 @@ const formatFileSize = (bytes) => {
 };
 
 const editTicket = (ticket) => {
+    if (!hasPermission('tickets.edit')) {
+        showError('You do not have permission to edit this ticket.');
+        return;
+    }
     router.visit(route('tickets.edit', ticket.id));
 };
 
@@ -307,8 +312,8 @@ const getTypeColor = (type) => {
                         v-for="ticket in data" 
                         :key="ticket.id" 
                         @click="editTicket(ticket)"
-                        class="group hover:bg-blue-50/50 transition-all cursor-pointer border-l-4"
-                        :class="getPriorityBorder(ticket.priority)"
+                        class="group hover:bg-blue-50/50 transition-all border-l-4"
+                        :class="[getPriorityBorder(ticket.priority), hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed']"
                     >
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
                             {{ ticket.ticket_key }}
@@ -352,7 +357,7 @@ const getTypeColor = (type) => {
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
                             <span>{{ new Date(ticket.created_at).toLocaleDateString() }}</span>
                             <!-- Hover instruction -->
-                            <div class="absolute inset-y-0 right-4 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div v-if="hasPermission('tickets.edit')" class="absolute inset-y-0 right-4 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-100 px-2 py-1 rounded">View Details</span>
                             </div>
                         </td>

@@ -97,9 +97,20 @@ const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'in_progress', 'closed', 'waiting'];
 const severities = ['critical', 'major', 'minor', 'cosmetic'];
 
+// Filter available statuses based on permissions
+const availableStatuses = computed(() => {
+    return statuses.filter(status => {
+        if (status === 'closed') {
+            // Allow 'closed' if user has permission OR if ticket is already closed (so they see the correct current status)
+            return hasPermission('tickets.close') || props.ticket.status === 'closed';
+        }
+        return true;
+    });
+});
+
 const updateTicket = () => {
-    if (!hasPermission('tickets.edit')) {
-        showError('You do not have permission to edit tickets.');
+    if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
+        showError('You do not have permission to update tickets.');
         return;
     }
     put(route('tickets.update', props.ticket.id), editForm.data(), {
@@ -234,12 +245,12 @@ const formatFileSize = (bytes) => {
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                            <input v-model="editForm.title" type="text" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-lg font-medium">
+                            <input v-model="editForm.title" type="text" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-lg font-medium disabled:bg-gray-100 disabled:text-gray-500">
                         </div>
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                            <textarea v-model="editForm.description" rows="6" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                            <textarea v-model="editForm.description" rows="6" :disabled="!hasPermission('tickets.edit')" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"></textarea>
                         </div>
                     </div>
 
@@ -385,10 +396,10 @@ const formatFileSize = (bytes) => {
                 <!-- Right Column: Metadata -->
                 <div class="lg:col-span-1 space-y-6">
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-6 sticky top-6">
-                        <fieldset :disabled="!hasPermission('tickets.edit')" class="space-y-6">
+                        <div class="space-y-6">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Company</label>
-                                <select v-model="editForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <select v-model="editForm.company_id" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500">
                                     <option value="">Select Company</option>
                                     <option v-for="company in companies" :key="company.id" :value="company.id">{{ company.name }}</option>
                                 </select>
@@ -396,43 +407,43 @@ const formatFileSize = (bytes) => {
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                                <select v-model="editForm.status" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize">
-                                    <option v-for="s in statuses" :key="s" :value="s">{{ s.replace('_', ' ') }}</option>
+                                <select v-model="editForm.status" :disabled="!hasPermission('tickets.edit') && !hasPermission('tickets.close')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize disabled:bg-gray-100 disabled:text-gray-500">
+                                    <option v-for="s in availableStatuses" :key="s" :value="s">{{ s.replace('_', ' ') }}</option>
                                 </select>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                                <select v-model="editForm.priority" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize">
+                                <select v-model="editForm.priority" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize disabled:bg-gray-100 disabled:text-gray-500">
                                     <option v-for="p in priorities" :key="p" :value="p">{{ p }}</option>
                                 </select>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Severity</label>
-                                <select v-model="editForm.severity" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize">
+                                <select v-model="editForm.severity" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize disabled:bg-gray-100 disabled:text-gray-500">
                                     <option v-for="s in severities" :key="s" :value="s">{{ s }}</option>
                                 </select>
                             </div>
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                                <select v-model="editForm.type" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize">
+                                <select v-model="editForm.type" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize disabled:bg-gray-100 disabled:text-gray-500">
                                     <option v-for="t in types" :key="t" :value="t">{{ t }}</option>
                                 </select>
                             </div>
+                        </div>
 
-                            <div v-if="hasPermission('tickets.assign')">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Assignee</label>
-                                <select v-model="editForm.assignee_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                                    <option value="">Unassigned</option>
-                                    <option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option>
-                                </select>
-                            </div>
-                        </fieldset>
+                        <div v-if="hasPermission('tickets.assign')">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Assignee</label>
+                            <select v-model="editForm.assignee_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Unassigned</option>
+                                <option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option>
+                            </select>
+                        </div>
 
                         <div class="pt-6 border-t space-y-3">
-                             <button v-if="hasPermission('tickets.edit')" type="submit" :disabled="editForm.processing" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all">
+                             <button v-if="hasPermission('tickets.edit') || hasPermission('tickets.assign') || hasPermission('tickets.close')" type="submit" :disabled="editForm.processing" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all">
                                 Save Changes
                             </button>
 
