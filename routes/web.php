@@ -13,13 +13,26 @@ Route::get('/debug-roles', function () {
     return Role::all();
 });
 
-Route::get('/fix-storage', function () {
-    try {
-        Illuminate\Support\Facades\Artisan::call('storage:link');
-        return 'Storage link created successfully!';
-    } catch (\Exception $e) {
-        return 'Error creating storage link: ' . $e->getMessage();
-    }
+Route::get('/debug-storage', function () {
+    $disk = Illuminate\Support\Facades\Storage::disk('public');
+    $path = 'ticket-attachments';
+    $files = $disk->files($path);
+    
+    $debug = [
+        'disk_root' => config('filesystems.disks.public.root'),
+        'disk_url' => config('filesystems.disks.public.url'),
+        'public_path' => public_path(),
+        'storage_path' => storage_path(),
+        'symlink_target' => public_path('storage'),
+        'symlink_exists' => is_link(public_path('storage')),
+        'symlink_target_read' => is_link(public_path('storage')) ? readlink(public_path('storage')) : 'N/A',
+        'directory_exists' => $disk->exists($path),
+        'directory_writable' => is_writable($disk->path($path)),
+        'file_count' => count($files),
+        'latest_files' => array_slice($files, 0, 5),
+    ];
+
+    return $debug;
 });
 
 Route::get('/', function () {
