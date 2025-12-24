@@ -1,10 +1,10 @@
-name: Deploy to SmarterASP.NET
+name: Deploy to Cloud Server
 
 on: [push]
 
 jobs:
   build_and_deploy:
-    name: Build package and deploy to SmarterASP.NET
+    name: Build package and deploy to Cloud Server
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,3 +52,19 @@ jobs:
             **/.git*/**
             **/node_modules/**
             README.md
+
+      - name: Deploy to FTP (GALGATIX)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER_GALGATIX }}
+          username: ${{ secrets.FTP_USERNAME_GALGATIX }}
+          password: ${{ secrets.FTP_PASSWORD_GALGATIX }}
+          protocol: ftp
+          port: 21
+          timeout: 120000
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            README.md
+
