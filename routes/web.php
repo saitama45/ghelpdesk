@@ -9,32 +9,6 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 
-Route::get('/debug-roles', function () {
-    return Role::all();
-});
-
-Route::get('/debug-storage', function () {
-    $disk = Illuminate\Support\Facades\Storage::disk('public');
-    $path = 'ticket-attachments';
-    $files = $disk->files($path);
-    
-    $debug = [
-        'disk_root' => config('filesystems.disks.public.root'),
-        'disk_url' => config('filesystems.disks.public.url'),
-        'public_path' => public_path(),
-        'storage_path' => storage_path(),
-        'symlink_target' => public_path('storage'),
-        'symlink_exists' => is_link(public_path('storage')),
-        'symlink_target_read' => is_link(public_path('storage')) ? readlink(public_path('storage')) : 'N/A',
-        'directory_exists' => $disk->exists($path),
-        'directory_writable' => is_writable($disk->path($path)),
-        'file_count' => count($files),
-        'latest_files' => array_slice($files, 0, 5),
-    ];
-
-    return $debug;
-});
-
 Route::get('/', function () {
     return redirect()->route('login');
 });
@@ -58,5 +32,14 @@ Route::middleware('auth')->group(function () {
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 });
+
+// Fallback route to serve storage files if symlink fails (common on Windows hosting)
+Route::get('/storage/{path}', function ($path) {
+    $fullPath = storage_path('app/public/' . $path);
+    if (!file_exists($fullPath)) {
+        abort(404);
+    }
+    return response()->file($fullPath);
+})->where('path', '.*');
 
 require __DIR__.'/auth.php';
