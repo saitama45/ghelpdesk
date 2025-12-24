@@ -13,6 +13,15 @@ Route::get('/debug-roles', function () {
     return Role::all();
 });
 
+Route::get('/fix-storage', function () {
+    try {
+        Illuminate\Support\Facades\Artisan::call('storage:link');
+        return 'Storage link created successfully!';
+    } catch (\Exception $e) {
+        return 'Error creating storage link: ' . $e->getMessage();
+    }
+});
+
 Route::get('/', function () {
     return redirect()->route('login');
 });
