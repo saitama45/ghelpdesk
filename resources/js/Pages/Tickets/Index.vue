@@ -355,7 +355,7 @@ const getTypeColor = (type) => {
                             </button>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
-                            <span>{{ new Date(ticket.created_at).toLocaleDateString() }}</span>
+                            <span>{{ new Date(ticket.created_at).toLocaleString() }}</span>
                             <!-- Hover instruction -->
                             <div v-if="hasPermission('tickets.edit')" class="absolute inset-y-0 right-4 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-100 px-2 py-1 rounded">View Details</span>

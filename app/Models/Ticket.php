@@ -32,6 +32,11 @@ class Ticket extends Model
         return $this->hasMany(TicketComment::class);
     }
 
+    public function histories()
+    {
+        return $this->hasMany(TicketHistory::class);
+    }
+
     public function attachments()
     {
         return $this->hasMany(TicketAttachment::class);

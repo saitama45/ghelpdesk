@@ -179,7 +179,10 @@ class TicketController extends Controller
             'ticket' => $ticket->load([
                 'comments' => function($query) {
                     $query->with(['user:id,name', 'attachments'])->orderBy('created_at', 'desc');
-                }, 
+                },
+                'histories' => function($query) {
+                    $query->with('user:id,name')->orderBy('changed_at', 'desc');
+                },
                 'attachments', 
                 'reporter', 
                 'assignee', 
@@ -196,10 +199,43 @@ class TicketController extends Controller
     public function update(UpdateTicketRequest $request, Ticket $ticket)
     {
         $validated = $request->validated();
-        foreach ($validated as $key => $value) {
-            $ticket->$key = $value;
+        
+        // Fill the model with validated data but don't save yet
+        $ticket->fill($validated);
+        
+        // Check for changes
+        if ($ticket->isDirty()) {
+            $userId = auth()->id();
+            $dirty = $ticket->getDirty();
+            
+            foreach ($dirty as $column => $newValue) {
+                // Skip internal timestamps
+                if ($column === 'updated_at') continue;
+                
+                $oldValue = $ticket->getOriginal($column);
+                
+                // Resolve names for IDs
+                if ($column === 'company_id') {
+                    $oldValue = \App\Models\Company::find($oldValue)?->name ?? $oldValue;
+                    $newValue = \App\Models\Company::find($newValue)?->name ?? $newValue;
+                } elseif (in_array($column, ['assignee_id', 'reporter_id'])) {
+                    $oldValue = \App\Models\User::find($oldValue)?->name ?? $oldValue;
+                    $newValue = \App\Models\User::find($newValue)?->name ?? $newValue;
+                }
+                
+                // Create history record
+                \App\Models\TicketHistory::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => $userId,
+                    'column_changed' => $column,
+                    'old_value' => (string) $oldValue,
+                    'new_value' => (string) $newValue,
+                    'changed_at' => now(),
+                ]);
+            }
+            
+            $ticket->save();
         }
-        $ticket->save();
 
         return redirect()->back()->with('success', 'Ticket updated successfully.');
     }
