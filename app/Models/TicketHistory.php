@@ -17,6 +17,10 @@ class TicketHistory extends Model
 
     public $timestamps = false; // We manage changed_at manually or via database default
 
+    protected $casts = [
+        'changed_at' => 'datetime',
+    ];
+
     public function ticket()
     {
         return $this->belongsTo(Ticket::class);
