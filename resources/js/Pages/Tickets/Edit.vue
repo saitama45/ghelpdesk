@@ -264,6 +264,21 @@ const formatFileSize = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+const linkify = (text) => {
+    if (!text) return '';
+    const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return escaped.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" class="text-blue-600 hover:underline break-all">${url}</a>`;
+    });
+};
+
 // Combine comments and unlinked attachments for timeline if needed, 
 // but since we link attachments to comments now, we can iterate comments.
 // Unlinked attachments (legacy or direct upload) can be shown at the bottom or top or separately.
@@ -380,7 +395,7 @@ const formatFileSize = (bytes) => {
                                         </div>
                                     </div>
                                     
-                                    <div class="text-gray-700 whitespace-pre-wrap mb-2">{{ activity.comment_text }}</div>
+                                    <div class="text-gray-700 whitespace-pre-wrap mb-2" v-html="linkify(activity.comment_text)"></div>
 
                                     <!-- Comment Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
