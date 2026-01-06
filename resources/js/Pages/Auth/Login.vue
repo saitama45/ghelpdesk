@@ -119,7 +119,7 @@ const submit = () => {
             </div>
 
             <!-- Remember Me & Forgot Password -->
-            <div class="flex items-center justify-between">
+            <!-- <div class="flex items-center justify-between">
                 <label class="flex items-center">
                     <Checkbox name="remember" v-model:checked="form.remember" class="rounded text-blue-600 focus:ring-blue-500" />
                     <span class="ml-2 text-sm text-gray-600">Remember me</span>
@@ -134,7 +134,7 @@ const submit = () => {
                         Forgot your password?
                     </Link>
                 </div>
-            </div>
+            </div> -->
 
             <!-- Submit Button -->
             <div class="pt-4">
