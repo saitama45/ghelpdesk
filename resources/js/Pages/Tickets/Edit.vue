@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
-import { ref, computed, reactive, watch } from 'vue';
+import { ref, computed, reactive, watch, nextTick } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import CustomSelect from '@/Components/CustomSelect.vue';
@@ -93,6 +93,12 @@ const commentForm = useForm({
 
 const commentFileInput = ref(null);
 
+// Inline Editing State
+const isEditingTitle = ref(false);
+const isEditingDescription = ref(false);
+const titleInput = ref(null);
+const descriptionInput = ref(null);
+
 const types = ['bug', 'feature', 'task', 'spike'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'in_progress', 'closed', 'waiting'];
@@ -122,8 +128,21 @@ const activities = computed(() => {
         date: new Date(h.changed_at)
     }));
 
-    // Sort descending (newest first)
-    return [...comments, ...histories].sort((a, b) => b.date - a.date);
+    // Add Description as an activity
+    const description = {
+        id: 'description-' + props.ticket.id,
+        activity_type: 'description',
+        date: new Date(props.ticket.created_at),
+        user: props.ticket.reporter,
+        // We use editForm.description here to reflect local changes in the list view immediately if we wanted,
+        // but sticking to props.ticket.description ensures we show committed state until save.
+        // However, for the 'edit' mode, we bind to editForm.
+        // Let's use the prop for display to be safe.
+        text: props.ticket.description 
+    };
+
+    // Sort ascending (oldest first)
+    return [...comments, ...histories, description].sort((a, b) => a.date - b.date);
 });
 
 const formatColumnName = (column) => {
@@ -141,24 +160,29 @@ const debounce = (fn, delay) => {
     };
 };
 
-const updateTicket = () => {
+const updateTicket = (options = {}) => {
     if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
         showError('You do not have permission to update tickets.');
         return;
     }
     
     // Check if form is dirty to avoid unnecessary requests (optional but good practice)
-    if (!editForm.isDirty) return;
+    if (!editForm.isDirty) {
+        if (options.onSuccess) options.onSuccess();
+        return;
+    }
 
     put(route('tickets.update', props.ticket.id), editForm.data(), {
         preserveScroll: true, // Keep scroll position during autosave
         onSuccess: () => {
             showSuccess('Changes saved successfully');
             editForm.defaults(editForm.data()); // Update defaults to new state
+            if (options.onSuccess) options.onSuccess();
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
             showError(errorMessage);
+            if (options.onError) options.onError(errors);
         }
     });
 };
@@ -167,11 +191,7 @@ const debouncedUpdate = debounce(() => {
     updateTicket();
 }, 1000);
 
-// Auto-save watchers
-watch(() => [editForm.title, editForm.description], () => {
-    debouncedUpdate();
-});
-
+// Watchers for other fields (excluding Title and Description which are now manual save)
 watch(() => [
     editForm.company_id, 
     editForm.status, 
@@ -182,6 +202,48 @@ watch(() => [
 ], () => {
     updateTicket();
 });
+
+const startEditingTitle = () => {
+    if (!hasPermission('tickets.edit')) return;
+    isEditingTitle.value = true;
+    nextTick(() => {
+        if (titleInput.value) titleInput.value.focus();
+    });
+};
+
+const saveTitle = () => {
+    updateTicket({
+        onSuccess: () => {
+            isEditingTitle.value = false;
+        }
+    });
+};
+
+const cancelTitleEdit = () => {
+    editForm.title = props.ticket.title;
+    isEditingTitle.value = false;
+};
+
+const startEditingDescription = () => {
+    if (!hasPermission('tickets.edit')) return;
+    isEditingDescription.value = true;
+    nextTick(() => {
+        if (descriptionInput.value) descriptionInput.value.focus();
+    });
+};
+
+const saveDescription = () => {
+    updateTicket({
+        onSuccess: () => {
+            isEditingDescription.value = false;
+        }
+    });
+};
+
+const cancelDescriptionEdit = () => {
+    editForm.description = props.ticket.description;
+    isEditingDescription.value = false;
+};
 
 const addComment = () => {
     if (!commentForm.comment_text.trim() && commentForm.attachments.length === 0) return;
@@ -292,19 +354,20 @@ const linkify = (text) => {
         <template #header>
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div class="flex items-center space-x-4">
-                    <Link :href="route('tickets.index')" class="text-blue-600 hover:text-blue-800 flex-shrink-0">
+                    <Link :href="route('tickets.index')" class="text-blue-600 hover:text-blue-800 flex-shrink-0 transition-colors">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                         </svg>
                     </Link>
                     <div class="flex flex-col">
-                        <span class="text-sm font-bold text-gray-500 uppercase tracking-wider">{{ ticket.ticket_key }}</span>
-                        <h1 class="text-2xl font-bold text-gray-900 leading-tight">
-                            {{ ticket.title }}
-                        </h1>
+                        <span class="text-lg font-bold text-gray-700 tracking-tight flex items-center gap-2">
+                            <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-sm border border-gray-200">{{ ticket.ticket_key }}</span>
+                            <span class="text-gray-400 font-normal">/</span>
+                            <span class="text-gray-500 text-base font-medium">Details</span>
+                        </span>
                     </div>
                 </div>
-                <div class="flex items-center text-sm text-gray-500 whitespace-nowrap bg-gray-50 px-3 py-1 rounded-full border border-gray-200">
+                <div class="flex items-center text-sm text-gray-500 whitespace-nowrap bg-white px-3 py-1.5 rounded-md shadow-sm border border-gray-200">
                      <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                      Created {{ new Date(ticket.created_at).toLocaleString() }}
                 </div>
@@ -315,16 +378,34 @@ const linkify = (text) => {
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- Left Column: Content & History -->
                 <div class="lg:col-span-2 space-y-6">
-                    <!-- Ticket Description -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                            <input v-model="editForm.title" type="text" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-lg font-medium disabled:bg-gray-100 disabled:text-gray-500">
+                    
+                    <!-- Title Section -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
+                        <div v-if="!isEditingTitle" 
+                             @click="startEditingTitle" 
+                             class="group relative -m-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors duration-200">
+                            <h1 class="text-3xl font-bold text-gray-900 leading-tight tracking-tight">
+                                {{ ticket.title }}
+                            </h1>
+                            <div v-if="hasPermission('tickets.edit')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                    Edit Title
+                                </span>
+                            </div>
                         </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                            <textarea v-model="editForm.description" rows="6" :disabled="!hasPermission('tickets.edit')" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"></textarea>
+                        <div v-else>
+                             <input 
+                                ref="titleInput"
+                                v-model="editForm.title" 
+                                type="text" 
+                                class="block w-full text-3xl font-bold text-gray-900 leading-tight border-0 border-b-2 border-blue-500 focus:ring-0 focus:border-blue-600 px-0 py-1 bg-transparent placeholder-gray-300"
+                                placeholder="Enter ticket title..."
+                                @blur="saveTitle"
+                                @keydown.enter="saveTitle"
+                                @keydown.esc="cancelTitleEdit"
+                            >
+                            <div class="mt-2 text-xs text-gray-500 flex justify-end">Press Enter to save, Esc to cancel</div>
                         </div>
                     </div>
 
@@ -380,11 +461,47 @@ const linkify = (text) => {
 
                         <!-- Timeline List -->
                         <div class="relative pl-4 border-l-2 border-gray-200 space-y-8">
-                            <!-- Loop Activities (Comments + History) -->
+                            <!-- Loop Activities (Comments + History + Description) -->
                             <div v-for="activity in activities" :key="activity.activity_type + '-' + activity.id" class="relative">
                                 
+                                <!-- Description Item (Inline Editable) -->
+                                <template v-if="activity.activity_type === 'description'">
+                                    <!-- Dot -->
+                                    <div class="absolute -left-[25px] top-0 w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-100"></div>
+                                    
+                                    <div class="flex justify-between items-start mb-1">
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
+                                            <span class="text-xs text-gray-500">created this ticket on {{ activity.date.toLocaleString() }}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Editable Description Area -->
+                                    <div v-if="!isEditingDescription" 
+                                         class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors cursor-pointer"
+                                         @click="startEditingDescription">
+                                        <div class="text-gray-700 whitespace-pre-wrap" v-html="linkify(activity.text)"></div>
+                                        <div v-if="hasPermission('tickets.edit')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                        </div>
+                                    </div>
+                                    <div v-else>
+                                        <textarea 
+                                            ref="descriptionInput"
+                                            v-model="editForm.description" 
+                                            rows="6" 
+                                            class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-2"
+                                            @keydown.esc="cancelDescriptionEdit"
+                                        ></textarea>
+                                        <div class="flex justify-end space-x-2">
+                                            <button @click="cancelDescriptionEdit" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                                            <button @click="saveDescription" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                                        </div>
+                                    </div>
+                                </template>
+
                                 <!-- Comment Item -->
-                                <template v-if="activity.activity_type === 'comment'">
+                                <template v-else-if="activity.activity_type === 'comment'">
                                     <!-- Dot -->
                                     <div class="absolute -left-[25px] top-0 w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-500"></div>
                                     

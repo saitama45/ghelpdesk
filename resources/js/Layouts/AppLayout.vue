@@ -135,13 +135,6 @@ const isCurrentRoute = (routeName) => {
 
                     <!-- Right side -->
                     <div class="flex items-center space-x-4">
-                        <!-- Notifications -->
-                        <button class="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-full">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-5 5v-5zM10.07 2.82l3.12 3.12M7.05 5.84L3.93 2.72M2 12h4M20 12h4M7.05 18.16l3.12-3.12M16.95 18.16l-3.12-3.12" />
-                            </svg>
-                        </button>
-
                         <!-- User Menu -->
                         <div class="relative" ref="userMenuRef">
                             <button

@@ -95,6 +95,7 @@ const submit = () => {
                         type="button"
                         @click="showPassword = !showPassword"
                         class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                        tabindex="-1"
                     >
                         <svg v-if="showPassword" class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>

@@ -299,7 +299,7 @@ Route::middleware('api')->group(function () {
                                ->replyTo($departmentEmail, $emailData['department'])
                                ->cc($validated['email']) // Send copy to sender
                                ->subject("[{$emailData['department']}] Inquiry from {$emailData['firstName']} {$emailData['lastName']}")
-                               ->from('info.loyolatanauan@gmail.com', 'No Reply - Loyola Gardens');
+                               ->from('info.loyolatanauan@gmail.com', 'No Reply');
                     }
                 );
 
