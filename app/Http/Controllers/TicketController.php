@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreTicketRequest;
 use App\Http\Requests\UpdateTicketRequest;
+use App\Mail\NewTicketCreated;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketAttachment;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Models\Company;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -114,7 +116,7 @@ class TicketController extends Controller
     {
         $data = $request->validated();
         
-        return DB::transaction(function () use ($data, $request) {
+        $ticket = DB::transaction(function () use ($data, $request) {
             // Lock the company record for update to prevent concurrent ticket key generation for the same company
             $company = Company::where('id', $data['company_id'])->lockForUpdate()->first();
             $companyCode = $company->code;
@@ -153,8 +155,23 @@ class TicketController extends Controller
                 }
             }
 
-            return redirect()->back()->with('success', 'Ticket created successfully.');
+            return $ticket;
         });
+
+        // Load relationships for email
+        $ticket->load(['reporter', 'assignee']);
+
+        // Send email to reporter
+        if ($ticket->reporter && $ticket->reporter->email) {
+            Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
+        }
+
+        // Send email to assignee (if different from reporter)
+        if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
+            Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+        }
+
+        return redirect()->back()->with('success', 'Ticket created successfully.');
     }
 
     /**
@@ -207,8 +224,14 @@ class TicketController extends Controller
         if ($ticket->isDirty()) {
             $userId = auth()->id();
             $dirty = $ticket->getDirty();
+            $assigneeChanged = false;
             
             foreach ($dirty as $column => $newValue) {
+                // Check if assignee changed
+                if ($column === 'assignee_id') {
+                    $assigneeChanged = true;
+                }
+
                 // Skip internal timestamps
                 if ($column === 'updated_at') continue;
                 
@@ -235,6 +258,16 @@ class TicketController extends Controller
             }
             
             $ticket->save();
+
+            // Send email if assignee changed and new assignee exists
+            if ($assigneeChanged && $ticket->assignee_id) {
+                $ticket->load('assignee');
+                if ($ticket->assignee && $ticket->assignee->email) {
+                    // Re-using NewTicketCreated for assignment notification as implied, or could create a specific one.
+                    // Assuming the request means "email the assignee now that they are assigned".
+                    Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                }
+            }
         }
 
         return redirect()->back()->with('success', 'Ticket updated successfully.');

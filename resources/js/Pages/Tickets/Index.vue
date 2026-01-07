@@ -302,7 +302,8 @@ const getTypeColor = (type) => {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creator</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                     </tr>
                 </template>
@@ -338,6 +339,15 @@ const getTypeColor = (type) => {
                             <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize border" :class="getStatusColor(ticket.status)">
                                 {{ ticket.status.replace('_', ' ') }}
                             </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div v-if="ticket.reporter" class="flex items-center space-x-2">
+                                <div class="h-6 w-6 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 border border-blue-100">
+                                    {{ ticket.reporter.name.charAt(0) }}
+                                </div>
+                                <span class="text-gray-700 font-medium">{{ ticket.reporter.name }}</span>
+                            </div>
+                            <span v-else class="text-gray-400 italic">Unknown</span>
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-sm" @click.stop>
                             <div v-if="ticket.assignee" class="flex items-center space-x-2">
