@@ -193,7 +193,7 @@ class TicketController extends Controller
      */
     public function edit(Ticket $ticket)
     {
-        $staff = User::permission('tickets.edit')->select('id', 'name')->get();
+        $staff = User::role('Dev')->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         
         return Inertia::render('Tickets/Edit', [
