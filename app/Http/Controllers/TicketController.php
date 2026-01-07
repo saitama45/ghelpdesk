@@ -61,21 +61,22 @@ class TicketController extends Controller
             }
         // }
 
-        // Apply status filters
-        if ($request->filled('status') && $request->status !== 'all') {
-            switch ($request->status) {
+        // Apply status filters - default to 'my_tickets' if not provided
+        $statusFilter = $request->get('status', 'my_tickets');
+        
+        if ($statusFilter !== 'all') {
+            switch ($statusFilter) {
                 case 'my_tickets':
-                    if ($user->hasRole('User')) {
-                        $query->where('reporter_id', $user->id);
-                    } else {
-                        $query->where('assignee_id', $user->id);
-                    }
+                    $query->where(function($q) use ($user) {
+                        $q->where('reporter_id', $user->id)
+                          ->orWhere('assignee_id', $user->id);
+                    });
                     break;
                 case 'unassigned':
                     $query->whereNull('assignee_id');
                     break;
                 default:
-                    $query->where('status', $request->status);
+                    $query->where('status', $statusFilter);
                     break;
             }
         }
@@ -97,7 +98,10 @@ class TicketController extends Controller
             'tickets' => $tickets,
             'staff' => $staff,
             'companies' => $companies,
-            'filters' => $request->only(['status', 'search']),
+            'filters' => [
+                'status' => $statusFilter,
+                'search' => $request->search
+            ],
         ]);
     }
 
