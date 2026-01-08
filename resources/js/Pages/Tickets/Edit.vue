@@ -151,14 +151,14 @@ const activities = computed(() => {
     const histories = (props.ticket.histories || []).map(h => ({
         ...h,
         activity_type: 'history',
-        date: h.changed_at
+        date: new Date(h.changed_at)
     }));
 
     // Add Description as an activity
     const description = {
         id: 'description-' + props.ticket.id,
         activity_type: 'description',
-        date: props.ticket.created_at,
+        date: new Date(props.ticket.created_at),
         user: props.ticket.reporter,
         text: props.ticket.description 
     };
@@ -393,7 +393,7 @@ const linkify = (text) => {
                 </div>
                 <div class="flex items-center text-sm text-gray-500 whitespace-nowrap bg-white px-3 py-1.5 rounded-md shadow-sm border border-gray-200">
                      <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                     Created {{ formatDate(ticket.created_at) }}
+                     Created {{ formatDate(new Date(ticket.created_at)) }}
                 </div>
             </div>
         </template>
