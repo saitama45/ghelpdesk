@@ -382,13 +382,15 @@ const linkify = (text) => {
                     <!-- Title Section -->
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 transition-all duration-200 hover:shadow-md">
                         <div v-if="!isEditingTitle" 
-                             @click="startEditingTitle" 
-                             class="group relative -m-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors duration-200">
+                             class="group relative -m-2 p-2 rounded-lg hover:bg-gray-50 transition-colors duration-200">
                             <h1 class="text-3xl font-bold text-gray-900 leading-tight tracking-tight">
                                 {{ ticket.title }}
                             </h1>
-                            <div v-if="hasPermission('tickets.edit')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                            <div v-if="hasPermission('tickets.edit')" 
+                                 class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer"
+                                 @click="startEditingTitle"
+                                 title="Edit Title">
+                                <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100">
                                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                     Edit Title
                                 </span>
@@ -478,10 +480,12 @@ const linkify = (text) => {
                                     
                                     <!-- Editable Description Area -->
                                     <div v-if="!isEditingDescription" 
-                                         class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors cursor-pointer"
-                                         @click="startEditingDescription">
+                                         class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors">
                                         <div class="text-gray-700 whitespace-pre-wrap" v-html="linkify(activity.text)"></div>
-                                        <div v-if="hasPermission('tickets.edit')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400">
+                                        <div v-if="hasPermission('tickets.edit')" 
+                                             class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 cursor-pointer hover:text-blue-600 transition-colors"
+                                             @click="startEditingDescription"
+                                             title="Edit Description">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                         </div>
                                     </div>
@@ -558,8 +562,12 @@ const linkify = (text) => {
                                     
                                     <div class="text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-100">
                                         Changed <span class="font-medium text-gray-800">{{ formatColumnName(activity.column_changed) }}</span> 
-                                        from <span class="font-medium text-red-600 bg-red-50 px-1 rounded line-through decoration-red-400">{{ activity.old_value || '(empty)' }}</span> 
-                                        to <span class="font-medium text-green-600 bg-green-50 px-1 rounded">{{ activity.new_value || '(empty)' }}</span>
+                                        from <span class="font-medium text-red-600 bg-red-50 px-1 rounded line-through decoration-red-400">
+                                            {{ activity.column_changed === 'assignee_id' && !activity.old_value ? 'Unassigned' : (activity.old_value || '(empty)') }}
+                                        </span> 
+                                        to <span class="font-medium text-green-600 bg-green-50 px-1 rounded">
+                                            {{ activity.column_changed === 'assignee_id' && !activity.new_value ? 'Unassigned' : (activity.new_value || '(empty)') }}
+                                        </span>
                                     </div>
                                 </template>
                             </div>

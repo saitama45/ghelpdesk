@@ -113,6 +113,7 @@ class DashboardController extends Controller
                     'id' => $history->id,
                     'user' => $history->user ? $history->user->name : 'System',
                     'action' => $this->formatAction($history),
+                    'ticket_id' => $history->ticket_id,
                     'ticket_key' => $history->ticket ? $history->ticket->ticket_key : 'Unknown',
                     'ticket_title' => $history->ticket ? $history->ticket->title : 'Unknown Ticket',
                     'time' => $history->changed_at ? $history->changed_at->diffForHumans() : '',

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreTicketRequest;
 use App\Http\Requests\UpdateTicketRequest;
 use App\Mail\NewTicketCreated;
+use App\Mail\TicketCommentAdded;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketAttachment;
@@ -61,8 +62,8 @@ class TicketController extends Controller
             }
         // }
 
-        // Apply status filters - default to 'my_tickets' if not provided
-        $statusFilter = $request->get('status', 'my_tickets');
+        // Apply status filters - default to 'open' if not provided
+        $statusFilter = $request->get('status', 'open');
         
         if ($statusFilter !== 'all') {
             switch ($statusFilter) {
@@ -193,7 +194,7 @@ class TicketController extends Controller
      */
     public function edit(Ticket $ticket)
     {
-        $staff = User::role('Dev')->select('id', 'name')->get();
+        $staff = User::role(['Dev', 'Admin'])->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         
         return Inertia::render('Tickets/Edit', [
@@ -308,6 +309,20 @@ class TicketController extends Controller
             'comment_text' => $request->comment_text,
             'user_id' => auth()->id(),
         ]);
+
+        // Load relationships for email logic
+        $ticket->load(['reporter', 'assignee']);
+        $commenterId = auth()->id();
+
+        // Email Assignee if the commenter is NOT the assignee
+        if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee_id != $commenterId) {
+             Mail::to($ticket->assignee->email)->send(new TicketCommentAdded($ticket, $comment, $ticket->assignee->name));
+        }
+
+        // Email Reporter if the commenter is NOT the reporter
+        if ($ticket->reporter && $ticket->reporter->email && $ticket->reporter_id != $commenterId) {
+             Mail::to($ticket->reporter->email)->send(new TicketCommentAdded($ticket, $comment, $ticket->reporter->name));
+        }
 
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {

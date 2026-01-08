@@ -62,7 +62,7 @@ const defaultCompanyId = computed(() => {
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index');
-const filterStatus = ref(props.filters?.status || 'my_tickets');
+const filterStatus = ref(props.filters?.status || 'open');
 
 const filterOptions = [
     { value: 'all', label: 'All' },

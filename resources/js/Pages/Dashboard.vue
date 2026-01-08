@@ -136,10 +136,10 @@ const getPriorityColor = (priority) => {
                         <tbody class="bg-white divide-y divide-gray-200">
                             <tr v-for="ticket in recentTickets" :key="ticket.id" class="hover:bg-gray-50">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                                    <Link :href="route('tickets.show', ticket.id)">{{ ticket.key }}</Link>
+                                    <Link :href="route('tickets.edit', ticket.id)">{{ ticket.key }}</Link>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    <Link :href="route('tickets.show', ticket.id)" class="hover:underline">{{ ticket.title }}</Link>
+                                    <Link :href="route('tickets.edit', ticket.id)" class="hover:underline">{{ ticket.title }}</Link>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span :class="['px-2 inline-flex text-xs leading-5 font-semibold rounded-full', getStatusColor(ticket.status)]">
@@ -189,7 +189,7 @@ const getPriorityColor = (priority) => {
                                                 <p class="text-sm text-gray-500">
                                                     <span class="font-medium text-gray-900">{{ activity.user }}</span> 
                                                     {{ activity.action }} 
-                                                    <Link :href="route('tickets.show', activity.ticket_key)" class="font-medium text-gray-900 hover:underline">{{ activity.ticket_key }}</Link>
+                                                    <Link :href="route('tickets.edit', activity.ticket_id)" class="font-medium text-gray-900 hover:underline">{{ activity.ticket_key }}</Link>
                                                 </p>
                                             </div>
                                             <div class="text-right text-sm whitespace-nowrap text-gray-500">
