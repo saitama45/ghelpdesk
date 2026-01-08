@@ -311,17 +311,33 @@ class TicketController extends Controller
         ]);
 
         // Load relationships for email logic
-        $ticket->load(['reporter', 'assignee']);
+        $ticket->load(['reporter', 'assignee', 'comments.user']);
         $commenterId = auth()->id();
 
-        // Email Assignee if the commenter is NOT the assignee
-        if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee_id != $commenterId) {
-             Mail::to($ticket->assignee->email)->send(new TicketCommentAdded($ticket, $comment, $ticket->assignee->name));
+        // 1. Identify recipients: Assignee + Reporter + All Previous Commenters
+        $recipients = collect();
+
+        if ($ticket->assignee) {
+            $recipients->push($ticket->assignee);
+        }
+        if ($ticket->reporter) {
+            $recipients->push($ticket->reporter);
+        }
+        foreach ($ticket->comments as $prevComment) {
+            if ($prevComment->user) {
+                $recipients->push($prevComment->user);
+            }
         }
 
-        // Email Reporter if the commenter is NOT the reporter
-        if ($ticket->reporter && $ticket->reporter->email && $ticket->reporter_id != $commenterId) {
-             Mail::to($ticket->reporter->email)->send(new TicketCommentAdded($ticket, $comment, $ticket->reporter->name));
+        // 2. Filter recipients: Unique emails, active users, exclude current commenter
+        $recipients = $recipients->unique('id')
+            ->filter(function ($user) use ($commenterId) {
+                return $user->id != $commenterId && $user->email;
+            });
+
+        // 3. Send emails
+        foreach ($recipients as $recipient) {
+            Mail::to($recipient->email)->send(new TicketCommentAdded($ticket, $comment, $recipient->name));
         }
 
         if ($request->hasFile('attachments')) {
