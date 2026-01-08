@@ -115,34 +115,58 @@ const availableStatuses = computed(() => {
     });
 });
 
+const formatDate = (dateInput) => {
+    if (!dateInput) return '';
+    
+    // If the input is a string from the server, it might have a 'Z' suffix 
+    // even if it's already Manila time. Stripping 'Z' (and the 'T' separator) 
+    // ensures the browser treats it as a local time string.
+    let date;
+    if (typeof dateInput === 'string') {
+        // Replace T with space and remove Z to ensure local parsing
+        const normalized = dateInput.replace('T', ' ').replace('Z', '').split('.')[0];
+        date = new Date(normalized);
+    } else {
+        date = new Date(dateInput);
+    }
+
+    return date.toLocaleString('en-US', { 
+        year: 'numeric', 
+        month: 'numeric', 
+        day: 'numeric', 
+        hour: 'numeric', 
+        minute: 'numeric', 
+        second: 'numeric',
+        hour12: true
+    });
+};
+
 const activities = computed(() => {
     const comments = (props.ticket.comments || []).map(c => ({
         ...c,
         activity_type: 'comment',
-        date: new Date(c.created_at)
+        date: c.created_at
     }));
 
     const histories = (props.ticket.histories || []).map(h => ({
         ...h,
         activity_type: 'history',
-        date: new Date(h.changed_at)
+        date: h.changed_at
     }));
 
     // Add Description as an activity
     const description = {
         id: 'description-' + props.ticket.id,
         activity_type: 'description',
-        date: new Date(props.ticket.created_at),
+        date: props.ticket.created_at,
         user: props.ticket.reporter,
-        // We use editForm.description here to reflect local changes in the list view immediately if we wanted,
-        // but sticking to props.ticket.description ensures we show committed state until save.
-        // However, for the 'edit' mode, we bind to editForm.
-        // Let's use the prop for display to be safe.
         text: props.ticket.description 
     };
 
     // Sort ascending (oldest first)
-    return [...comments, ...histories, description].sort((a, b) => a.date - b.date);
+    return [...comments, ...histories, description].sort((a, b) => {
+        return new Date(a.date) - new Date(b.date);
+    });
 });
 
 const formatColumnName = (column) => {
@@ -369,7 +393,7 @@ const linkify = (text) => {
                 </div>
                 <div class="flex items-center text-sm text-gray-500 whitespace-nowrap bg-white px-3 py-1.5 rounded-md shadow-sm border border-gray-200">
                      <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                     Created {{ new Date(ticket.created_at).toLocaleString() }}
+                     Created {{ formatDate(ticket.created_at) }}
                 </div>
             </div>
         </template>
@@ -474,7 +498,7 @@ const linkify = (text) => {
                                     <div class="flex justify-between items-start mb-1">
                                         <div class="flex items-center space-x-2">
                                             <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                            <span class="text-xs text-gray-500">created this ticket on {{ activity.date.toLocaleString() }}</span>
+                                            <span class="text-xs text-gray-500">created this ticket on {{ formatDate(activity.date) }}</span>
                                         </div>
                                     </div>
                                     
@@ -512,7 +536,7 @@ const linkify = (text) => {
                                     <div class="flex justify-between items-start mb-1">
                                         <div class="flex items-center space-x-2">
                                             <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                            <span class="text-xs text-gray-500">{{ activity.date.toLocaleString() }}</span>
+                                            <span class="text-xs text-gray-500">{{ formatDate(activity.date) }}</span>
                                         </div>
                                     </div>
                                     
@@ -557,7 +581,7 @@ const linkify = (text) => {
                                     
                                     <div class="flex items-center space-x-2 mb-1">
                                         <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                        <span class="text-xs text-gray-500">{{ activity.date.toLocaleString() }}</span>
+                                        <span class="text-xs text-gray-500">{{ formatDate(activity.date) }}</span>
                                     </div>
                                     
                                     <div class="text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-100">
