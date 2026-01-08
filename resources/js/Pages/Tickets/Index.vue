@@ -342,7 +342,10 @@ const getTypeColor = (type) => {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <div v-if="ticket.reporter" class="flex items-center space-x-2">
-                                <div class="h-6 w-6 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 border border-blue-100">
+                                <div v-if="ticket.reporter.profile_photo" class="h-6 w-6 rounded-full overflow-hidden border border-gray-200">
+                                    <img :src="'/storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
+                                </div>
+                                <div v-else class="h-6 w-6 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 border border-blue-100">
                                     {{ ticket.reporter.name.charAt(0) }}
                                 </div>
                                 <span class="text-gray-700 font-medium">{{ ticket.reporter.name }}</span>
@@ -351,7 +354,10 @@ const getTypeColor = (type) => {
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-sm" @click.stop>
                             <div v-if="ticket.assignee" class="flex items-center space-x-2">
-                                <div class="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
+                                <div v-if="ticket.assignee.profile_photo" class="h-6 w-6 rounded-full overflow-hidden border border-gray-200">
+                                    <img :src="'/storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
+                                </div>
+                                <div v-else class="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
                                     {{ ticket.assignee.name.charAt(0) }}
                                 </div>
                                 <span class="text-gray-700 font-medium">{{ ticket.assignee.name }}</span>

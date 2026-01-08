@@ -458,7 +458,10 @@ const toggleSidebar = () => {
             <!-- User Section -->
             <div class="p-4 border-t border-gray-800">
                 <div class="flex items-center">
-                    <div class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                    <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
+                        <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
+                    </div>
+                    <div v-else class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
                         <span class="text-sm font-medium">
                             {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
                         </span>

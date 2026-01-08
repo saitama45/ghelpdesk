@@ -26,7 +26,7 @@ class TicketController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Ticket::with(['reporter:id,name', 'assignee:id,name', 'company:id,name']);
+        $query = Ticket::with(['reporter:id,name,profile_photo', 'assignee:id,name,profile_photo', 'company:id,name']);
 
         // If user has 'User' role, only show tickets they reported
         if ($user->hasRole('User')) {
@@ -200,10 +200,10 @@ class TicketController extends Controller
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket->load([
                 'comments' => function($query) {
-                    $query->with(['user:id,name', 'attachments'])->orderBy('created_at', 'desc');
+                    $query->with(['user:id,name,profile_photo', 'attachments'])->orderBy('created_at', 'desc');
                 },
                 'histories' => function($query) {
-                    $query->with('user:id,name')->orderBy('changed_at', 'desc');
+                    $query->with('user:id,name,profile_photo')->orderBy('changed_at', 'desc');
                 },
                 'attachments', 
                 'reporter', 

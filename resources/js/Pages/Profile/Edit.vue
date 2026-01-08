@@ -16,7 +16,30 @@ const profileForm = useForm({
     email: props.user.email,
     department: props.user.department || '',
     position: props.user.position || '',
+    photo: null,
 });
+
+const photoInput = ref(null);
+const photoPreview = ref(null);
+
+const selectNewPhoto = () => {
+    photoInput.value.click();
+};
+
+const updatePhotoPreview = () => {
+    const photo = photoInput.value.files[0];
+
+    if (! photo) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+        photoPreview.value = e.target.result;
+    };
+
+    reader.readAsDataURL(photo);
+    profileForm.photo = photo;
+};
 
 const passwordForm = useForm({
     current_password: '',
@@ -25,6 +48,26 @@ const passwordForm = useForm({
 });
 
 const updateProfile = () => {
+    if (profileForm.photo) {
+        // Method spoofing for file upload via PUT route
+        profileForm.transform((data) => ({
+            ...data,
+            _method: 'PUT',
+        })).post(route('profile.update'), {
+            onSuccess: () => {
+                showSuccess('Profile updated successfully');
+                photoPreview.value = null;
+                const fileInput = document.getElementById('photo');
+                if (fileInput) fileInput.value = null;
+            },
+            onError: (errors) => {
+                const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to update profile';
+                showError(errorMessage);
+            }
+        });
+        return;
+    }
+
     profileForm.put(route('profile.update'), {
         onSuccess: () => {
             showSuccess('Profile updated successfully');
@@ -62,8 +105,22 @@ const updatePassword = () => {
             <!-- Profile Header -->
             <div class="bg-white rounded-lg shadow-sm p-6">
                 <div class="flex items-center space-x-4">
-                    <div class="h-20 w-20 bg-blue-600 rounded-full flex items-center justify-center">
-                        <span class="text-2xl font-bold text-white">{{ user.name.charAt(0) }}</span>
+                    <div class="relative group cursor-pointer" @click="selectNewPhoto">
+                        <div v-if="photoPreview" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200">
+                            <img :src="photoPreview" class="h-full w-full object-cover">
+                        </div>
+                        <div v-else-if="user.profile_photo" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200">
+                            <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover">
+                        </div>
+                        <div v-else class="h-20 w-20 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                            <span class="text-2xl font-bold text-white">{{ user.name.charAt(0) }}</span>
+                        </div>
+                        
+                        <!-- Overlay -->
+                        <div class="absolute inset-0 bg-black bg-opacity-40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        </div>
+                        <input ref="photoInput" type="file" class="hidden" @change="updatePhotoPreview" accept="image/*">
                     </div>
                     <div>
                         <h2 class="text-2xl font-bold text-gray-900">{{ user.name }}</h2>

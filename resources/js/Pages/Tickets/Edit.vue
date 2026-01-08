@@ -442,7 +442,10 @@ const linkify = (text) => {
                         <!-- Comment Input -->
                         <div class="flex space-x-4 mb-8">
                             <div class="flex-shrink-0">
-                                <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold">
+                                <div v-if="$page.props.auth.user.profile_photo" class="w-10 h-10 rounded-full overflow-hidden border border-gray-200">
+                                    <img :src="'/storage/' + $page.props.auth.user.profile_photo" class="h-full w-full object-cover" :alt="$page.props.auth.user.name">
+                                </div>
+                                <div v-else class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold">
                                     {{ $page.props.auth.user.name.charAt(0) }}
                                 </div>
                             </div>
@@ -492,8 +495,13 @@ const linkify = (text) => {
                                 
                                 <!-- Description Item (Inline Editable) -->
                                 <template v-if="activity.activity_type === 'description'">
-                                    <!-- Dot -->
-                                    <div class="absolute -left-[25px] top-0 w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-100"></div>
+                                    <!-- Dot (Avatar) -->
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <div v-else class="w-full h-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
+                                            {{ activity.user ? activity.user.name.charAt(0) : '?' }}
+                                        </div>
+                                    </div>
                                     
                                     <div class="flex justify-between items-start mb-1">
                                         <div class="flex items-center space-x-2">
@@ -530,8 +538,13 @@ const linkify = (text) => {
 
                                 <!-- Comment Item -->
                                 <template v-else-if="activity.activity_type === 'comment'">
-                                    <!-- Dot -->
-                                    <div class="absolute -left-[25px] top-0 w-4 h-4 rounded-full bg-blue-100 border-2 border-blue-500"></div>
+                                    <!-- Dot (Avatar) -->
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <div v-else class="w-full h-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">
+                                            {{ activity.user ? activity.user.name.charAt(0) : '?' }}
+                                        </div>
+                                    </div>
                                     
                                     <div class="flex justify-between items-start mb-1">
                                         <div class="flex items-center space-x-2">
@@ -576,8 +589,13 @@ const linkify = (text) => {
 
                                 <!-- History Item -->
                                 <template v-else>
-                                    <!-- Dot -->
-                                    <div class="absolute -left-[25px] top-0 w-4 h-4 rounded-full bg-gray-100 border-2 border-gray-400"></div>
+                                    <!-- Dot (Avatar) -->
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <div v-else class="w-full h-full bg-gray-400 flex items-center justify-center text-[10px] font-bold text-white">
+                                            {{ activity.user ? activity.user.name.charAt(0) : '?' }}
+                                        </div>
+                                    </div>
                                     
                                     <div class="flex items-center space-x-2 mb-1">
                                         <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>

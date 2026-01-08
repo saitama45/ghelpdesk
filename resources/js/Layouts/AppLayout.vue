@@ -99,7 +99,10 @@ const isCurrentRoute = (routeName) => {
             <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
                 <div class="flex items-center space-x-3">
                     <div class="flex-shrink-0">
-                        <div class="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center">
+                        <div v-if="user.profile_photo" class="h-10 w-10 rounded-full overflow-hidden border border-gray-200">
+                            <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
+                        </div>
+                        <div v-else class="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center">
                             <span class="text-sm font-medium text-white">{{ user.name?.charAt(0) || 'U' }}</span>
                         </div>
                     </div>
@@ -141,7 +144,10 @@ const isCurrentRoute = (routeName) => {
                                 @click="userMenuOpen = !userMenuOpen"
                                 class="flex items-center space-x-2 p-2 text-sm rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                                <div class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                <div v-if="user.profile_photo" class="h-8 w-8 rounded-full overflow-hidden border border-gray-200">
+                                    <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
+                                </div>
+                                <div v-else class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
                                     <span class="text-sm font-medium text-white">{{ user.name?.charAt(0) || 'U' }}</span>
                                 </div>
                                 <span class="hidden md:block text-gray-700">{{ user.name }}</span>

@@ -22,14 +22,31 @@ class ProfileController extends Controller
             'email' => 'required|string|email|max:255|unique:users,email,' . auth()->id(),
             'department' => 'nullable|string|max:255',
             'position' => 'nullable|string|max:255',
+            'photo' => 'nullable|image|max:1024', // 1MB Max
         ]);
 
-        auth()->user()->update([
+        $user = auth()->user();
+        $data = [
             'name' => $request->name,
             'email' => $request->email,
             'department' => $request->department,
             'position' => $request->position,
-        ]);
+        ];
+
+        if ($request->hasFile('photo')) {
+            // Delete old photo if exists
+            if ($user->profile_photo) {
+                // Check if it's not a default placeholder logic if any, but assume direct path storage
+                // If path is stored relative to public root, delete it.
+                // Assuming path is stored as 'profile-photos/filename.jpg'
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_photo);
+            }
+
+            $path = $request->file('photo')->store('profile-photos', 'public');
+            $data['profile_photo'] = $path;
+        }
+
+        $user->update($data);
 
         return redirect()->back()->with('success', 'Profile updated successfully.');
     }
