@@ -15,6 +15,11 @@ class TicketComment extends Model
         'user_id',
     ];
 
+    protected $casts = [
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
+    ];
+
     public function ticket()
     {
         return $this->belongsTo(Ticket::class);

@@ -117,19 +117,7 @@ const availableStatuses = computed(() => {
 
 const formatDate = (dateInput) => {
     if (!dateInput) return '';
-    
-    // If the input is a string from the server, it might have a 'Z' suffix 
-    // even if it's already Manila time. Stripping 'Z' (and the 'T' separator) 
-    // ensures the browser treats it as a local time string.
-    let date;
-    if (typeof dateInput === 'string') {
-        // Replace T with space and remove Z to ensure local parsing
-        const normalized = dateInput.replace('T', ' ').replace('Z', '').split('.')[0];
-        date = new Date(normalized);
-    } else {
-        date = new Date(dateInput);
-    }
-
+    const date = parseDate(dateInput);
     return date.toLocaleString('en-US', { 
         year: 'numeric', 
         month: 'numeric', 
@@ -141,31 +129,45 @@ const formatDate = (dateInput) => {
     });
 };
 
+const parseDate = (dateString) => {
+    if (!dateString) return new Date(0);
+    if (dateString instanceof Date) return dateString;
+    
+    // Treat as Wall Clock time: strip 'T', 'Z' and milliseconds/offset
+    // This ensures consistency between different serialization formats
+    let s = String(dateString).replace('T', ' ').replace('Z', '').split('.')[0].trim();
+    
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? new Date(dateString) : d;
+};
+
 const activities = computed(() => {
     const comments = (props.ticket.comments || []).map(c => ({
         ...c,
         activity_type: 'comment',
-        date: c.created_at
+        date: parseDate(c.created_at)
     }));
 
     const histories = (props.ticket.histories || []).map(h => ({
         ...h,
         activity_type: 'history',
-        date: new Date(h.changed_at)
+        date: parseDate(h.changed_at)
     }));
 
     // Add Description as an activity
     const description = {
         id: 'description-' + props.ticket.id,
         activity_type: 'description',
-        date: new Date(props.ticket.created_at),
+        date: parseDate(props.ticket.created_at),
         user: props.ticket.reporter,
-        text: props.ticket.description 
+        text: props.ticket.description,
+        // Attachments that are not linked to any comment (created with ticket)
+        attachments: (props.ticket.attachments || []).filter(a => !a.comment_id)
     };
 
     // Sort ascending (oldest first)
     return [...comments, ...histories, description].sort((a, b) => {
-        return new Date(a.date) - new Date(b.date);
+        return a.date.getTime() - b.date.getTime();
     });
 });
 
@@ -393,7 +395,7 @@ const linkify = (text) => {
                 </div>
                 <div class="flex items-center text-sm text-gray-500 whitespace-nowrap bg-white px-3 py-1.5 rounded-md shadow-sm border border-gray-200">
                      <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                     Created {{ formatDate(new Date(ticket.created_at)) }}
+                     Created {{ formatDate(ticket.created_at) }}
                 </div>
             </div>
         </template>
@@ -534,6 +536,37 @@ const linkify = (text) => {
                                             <button @click="saveDescription" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
                                         </div>
                                     </div>
+
+                                    <!-- Description Attachments -->
+                                    <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                            <!-- Image Preview -->
+                                            <div v-if="isImage(attachment.file_name) && !failedImages.has(attachment.id)" 
+                                                 class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
+                                                 @click="openImageViewer(attachment)">
+                                                <img :src="getThumbnailUrl(attachment)" 
+                                                     class="object-cover w-full h-32" 
+                                                     :alt="attachment.file_name"
+                                                     @error="handleImageError(attachment.id)">
+                                                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all flex items-center justify-center">
+                                                    <svg class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Generic File Icon -->
+                                            <div v-else class="h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
+                                                <svg class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                                </svg>
+                                                <span class="text-xs text-gray-500 text-center truncate w-full px-2">{{ attachment.file_name }}</span>
+                                            </div>
+
+                                            <!-- File info -->
+                                            <div class="bg-gray-50 px-2 py-1 text-xs border-t border-gray-100 flex justify-between items-center">
+                                                <span class="text-gray-500 truncate w-full">{{ formatFileSize(attachment.file_size_bytes) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </template>
 
                                 <!-- Comment Item -->
@@ -612,43 +645,6 @@ const linkify = (text) => {
                                         </span>
                                     </div>
                                 </template>
-                            </div>
-
-                            <!-- Legacy/Unlinked Attachments (if any, grouping them as an event) -->
-                            <div v-if="ticket.attachments.filter(a => !a.comment_id).length > 0" class="relative">
-                                <div class="absolute -left-[25px] top-0 w-4 h-4 rounded-full bg-gray-100 border-2 border-gray-400"></div>
-                                <div class="mb-1 text-sm text-gray-500">
-                                    Attachments uploaded separately
-                                </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                    <div v-for="attachment in ticket.attachments.filter(a => !a.comment_id)" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
-                                        <!-- Image Preview -->
-                                        <div v-if="isImage(attachment.file_name) && !failedImages.has(attachment.id)" 
-                                             class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
-                                             @click="openImageViewer(attachment)">
-                                            <img :src="getThumbnailUrl(attachment)" 
-                                                 class="object-cover w-full h-32" 
-                                                 :alt="attachment.file_name"
-                                                 @error="handleImageError(attachment.id)">
-                                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all flex items-center justify-center">
-                                                <svg class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Generic File Icon -->
-                                        <div v-else class="h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
-                                            <svg class="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                            </svg>
-                                            <span class="text-xs text-gray-500 text-center truncate w-full px-2">{{ attachment.file_name }}</span>
-                                        </div>
-
-                                        <!-- File info -->
-                                        <div class="bg-gray-50 px-2 py-1 text-xs border-t border-gray-100 flex justify-between items-center">
-                                            <span class="text-gray-500 truncate w-full">{{ formatFileSize(attachment.file_size_bytes) }}</span>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
 
                         </div>

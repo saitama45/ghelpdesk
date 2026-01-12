@@ -42,6 +42,11 @@ class Ticket extends Model
         return $this->hasMany(TicketAttachment::class);
     }
 
+    protected $casts = [
+        'created_at' => 'datetime:Y-m-d H:i:s',
+        'updated_at' => 'datetime:Y-m-d H:i:s',
+    ];
+
     public function reporter()
     {
         return $this->belongsTo(User::class, 'reporter_id');
