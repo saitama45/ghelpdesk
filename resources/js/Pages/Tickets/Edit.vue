@@ -155,6 +155,63 @@ const parseDate = (dateString) => {
     return isNaN(d.getTime()) ? new Date(dateString) : d;
 };
 
+// Image Navigation
+const allImages = computed(() => {
+    const images = [];
+    
+    // Add description attachments
+    const descAttachments = (props.ticket.attachments || []).filter(a => !a.comment_id && isImage(a.file_name));
+    images.push(...descAttachments);
+
+    // Add comment attachments
+    if (props.ticket.comments) {
+        props.ticket.comments.forEach(comment => {
+            if (comment.attachments) {
+                images.push(...comment.attachments.filter(a => isImage(a.file_name)));
+            }
+        });
+    }
+
+    return images;
+});
+
+const currentIndex = computed(() => {
+    if (!currentImage.value) return -1;
+    return allImages.value.findIndex(img => img.id === currentImage.value.id);
+});
+
+const navigateImage = (direction) => {
+    if (currentIndex.value === -1 || allImages.value.length <= 1) return;
+    
+    let newIndex = currentIndex.value + direction;
+    
+    // Loop
+    if (newIndex < 0) newIndex = allImages.value.length - 1;
+    if (newIndex >= allImages.value.length) newIndex = 0;
+    
+    currentImage.value = allImages.value[newIndex];
+    zoomLevel.value = 1;
+    panOffset.value = { x: 0, y: 0 };
+};
+
+const handleKeydown = (e) => {
+    if (!showImageViewer.value) return;
+    
+    if (e.key === 'ArrowLeft') navigateImage(-1);
+    if (e.key === 'ArrowRight') navigateImage(1);
+    if (e.key === 'Escape') closeImageViewer();
+};
+
+import { onMounted, onUnmounted } from 'vue';
+
+onMounted(() => {
+    window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeydown);
+});
+
 const activities = computed(() => {
     const comments = (props.ticket.comments || []).map(c => ({
         ...c,
@@ -804,12 +861,30 @@ const linkify = (text) => {
                 </div>
 
                 <!-- Image Container -->
-                <div class="flex-grow flex items-center justify-center overflow-hidden cursor-move p-4" 
+                <div class="flex-grow flex items-center justify-center overflow-hidden cursor-move p-4 relative" 
                      @mousedown.prevent="isDragging = true" 
                      @mouseup="isDragging = false" 
                      @mouseleave="isDragging = false"
                      @mousemove="isDragging && (panOffset.x += $event.movementX, panOffset.y += $event.movementY)"
                      @wheel.prevent="handleWheel">
+                    
+                    <!-- Navigation Arrows -->
+                    <button 
+                        v-if="allImages.length > 1" 
+                        @click.stop="navigateImage(-1)" 
+                        class="absolute left-4 top-1/2 transform -translate-y-1/2 p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-sm transition-all z-20 focus:outline-none"
+                    >
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    
+                    <button 
+                        v-if="allImages.length > 1" 
+                        @click.stop="navigateImage(1)" 
+                        class="absolute right-4 top-1/2 transform -translate-y-1/2 p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-sm transition-all z-20 focus:outline-none"
+                    >
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                    </button>
+
                     <img 
                         v-if="currentImage"
                         :src="getThumbnailUrl(currentImage)" 
