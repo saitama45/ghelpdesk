@@ -48,9 +48,14 @@ const handleImageError = (attachmentId) => {
 
 const handleZoom = (delta) => {
     const newZoom = zoomLevel.value + delta;
-    if (newZoom >= 0.5 && newZoom <= 5) {
-        zoomLevel.value = newZoom;
+    if (newZoom >= 0.1 && newZoom <= 5) {
+        zoomLevel.value = Math.round(newZoom * 10) / 10;
     }
+};
+
+const handleWheel = (event) => {
+    const delta = event.deltaY > 0 ? -0.1 : 0.1;
+    handleZoom(delta);
 };
 
 const isImage = (filename) => {
@@ -125,7 +130,8 @@ const formatDate = (dateInput) => {
         hour: 'numeric', 
         minute: 'numeric', 
         second: 'numeric',
-        hour12: true
+        hour12: true,
+        timeZone: 'Asia/Manila'
     });
 };
 
@@ -133,9 +139,17 @@ const parseDate = (dateString) => {
     if (!dateString) return new Date(0);
     if (dateString instanceof Date) return dateString;
     
-    // Treat as Wall Clock time: strip 'T', 'Z' and milliseconds/offset
-    // This ensures consistency between different serialization formats
-    let s = String(dateString).replace('T', ' ').replace('Z', '').split('.')[0].trim();
+    let s = String(dateString).replace(' ', 'T');
+    
+    // If it looks like a timestamp but lacks timezone info, force Manila (+08:00)
+    // Also handle Laravel's default ISO format by replacing Z with +08:00 
+    // because we've configured the server to Asia/Manila.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s)) {
+        // Strip milliseconds and any existing timezone/Z
+        s = s.split('.')[0].replace('Z', '');
+        // Append Manila offset
+        s += '+08:00';
+    }
     
     const d = new Date(s);
     return isNaN(d.getTime()) ? new Date(dateString) : d;
@@ -775,11 +789,11 @@ const linkify = (text) => {
                 <div class="absolute top-0 left-0 right-0 z-10 flex justify-between items-center p-4 bg-gradient-to-b from-black/50 to-transparent">
                     <h3 class="text-white font-medium truncate ml-2 text-shadow">{{ currentImage?.file_name }}</h3>
                     <div class="flex items-center space-x-2">
-                        <button @click="handleZoom(-0.5)" class="p-2 text-white hover:bg-white/20 rounded-full backdrop-blur-sm">
+                        <button @click="handleZoom(-0.1)" class="p-2 text-white hover:bg-white/20 rounded-full backdrop-blur-sm">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" /></svg>
                         </button>
                         <span class="text-white text-sm font-mono w-12 text-center">{{ Math.round(zoomLevel * 100) }}%</span>
-                        <button @click="handleZoom(0.5)" class="p-2 text-white hover:bg-white/20 rounded-full backdrop-blur-sm">
+                        <button @click="handleZoom(0.1)" class="p-2 text-white hover:bg-white/20 rounded-full backdrop-blur-sm">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
                         </button>
                         <div class="w-px h-6 bg-white/30 mx-2"></div>
@@ -794,7 +808,8 @@ const linkify = (text) => {
                      @mousedown.prevent="isDragging = true" 
                      @mouseup="isDragging = false" 
                      @mouseleave="isDragging = false"
-                     @mousemove="isDragging && (panOffset.x += $event.movementX, panOffset.y += $event.movementY)">
+                     @mousemove="isDragging && (panOffset.x += $event.movementX, panOffset.y += $event.movementY)"
+                     @wheel.prevent="handleWheel">
                     <img 
                         v-if="currentImage"
                         :src="getThumbnailUrl(currentImage)" 
