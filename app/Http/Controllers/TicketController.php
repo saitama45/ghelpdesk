@@ -166,14 +166,24 @@ class TicketController extends Controller
         // Load relationships for email
         $ticket->load(['reporter', 'assignee']);
 
+        $sentTo = [];
+        $adminEmail = 'gmcloud45@gmail.com';
+
         // Send email to reporter
         if ($ticket->reporter && $ticket->reporter->email) {
             Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
+            $sentTo[] = $ticket->reporter->email;
         }
 
         // Send email to assignee (if different from reporter)
         if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
             Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+            $sentTo[] = $ticket->assignee->email;
+        }
+
+        // Send notification to global admin for new tickets if not already sent
+        if (!in_array($adminEmail, $sentTo)) {
+            Mail::to($adminEmail)->send(new NewTicketCreated($ticket, 'Admin'));
         }
 
         return redirect()->back()->with('success', 'Ticket created successfully.');
