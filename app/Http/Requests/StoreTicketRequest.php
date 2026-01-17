@@ -23,7 +23,7 @@ class StoreTicketRequest extends FormRequest
     {
         return [
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:65535',
             'type' => 'required|in:bug,feature,task,spike',
             'status' => 'required|in:open,in_progress,closed,waiting',
             'priority' => 'required|in:low,medium,high,urgent',

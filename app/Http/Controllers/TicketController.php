@@ -309,7 +309,7 @@ class TicketController extends Controller
     public function storeComment(Request $request, Ticket $ticket)
     {
         $request->validate([
-            'comment_text' => 'required|string|max:1000',
+            'comment_text' => 'required|string|max:65535',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,txt',
         ]);

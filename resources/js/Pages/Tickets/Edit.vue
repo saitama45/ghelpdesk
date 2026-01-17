@@ -498,6 +498,7 @@ const linkify = (text) => {
                                 ref="titleInput"
                                 v-model="editForm.title" 
                                 type="text" 
+                                maxlength="255"
                                 class="block w-full text-3xl font-bold text-gray-900 leading-tight border-0 border-b-2 border-blue-500 focus:ring-0 focus:border-blue-600 px-0 py-1 bg-transparent placeholder-gray-300"
                                 placeholder="Enter ticket title..."
                                 @blur="saveTitle"
@@ -527,6 +528,7 @@ const linkify = (text) => {
                                     <textarea 
                                         v-model="commentForm.comment_text" 
                                         rows="3" 
+                                        maxlength="65535"
                                         class="block w-full border-0 focus:ring-0 resize-y bg-transparent" 
                                         placeholder="Leave a comment..."
                                     ></textarea>
@@ -599,6 +601,7 @@ const linkify = (text) => {
                                             ref="descriptionInput"
                                             v-model="editForm.description" 
                                             rows="6" 
+                                            maxlength="65535"
                                             class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-2"
                                             @keydown.esc="cancelDescriptionEdit"
                                         ></textarea>
