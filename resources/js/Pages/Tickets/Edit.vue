@@ -62,7 +62,19 @@ const isImage = (filename) => {
     return /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename);
 };
 
+const createFileObject = (file) => {
+    return {
+        id: 'local-' + Date.now() + '-' + Math.random(),
+        file: file,
+        file_name: file.name,
+        file_size_bytes: file.size,
+        preview: isImage(file.name) ? URL.createObjectURL(file) : null,
+        is_local: true
+    };
+};
+
 const getThumbnailUrl = (attachment) => {
+    if (attachment.preview) return attachment.preview;
     if (!attachment.file_storage_path) return '';
     
     // Check if path already starts with /storage (not expected but safe)
@@ -345,12 +357,18 @@ const cancelDescriptionEdit = () => {
 const addComment = () => {
     if (!commentForm.comment_text.trim() && commentForm.attachments.length === 0) return;
     
+    const attachmentsToUpload = commentForm.attachments.map(a => a.file);
+    
     // Inertia automatically handles FormData when files are present in the data object
     post(route('tickets.comments.store', props.ticket.id), {
         comment_text: commentForm.comment_text,
-        attachments: commentForm.attachments
+        attachments: attachmentsToUpload
     }, {
         onSuccess: () => {
+            // Cleanup object URLs
+            commentForm.attachments.forEach(a => {
+                if (a.preview) URL.revokeObjectURL(a.preview);
+            });
             commentForm.reset();
             if (commentFileInput.value) commentFileInput.value.value = '';
             showSuccess('Comment added successfully');
@@ -364,12 +382,28 @@ const addComment = () => {
 
 const handleCommentFileSelect = (event) => {
     const files = Array.from(event.target.files);
-    commentForm.attachments = [...commentForm.attachments, ...files];
+    const wrappedFiles = files.map(file => createFileObject(file));
+    commentForm.attachments = [...commentForm.attachments, ...wrappedFiles];
     // Reset input so same file can be selected again if needed (though we just appended)
     event.target.value = ''; 
 };
 
+const handlePaste = (event) => {
+    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    for (const item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            const blob = item.getAsFile();
+            if (blob) {
+                const file = new File([blob], `screenshot-${Date.now()}.png`, { type: blob.type });
+                commentForm.attachments.push(createFileObject(file));
+            }
+        }
+    }
+};
+
 const removeCommentAttachment = (index) => {
+    const attachment = commentForm.attachments[index];
+    if (attachment.preview) URL.revokeObjectURL(attachment.preview);
     commentForm.attachments.splice(index, 1);
 };
 
@@ -684,15 +718,41 @@ const linkify = (text) => {
                                             maxlength="65535"
                                             class="block w-full border-0 focus:ring-0 resize-y bg-transparent p-3 text-gray-700 placeholder-gray-400" 
                                             placeholder="Write your response..."
+                                            @paste="handlePaste"
                                         ></textarea>
                                         
                                         <!-- Attachment Preview in Comment Form -->
-                                        <div v-if="commentForm.attachments.length > 0" class="px-3 pb-2 flex flex-wrap gap-2">
-                                            <div v-for="(file, index) in commentForm.attachments" :key="index" class="relative group inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium border border-blue-200">
-                                                <span class="max-w-xs truncate">{{ file.name }}</span>
-                                                <button type="button" @click="removeCommentAttachment(index)" class="ml-1.5 text-blue-400 hover:text-blue-600 transition-colors">
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        <div v-if="commentForm.attachments.length > 0" class="px-3 pb-3 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-blue-50 pt-3">
+                                            <div v-for="(attachment, index) in commentForm.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                                <!-- Image Preview -->
+                                                <div v-if="isImage(attachment.file_name) && attachment.preview" 
+                                                     class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
+                                                     @click="openImageViewer(attachment)">
+                                                    <img :src="attachment.preview" 
+                                                         class="object-cover w-full h-24" 
+                                                         :alt="attachment.file_name">
+                                                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all flex items-center justify-center">
+                                                        <svg class="w-6 h-6 text-white opacity-0 group-hover:opacity-100 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Generic File Icon -->
+                                                <div v-else class="h-24 flex flex-col items-center justify-center p-2 bg-gray-50">
+                                                    <svg class="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                                    </svg>
+                                                    <span class="text-[10px] text-gray-500 text-center truncate w-full px-1">{{ attachment.file_name }}</span>
+                                                </div>
+
+                                                <!-- Remove button -->
+                                                <button type="button" @click="removeCommentAttachment(index)" class="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600">
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                                 </button>
+
+                                                <!-- File info -->
+                                                <div class="bg-gray-50 px-1.5 py-0.5 text-[10px] border-t border-gray-100 flex justify-between items-center">
+                                                    <span class="text-gray-500 truncate w-full">{{ formatFileSize(attachment.file_size_bytes) }}</span>
+                                                </div>
                                             </div>
                                         </div>
 
