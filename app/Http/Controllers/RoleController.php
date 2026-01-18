@@ -36,10 +36,14 @@ class RoleController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:roles',
             'permissions' => 'array',
-            'companies' => 'array'
+            'companies' => 'required|array|min:1',
+            'is_assignable' => 'boolean'
         ]);
 
-        $role = Role::create(['name' => $request->name]);
+        $role = Role::create([
+            'name' => $request->name,
+            'is_assignable' => $request->boolean('is_assignable')
+        ]);
         
         if ($request->permissions) {
             $role->syncPermissions($request->permissions);
@@ -57,10 +61,12 @@ class RoleController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:roles,name,' . $role->id,
             'permissions' => 'array',
-            'companies' => 'array'
+            'companies' => 'required|array|min:1',
+            'is_assignable' => 'boolean'
         ]);
 
         $role->name = $request->name;
+        $role->is_assignable = $request->boolean('is_assignable');
         $role->save();
         $role->syncPermissions($request->permissions ?? []);
         $role->companies()->sync($request->companies ?? []);

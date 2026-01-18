@@ -92,7 +92,9 @@ class TicketController extends Controller
         
         $query->orderBy('created_at', 'desc');
         $tickets = $query->paginate($request->get('per_page', 10))->withQueryString();
-        $staff = User::permission('tickets.edit')->select('id', 'name')->get();
+        $staff = User::whereHas('roles', function($q) {
+            $q->where('is_assignable', true);
+        })->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
 
         return Inertia::render('Tickets/Index', [
@@ -204,7 +206,9 @@ class TicketController extends Controller
      */
     public function edit(Ticket $ticket)
     {
-        $staff = User::role(['Dev', 'Admin'])->select('id', 'name')->get();
+        $staff = User::whereHas('roles', function($q) {
+            $q->where('is_assignable', true);
+        })->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         
         return Inertia::render('Tickets/Edit', [

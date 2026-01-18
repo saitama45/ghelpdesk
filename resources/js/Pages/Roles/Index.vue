@@ -136,8 +136,28 @@
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
 
+                        <div class="mb-4">
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <span class="text-sm font-medium text-gray-700">Can be assigned to tickets?</span>
+                                <div class="relative">
+                                    <input type="checkbox" v-model="form.is_assignable" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </div>
+                            </label>
+                            <p class="text-xs text-gray-500 mt-1">Users with this role will appear in the "Assignee" dropdown on tickets.</p>
+                        </div>
+
                             <div class="mb-6">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Companies</label>
+                                <div class="flex items-center justify-between mb-2">
+                                    <label class="block text-sm font-medium text-gray-700">Companies</label>
+                                    <label class="flex items-center space-x-2 text-xs text-blue-600 hover:text-blue-800 cursor-pointer">
+                                        <input type="checkbox" 
+                                            :checked="form.companies.length === companies.length && companies.length > 0"
+                                            @change="toggleAllCompanies"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <span>Select All</span>
+                                    </label>
+                                </div>
                                 <div class="space-y-2 max-h-32 overflow-y-auto border rounded-lg p-3">
                                     <label v-for="company in companies" :key="company.id" class="flex items-center">
                                         <input type="checkbox" :value="company.id" v-model="form.companies"
@@ -148,10 +168,28 @@
                             </div>
 
                             <div class="mb-6">
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
+                                <div class="flex items-center justify-between mb-2">
+                                    <label class="block text-sm font-medium text-gray-700">Permissions</label>
+                                    <label class="flex items-center space-x-2 text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer">
+                                        <input type="checkbox"
+                                            :checked="areAllPermissionsSelected"
+                                            @change="toggleAllPermissions"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <span>Select All Permissions</span>
+                                    </label>
+                                </div>
                                 <div class="space-y-4">
                                     <div v-for="(perms, category) in permissions" :key="category" class="border rounded-lg p-4">
-                                        <h4 class="font-medium text-gray-900 mb-2 capitalize">{{ category }}</h4>
+                                        <div class="flex items-center justify-between mb-2">
+                                            <h4 class="font-medium text-gray-900 capitalize">{{ category }}</h4>
+                                            <label class="flex items-center space-x-2 text-xs text-gray-600 hover:text-gray-900 cursor-pointer">
+                                                <input type="checkbox" 
+                                                    :checked="isCategorySelected(perms)" 
+                                                    @change="toggleCategory(category, perms)"
+                                                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                                <span>Select All</span>
+                                            </label>
+                                        </div>
                                         <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
                                             <label v-for="permission in sortPermissions(perms)" :key="permission.id" class="flex items-center">
                                                 <input type="checkbox" :value="permission.name" v-model="form.permissions"
@@ -181,7 +219,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -212,7 +250,8 @@ const selectedRole = ref(null)
 const form = reactive({
     name: '',
     permissions: [],
-    companies: []
+    companies: [],
+    is_assignable: false
 })
 
 onMounted(() => {
@@ -239,6 +278,7 @@ const openCreateModal = () => {
     form.name = ''
     form.permissions = []
     form.companies = []
+    form.is_assignable = false
     showModal.value = true
 }
 
@@ -248,6 +288,7 @@ const editRole = (role) => {
     form.name = role.name
     form.permissions = role.permissions.map(p => p.name)
     form.companies = role.companies ? role.companies.map(c => c.id) : []
+    form.is_assignable = !!role.is_assignable
     showModal.value = true
 }
 
@@ -256,9 +297,15 @@ const closeModal = () => {
     form.name = ''
     form.permissions = []
     form.companies = []
+    form.is_assignable = false
 }
 
 const submitForm = () => {
+    if (form.companies.length === 0) {
+        showError('Please select at least one company')
+        return
+    }
+
     const url = isEditing.value ? `/roles/${currentRole.value.id}` : '/roles'
     const method = isEditing.value ? 'put' : 'post'
     
@@ -276,21 +323,51 @@ const submitForm = () => {
     })
 }
 
-const deleteRole = async (role) => {
-    const confirmed = await confirm({
-        title: 'Delete Role',
-        message: `Are you sure you want to delete the role "${role.name}"? This action cannot be undone.`
-    })
-    
-    if (confirmed) {
-        destroy(`/roles/${role.id}`, {
-            onSuccess: () => showSuccess('Role deleted successfully'),
-            onError: (errors) => {
-                const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete role with assigned users'
-                showError(errorMessage)
-            }
-        })
+const toggleAllCompanies = () => {
+    if (form.companies.length === props.companies.length) {
+        form.companies = []
+    } else {
+        form.companies = props.companies.map(c => c.id)
     }
+}
+
+const getAllPermissionNames = () => {
+    return Object.values(props.permissions).flat().map(p => p.name);
+};
+
+const areAllPermissionsSelected = computed(() => {
+    if (!props.permissions) return false;
+    const allNames = getAllPermissionNames();
+    return allNames.length > 0 && allNames.every(name => form.permissions.includes(name));
+});
+
+const toggleAllPermissions = () => {
+    const allNames = getAllPermissionNames();
+    
+    if (areAllPermissionsSelected.value) {
+        form.permissions = [];
+    } else {
+        form.permissions = [...allNames];
+    }
+}
+
+const toggleCategory = (category, permissionsList) => {
+    const allNames = permissionsList.map(p => p.name);
+    const hasAll = allNames.every(name => form.permissions.includes(name));
+    
+    if (hasAll) {
+        // Unselect all
+        form.permissions = form.permissions.filter(name => !allNames.includes(name));
+    } else {
+        // Select all (add missing ones)
+        const missing = allNames.filter(name => !form.permissions.includes(name));
+        form.permissions = [...form.permissions, ...missing];
+    }
+}
+
+const isCategorySelected = (permissionsList) => {
+    if (!permissionsList || permissionsList.length === 0) return false;
+    return permissionsList.every(p => form.permissions.includes(p.name));
 }
 
 const sortPermissions = (permissions) => {
