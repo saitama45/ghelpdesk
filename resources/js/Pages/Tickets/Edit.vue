@@ -449,24 +449,16 @@ const linkify = (text) => {
 
     <AppLayout>
         <template #header>
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div class="flex items-center space-x-4">
-                    <Link :href="route('tickets.index')" class="text-blue-600 hover:text-blue-800 flex-shrink-0 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                        </svg>
-                    </Link>
-                    <div class="flex flex-col">
-                        <span class="text-lg font-bold text-gray-700 tracking-tight flex items-center gap-2">
-                            <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-sm border border-gray-200">{{ ticket.ticket_key }}</span>
-                            <span class="text-gray-400 font-normal">/</span>
-                            <span class="text-gray-500 text-base font-medium">Details</span>
-                        </span>
-                    </div>
-                </div>
-                <div class="flex items-center text-sm text-gray-500 whitespace-nowrap bg-white px-3 py-1.5 rounded-md shadow-sm border border-gray-200">
-                     <svg class="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                     Created {{ formatDate(ticket.created_at) }}
+            <div class="flex items-center space-x-4">
+                <Link :href="route('tickets.index')" class="text-blue-600 hover:text-blue-800 flex-shrink-0 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </Link>
+                <div class="flex flex-col">
+                    <h1 class="text-lg font-bold tracking-tight">
+                        <span class="text-blue-600">{{ ticket.ticket_key }}</span> <span class="text-gray-900">{{ ticket.title }}</span>
+                    </h1>
                 </div>
             </div>
         </template>
@@ -510,61 +502,11 @@ const linkify = (text) => {
                     </div>
 
                     <!-- Activity / Timeline -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 pb-0 relative">
                         <h3 class="text-lg font-semibold text-gray-900 mb-6">Activity</h3>
 
-                        <!-- Comment Input -->
-                        <div class="flex space-x-4 mb-8">
-                            <div class="flex-shrink-0">
-                                <div v-if="$page.props.auth.user.profile_photo" class="w-10 h-10 rounded-full overflow-hidden border border-gray-200">
-                                    <img :src="'/storage/' + $page.props.auth.user.profile_photo" class="h-full w-full object-cover" :alt="$page.props.auth.user.name">
-                                </div>
-                                <div v-else class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold">
-                                    {{ $page.props.auth.user.name.charAt(0) }}
-                                </div>
-                            </div>
-                            <div class="flex-grow">
-                                <div class="bg-white border border-gray-300 rounded-lg shadow-sm focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
-                                    <textarea 
-                                        v-model="commentForm.comment_text" 
-                                        rows="3" 
-                                        maxlength="65535"
-                                        class="block w-full border-0 focus:ring-0 resize-y bg-transparent" 
-                                        placeholder="Leave a comment..."
-                                    ></textarea>
-                                    
-                                    <!-- Attachment Preview in Comment Form -->
-                                    <div v-if="commentForm.attachments.length > 0" class="px-3 pb-2 flex flex-wrap gap-2">
-                                        <div v-for="(file, index) in commentForm.attachments" :key="index" class="relative group inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
-                                            <span class="max-w-xs truncate">{{ file.name }}</span>
-                                            <button type="button" @click="removeCommentAttachment(index)" class="ml-1 text-blue-400 hover:text-blue-600">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex items-center justify-between px-3 py-2 border-t border-gray-100 bg-gray-50 rounded-b-lg">
-                                        <div class="flex items-center space-x-2">
-                                            <input ref="commentFileInput" type="file" multiple class="hidden" @change="handleCommentFileSelect">
-                                            <button type="button" @click="commentFileInput.click()" class="p-1 text-gray-500 hover:text-gray-700 rounded hover:bg-gray-200" title="Attach files">
-                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-                                            </button>
-                                        </div>
-                                        <button 
-                                            type="button" 
-                                            @click="addComment" 
-                                            :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
-                                            class="inline-flex items-center px-4 py-1.5 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-                                        >
-                                            Comment
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Timeline List -->
-                        <div class="relative pl-4 border-l-2 border-gray-200 space-y-8">
+                        <div class="relative pl-4 border-l-2 border-gray-200 space-y-8 mb-8 pb-6">
                             <!-- Loop Activities (Comments + History + Description) -->
                             <div v-for="activity in activities" :key="activity.activity_type + '-' + activity.id" class="relative">
                                 
@@ -721,6 +663,58 @@ const linkify = (text) => {
                                 </template>
                             </div>
 
+                        </div>
+
+                        <!-- Sticky Comment Input -->
+                        <div class="sticky bottom-0 z-10 -mx-6 -mb-0 p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg">
+                            <div class="flex space-x-4">
+                                <div class="flex-shrink-0">
+                                    <div v-if="$page.props.auth.user.profile_photo" class="w-10 h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
+                                        <img :src="'/storage/' + $page.props.auth.user.profile_photo" class="h-full w-full object-cover" :alt="$page.props.auth.user.name">
+                                    </div>
+                                    <div v-else class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-sm">
+                                        {{ $page.props.auth.user.name.charAt(0) }}
+                                    </div>
+                                </div>
+                                <div class="flex-grow">
+                                    <div class="bg-white border-2 border-blue-100 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all duration-200">
+                                        <textarea 
+                                            v-model="commentForm.comment_text" 
+                                            rows="2" 
+                                            maxlength="65535"
+                                            class="block w-full border-0 focus:ring-0 resize-y bg-transparent p-3 text-gray-700 placeholder-gray-400" 
+                                            placeholder="Write your response..."
+                                        ></textarea>
+                                        
+                                        <!-- Attachment Preview in Comment Form -->
+                                        <div v-if="commentForm.attachments.length > 0" class="px-3 pb-2 flex flex-wrap gap-2">
+                                            <div v-for="(file, index) in commentForm.attachments" :key="index" class="relative group inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium border border-blue-200">
+                                                <span class="max-w-xs truncate">{{ file.name }}</span>
+                                                <button type="button" @click="removeCommentAttachment(index)" class="ml-1.5 text-blue-400 hover:text-blue-600 transition-colors">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center justify-between px-3 py-2 border-t border-blue-50 bg-blue-50/50 rounded-b-xl">
+                                            <div class="flex items-center space-x-2">
+                                                <input ref="commentFileInput" type="file" multiple class="hidden" @change="handleCommentFileSelect">
+                                                <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all" title="Attach files">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                                                </button>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                @click="addComment" 
+                                                :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
+                                                class="inline-flex items-center px-5 py-2 border border-transparent text-sm font-bold rounded-lg shadow-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:transform active:scale-95"
+                                            >
+                                                Post Response
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
