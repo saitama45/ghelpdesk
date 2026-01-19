@@ -37,12 +37,16 @@ class RoleController extends Controller
             'name' => 'required|string|max:255|unique:roles',
             'permissions' => 'array',
             'companies' => 'required|array|min:1',
-            'is_assignable' => 'boolean'
+            'is_assignable' => 'boolean',
+            'notify_on_ticket_create' => 'boolean',
+            'notify_on_ticket_assign' => 'boolean',
         ]);
 
         $role = Role::create([
             'name' => $request->name,
-            'is_assignable' => $request->boolean('is_assignable')
+            'is_assignable' => $request->boolean('is_assignable'),
+            'notify_on_ticket_create' => $request->boolean('notify_on_ticket_create'),
+            'notify_on_ticket_assign' => $request->boolean('notify_on_ticket_assign'),
         ]);
         
         if ($request->permissions) {
@@ -62,11 +66,15 @@ class RoleController extends Controller
             'name' => 'required|string|max:255|unique:roles,name,' . $role->id,
             'permissions' => 'array',
             'companies' => 'required|array|min:1',
-            'is_assignable' => 'boolean'
+            'is_assignable' => 'boolean',
+            'notify_on_ticket_create' => 'boolean',
+            'notify_on_ticket_assign' => 'boolean',
         ]);
 
         $role->name = $request->name;
         $role->is_assignable = $request->boolean('is_assignable');
+        $role->notify_on_ticket_create = $request->boolean('notify_on_ticket_create');
+        $role->notify_on_ticket_assign = $request->boolean('notify_on_ticket_assign');
         $role->save();
         $role->syncPermissions($request->permissions ?? []);
         $role->companies()->sync($request->companies ?? []);

@@ -8,6 +8,8 @@ class Role extends SpatieRole
 {
     protected $casts = [
         'is_assignable' => 'boolean',
+        'notify_on_ticket_create' => 'boolean',
+        'notify_on_ticket_assign' => 'boolean',
     ];
 
     public function companies()

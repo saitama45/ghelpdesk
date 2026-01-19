@@ -147,6 +147,28 @@
                             <p class="text-xs text-gray-500 mt-1">Users with this role will appear in the "Assignee" dropdown on tickets.</p>
                         </div>
 
+                        <div class="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Notification Settings</h4>
+                            <div class="space-y-4">
+                                <label class="flex items-center justify-between cursor-pointer">
+                                    <span class="text-sm font-medium text-gray-700">Notify on Ticket Creation?</span>
+                                    <div class="relative">
+                                        <input type="checkbox" v-model="form.notify_on_ticket_create" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                </label>
+                                
+                                <label class="flex items-center justify-between cursor-pointer">
+                                    <span class="text-sm font-medium text-gray-700">Notify when Assigned?</span>
+                                    <div class="relative">
+                                        <input type="checkbox" v-model="form.notify_on_ticket_assign" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                </label>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-2">Configure when users with this role should receive email notifications.</p>
+                        </div>
+
                             <div class="mb-6">
                                 <div class="flex items-center justify-between mb-2">
                                     <label class="block text-sm font-medium text-gray-700">Companies</label>
@@ -251,7 +273,9 @@ const form = reactive({
     name: '',
     permissions: [],
     companies: [],
-    is_assignable: false
+    is_assignable: false,
+    notify_on_ticket_create: false,
+    notify_on_ticket_assign: false
 })
 
 onMounted(() => {
@@ -279,6 +303,8 @@ const openCreateModal = () => {
     form.permissions = []
     form.companies = []
     form.is_assignable = false
+    form.notify_on_ticket_create = false
+    form.notify_on_ticket_assign = false
     showModal.value = true
 }
 
@@ -289,6 +315,8 @@ const editRole = (role) => {
     form.permissions = role.permissions.map(p => p.name)
     form.companies = role.companies ? role.companies.map(c => c.id) : []
     form.is_assignable = !!role.is_assignable
+    form.notify_on_ticket_create = !!role.notify_on_ticket_create
+    form.notify_on_ticket_assign = !!role.notify_on_ticket_assign
     showModal.value = true
 }
 
@@ -298,6 +326,8 @@ const closeModal = () => {
     form.permissions = []
     form.companies = []
     form.is_assignable = false
+    form.notify_on_ticket_create = false
+    form.notify_on_ticket_assign = false
 }
 
 const submitForm = () => {

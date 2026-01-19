@@ -169,7 +169,6 @@ class TicketController extends Controller
         $ticket->load(['reporter', 'assignee']);
 
         $sentTo = [];
-        $adminEmail = 'gmcloud45@gmail.com';
 
         // Send email to reporter
         if ($ticket->reporter && $ticket->reporter->email) {
@@ -179,13 +178,24 @@ class TicketController extends Controller
 
         // Send email to assignee (if different from reporter)
         if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
-            Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
-            $sentTo[] = $ticket->assignee->email;
+            // Check if assignee role allows notification
+            $shouldNotifyAssignee = $ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists();
+             
+            if ($shouldNotifyAssignee) {
+                Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                $sentTo[] = $ticket->assignee->email;
+            }
         }
 
-        // Send notification to global admin for new tickets if not already sent
-        if (!in_array($adminEmail, $sentTo)) {
-            Mail::to($adminEmail)->send(new NewTicketCreated($ticket, 'Admin'));
+        // Send notification to users with 'notify_on_ticket_create' role
+        $usersToNotify = User::whereHas('roles', function($q) {
+            $q->where('notify_on_ticket_create', true);
+        })->get();
+
+        foreach ($usersToNotify as $userToNotify) {
+            if ($userToNotify->email && !in_array($userToNotify->email, $sentTo)) {
+                Mail::to($userToNotify->email)->send(new NewTicketCreated($ticket, 'Admin'));
+            }
         }
 
         return redirect()->back()->with('success', 'Ticket created successfully.');
@@ -282,9 +292,10 @@ class TicketController extends Controller
             if ($assigneeChanged && $ticket->assignee_id) {
                 $ticket->load('assignee');
                 if ($ticket->assignee && $ticket->assignee->email) {
-                    // Re-using NewTicketCreated for assignment notification as implied, or could create a specific one.
-                    // Assuming the request means "email the assignee now that they are assigned".
-                    Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                    // Check if assignee role allows notification
+                    if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
+                        Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                    }
                 }
             }
         }
