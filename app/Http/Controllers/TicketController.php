@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreTicketRequest;
 use App\Http\Requests\UpdateTicketRequest;
 use App\Mail\NewTicketCreated;
+use App\Mail\TicketAssigned;
 use App\Mail\TicketCommentAdded;
 use App\Models\Ticket;
 use App\Models\TicketComment;
@@ -294,7 +295,7 @@ class TicketController extends Controller
                 if ($ticket->assignee && $ticket->assignee->email) {
                     // Check if assignee role allows notification
                     if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
-                        Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                        Mail::to($ticket->assignee->email)->send(new TicketAssigned($ticket, $ticket->assignee->name));
                     }
                 }
             }
