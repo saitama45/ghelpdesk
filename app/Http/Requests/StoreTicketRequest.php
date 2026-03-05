@@ -30,6 +30,9 @@ class StoreTicketRequest extends FormRequest
             'severity' => 'required|in:critical,major,minor,cosmetic',
             'assignee_id' => 'nullable|exists:users,id',
             'company_id' => 'required|exists:companies,id',
+            'category_id' => 'required|exists:categories,id',
+            'sub_category_id' => 'required|exists:sub_categories,id',
+            'item_id' => 'required|exists:items,id',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,txt',
         ];

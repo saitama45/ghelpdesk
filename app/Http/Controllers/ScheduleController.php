@@ -18,16 +18,23 @@ class ScheduleController extends Controller implements HasMiddleware
             new Middleware('can:schedules.view', only: ['index']),
             new Middleware('can:schedules.create', only: ['store']),
             new Middleware('can:schedules.edit', only: ['update']),
-            new Middleware('can:schedules.delete', only: ['destroy']),
         ];
     }
 
     public function index(Request $request)
     {
-        $query = Schedule::with(['user', 'store']);
+        $query = Schedule::with(['user', 'store', 'ticket']);
 
         if ($request->filled('start') && $request->filled('end')) {
             $query->whereBetween('start_time', [$request->start, $request->end]);
+        }
+
+        if ($request->filled('user_id')) {
+            if ($request->user_id === 'my') {
+                $query->where('user_id', auth()->id());
+            } else {
+                $query->where('user_id', $request->user_id);
+            }
         }
 
         $schedules = $query->get()->map(function($schedule) {
@@ -35,6 +42,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'id' => $schedule->id,
                 'user_id' => $schedule->user_id,
                 'store_id' => $schedule->store_id,
+                'ticket_id' => $schedule->ticket_id,
                 'status' => $schedule->status,
                 'start_time' => $schedule->start_time->toIso8601String(),
                 'end_time' => $schedule->end_time->toIso8601String(),
@@ -45,6 +53,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'remarks' => $schedule->remarks,
                 'user' => $schedule->user,
                 'store' => $schedule->store,
+                'ticket' => $schedule->ticket,
             ];
         });
         
@@ -55,6 +64,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'schedules' => $schedules,
             'users' => $users,
             'stores' => $stores,
+            'filters' => $request->only(['user_id']),
         ]);
     }
 
@@ -133,11 +143,5 @@ class ScheduleController extends Controller implements HasMiddleware
         $schedule->update($validated);
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
-    }
-
-    public function destroy(Schedule $schedule)
-    {
-        $schedule->delete();
-        return redirect()->back()->with('success', 'Schedule deleted successfully');
     }
 }

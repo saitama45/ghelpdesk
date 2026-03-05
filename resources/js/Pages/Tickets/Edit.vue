@@ -1,9 +1,11 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
-import { ref, computed, reactive, watch, nextTick } from 'vue';
+import { ref, computed, reactive, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import CustomSelect from '@/Components/CustomSelect.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -13,6 +15,8 @@ const props = defineProps({
     ticket: Object,
     staff: Array,
     companies: Array,
+    users: Array,
+    stores: Array,
 });
 
 const page = usePage();
@@ -20,6 +24,57 @@ const { confirm } = useConfirm();
 const { put, destroy, post } = useErrorHandler();
 const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
+
+// Child Ticket State
+const showChildModal = ref(false);
+const childForm = useForm({
+    user_id: null,
+    store_id: null,
+    status: 'On-site',
+    start_time: '',
+    end_time: '',
+    pickup_start: '',
+    pickup_end: '',
+    backlogs_start: '',
+    backlogs_end: '',
+    remarks: ''
+});
+
+const scheduleStatuses = [
+    'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
+];
+
+const formatDateForInput = (date) => {
+    const d = new Date(date);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+};
+
+const openChildModal = () => {
+    childForm.reset();
+    
+    // Set default times
+    const now = new Date();
+    childForm.start_time = formatDateForInput(now);
+    const end = new Date();
+    end.setHours(end.getHours() + 8);
+    childForm.end_time = formatDateForInput(end);
+    
+    showChildModal.value = true
+};
+
+const submitChildTicket = () => {
+    childForm.post(route('tickets.store-child', props.ticket.id), {
+        onSuccess: () => {
+            showChildModal.value = false;
+            showSuccess('Child ticket and schedule created successfully');
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
+            showError(errorMessage);
+        }
+    });
+};
 
 // Image Viewer State
 const showImageViewer = ref(false);
@@ -94,6 +149,9 @@ const getThumbnailUrl = (attachment) => {
 
 const editForm = useForm({
     company_id: props.ticket.company_id || '',
+    category_id: props.ticket.category_id || '',
+    sub_category_id: props.ticket.sub_category_id || '',
+    item_id: props.ticket.item_id || '',
     title: props.ticket.title,
     description: props.ticket.description,
     type: props.ticket.type,
@@ -101,6 +159,71 @@ const editForm = useForm({
     status: props.ticket.status,
     severity: props.ticket.severity,
     assignee_id: props.ticket.assignee_id || '',
+});
+
+const categories = ref([]);
+const subCategories = ref([]);
+const items = ref([]);
+
+const fetchCategories = async () => {
+    try {
+        const response = await axios.get(route('tickets.data.categories'));
+        categories.value = response.data;
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+    }
+};
+
+const fetchSubCategories = async (categoryId) => {
+    if (!categoryId) {
+        subCategories.value = [];
+        return;
+    }
+    try {
+        const response = await axios.get(`/tickets/data/subcategories?category_id=${categoryId}`);
+        subCategories.value = response.data;
+    } catch (error) {
+        console.error('Error fetching subcategories:', error);
+    }
+};
+
+const fetchItems = async (categoryId, subCategoryId) => {
+    if (!categoryId || !subCategoryId) {
+        items.value = [];
+        return;
+    }
+    try {
+        const response = await axios.get(`/tickets/data/items?category_id=${categoryId}&sub_category_id=${subCategoryId}`);
+        items.value = response.data;
+    } catch (error) {
+        console.error('Error fetching items:', error);
+    }
+};
+
+watch(() => editForm.category_id, (newVal, oldVal) => {
+    if (oldVal !== undefined && oldVal !== newVal) {
+        editForm.sub_category_id = '';
+        editForm.item_id = '';
+    }
+    fetchSubCategories(newVal);
+});
+
+watch(() => editForm.sub_category_id, (newVal, oldVal) => {
+    if (oldVal !== undefined && oldVal !== newVal) {
+        editForm.item_id = '';
+    }
+    fetchItems(editForm.category_id, newVal);
+});
+
+onMounted(() => {
+    fetchCategories();
+    if (props.ticket.category_id) fetchSubCategories(props.ticket.category_id);
+    if (props.ticket.category_id && props.ticket.sub_category_id) fetchItems(props.ticket.category_id, props.ticket.sub_category_id);
+    window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeydown);
 });
 
 const commentForm = useForm({
@@ -118,15 +241,15 @@ const descriptionInput = ref(null);
 
 const types = ['bug', 'feature', 'task', 'spike'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'in_progress', 'closed', 'waiting'];
+const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting'];
 const severities = ['critical', 'major', 'minor', 'cosmetic'];
 
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
     return statuses.filter(status => {
-        if (status === 'closed') {
-            // Allow 'closed' if user has permission OR if ticket is already closed (so they see the correct current status)
-            return hasPermission('tickets.close') || props.ticket.status === 'closed';
+        if (status === 'closed' || status === 'resolved') {
+            // Allow 'closed' or 'resolved' if user has permission OR if ticket is already in that status
+            return hasPermission('tickets.close') || props.ticket.status === status;
         }
         return true;
     });
@@ -151,15 +274,15 @@ const parseDate = (dateString) => {
     if (!dateString) return new Date(0);
     if (dateString instanceof Date) return dateString;
     
+    // If the string already contains timezone info (Z or +/-XX:XX), let the Date constructor handle it
+    if (dateString.includes('Z') || /[\+\-]\d{2}:\d{2}$/.test(dateString)) {
+        return new Date(dateString);
+    }
+
     let s = String(dateString).replace(' ', 'T');
     
     // If it looks like a timestamp but lacks timezone info, force Manila (+08:00)
-    // Also handle Laravel's default ISO format by replacing Z with +08:00 
-    // because we've configured the server to Asia/Manila.
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s)) {
-        // Strip milliseconds and any existing timezone/Z
-        s = s.split('.')[0].replace('Z', '');
-        // Append Manila offset
         s += '+08:00';
     }
     
@@ -214,16 +337,6 @@ const handleKeydown = (e) => {
     if (e.key === 'Escape') closeImageViewer();
 };
 
-import { onMounted, onUnmounted } from 'vue';
-
-onMounted(() => {
-    window.addEventListener('keydown', handleKeydown);
-});
-
-onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeydown);
-});
-
 const activities = computed(() => {
     const comments = (props.ticket.comments || []).map(c => ({
         ...c,
@@ -248,8 +361,15 @@ const activities = computed(() => {
         attachments: (props.ticket.attachments || []).filter(a => !a.comment_id)
     };
 
+    const children = (props.ticket.children || []).map(child => ({
+        ...child,
+        activity_type: 'child_ticket',
+        date: parseDate(child.created_at),
+        user: child.reporter
+    }));
+
     // Sort ascending (oldest first)
-    return [...comments, ...histories, description].sort((a, b) => {
+    return [...comments, ...histories, ...children, description].sort((a, b) => {
         return a.date.getTime() - b.date.getTime();
     });
 });
@@ -302,16 +422,22 @@ const debouncedUpdate = debounce(() => {
 
 // Watchers for other fields (excluding Title and Description which are now manual save)
 watch(() => [
-    editForm.company_id, 
-    editForm.status, 
-    editForm.priority, 
-    editForm.severity, 
-    editForm.type, 
+    editForm.company_id,
+    editForm.status,
+    editForm.priority,
+    editForm.severity,
+    editForm.type,
     editForm.assignee_id
 ], () => {
     updateTicket();
 });
 
+// Classification Watcher: Only save when the full hierarchy (Category -> Sub -> Item) is complete
+watch(() => editForm.item_id, (newVal) => {
+    if (newVal) {
+        updateTicket();
+    }
+});
 const startEditingTitle = () => {
     if (!hasPermission('tickets.edit')) return;
     isEditingTitle.value = true;
@@ -443,6 +569,7 @@ const getStatusColor = (status) => {
     switch (status) {
         case 'open': return 'text-blue-800 bg-blue-100';
         case 'in_progress': return 'text-purple-800 bg-purple-100';
+        case 'resolved': return 'text-green-800 bg-green-100';
         case 'closed': return 'text-gray-600 bg-gray-200';
         case 'waiting': return 'text-orange-800 bg-orange-100';
         default: return 'text-gray-800 bg-gray-100';
@@ -671,7 +798,7 @@ const linkify = (text) => {
                                 </template>
 
                                 <!-- History Item -->
-                                <template v-else>
+                                <template v-else-if="activity.activity_type === 'history'">
                                     <!-- Dot (Avatar) -->
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
@@ -693,6 +820,58 @@ const linkify = (text) => {
                                         to <span class="font-medium text-green-600 bg-green-50 px-1 rounded">
                                             {{ activity.column_changed === 'assignee_id' && !activity.new_value ? 'Unassigned' : (activity.new_value || '(empty)') }}
                                         </span>
+                                    </div>
+                                </template>
+
+                                <!-- Child Ticket Item -->
+                                <template v-else-if="activity.activity_type === 'child_ticket'">
+                                    <!-- Dot (Avatar) -->
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <div v-else class="w-full h-full bg-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                                            {{ activity.user ? activity.user.name.charAt(0) : '?' }}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-center space-x-2 mb-1">
+                                        <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
+                                        <span class="text-xs text-gray-500">created a child ticket <Link :href="route('tickets.edit', activity.id)" class="font-bold text-blue-600 hover:underline">{{ activity.ticket_key }}</Link> on {{ formatDate(activity.date) }}</span>
+                                    </div>
+                                    
+                                    <div v-if="activity.schedule" class="text-sm text-gray-700 bg-purple-50 p-4 rounded-xl border border-purple-100 space-y-3">
+                                        <div class="flex items-center justify-between">
+                                            <div class="flex flex-col">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">
+                                                    SCHEDULE DETAILS
+                                                </span>
+                                                <a :href="route('schedules.index')" target="_blank" class="text-[10px] font-bold text-blue-600 hover:underline mt-1 flex items-center">
+                                                    <svg class="w-2.5 h-2.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                    View Calendar
+                                                </a>
+                                            </div>
+                                            <span class="text-xs font-black text-purple-400">{{ activity.schedule.status }}</span>
+                                        </div>
+                                        
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p class="text-[10px] font-bold text-gray-400 uppercase">Assigned To</p>
+                                                <p class="font-semibold">{{ activity.assignee?.name || 'Unassigned' }}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-[10px] font-bold text-gray-400 uppercase">Store</p>
+                                                <p class="font-semibold">{{ activity.schedule.store?.name || 'N/A' }}</p>
+                                            </div>
+                                            <div>
+                                                <p class="text-[10px] font-bold text-gray-400 uppercase">Period</p>
+                                                <p class="text-xs">{{ formatDate(activity.schedule.start_time) }} - {{ formatDate(activity.schedule.end_time) }}</p>
+                                            </div>
+                                            <div v-if="activity.schedule.remarks">
+                                                <p class="text-[10px] font-bold text-gray-400 uppercase">Remarks</p>
+                                                <p class="text-xs italic">"{{ activity.schedule.remarks }}"</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </template>
                             </div>
@@ -814,6 +993,42 @@ const linkify = (text) => {
                             </div>
 
                             <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                                <Autocomplete 
+                                    v-model="editForm.category_id"
+                                    :options="categories"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select category..."
+                                    :disabled="!hasPermission('tickets.edit')"
+                                />
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Sub-Category</label>
+                                <Autocomplete 
+                                    v-model="editForm.sub_category_id"
+                                    :options="subCategories"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select sub-category..."
+                                    :disabled="!hasPermission('tickets.edit') || !editForm.category_id"
+                                />
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Item</label>
+                                <Autocomplete 
+                                    v-model="editForm.item_id"
+                                    :options="items"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select item..."
+                                    :disabled="!hasPermission('tickets.edit') || !editForm.sub_category_id"
+                                />
+                            </div>
+
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
                                 <CustomSelect
                                     v-model="editForm.status"
@@ -857,6 +1072,82 @@ const linkify = (text) => {
                             </div>
                         </div>
 
+                        <!-- Schedule Info for Child Ticket -->
+                        <div v-if="ticket.schedule" class="pt-6 border-t space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Schedule Info</h3>
+                                <a :href="route('schedules.index')" target="_blank" class="text-[10px] font-bold text-blue-600 hover:underline flex items-center">
+                                    <svg class="w-2.5 h-2.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    View Calendar
+                                </a>
+                            </div>
+                            <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs font-bold text-blue-700">{{ ticket.schedule.status }}</span>
+                                    <span v-if="ticket.schedule.store" class="text-[10px] font-bold text-blue-400 italic">@ {{ ticket.schedule.store.name }}</span>
+                                </div>
+                                <div class="text-[11px] text-gray-600 space-y-1">
+                                    <p><span class="font-bold">Start:</span> {{ formatDate(ticket.schedule.start_time) }}</p>
+                                    <p><span class="font-bold">End:</span> {{ formatDate(ticket.schedule.end_time) }}</p>
+                                </div>
+                                <div v-if="ticket.schedule.remarks" class="text-[10px] text-gray-500 italic border-t border-blue-100 pt-2 mt-2">
+                                    "{{ ticket.schedule.remarks }}"
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SLA Widget -->
+                        <div v-if="ticket.sla_metric" class="pt-6 border-t space-y-4">
+                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Ticket SLA</h3>
+                            <div class="space-y-3">
+                                <!-- Response SLA -->
+                                <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase">Response</span>
+                                        <span v-if="ticket.sla_metric.is_response_breached" class="text-[10px] font-black text-red-600 uppercase">BREACHED</span>
+                                        <span v-else-if="ticket.sla_metric.first_response_at" class="text-[10px] font-black text-green-600 uppercase">MET</span>
+                                        <span v-else class="text-[10px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                    </div>
+                                    <div class="text-xs font-semibold text-gray-900">
+                                        <div v-if="ticket.sla_metric.first_response_at">
+                                            Responded: {{ formatDate(ticket.sla_metric.first_response_at) }}
+                                        </div>
+                                        <div v-else-if="ticket.sla_metric.response_target_at">
+                                            Target: {{ formatDate(ticket.sla_metric.response_target_at) }}
+                                        </div>
+                                        <div v-else class="text-gray-400 italic">No target set</div>
+                                    </div>
+                                </div>
+
+                                <!-- Resolution SLA -->
+                                <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase">Resolution</span>
+                                        <span v-if="ticket.sla_metric.is_resolution_breached" class="text-[10px] font-black text-red-600 uppercase">BREACHED</span>
+                                        <span v-else-if="ticket.sla_metric.resolved_at" class="text-[10px] font-black text-green-600 uppercase">MET</span>
+                                        <span v-else class="text-[10px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                    </div>
+                                    <div class="text-xs font-semibold text-gray-900">
+                                        <div v-if="ticket.sla_metric.resolved_at">
+                                            Resolved: {{ formatDate(ticket.sla_metric.resolved_at) }}
+                                        </div>
+                                        <div v-else-if="ticket.sla_metric.resolution_target_at">
+                                            Target: {{ formatDate(ticket.sla_metric.resolution_target_at) }}
+                                        </div>
+                                        <div v-else class="text-gray-400 italic">No target set</div>
+                                    </div>
+                                </div>
+
+                                <div v-if="ticket.sla_metric.total_paused_seconds > 0" class="text-center">
+                                    <span class="text-[10px] font-medium text-gray-400 italic">
+                                        Total paused: {{ Math.round(ticket.sla_metric.total_paused_seconds / 60) }} minutes
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div v-if="hasPermission('tickets.assign')">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Assignee</label>
                             <CustomSelect
@@ -887,14 +1178,149 @@ const linkify = (text) => {
                         </div>
 
                         <div class="pt-6 border-t space-y-3">
+                            <button 
+                                v-if="hasPermission('tickets.edit') && (!ticket.children || ticket.children.length === 0)"
+                                type="button" 
+                                @click="openChildModal" 
+                                class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-medium text-blue-600 bg-white hover:bg-blue-50 transition-colors"
+                            >
+                                Create Child Ticket
+                            </button>
+                            
                             <button v-if="hasPermission('tickets.delete')" type="button" @click="deleteTicket" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
                                 Delete Ticket
                             </button>
                         </div>
                     </div>
+
+                    <!-- Children Tickets -->
+                    <div v-if="ticket.children && ticket.children.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 space-y-4">
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Child Tickets</h3>
+                        <div class="space-y-3">
+                            <div v-for="child in ticket.children" :key="child.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                <div class="flex flex-col">
+                                    <Link :href="route('tickets.edit', child.id)" class="text-sm font-bold text-blue-600 hover:underline">
+                                        {{ child.ticket_key }}
+                                    </Link>
+                                    <span class="text-xs text-gray-600 truncate max-w-[200px]">{{ child.title }}</span>
+                                </div>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter" :class="getStatusColor(child.status)">
+                                    {{ child.status }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <!-- Create Child Ticket Modal -->
+        <Modal :show="showChildModal" max-width="2xl" @close="showChildModal = false">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex flex-col">
+                        <h3 class="text-lg font-bold text-gray-900 leading-none">
+                            Create Child Ticket & Schedule
+                        </h3>
+                        <a :href="route('schedules.index')" target="_blank" class="text-xs font-bold text-blue-600 hover:underline mt-1 flex items-center">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            View Scheduling Calendar
+                        </a>
+                    </div>
+                    <button @click="showChildModal = false" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form @submit.prevent="submitChildTicket" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Assigned User</label>
+                            <Autocomplete 
+                                v-model="childForm.user_id"
+                                :options="users"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select user..."
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Schedule Status</label>
+                            <select v-model="childForm.status" required
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Store (Optional)</label>
+                            <Autocomplete 
+                                v-model="childForm.store_id"
+                                :options="stores"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select store..."
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
+                            <input v-model="childForm.start_time" type="datetime-local" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
+                            <input v-model="childForm.end_time" type="datetime-local" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Pickup Time (From - To)</label>
+                            <div class="flex items-center space-x-2">
+                                <input v-model="childForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                <span class="text-gray-400">-</span>
+                                <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Backlogs Time (From - To)</label>
+                            <div class="flex items-center space-x-2">
+                                <input v-model="childForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                <span class="text-gray-400">-</span>
+                                <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
+                            <textarea v-model="childForm.remarks" rows="3"
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                      placeholder="Provide details about the activity..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end space-x-3 pt-4 border-t">
+                        <button type="button" @click="showChildModal = false" 
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95">
+                            Create Child Ticket
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Modal>
 
         <!-- Image Viewer Modal -->
         <Modal :show="showImageViewer" max-width="4xl" @close="closeImageViewer">

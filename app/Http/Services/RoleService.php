@@ -65,15 +65,6 @@ class RoleService
     }
 
     /**
-     * Delete a role
-     */
-    public static function deleteRole($roleId)
-    {
-        $role = Role::findById($roleId);
-        return $role->delete();
-    }
-
-    /**
      * Check if user has permission
      */
     public static function userHasPermission($user, $permission)

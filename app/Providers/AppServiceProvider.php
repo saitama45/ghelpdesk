@@ -27,5 +27,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::before(function ($user, $ability) {
             return $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) ? true : null;
         });
+
+        \App\Models\Ticket::observe(\App\Observers\TicketObserver::class);
     }
 }

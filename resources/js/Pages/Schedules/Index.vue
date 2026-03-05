@@ -8,6 +8,16 @@
                     @event-click="handleEventClick"
                 >
                     <template #actions>
+                        <div class="w-48 md:w-64">
+                            <Autocomplete 
+                                v-model="filterUser"
+                                :options="userFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Filter by user..."
+                                @update:modelValue="applyFilter"
+                            />
+                        </div>
                         <button 
                             @click="exportPdf"
                             class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm"
@@ -123,17 +133,7 @@
                             </div>
                         </div>
 
-                        <div class="flex justify-between items-center pt-4 border-t">
-                            <button 
-                                v-if="isEditing && hasPermission('schedules.delete')"
-                                type="button" 
-                                @click="deleteSchedule" 
-                                class="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                                Delete
-                            </button>
-                            <div v-else></div>
-
+                        <div class="flex justify-end items-center pt-4 border-t">
                             <div class="flex space-x-3">
                                 <button type="button" @click="closeModal" 
                                         class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
@@ -153,7 +153,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
@@ -165,8 +166,37 @@ import { usePermission } from '@/Composables/usePermission'
 const props = defineProps({
     schedules: Array,
     users: Array,
-    stores: Array
+    stores: Array,
+    filters: Object
 })
+
+const page = usePage()
+const filterUser = ref(props.filters?.user_id || '')
+
+const userFilterOptions = computed(() => {
+    const currentUserId = page.props.auth.user.id
+    const options = [
+        { id: '', name: 'All Users' },
+        { id: 'my', name: 'My Schedules' }
+    ]
+    
+    props.users.forEach(user => {
+        if (user.id !== currentUserId) {
+            options.push({ id: user.id, name: user.name })
+        }
+    })
+    
+    return options
+})
+
+const applyFilter = () => {
+    router.get(route('schedules.index'), {
+        user_id: filterUser.value
+    }, {
+        preserveState: true,
+        preserveScroll: true
+    })
+}
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
@@ -280,25 +310,5 @@ const submitForm = () => {
             showError(errorMessage)
         }
     })
-}
-
-const deleteSchedule = async () => {
-    const confirmed = await confirm({
-        title: 'Delete Schedule',
-        message: 'Are you sure you want to delete this schedule? This action cannot be undone.'
-    })
-    
-    if (confirmed) {
-        destroy(`/schedules/${currentScheduleId.value}`, {
-            onSuccess: () => {
-                closeModal()
-                showSuccess('Schedule deleted successfully')
-            },
-            onError: (errors) => {
-                const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete schedule'
-                showError(errorMessage)
-            }
-        })
-    }
 }
 </script>

@@ -26,11 +26,44 @@ class Ticket extends Model
         'milestone_id',
         'company_id',
         'category_id',
+        'sub_category_id',
+        'item_id',
+        'parent_id',
     ];
+
+    public function parent()
+    {
+        return $this->belongsTo(Ticket::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(Ticket::class, 'parent_id');
+    }
+
+    public function schedule()
+    {
+        return $this->hasOne(Schedule::class);
+    }
+
+    public function slaMetric()
+    {
+        return $this->hasOne(TicketSlaMetric::class);
+    }
 
     public function category()
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function subCategory()
+    {
+        return $this->belongsTo(SubCategory::class);
+    }
+
+    public function item()
+    {
+        return $this->belongsTo(Item::class);
     }
 
     public function comments()

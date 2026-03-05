@@ -229,6 +229,7 @@ const formatDateLong = (date) => {
                             <div class="flex flex-col gap-0.5">
                                 <div class="font-black truncate flex items-center gap-1">
                                     <span v-if="getEventStatus(event, day.date).isStart" class="w-1 h-1 rounded-full bg-white animate-pulse"></span>
+                                    <span v-if="event.ticket" class="opacity-75 font-normal">[{{ event.ticket.ticket_key }}]</span>
                                     {{ event.user?.name }}
                                 </div>
                                 <div v-if="getEventStatus(event, day.date).isStart" class="opacity-90 font-medium truncate flex justify-between">

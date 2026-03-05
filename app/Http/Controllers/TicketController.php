@@ -12,6 +12,8 @@ use App\Models\TicketComment;
 use App\Models\TicketAttachment;
 use App\Models\User;
 use App\Models\Company;
+use App\Models\Store;
+use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -27,7 +29,8 @@ class TicketController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Ticket::with(['reporter:id,name,profile_photo', 'assignee:id,name,profile_photo', 'company:id,name']);
+        $query = Ticket::with(['reporter:id,name,profile_photo', 'assignee:id,name,profile_photo', 'company:id,name', 'slaMetric'])
+            ->whereNull('parent_id'); // Only show top-level tickets
 
         // If user has 'User' role, only show tickets they reported
         if ($user->hasRole('User')) {
@@ -217,26 +220,54 @@ class TicketController extends Controller
      */
     public function edit(Ticket $ticket)
     {
+        $ticket->load([
+            'comments' => function($query) {
+                $query->with(['user:id,name,profile_photo', 'attachments'])->orderBy('created_at', 'desc');
+            },
+            'histories' => function($query) {
+                $query->with('user:id,name,profile_photo')->orderBy('changed_at', 'desc');
+            },
+            'attachments', 
+            'reporter', 
+            'assignee', 
+            'company',
+            'parent',
+            'schedule.store',
+            'slaMetric',
+            'children' => function($query) {
+                $query->with(['schedule.store', 'reporter', 'assignee']);
+            }
+        ]);
+
+        // Auto-create SLA metric if missing but category has targets
+        if (!$ticket->slaMetric && $ticket->category) {
+            $category = $ticket->category;
+            if ($category->response_time_hours || $category->resolution_time_hours) {
+                $ticket->slaMetric()->create([
+                    'response_target_at' => $category->response_time_hours 
+                        ? \App\Services\SlaService::calculateTarget($ticket->created_at, $category->response_time_hours, $category)
+                        : null,
+                    'resolution_target_at' => $category->resolution_time_hours 
+                        ? \App\Services\SlaService::calculateTarget($ticket->created_at, $category->resolution_time_hours, $category)
+                        : null,
+                ]);
+                $ticket->load('slaMetric'); // Reload
+            }
+        }
+
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
         })->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
+        $users = User::active()->orderBy('name')->get();
+        $stores = Store::where('is_active', true)->orderBy('name')->get();
         
         return Inertia::render('Tickets/Edit', [
-            'ticket' => $ticket->load([
-                'comments' => function($query) {
-                    $query->with(['user:id,name,profile_photo', 'attachments'])->orderBy('created_at', 'desc');
-                },
-                'histories' => function($query) {
-                    $query->with('user:id,name,profile_photo')->orderBy('changed_at', 'desc');
-                },
-                'attachments', 
-                'reporter', 
-                'assignee', 
-                'company'
-            ]),
+            'ticket' => $ticket,
             'staff' => $staff,
             'companies' => $companies,
+            'users' => $users,
+            'stores' => $stores,
         ]);
     }
 
@@ -274,6 +305,15 @@ class TicketController extends Controller
                 } elseif (in_array($column, ['assignee_id', 'reporter_id'])) {
                     $oldValue = \App\Models\User::find($oldValue)?->name ?? $oldValue;
                     $newValue = \App\Models\User::find($newValue)?->name ?? $newValue;
+                } elseif ($column === 'category_id') {
+                    $oldValue = \App\Models\Category::find($oldValue)?->name ?? $oldValue;
+                    $newValue = \App\Models\Category::find($newValue)?->name ?? $newValue;
+                } elseif ($column === 'sub_category_id') {
+                    $oldValue = \App\Models\SubCategory::find($oldValue)?->name ?? $oldValue;
+                    $newValue = \App\Models\SubCategory::find($newValue)?->name ?? $newValue;
+                } elseif ($column === 'item_id') {
+                    $oldValue = \App\Models\Item::find($oldValue)?->name ?? $oldValue;
+                    $newValue = \App\Models\Item::find($newValue)?->name ?? $newValue;
                 }
                 
                 // Create history record
@@ -320,6 +360,85 @@ class TicketController extends Controller
     }
 
     /**
+     * Store a child ticket and link it to a schedule.
+     */
+    public function storeChild(Request $request, Ticket $ticket)
+    {
+        // Check if child ticket already exists
+        if ($ticket->children()->exists()) {
+            return redirect()->back()->withErrors(['error' => 'A child ticket already exists for this ticket.']);
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'store_id' => 'nullable|exists:stores,id',
+            'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date|after_or_equal:start_time',
+            'pickup_start' => 'nullable|string',
+            'pickup_end' => 'nullable|string',
+            'backlogs_start' => 'nullable|string',
+            'backlogs_end' => 'nullable|string',
+            'remarks' => 'nullable|string',
+        ]);
+
+        $childTicket = DB::transaction(function () use ($validated, $ticket, $request) {
+            $company = $ticket->company;
+            $companyCode = $company->code;
+
+            // Find the max ticket number for this company
+            $maxNumber = Ticket::where('company_id', $ticket->company_id)
+                ->where('ticket_key', 'LIKE', "{$companyCode}-%")
+                ->get(['ticket_key'])
+                ->map(function ($t) {
+                    if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
+                        return (int) $matches[1];
+                    }
+                    return 0;
+                })
+                ->max();
+
+            $nextNumber = ($maxNumber ?? 0) + 1;
+            
+            $childTicket = Ticket::create([
+                'ticket_key' => "{$companyCode}-{$nextNumber}",
+                'title' => "Child: {$ticket->title}",
+                'description' => "Child of {$ticket->ticket_key}. Remarks: " . ($validated['remarks'] ?? ''),
+                'type' => $ticket->type,
+                'status' => 'open',
+                'priority' => $ticket->priority,
+                'severity' => $ticket->severity,
+                'reporter_id' => auth()->id(),
+                'assignee_id' => $validated['user_id'],
+                'company_id' => $ticket->company_id,
+                'category_id' => $ticket->category_id,
+                'parent_id' => $ticket->id,
+            ]);
+
+            // Create schedule linked to this child ticket
+            Schedule::create([
+                'ticket_id' => $childTicket->id,
+                'user_id' => $validated['user_id'],
+                'store_id' => $validated['store_id'],
+                'status' => $validated['status'],
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'pickup_start' => $validated['pickup_start'],
+                'pickup_end' => $validated['pickup_end'],
+                'backlogs_start' => $validated['backlogs_start'],
+                'backlogs_end' => $validated['backlogs_end'],
+                'remarks' => $validated['remarks'],
+            ]);
+
+            return $childTicket;
+        });
+
+        return redirect()->back()->with([
+            'success' => 'Child ticket and schedule created successfully.',
+        ]);
+    }
+
+    /**
      * Store a new comment for the ticket.
      */
     public function storeComment(Request $request, Ticket $ticket)
@@ -335,6 +454,16 @@ class TicketController extends Controller
             'comment_text' => $request->comment_text,
             'user_id' => auth()->id(),
         ]);
+
+        // SLA: Record first response if not already recorded and commenter is NOT the reporter
+        $metric = $ticket->slaMetric;
+        if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
+            $now = now();
+            $metric->update([
+                'first_response_at' => $now,
+                'is_response_breached' => $metric->response_target_at && $now->gt($metric->response_target_at),
+            ]);
+        }
 
         // Load relationships for email logic
         $ticket->load(['reporter', 'assignee', 'comments.user']);
@@ -407,6 +536,54 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Attachments uploaded successfully.');
+    }
+
+    public function getCategories()
+    {
+        return response()->json(\App\Models\Category::where('is_active', true)->orderBy('name')->get());
+    }
+
+    public function getSubCategories(Request $request)
+    {
+        $categoryId = $request->query('category_id');
+        
+        if (!$categoryId) {
+            return response()->json([]);
+        }
+
+        // Get subcategory IDs that are linked to this category in the Items table
+        $subCategoryIds = \App\Models\Item::where('category_id', $categoryId)
+            ->whereNotNull('sub_category_id')
+            ->distinct()
+            ->pluck('sub_category_id');
+            
+        // If no links found in Item table, maybe return ALL subcategories as a fallback? 
+        // Or if the user strictly wants the Item table to be the source of truth:
+        
+        $subCategories = \App\Models\SubCategory::whereIn('id', $subCategoryIds)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        return response()->json($subCategories);
+    }
+
+    public function getItems(Request $request)
+    {
+        $categoryId = $request->query('category_id') ?? $request->input('category_id');
+        $subCategoryId = $request->query('sub_category_id') ?? $request->input('sub_category_id');
+        
+        if (!$categoryId || !$subCategoryId) {
+            return response()->json([]);
+        }
+        
+        $items = \App\Models\Item::where('category_id', $categoryId)
+            ->where('sub_category_id', $subCategoryId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        return response()->json($items);
     }
 
     /**

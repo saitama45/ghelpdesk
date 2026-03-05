@@ -9,6 +9,7 @@ class Schedule extends Model
     protected $fillable = [
         'user_id',
         'store_id',
+        'ticket_id',
         'status',
         'start_time',
         'end_time',
@@ -23,6 +24,11 @@ class Schedule extends Model
         'start_time' => 'datetime',
         'end_time' => 'datetime',
     ];
+
+    public function ticket()
+    {
+        return $this->belongsTo(Ticket::class);
+    }
 
     public function user()
     {

@@ -1,8 +1,10 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import { ref, onMounted, watch, computed } from 'vue';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -94,6 +96,9 @@ watch(() => props.tickets, (newTickets) => {
 
 const createForm = useForm({
     company_id: '',
+    category_id: '',
+    sub_category_id: '',
+    item_id: '',
     title: '',
     description: '',
     type: 'task',
@@ -104,10 +109,63 @@ const createForm = useForm({
     attachments: [],
 });
 
+const categories = ref([]);
+const subCategories = ref([]);
+const items = ref([]);
+
+const fetchCategories = async () => {
+    try {
+        const response = await axios.get(route('tickets.data.categories'));
+        categories.value = response.data;
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+    }
+};
+
+const fetchSubCategories = async (categoryId) => {
+    if (!categoryId) {
+        subCategories.value = [];
+        return;
+    }
+    try {
+        const response = await axios.get(`/tickets/data/subcategories?category_id=${categoryId}`);
+        subCategories.value = response.data;
+    } catch (error) {
+        console.error('Error fetching subcategories:', error);
+    }
+};
+
+const fetchItems = async (categoryId, subCategoryId) => {
+    if (!categoryId || !subCategoryId) {
+        items.value = [];
+        return;
+    }
+    try {
+        const response = await axios.get(`/tickets/data/items?category_id=${categoryId}&sub_category_id=${subCategoryId}`);
+        items.value = response.data;
+    } catch (error) {
+        console.error('Error fetching items:', error);
+    }
+};
+
+watch(() => createForm.category_id, (newVal) => {
+    createForm.sub_category_id = '';
+    createForm.item_id = '';
+    fetchSubCategories(newVal);
+});
+
+watch(() => createForm.sub_category_id, (newVal) => {
+    createForm.item_id = '';
+    fetchItems(createForm.category_id, newVal);
+});
+
 // Set default company when modal opens or companies load
 watch(() => showCreateModal.value, (isOpen) => {
     if (isOpen && !createForm.company_id) {
         createForm.company_id = defaultCompanyId.value;
+    }
+    if (isOpen) {
+        fetchCategories();
     }
 });
 
@@ -120,7 +178,7 @@ watch(defaultCompanyId, (newId) => {
 
 const types = ['bug', 'feature', 'task', 'spike'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'in_progress', 'closed', 'waiting'];
+const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting'];
 const severities = ['critical', 'major', 'minor', 'cosmetic'];
 
 const handleFileSelect = (event) => {
@@ -228,6 +286,7 @@ const getStatusColor = (status) => {
     switch (status) {
         case 'open': return 'text-blue-800 bg-blue-100';
         case 'in_progress': return 'text-purple-800 bg-purple-100';
+        case 'resolved': return 'text-green-800 bg-green-100';
         case 'closed': return 'text-gray-600 bg-gray-200';
         case 'waiting': return 'text-orange-800 bg-orange-100';
         default: return 'text-gray-800 bg-gray-100';
@@ -302,6 +361,7 @@ const getTypeColor = (type) => {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creator</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
@@ -339,6 +399,21 @@ const getTypeColor = (type) => {
                             <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize border" :class="getStatusColor(ticket.status)">
                                 {{ ticket.status.replace('_', ' ') }}
                             </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div v-if="ticket.sla_metric" class="flex flex-col space-y-1">
+                                <span v-if="ticket.sla_metric.response_target_at" 
+                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border"
+                                      :class="ticket.sla_metric.is_response_breached ? 'bg-red-100 text-red-700 border-red-200' : (ticket.sla_metric.first_response_at ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-100')">
+                                    RES: {{ ticket.sla_metric.is_response_breached ? 'BREACH' : (ticket.sla_metric.first_response_at ? 'MET' : 'OK') }}
+                                </span>
+                                <span v-if="ticket.sla_metric.resolution_target_at" 
+                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border"
+                                      :class="ticket.sla_metric.is_resolution_breached ? 'bg-red-100 text-red-700 border-red-200' : (ticket.sla_metric.resolved_at ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-100')">
+                                    SLV: {{ ticket.sla_metric.is_resolution_breached ? 'BREACH' : (ticket.sla_metric.resolved_at ? 'MET' : 'OK') }}
+                                </span>
+                            </div>
+                            <span v-else class="text-[10px] text-gray-400 italic">No SLA</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <div v-if="ticket.reporter" class="flex items-center space-x-2">
@@ -406,6 +481,43 @@ const getTypeColor = (type) => {
                                 <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
                             </select>
                         </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                                <Autocomplete 
+                                    v-model="createForm.category_id"
+                                    :options="categories"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select category..."
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Category</label>
+                                <Autocomplete 
+                                    v-model="createForm.sub_category_id"
+                                    :options="subCategories"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select sub-category..."
+                                    :disabled="!createForm.category_id"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item</label>
+                            <Autocomplete 
+                                v-model="createForm.item_id"
+                                :options="items"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select item..."
+                                :disabled="!createForm.sub_category_id"
+                            />
+                        </div>
+
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title</label>
                             <input v-model="createForm.title" type="text" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
