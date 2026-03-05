@@ -18,6 +18,8 @@ class User extends Authenticatable
         'email',
         'password',
         'department',
+        'unit',
+        'sub_unit',
         'position',
         'is_active',
         'last_login',
@@ -54,5 +56,10 @@ class User extends Authenticatable
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function stores()
+    {
+        return $this->hasMany(Store::class);
     }
 }

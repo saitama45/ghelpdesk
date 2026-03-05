@@ -46,6 +46,36 @@ class RolesAndPermissionSeeder extends Seeder
             'companies.create' => 'Create companies',
             'companies.edit' => 'Edit companies',
             'companies.delete' => 'Delete companies',
+
+            // Categories
+            'categories.view' => 'View categories',
+            'categories.create' => 'Create categories',
+            'categories.edit' => 'Edit categories',
+            'categories.delete' => 'Delete categories',
+
+            // SubCategories
+            'subcategories.view' => 'View sub-categories',
+            'subcategories.create' => 'Create sub-categories',
+            'subcategories.edit' => 'Edit sub-categories',
+            'subcategories.delete' => 'Delete sub-categories',
+
+            // Items
+            'items.view' => 'View items',
+            'items.create' => 'Create items',
+            'items.edit' => 'Edit items',
+            'items.delete' => 'Delete items',
+
+            // Stores
+            'stores.view' => 'View stores',
+            'stores.create' => 'Create stores',
+            'stores.edit' => 'Edit stores',
+            'stores.delete' => 'Delete stores',
+
+            // Schedules
+            'schedules.view' => 'View schedules',
+            'schedules.create' => 'Create schedules',
+            'schedules.edit' => 'Edit schedules',
+            'schedules.delete' => 'Delete schedules',
         ];
 
         // Create permissions
@@ -66,6 +96,11 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close',
             'users.view',
             'companies.view',
+            'categories.view',
+            'subcategories.view',
+            'items.view',
+            'stores.view',
+            'schedules.view',
         ]);
         
         $user->givePermissionTo([

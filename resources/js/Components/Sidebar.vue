@@ -17,8 +17,9 @@ import {
     ChartBarIcon,
     UsersIcon,
     BuildingOfficeIcon,
+    TagIcon,
 } from '@heroicons/vue/24/outline';
-import { usePermission } from '@/Composables/usePermission';
+import { usePermission } from '@/Composables/usePermission.js';
 
 const props = defineProps({
     isCollapsed: {
@@ -100,37 +101,150 @@ const toggleSidebar = () => {
                     </div>
                 </Link>
 
-                <!-- Tenant Monitoring Dashboard Link -->
+                <!-- People Management Section -->
+                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
+                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">People Management</p>
+                </div>
+
+                <!-- Categories Link -->
                 <Link
-                    :href="route('tenant-monitoring.dashboard.index')"
+                    v-if="hasPermission('categories.view')"
+                    :href="route('categories.index')"
                     :class="[
                         'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.dashboard.*')
+                        route().current('categories.*')
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     ]"
                 >
-                    <ChartBarIcon
+                    <TagIcon
                         :class="[
                             'w-5 h-5 flex-shrink-0',
                             isCollapsed ? 'mx-auto' : 'mr-3'
                         ]"
                     />
-                    <span v-if="!isCollapsed" class="truncate">Tenant Dashboard</span>
+                    <span v-if="!isCollapsed" class="truncate">Categories</span>
 
                     <!-- Tooltip for collapsed state -->
                     <div
                         v-if="isCollapsed"
                         class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
                     >
-                        Tenant Dashboard
+                        Categories
                     </div>
                 </Link>
 
-                <!-- People Management Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">People Management</p>
-                </div>
+                <!-- Sub-Categories Link -->
+                <Link
+                    v-if="hasPermission('subcategories.view')"
+                    :href="route('sub-categories.index')"
+                    :class="[
+                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                        route().current('sub-categories.*')
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ]"
+                >
+                    <ClipboardDocumentListIcon
+                        :class="[
+                            'w-5 h-5 flex-shrink-0',
+                            isCollapsed ? 'mx-auto' : 'mr-3'
+                        ]"
+                    />
+                    <span v-if="!isCollapsed" class="truncate">Sub-Categories</span>
+
+                    <!-- Tooltip for collapsed state -->
+                    <div
+                        v-if="isCollapsed"
+                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
+                    >
+                        Sub-Categories
+                    </div>
+                </Link>
+
+                <!-- Items Link -->
+                <Link
+                    v-if="hasPermission('items.view')"
+                    :href="route('items.index')"
+                    :class="[
+                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                        route().current('items.*')
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ]"
+                >
+                    <WrenchScrewdriverIcon
+                        :class="[
+                            'w-5 h-5 flex-shrink-0',
+                            isCollapsed ? 'mx-auto' : 'mr-3'
+                        ]"
+                    />
+                    <span v-if="!isCollapsed" class="truncate">Items</span>
+
+                    <!-- Tooltip for collapsed state -->
+                    <div
+                        v-if="isCollapsed"
+                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
+                    >
+                        Items
+                    </div>
+                </Link>
+
+                <!-- Stores Link -->
+                <Link
+                    v-if="hasPermission('stores.view')"
+                    :href="route('stores.index')"
+                    :class="[
+                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                        route().current('stores.*')
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ]"
+                >
+                    <BuildingOffice2Icon
+                        :class="[
+                            'w-5 h-5 flex-shrink-0',
+                            isCollapsed ? 'mx-auto' : 'mr-3'
+                        ]"
+                    />
+                    <span v-if="!isCollapsed" class="truncate">Stores</span>
+
+                    <!-- Tooltip for collapsed state -->
+                    <div
+                        v-if="isCollapsed"
+                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
+                    >
+                        Stores
+                    </div>
+                </Link>
+
+                <!-- Scheduling Link -->
+                <Link
+                    v-if="hasPermission('schedules.view')"
+                    :href="route('schedules.index')"
+                    :class="[
+                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                        route().current('schedules.*')
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ]"
+                >
+                    <CalendarIcon
+                        :class="[
+                            'w-5 h-5 flex-shrink-0',
+                            isCollapsed ? 'mx-auto' : 'mr-3'
+                        ]"
+                    />
+                    <span v-if="!isCollapsed" class="truncate">Scheduling</span>
+
+                    <!-- Tooltip for collapsed state -->
+                    <div
+                        v-if="isCollapsed"
+                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
+                    >
+                        Scheduling
+                    </div>
+                </Link>
 
                 <!-- Companies Link -->
                 <Link
@@ -160,130 +274,12 @@ const toggleSidebar = () => {
                     </div>
                 </Link>
 
-                <!-- Tenants Link -->
+                <!-- Tickets Link (Added for relevance) -->
                 <Link
-                    :href="route('tenant-monitoring.tenants.index')"
+                    :href="route('tickets.index')"
                     :class="[
                         'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.tenants.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <UserGroupIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Tenants</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Tenants
-                    </div>
-                </Link>
-
-                <!-- Prospects Link -->
-                <Link
-                    :href="route('tenant-monitoring.prospects.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.prospects.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <UsersIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Prospects</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Prospects
-                    </div>
-                </Link>
-
-                <!-- Property Management Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Property Management</p>
-                </div>
-
-                <!-- Properties Link -->
-                <Link
-                    :href="route('tenant-monitoring.properties.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.properties.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <BuildingOffice2Icon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Properties</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Properties
-                    </div>
-                </Link>
-
-                <!-- Units Link -->
-                <Link
-                    :href="route('tenant-monitoring.units.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.units.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <HomeModernIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Units</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Units
-                    </div>
-                </Link>
-
-                <!-- Operations Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Operations</p>
-                </div>
-
-                <!-- Contracts Link -->
-                <Link
-                    :href="route('tenant-monitoring.contracts.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.contracts.*')
+                        route().current('tickets.*')
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     ]"
@@ -294,165 +290,17 @@ const toggleSidebar = () => {
                             isCollapsed ? 'mx-auto' : 'mr-3'
                         ]"
                     />
-                    <span v-if="!isCollapsed" class="truncate">Contracts</span>
+                    <span v-if="!isCollapsed" class="truncate">Tickets</span>
 
                     <!-- Tooltip for collapsed state -->
                     <div
                         v-if="isCollapsed"
                         class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
                     >
-                        Contracts
+                        Tickets
                     </div>
                 </Link>
 
-                <!-- Bills & Payments Link -->
-                <Link
-                    :href="route('tenant-monitoring.bills.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.bills.*') || route().current('tenant-monitoring.payments.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <CurrencyDollarIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Bills & Payments</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Bills & Payments
-                    </div>
-                </Link>
-
-                <!-- Maintenance Link -->
-                <Link
-                    :href="route('tenant-monitoring.maintenance.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.maintenance.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <WrenchScrewdriverIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Maintenance</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Maintenance
-                    </div>
-                </Link>
-
-                <!-- Communication Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Communication</p>
-                </div>
-
-                <!-- Notifications Link -->
-                <Link
-                    :href="route('tenant-monitoring.notifications.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.notifications.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <div class="relative">
-                        <BellIcon
-                            :class="[
-                                'w-5 h-5 flex-shrink-0',
-                                isCollapsed ? 'mx-auto' : 'mr-3'
-                            ]"
-                        />
-                        <!-- Notification badge -->
-                        <span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                    </div>
-                    <span v-if="!isCollapsed" class="truncate">Notifications</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Notifications
-                    </div>
-                </Link>
-
-                <!-- Calendar Link -->
-                <Link
-                    :href="route('tenant-monitoring.calendar.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.calendar.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <CalendarIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Calendar</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Calendar
-                    </div>
-                </Link>
-
-                <!-- Analytics Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Analytics</p>
-                </div>
-
-                <!-- Reports Link -->
-                <Link
-                    :href="route('tenant-monitoring.reports.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tenant-monitoring.reports.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <ClipboardDocumentListIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Reports</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Reports
-                    </div>
-                </Link>
             </nav>
 
             <!-- User Section -->

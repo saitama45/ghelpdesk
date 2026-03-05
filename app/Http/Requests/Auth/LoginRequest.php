@@ -41,7 +41,18 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        if (! Auth::attempt($this->only('email', 'password') + ['is_active' => true], $this->boolean('remember'))) {
+            // Check if the user exists but is inactive
+            $user = \App\Models\User::where('email', $this->email)->first();
+            
+            if ($user && !$user->is_active) {
+                RateLimiter::hit($this->throttleKey());
+
+                throw ValidationException::withMessages([
+                    'email' => 'Your account is currently inactive. Please contact the administrator for assistance.',
+                ]);
+            }
+
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([

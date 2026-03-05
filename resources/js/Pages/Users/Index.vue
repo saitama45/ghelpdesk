@@ -3,6 +3,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref, onMounted, watch } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -12,6 +13,7 @@ import { usePermission } from '@/Composables/usePermission';
 const props = defineProps({
     users: Object,
     roles: Array,
+    stores: Array,
 });
 
 const showCreateModal = ref(false);
@@ -40,7 +42,11 @@ const createForm = useForm({
     password: '',
     role: '',
     department: '',
+    unit: '',
+    sub_unit: '',
     position: '',
+    is_active: true,
+    store_ids: [],
 });
 
 const editForm = useForm({
@@ -48,7 +54,11 @@ const editForm = useForm({
     email: '',
     role: '',
     department: '',
+    unit: '',
+    sub_unit: '',
     position: '',
+    is_active: true,
+    store_ids: [],
 });
 
 const passwordForm = useForm({
@@ -75,7 +85,11 @@ const editUser = (user) => {
     editForm.email = user.email;
     editForm.role = user.roles[0]?.name || '';
     editForm.department = user.department || '';
+    editForm.unit = user.unit || '';
+    editForm.sub_unit = user.sub_unit || '';
     editForm.position = user.position || '';
+    editForm.is_active = user.is_active;
+    editForm.store_ids = user.stores?.map(s => s.id) || [];
     showEditModal.value = true;
 };
 
@@ -204,8 +218,11 @@ const updatePassword = () => {
                             {{ user.department || '-' }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                Active
+                            <span :class="[
+                                'inline-flex px-2 py-1 text-xs font-semibold rounded-full',
+                                user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            ]">
+                                {{ user.is_active ? 'Active' : 'Inactive' }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -277,6 +294,36 @@ const updatePassword = () => {
                             <label class="block text-sm font-medium text-gray-700">Department</label>
                             <input v-model="createForm.department" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Unit</label>
+                                <input v-model="createForm.unit" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Sub-Unit</label>
+                                <input v-model="createForm.sub_unit" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Position</label>
+                            <input v-model="createForm.position" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Assigned Stores</label>
+                            <MultiAutocomplete 
+                                v-model="createForm.store_ids"
+                                :options="stores"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Assign stores..."
+                            />
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input v-model="createForm.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                                <span class="ml-2 text-sm text-gray-600">Active</span>
+                            </label>
+                        </div>
                         <div class="flex justify-end space-x-3 pt-4">
                             <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancel</button>
                             <button type="submit" :disabled="createForm.processing" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">Create</button>
@@ -311,6 +358,36 @@ const updatePassword = () => {
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Department</label>
                             <input v-model="editForm.department" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Unit</label>
+                                <input v-model="editForm.unit" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Sub-Unit</label>
+                                <input v-model="editForm.sub_unit" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Position</label>
+                            <input v-model="editForm.position" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Assigned Stores</label>
+                            <MultiAutocomplete 
+                                v-model="editForm.store_ids"
+                                :options="stores"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Assign stores..."
+                            />
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input v-model="editForm.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                                <span class="ml-2 text-sm text-gray-600">Active</span>
+                            </label>
                         </div>
                         <div class="flex justify-end space-x-3 pt-4">
                             <button type="button" @click="showEditModal = false" class="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">Cancel</button>

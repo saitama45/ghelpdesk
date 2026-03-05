@@ -40,13 +40,8 @@ class HandleInertiaRequests extends Middleware
         $permissions = [];
         
         if ($user) {
-            $user->loadMissing(['roles.companies']);
-            // Get permissions through roles to avoid Spatie issues
-            foreach ($user->roles as $role) {
-                $rolePermissions = $role->permissions()->pluck('name')->toArray();
-                $permissions = array_merge($permissions, $rolePermissions);
-            }
-            $permissions = array_unique($permissions);
+            $user->loadMissing(['roles.permissions', 'permissions']);
+            $permissions = $user->getAllPermissions()->pluck('name')->unique()->values()->toArray();
         }
         
         return array_merge(parent::share($request), [

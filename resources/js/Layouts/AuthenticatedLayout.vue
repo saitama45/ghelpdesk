@@ -34,19 +34,47 @@ const showingNavigationDropdown = ref(false);
                                 class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
                             >
                                 <NavLink
-                                    :href="route('dashboard')"
-                                    :active="route().current('dashboard')"
-                                >
-                                    Dashboard
-                                </NavLink>
-                                <NavLink
                                     :href="route('tickets.index')"
                                     :active="route().current('tickets.*')"
                                 >
                                     Tickets
                                 </NavLink>
+                                <NavLink
+                                    v-if="hasPermission('categories.view')"
+                                    :href="route('categories.index')"
+                                    :active="route().current('categories.*')"
+                                >
+                                    Categories
+                                </NavLink>
+                                <NavLink
+                                    v-if="hasPermission('subcategories.view')"
+                                    :href="route('sub-categories.index')"
+                                    :active="route().current('sub-categories.*')"
+                                >
+                                    Sub-Categories
+                                </NavLink>
+                                <NavLink
+                                    v-if="hasPermission('items.view')"
+                                    :href="route('items.index')"
+                                    :active="route().current('items.*')"
+                                >
+                                    Items
+                                </NavLink>
+                                <NavLink
+                                    v-if="hasPermission('stores.view')"
+                                    :href="route('stores.index')"
+                                    :active="route().current('stores.*')"
+                                >
+                                    Stores
+                                </NavLink>
+                                <NavLink
+                                    v-if="hasPermission('schedules.view')"
+                                    :href="route('schedules.index')"
+                                    :active="route().current('schedules.*')"
+                                >
+                                    Scheduling
+                                </NavLink>
                             </div>
-                        </div>
 
                         <div class="hidden sm:ms-6 sm:flex sm:items-center">
                             <!-- Settings Dropdown -->
@@ -147,19 +175,47 @@ const showingNavigationDropdown = ref(false);
                 >
                     <div class="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink
-                            :href="route('dashboard')"
-                            :active="route().current('dashboard')"
-                        >
-                            Dashboard
-                        </ResponsiveNavLink>
-                        <ResponsiveNavLink
                             :href="route('tickets.index')"
                             :active="route().current('tickets.*')"
                         >
                             Tickets
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="hasPermission('categories.view')"
+                            :href="route('categories.index')"
+                            :active="route().current('categories.*')"
+                        >
+                            Categories
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="hasPermission('subcategories.view')"
+                            :href="route('sub-categories.index')"
+                            :active="route().current('sub-categories.*')"
+                        >
+                            Sub-Categories
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="hasPermission('items.view')"
+                            :href="route('items.index')"
+                            :active="route().current('items.*')"
+                        >
+                            Items
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="hasPermission('stores.view')"
+                            :href="route('stores.index')"
+                            :active="route().current('stores.*')"
+                        >
+                            Stores
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            v-if="hasPermission('schedules.view')"
+                            :href="route('schedules.index')"
+                            :active="route().current('schedules.*')"
+                        >
+                            Scheduling
+                        </ResponsiveNavLink>
                     </div>
-
                     <!-- Responsive Settings Options -->
                     <div
                         class="border-t border-gray-200 pb-1 pt-4"
