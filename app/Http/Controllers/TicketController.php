@@ -612,13 +612,15 @@ class TicketController extends Controller
     public function downloadAttachment(TicketAttachment $attachment)
     {
         if (!Storage::disk('public')->exists($attachment->file_storage_path)) {
-            // Check legacy path if file not found in new path
-            // Legacy path was 'public/ticket-attachments/filename' relative to local disk (storage/app/public/ticket-attachments)
-            // But we stored it in 'storage/app/private/public/ticket-attachments' by mistake.
-            // Let's assume we fixed it and only care about public disk now.
             abort(404, 'File not found.');
         }
 
         return Storage::disk('public')->download($attachment->file_storage_path, $attachment->file_name);
+    }
+
+    public function sync(\App\Services\EmailTicketService $service)
+    {
+        $result = $service->fetchAndProcess();
+        return response()->json($result);
     }
 }

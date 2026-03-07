@@ -1,16 +1,27 @@
 <script setup>
 import { Head, usePage, Link, router } from '@inertiajs/vue3';
-import { computed, reactive, watch } from 'vue';
+import { computed, reactive, watch, onMounted } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import axios from 'axios';
+import { usePermission } from '@/Composables/usePermission.js';
 
 const props = defineProps({
     stats: Object,
-    recentTickets: Array,
-    myTickets: Array,
     recentActivity: Array,
+    myTickets: Array,
+    recentTickets: Array,
     filters: Object,
     years: Array,
     months: Array,
+});
+
+const { hasPermission } = usePermission();
+
+onMounted(() => {
+    // Trigger email sync in the background when dashboard loads
+    if (hasPermission('tickets.view')) {
+        axios.post(route('tickets.sync')).catch(e => console.warn("Email sync failed", e));
+    }
 });
 
 const page = usePage();
@@ -164,7 +175,7 @@ const getPriorityColor = (priority) => {
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-2 space-y-8">
                 <!-- My Assigned Tickets -->
-                <div v-if="myTickets.length > 0" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div v-if="myTickets && myTickets.length > 0" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                         <div class="flex items-center space-x-2">
                             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
@@ -250,7 +261,7 @@ const getPriorityColor = (priority) => {
                                         </span>
                                     </td>
                                 </tr>
-                                <tr v-if="recentTickets.length === 0">
+                                <tr v-if="!recentTickets || recentTickets.length === 0">
                                     <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-400 italic">
                                         No tickets found in your current workspace.
                                     </td>
@@ -303,7 +314,7 @@ const getPriorityColor = (priority) => {
                                     </div>
                                 </div>
                             </li>
-                            <li v-if="recentActivity.length === 0" class="text-center py-12">
+                            <li v-if="!recentActivity || recentActivity.length === 0" class="text-center py-12">
                                 <div class="bg-gray-50 rounded-full h-12 w-12 flex items-center justify-center mx-auto mb-3">
                                     <svg class="h-6 w-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 </div>
