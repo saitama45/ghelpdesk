@@ -13,11 +13,13 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
-    ->middleware(['auth', 'verified'])
-    ->name('dashboard');
-
 Route::middleware('auth')->group(function () {
+    Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
+        ->middleware(['verified'])
+        ->name('dashboard');
+    Route::get('/dtr', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
+    Route::get('/attendance/logs', [\App\Http\Controllers\AttendanceController::class, 'logs'])->name('attendance.logs');
+    Route::post('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])->name('attendance.log');
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     

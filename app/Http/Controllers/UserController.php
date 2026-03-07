@@ -13,7 +13,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['roles:id,name', 'stores:id,user_id,name']);
+        $query = User::with(['roles:id,name', 'stores:id,name']);
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
@@ -68,7 +68,7 @@ class UserController extends Controller
         $user->assignRole($request->role);
 
         if ($request->has('store_ids')) {
-            \App\Models\Store::whereIn('id', $request->store_ids)->update(['user_id' => $user->id]);
+            $user->stores()->sync($request->store_ids);
         }
 
         return redirect()->back()->with('success', 'User created successfully.');
@@ -101,9 +101,10 @@ class UserController extends Controller
         $user->syncRoles([$request->role]);
 
         // Update stores assignment
-        \App\Models\Store::where('user_id', $user->id)->update(['user_id' => null]);
         if ($request->has('store_ids')) {
-            \App\Models\Store::whereIn('id', $request->store_ids)->update(['user_id' => $user->id]);
+            $user->stores()->sync($request->store_ids);
+        } else {
+            $user->stores()->detach();
         }
 
         return redirect()->back()->with('success', 'User updated successfully.');

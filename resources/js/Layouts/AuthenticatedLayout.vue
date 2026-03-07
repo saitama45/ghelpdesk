@@ -5,13 +5,37 @@ import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { usePermission } from '@/Composables/usePermission.js';
+import Toast from '@/Components/Toast.vue';
+import { useToast } from '@/Composables/useToast.js';
+import { watch, onMounted } from 'vue';
 
 const showingNavigationDropdown = ref(false);
+const { hasPermission } = usePermission();
+const { success, error, warning, info } = useToast();
+const page = usePage();
+
+const checkFlashMessages = () => {
+    const flash = page.props.flash || {};
+    if (flash.success) success(flash.success);
+    if (flash.error) error(flash.error);
+    if (flash.warning) warning(flash.warning);
+    if (flash.info) info(flash.info);
+};
+
+onMounted(() => {
+    checkFlashMessages();
+});
+
+watch(() => page.props.flash, () => {
+    checkFlashMessages();
+}, { deep: true });
 </script>
 
 <template>
     <div>
+        <Toast />
         <div class="min-h-screen bg-gray-100">
             <nav
                 class="border-b border-gray-100 bg-white"
@@ -33,6 +57,12 @@ const showingNavigationDropdown = ref(false);
                             <div
                                 class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
                             >
+                                <NavLink
+                                    :href="route('attendance.index')"
+                                    :active="route().current('attendance.*')"
+                                >
+                                    DTR
+                                </NavLink>
                                 <NavLink
                                     :href="route('tickets.index')"
                                     :active="route().current('tickets.*')"
@@ -75,6 +105,7 @@ const showingNavigationDropdown = ref(false);
                                     Scheduling
                                 </NavLink>
                             </div>
+                        </div>
 
                         <div class="hidden sm:ms-6 sm:flex sm:items-center">
                             <!-- Settings Dropdown -->
@@ -174,6 +205,12 @@ const showingNavigationDropdown = ref(false);
                     class="sm:hidden"
                 >
                     <div class="space-y-1 pb-3 pt-2">
+                        <ResponsiveNavLink
+                            :href="route('attendance.index')"
+                            :active="route().current('attendance.*')"
+                        >
+                            DTR
+                        </ResponsiveNavLink>
                         <ResponsiveNavLink
                             :href="route('tickets.index')"
                             :active="route().current('tickets.*')"

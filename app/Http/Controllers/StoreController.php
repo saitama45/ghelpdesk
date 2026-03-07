@@ -23,7 +23,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Store::with('user');
+        $query = Store::with('users:id,name');
 
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%")
@@ -31,13 +31,13 @@ class StoreController extends Controller implements HasMiddleware
                   ->orWhere('area', 'like', "%{$request->search}%")
                   ->orWhere('brand', 'like', "%{$request->search}%")
                   ->orWhere('cluster', 'like', "%{$request->search}%")
-                  ->orWhereHas('user', function($q) use ($request) {
+                  ->orWhereHas('users', function($q) use ($request) {
                       $q->where('name', 'like', "%{$request->search}%");
                   });
         }
 
         $stores = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
-        $users = User::active()->orderBy('name')->get();
+        $users = User::active()->orderBy('name')->get(['id', 'name']);
 
         return Inertia::render('Stores/Index', [
             'stores' => $stores,
@@ -48,17 +48,25 @@ class StoreController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'user_id' => 'nullable|exists:users,id',
             'code' => 'required|string|max:50|unique:stores,code',
             'name' => 'required|string|max:255|unique:stores,name',
             'sector' => 'required|numeric|min:1|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'cluster' => 'required|string|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'radius_meters' => 'nullable|integer|min:10|max:5000',
             'is_active' => 'boolean',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'exists:users,id',
         ]);
 
-        Store::create($validated);
+        $store = Store::create($validated);
+
+        if ($request->has('user_ids')) {
+            $store->users()->sync($request->user_ids);
+        }
 
         return redirect()->back()->with('success', 'Store created successfully');
     }
@@ -66,17 +74,27 @@ class StoreController extends Controller implements HasMiddleware
     public function update(Request $request, Store $store)
     {
         $validated = $request->validate([
-            'user_id' => 'nullable|exists:users,id',
             'code' => 'required|string|max:50|unique:stores,code,' . $store->id,
             'name' => 'required|string|max:255|unique:stores,name,' . $store->id,
             'sector' => 'required|numeric|min:1|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'cluster' => 'required|string|max:255',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'radius_meters' => 'nullable|integer|min:10|max:5000',
             'is_active' => 'boolean',
+            'user_ids' => 'nullable|array',
+            'user_ids.*' => 'exists:users,id',
         ]);
 
         $store->update($validated);
+
+        if ($request->has('user_ids')) {
+            $store->users()->sync($request->user_ids);
+        } else {
+            $store->users()->detach();
+        }
 
         return redirect()->back()->with('success', 'Store updated successfully');
     }

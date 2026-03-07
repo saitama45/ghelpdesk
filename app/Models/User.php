@@ -32,6 +32,16 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    public function attendanceLogs()
+    {
+        return $this->hasMany(AttendanceLog::class);
+    }
+
+    public function lastAttendanceLog()
+    {
+        return $this->hasOne(AttendanceLog::class)->latestOfMany();
+    }
+
     protected function casts(): array
     {
         return [
@@ -60,6 +70,6 @@ class User extends Authenticatable
 
     public function stores()
     {
-        return $this->hasMany(Store::class);
+        return $this->belongsToMany(Store::class)->withTimestamps();
     }
 }

@@ -29,7 +29,16 @@ class TicketController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Ticket::with(['reporter:id,name,profile_photo', 'assignee:id,name,profile_photo', 'company:id,name', 'slaMetric'])
+        $query = Ticket::with([
+            'reporter:id,name,profile_photo', 
+            'assignee:id,name,profile_photo', 
+            'company:id,name', 
+            'slaMetric', 
+            'children' => function($q) {
+                $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id')
+                  ->with('assignee:id,name,profile_photo');
+            }
+        ])
             ->whereNull('parent_id'); // Only show top-level tickets
 
         // If user has 'User' role, only show tickets they reported
@@ -90,7 +99,18 @@ class TicketController extends Controller
             $query->where(function($q) use ($request) {
                 $q->where('title', 'like', "%{$request->search}%")
                   ->orWhere('description', 'like', "%{$request->search}%")
-                  ->orWhere('ticket_key', 'like', "%{$request->search}%");
+                  ->orWhere('ticket_key', 'like', "%{$request->search}%")
+                  ->orWhereHas('assignee', function($aq) use ($request) {
+                      $aq->where('name', 'like', "%{$request->search}%");
+                  })
+                  ->orWhereHas('children', function($cq) use ($request) {
+                      $cq->where('title', 'like', "%{$request->search}%")
+                        ->orWhere('description', 'like', "%{$request->search}%")
+                        ->orWhere('ticket_key', 'like', "%{$request->search}%")
+                        ->orWhereHas('assignee', function($aq) use ($request) {
+                            $aq->where('name', 'like', "%{$request->search}%");
+                        });
+                  });
             });
         }
         

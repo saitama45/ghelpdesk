@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     HomeIcon,
@@ -18,6 +18,11 @@ import {
     UsersIcon,
     BuildingOfficeIcon,
     TagIcon,
+    ChevronDownIcon,
+    ChevronRightIcon,
+    Cog6ToothIcon,
+    QueueListIcon,
+    ClockIcon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -34,9 +39,53 @@ const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const { hasPermission } = usePermission();
 
+// For Laravel ziggy route helper if not global
+const route = window.route;
+
+const openMenus = ref({
+    operations: false,
+    references: false,
+    userManagement: false,
+    settings: false,
+});
+
+const toggleMenu = (menu) => {
+    if (props.isCollapsed) {
+        emit('toggle');
+        // Delay opening the menu until sidebar is expanded
+        setTimeout(() => {
+            Object.keys(openMenus.value).forEach(key => {
+                openMenus.value[key] = key === menu;
+            });
+        }, 300);
+    } else {
+        const isCurrentlyOpen = openMenus.value[menu];
+        // Close all menus and toggle the clicked one
+        Object.keys(openMenus.value).forEach(key => {
+            openMenus.value[key] = key === menu ? !isCurrentlyOpen : false;
+        });
+    }
+};
+
 const toggleSidebar = () => {
     emit('toggle');
 };
+
+// Auto-expand menus based on current route
+onMounted(() => {
+    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*')) {
+        openMenus.value.operations = true;
+    }
+    if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*')) {
+        openMenus.value.references = true;
+    }
+    if (route().current('users.*') || route().current('roles.*')) {
+        openMenus.value.userManagement = true;
+    }
+    if (route().current('profile.*')) {
+        openMenus.value.settings = true;
+    }
+});
 </script>
 
 <template>
@@ -51,10 +100,10 @@ const toggleSidebar = () => {
             <!-- Sidebar Header -->
             <div class="flex items-center justify-between p-4 border-b border-gray-800">
                 <div v-if="!isCollapsed" class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                        <span class="text-white font-bold text-lg">A</span>
+                    <div class="w-10 h-10 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
+                        <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
                     </div>
-                    <span class="text-xl font-semibold">Amalgated</span>
+                    <span class="text-xl font-semibold">TAS</span>
                 </div>
 
                 <button
@@ -68,12 +117,7 @@ const toggleSidebar = () => {
             </div>
 
             <!-- Navigation -->
-            <nav class="flex-1 p-4 space-y-2">
-                <!-- Overview Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Overview</p>
-                </div>
-
+            <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
                 <!-- Dashboard Link -->
                 <Link
                     :href="route('dashboard')"
@@ -90,216 +134,225 @@ const toggleSidebar = () => {
                             isCollapsed ? 'mx-auto' : 'mr-3'
                         ]"
                     />
-                    <span v-if="!isCollapsed" class="truncate">Dashboard</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
+                    <span v-if="!isCollapsed" class="truncate font-medium">Dashboard</span>
+                    <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
                         Dashboard
                     </div>
                 </Link>
 
-                <!-- People Management Section -->
-                <div v-if="!isCollapsed" class="px-2 py-1 mt-4">
-                    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">People Management</p>
+                <!-- Operations Section -->
+                <div class="space-y-1 pt-2">
+                    <button
+                        @click="toggleMenu('operations')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('tickets.*') || route().current('schedules.*')) && !openMenus.operations
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <QueueListIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Operations</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.operations" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.operations" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Operations
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.operations" class="pl-10 space-y-1 mt-1 transition-all duration-300">
+                        <Link
+                            :href="route('attendance.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <ClockIcon class="w-4 h-4 mr-2" />
+                            <span>DTR</span>
+                        </Link>
+                        <Link
+                            :href="route('attendance.logs')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <ClipboardDocumentListIcon class="w-4 h-4 mr-2" />
+                            <span>Attendance Logs</span>
+                        </Link>
+                        <Link
+                            :href="route('tickets.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('tickets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Tickets</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('schedules.view')"
+                            :href="route('schedules.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Scheduling</span>
+                        </Link>
+                    </div>
                 </div>
 
-                <!-- Categories Link -->
-                <Link
-                    v-if="hasPermission('categories.view')"
-                    :href="route('categories.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('categories.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <TagIcon
+                <!-- References Section -->
+                <div class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('references')"
                         :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('companies.*') || route().current('stores.*') || route().current('categories.*')) && !openMenus.references
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Categories</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
                     >
-                        Categories
-                    </div>
-                </Link>
+                        <BuildingOfficeIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">References</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.references" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.references" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            References
+                        </div>
+                    </button>
 
-                <!-- Sub-Categories Link -->
-                <Link
-                    v-if="hasPermission('subcategories.view')"
-                    :href="route('sub-categories.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('sub-categories.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <ClipboardDocumentListIcon
+                    <div v-if="!isCollapsed && openMenus.references" class="pl-10 space-y-1 mt-1">
+                        <Link
+                            v-if="hasPermission('companies.view')"
+                            :href="route('companies.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('companies.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Companies</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('stores.view')"
+                            :href="route('stores.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('stores.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Stores</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('categories.view')"
+                            :href="route('categories.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Categories</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('subcategories.view')"
+                            :href="route('sub-categories.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('sub-categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Sub-Categories</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('items.view')"
+                            :href="route('items.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('items.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Items</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- User Management Section -->
+                <div class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('userManagement')"
                         :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('users.*') || route().current('roles.*')) && !openMenus.userManagement
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Sub-Categories</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
                     >
-                        Sub-Categories
-                    </div>
-                </Link>
+                        <UserGroupIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">User Management</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.userManagement" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.userManagement" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            User Management
+                        </div>
+                    </button>
 
-                <!-- Items Link -->
-                <Link
-                    v-if="hasPermission('items.view')"
-                    :href="route('items.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('items.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <WrenchScrewdriverIcon
+                    <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 space-y-1 mt-1">
+                        <Link
+                            v-if="hasPermission('users.view')"
+                            :href="route('users.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Users</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('roles.view')"
+                            :href="route('roles.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Roles & Permissions</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Settings Section -->
+                <div class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('settings')"
                         :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            route().current('profile.edit') && !openMenus.settings
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Items</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
                     >
-                        Items
+                        <Cog6ToothIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Settings</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.settings" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.settings" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Settings
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.settings" class="pl-10 space-y-1 mt-1">
+                        <Link
+                            :href="route('profile.edit')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('profile.edit') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>My Profile</span>
+                        </Link>
                     </div>
-                </Link>
-
-                <!-- Stores Link -->
-                <Link
-                    v-if="hasPermission('stores.view')"
-                    :href="route('stores.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('stores.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <BuildingOffice2Icon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Stores</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Stores
-                    </div>
-                </Link>
-
-                <!-- Scheduling Link -->
-                <Link
-                    v-if="hasPermission('schedules.view')"
-                    :href="route('schedules.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('schedules.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <CalendarIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Scheduling</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Scheduling
-                    </div>
-                </Link>
-
-                <!-- Companies Link -->
-                <Link
-                    v-if="hasPermission('companies.view')"
-                    :href="route('companies.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('companies.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <BuildingOfficeIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Companies</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Companies
-                    </div>
-                </Link>
-
-                <!-- Tickets Link (Added for relevance) -->
-                <Link
-                    :href="route('tickets.index')"
-                    :class="[
-                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                        route().current('tickets.*')
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    ]"
-                >
-                    <DocumentTextIcon
-                        :class="[
-                            'w-5 h-5 flex-shrink-0',
-                            isCollapsed ? 'mx-auto' : 'mr-3'
-                        ]"
-                    />
-                    <span v-if="!isCollapsed" class="truncate">Tickets</span>
-
-                    <!-- Tooltip for collapsed state -->
-                    <div
-                        v-if="isCollapsed"
-                        class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50"
-                    >
-                        Tickets
-                    </div>
-                </Link>
+                </div>
 
             </nav>
 
@@ -314,7 +367,7 @@ const toggleSidebar = () => {
                             {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
                         </span>
                     </div>
-                    <div v-if="!isCollapsed" class="ml-3 flex-1">
+                    <div v-if="!isCollapsed" class="ml-3 flex-1 min-w-0">
                         <p class="text-sm font-medium truncate">{{ user.name || 'User' }}</p>
                         <p class="text-xs text-gray-400 truncate">{{ user.email || 'user@example.com' }}</p>
                     </div>
@@ -323,3 +376,19 @@ const toggleSidebar = () => {
         </div>
     </div>
 </template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+</style>

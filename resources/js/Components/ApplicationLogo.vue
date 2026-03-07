@@ -1,7 +1,7 @@
 <template>
     <img
         src="/images/company_logo.png"
-        alt="Amalgated NCR Logo"
+        alt="NCR Logo"
         class="object-contain"
     />
 </template>

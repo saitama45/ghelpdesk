@@ -377,12 +377,19 @@ const getTypeColor = (type) => {
                         :class="[getPriorityBorder(ticket.priority), hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed']"
                     >
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
-                            {{ ticket.ticket_key }}
+                            <div>{{ ticket.ticket_key }}</div>
+                            <div v-for="child in ticket.children" :key="child.id" class="text-[10px] text-blue-600 mt-1">
+                                {{ child.ticket_key }}
+                            </div>
                         </td>
                         <td class="px-6 py-4">
                             <div class="flex flex-col">
                                 <div class="text-sm font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">{{ ticket.title }}</div>
                                 <div class="text-xs text-gray-500 truncate max-w-xs">{{ ticket.description }}</div>
+                                <!-- Child Tickets -->
+                                <div v-for="child in ticket.children" :key="child.id" class="text-[10px] text-blue-500 italic mt-1 font-medium">
+                                    ↳ {{ child.title }}
+                                </div>
                             </div>
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap">
@@ -444,6 +451,18 @@ const getTypeColor = (type) => {
                             >
                                 Accept Ticket
                             </button>
+                            <!-- Child Assignees -->
+                            <div v-for="child in ticket.children" :key="child.id" class="mt-2 ml-4">
+                                <div v-if="child.assignee" class="flex items-center space-x-2">
+                                    <div v-if="child.assignee.profile_photo" class="h-4 w-4 rounded-full overflow-hidden border border-gray-200">
+                                        <img :src="'/storage/' + child.assignee.profile_photo" class="h-full w-full object-cover" :alt="child.assignee.name">
+                                    </div>
+                                    <div v-else class="h-4 w-4 rounded-full bg-blue-50 flex items-center justify-center text-[8px] font-bold text-blue-600">
+                                        {{ child.assignee.name.charAt(0) }}
+                                    </div>
+                                    <span class="text-[10px] text-blue-600 font-medium italic">↳ {{ child.assignee.name }}</span>
+                                </div>
+                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
                             <span>{{ new Date(ticket.created_at).toLocaleString() }}</span>

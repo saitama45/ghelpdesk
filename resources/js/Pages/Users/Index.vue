@@ -23,7 +23,7 @@ const editingUser = ref(null);
 const resetPasswordUser = ref(null);
 const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
-const { showSuccess, showError } = useToast();
+const { showError } = useToast();
 const { hasPermission } = usePermission();
 
 const pagination = usePagination(props.users, 'users.index');
@@ -70,7 +70,6 @@ const createUser = () => {
         onSuccess: () => {
             showCreateModal.value = false;
             createForm.reset();
-            showSuccess('User created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -99,7 +98,6 @@ const updateUser = () => {
             showEditModal.value = false;
             editForm.reset();
             editingUser.value = null;
-            showSuccess('User updated successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -116,7 +114,7 @@ const deleteUser = async (user) => {
     
     if (confirmed) {
         destroy(route('users.destroy', user.id), {
-            onSuccess: () => showSuccess('User deleted successfully'),
+            onSuccess: () => {},
             onError: (errors) => {
                 const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete user'
                 showError(errorMessage)
@@ -137,7 +135,6 @@ const updatePassword = () => {
             showPasswordModal.value = false;
             passwordForm.reset();
             resetPasswordUser.value = null;
-            showSuccess('Password reset successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'

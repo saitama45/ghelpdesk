@@ -1,0 +1,534 @@
+<script setup>
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { Head, useForm } from '@inertiajs/vue3';
+import AppLayout from '@/Layouts/AppLayout.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCircleIcon, GlobeAsiaAustraliaIcon } from '@heroicons/vue/24/outline';
+
+const props = defineProps({
+    lastLog: Object,
+    assignedStores: Array
+});
+
+// Component state
+const isMounted = ref(true);
+
+// Camera State
+const video = ref(null);
+const canvas = ref(null);
+const capturedImage = ref(null);
+const stream = ref(null);
+const isCameraReady = ref(false);
+const cameraError = ref(null);
+
+// Location State
+const latitude = ref(null);
+const longitude = ref(null);
+const locationAccuracy = ref(null);
+const isLocationStable = ref(false);
+const locationError = ref(null);
+const stabilityProgress = ref(0);
+let stabilityInterval = null;
+let watchId = null;
+
+// Map State
+const mapElement = ref(null);
+let map = null;
+let marker = null;
+let geofenceCircles = [];
+
+const form = useForm({
+    latitude: null,
+    longitude: null,
+    photo: null,
+    device_info: null,
+    public_ip: null,
+});
+
+const nextAction = computed(() => {
+    return (!props.lastLog || props.lastLog.type === 'time_out') ? 'Time In' : 'Time Out';
+});
+
+const currentTime = ref(new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+const updateClock = () => {
+    if (isMounted.value) {
+        currentTime.value = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+};
+
+let clockInterval;
+
+const loadGoogleMapsScript = () => {
+    const key = window.config?.google_maps_api_key;
+    if (!key) {
+        locationError.value = "Google Maps API Key is missing in .env";
+        return;
+    }
+    
+    if (window.google && window.google.maps) {
+        updateMap();
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=marker&loading=async`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+        if (isMounted.value) updateMap();
+    };
+    script.onerror = () => {
+        locationError.value = "Failed to load Google Maps script.";
+    };
+    document.head.appendChild(script);
+};
+
+onMounted(() => {
+    startCamera();
+    startLocationTracking();
+    loadGoogleMapsScript();
+    clockInterval = setInterval(updateClock, 1000);
+});
+
+onUnmounted(() => {
+    isMounted.value = false;
+    stopCamera();
+    stopLocationTracking();
+    clearInterval(clockInterval);
+    if (stabilityInterval) clearInterval(stabilityInterval);
+});
+
+// Camera Functions
+const startCamera = async () => {
+    try {
+        cameraError.value = null;
+        stream.value = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+        });
+        if (video.value && isMounted.value) {
+            video.value.srcObject = stream.value;
+            isCameraReady.value = true;
+        }
+    } catch (err) {
+        if (isMounted.value) {
+            cameraError.value = "Camera access denied. Please check permissions.";
+        }
+    }
+};
+
+const stopCamera = () => {
+    if (stream.value) {
+        stream.value.getTracks().forEach(track => track.stop());
+    }
+};
+
+const capturePhoto = () => {
+    if (!video.value || !canvas.value) return;
+    const context = canvas.value.getContext('2d');
+    canvas.value.width = video.value.videoWidth;
+    canvas.value.height = video.value.videoHeight;
+    context.drawImage(video.value, 0, 0);
+    capturedImage.value = canvas.value.toDataURL('image/jpeg', 0.8);
+    form.photo = capturedImage.value;
+};
+
+const retakePhoto = () => {
+    capturedImage.value = null;
+    form.photo = null;
+};
+
+// Location Functions
+const startLocationTracking = () => {
+    if (!navigator.geolocation) {
+        locationError.value = "Geolocation not supported.";
+        return;
+    }
+
+    watchId = navigator.geolocation.watchPosition(
+        (position) => {
+            if (!isMounted.value) return;
+            latitude.value = position.coords.latitude;
+            longitude.value = position.coords.longitude;
+            locationAccuracy.value = position.coords.accuracy;
+            form.latitude = latitude.value;
+            form.longitude = longitude.value;
+
+            updateMap();
+
+            if (locationAccuracy.value < 100) {
+                startStabilityTimer();
+            } else if (!isLocationStable.value) {
+                // Only reset if we haven't achieved a stable lock yet
+                resetStabilityTimer();
+            }
+        },
+        (err) => {
+            if (isMounted.value) locationError.value = "GPS Error: " + err.message;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+};
+
+const startStabilityTimer = () => {
+    if (isLocationStable.value || stabilityInterval) return;
+    stabilityInterval = setInterval(() => {
+        stabilityProgress.value += 10;
+        if (stabilityProgress.value >= 100) {
+            isLocationStable.value = true;
+            clearInterval(stabilityInterval);
+            stabilityInterval = null;
+        }
+    }, 200);
+};
+
+const resetStabilityTimer = () => {
+    isLocationStable.value = false;
+    stabilityProgress.value = 0;
+    if (stabilityInterval) {
+        clearInterval(stabilityInterval);
+        stabilityInterval = null;
+    }
+};
+
+const stopLocationTracking = () => {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+};
+
+// Geofencing logic
+const isWithinStoreVicinity = computed(() => {
+    if (!latitude.value || !longitude.value || !props.assignedStores?.length) return false;
+    
+    return props.assignedStores.some(store => {
+        const dist = calculateDistance(latitude.value, longitude.value, store.latitude, store.longitude);
+        return dist <= store.radius_meters;
+    });
+});
+
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+const updateMap = async () => {
+    if (!mapElement.value || !latitude.value || !longitude.value) return;
+
+    if (window.google && window.google.maps) {
+        const pos = { lat: latitude.value, lng: longitude.value };
+        
+        if (!map) {
+            try {
+                const { Map, Circle } = await google.maps.importLibrary("maps");
+                const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+                
+                map = new Map(mapElement.value, {
+                    center: pos,
+                    zoom: 17,
+                    mapId: 'DTR_MAP_ID',
+                    disableDefaultUI: true,
+                });
+                
+                marker = new AdvancedMarkerElement({
+                    map: map,
+                    position: pos,
+                    title: "You are here",
+                });
+
+                // Draw circles for assigned stores
+                props.assignedStores.forEach(store => {
+                    const circle = new google.maps.Circle({
+                        strokeColor: "#3B82F6",
+                        strokeOpacity: 0.8,
+                        strokeWeight: 2,
+                        fillColor: "#3B82F6",
+                        fillOpacity: 0.15,
+                        map: map,
+                        center: { lat: store.latitude, lng: store.longitude },
+                        radius: store.radius_meters,
+                    });
+                    geofenceCircles.push(circle);
+                });
+
+            } catch (e) {
+                map = new google.maps.Map(mapElement.value, {
+                    center: pos,
+                    zoom: 17,
+                    disableDefaultUI: true,
+                });
+                marker = new google.maps.Marker({
+                    position: pos,
+                    map: map
+                });
+            }
+        } else {
+            map.setCenter(pos);
+            if (marker.setPosition) marker.setPosition(pos);
+            else marker.position = pos;
+        }
+    }
+};
+
+const getRefinedDeviceInfo = async () => {
+    let info = navigator.userAgent;
+    let hardwareDetails = [];
+
+    // 1. Extract GPU Information (The most specific hardware hint available in a browser)
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                hardwareDetails.push(`Hardware: ${renderer}`);
+            }
+        }
+    } catch (e) {
+        console.warn("GPU inspection failed", e);
+    }
+
+    // 2. Display Details
+    hardwareDetails.push(`Display: ${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`);
+
+    if (navigator.userAgentData) {
+        try {
+            const highEntropy = await navigator.userAgentData.getHighEntropyValues([
+                'model', 
+                'platform', 
+                'platformVersion', 
+                'architecture',
+                'bitness'
+            ]);
+            
+            const brands = navigator.userAgentData.brands
+                .map(b => b.brand)
+                .join('/');
+                
+            const model = highEntropy.model || 'Desktop/Laptop';
+            const platform = highEntropy.platform || navigator.userAgentData.platform;
+            const arch = highEntropy.architecture ? `${highEntropy.architecture} ${highEntropy.bitness}-bit` : '';
+            
+            info = `OS: ${platform} ${highEntropy.platformVersion} (${arch}) | Device: ${model} | ${hardwareDetails.join(' | ')} | Browser: ${brands}`;
+        } catch (e) {
+            info = `${info} | ${hardwareDetails.join(' | ')}`;
+        }
+    } else {
+        info = `${info} | ${hardwareDetails.join(' | ')}`;
+    }
+    return info;
+};
+
+const getPublicIp = async () => {
+    try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        return data.ip;
+    } catch (e) {
+        console.warn("Could not fetch public IP", e);
+        return null;
+    }
+};
+
+const submit = async () => {
+    if (!canSave.value) return;
+    
+    form.device_info = await getRefinedDeviceInfo();
+    form.public_ip = await getPublicIp();
+    
+    form.post(route('attendance.log'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            capturedImage.value = null;
+            form.reset();
+        },
+    });
+};
+
+const canSave = computed(() => {
+    return !!capturedImage.value && 
+           isLocationStable.value === true && 
+           isWithinStoreVicinity.value === true && 
+           !form.processing;
+});
+
+const statusMessage = computed(() => {
+    if (props.assignedStores.length === 0) return 'No assigned work sites found.';
+    if (!capturedImage.value) return 'Please take a selfie first.';
+    if (!latitude.value) return 'Acquiring GPS...';
+    if (!isLocationStable.value) return 'Waiting for location to stabilize...';
+    if (!isWithinStoreVicinity.value) return 'You are outside the office vicinity.';
+    return `Ready to ${nextAction.value}`;
+});
+
+</script>
+
+<template>
+    <Head title="Daily Time Record" />
+
+    <AppLayout>
+        <template #header>
+            Daily Time Record (DTR)
+        </template>
+
+        <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
+            <div v-if="assignedStores.length === 0" class="p-8 text-center bg-red-50">
+                <ExclamationCircleIcon class="w-12 h-12 text-red-500 mx-auto mb-4" />
+                <h3 class="text-lg font-bold text-red-900">Geofencing Restricted</h3>
+                <p class="text-red-700 max-w-md mx-auto">No active work sites are assigned to your account. You must be assigned to a specific office or store to use the DTR module.</p>
+            </div>
+
+            <div v-else class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- Camera Section -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <CameraIcon class="w-5 h-5 text-blue-600" />
+                            1. Take a Selfie
+                        </h3>
+                        <span v-if="capturedImage" class="text-xs font-bold text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded">
+                            <CheckCircleIcon class="w-3 h-3" /> CAPTURED
+                        </span>
+                    </div>
+                    
+                    <div class="relative aspect-video bg-gray-900 rounded-lg overflow-hidden border-2" :class="capturedImage ? 'border-green-500' : 'border-gray-200'">
+                        <video v-show="!capturedImage" ref="video" autoplay playsinline class="w-full h-full object-cover mirrored"></video>
+                        <img v-if="capturedImage" :src="capturedImage" class="w-full h-full object-cover mirrored" />
+                        
+                        <div v-if="cameraError" class="absolute inset-0 flex items-center justify-center p-4 bg-gray-900/80 text-white text-center">
+                            <p>{{ cameraError }}</p>
+                        </div>
+                        
+                        <div v-if="!isCameraReady && !cameraError && !capturedImage" class="absolute inset-0 flex items-center justify-center">
+                            <ArrowPathIcon class="w-10 h-10 text-white animate-spin" />
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-center gap-4">
+                        <SecondaryButton v-if="!capturedImage" @click="capturePhoto" :disabled="!isCameraReady || form.processing" class="w-full justify-center py-3">
+                            Capture Photo
+                        </SecondaryButton>
+                        <SecondaryButton v-else @click="retakePhoto" :disabled="form.processing" class="w-full justify-center py-3">
+                            Retake Photo
+                        </SecondaryButton>
+                    </div>
+                </div>
+
+                <!-- Map Section -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <MapPinIcon class="w-5 h-5 text-red-600" />
+                            2. Confirm Location
+                        </h3>
+                        <div class="flex gap-2">
+                            <span v-if="isLocationStable" class="text-[10px] font-bold text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded">
+                                <CheckCircleIcon class="w-3 h-3" /> STABLE
+                            </span>
+                            <span v-if="isWithinStoreVicinity" class="text-[10px] font-bold text-blue-600 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                                <GlobeAsiaAustraliaIcon class="w-3 h-3" /> IN VICINITY
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="relative aspect-video bg-gray-100 rounded-lg border-2 overflow-hidden" :class="isWithinStoreVicinity ? 'border-blue-500' : 'border-gray-200'">
+                        <div ref="mapElement" class="w-full h-full"></div>
+                        
+                        <div v-if="!latitude || locationError" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+                            <template v-if="!latitude && !locationError">
+                                <ArrowPathIcon class="w-8 h-8 animate-spin text-gray-400 mb-2" />
+                                <p class="text-gray-500">Acquiring GPS...</p>
+                            </template>
+                            <p v-else-if="locationError" class="text-red-500 text-sm font-medium">{{ locationError }}</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-600 font-medium">GPS Accuracy</span>
+                            <span :class="isLocationStable ? 'text-green-600 font-bold' : 'text-orange-600 font-medium'">
+                                {{ isLocationStable ? 'Location Secured' : 'Stabilizing Signal...' }}
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: stabilityProgress + '%' }"></div>
+                        </div>
+                        <p v-if="latitude" class="text-[10px] text-gray-400 font-mono text-center">
+                            {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }} (±{{ locationAccuracy?.toFixed(1) }}m)
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Action Section -->
+                <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100">
+                    <div class="bg-gray-50 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 border border-gray-100 shadow-inner">
+                        <div class="text-center md:text-left">
+                            <p class="text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
+                            <p class="text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
+                            <div class="flex items-center gap-2 mt-1 justify-center md:justify-start">
+                                <div :class="['w-2 h-2 rounded-full animate-pulse', nextAction === 'Time In' ? 'bg-red-500' : 'bg-green-500']"></div>
+                                <p class="text-sm font-bold" :class="nextAction === 'Time In' ? 'text-red-600' : 'text-green-600'">
+                                    Status: {{ nextAction === 'Time In' ? 'OUT' : 'IN' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col items-center gap-3">
+                            <div v-if="!canSave" class="flex items-center gap-2 text-orange-600 bg-orange-50 px-4 py-2 rounded-lg border border-orange-100 text-sm font-bold">
+                                <ExclamationCircleIcon class="w-4 h-4" />
+                                {{ statusMessage }}
+                            </div>
+
+                            <PrimaryButton 
+                                @click="submit" 
+                                :disabled="!canSave"
+                                class="px-16 py-5 text-xl font-black shadow-xl uppercase tracking-widest transition-all"
+                                :class="[
+                                    canSave 
+                                        ? (nextAction === 'Time In' ? 'bg-green-600 hover:bg-green-700 hover:scale-105' : 'bg-orange-600 hover:bg-orange-700 hover:scale-105') 
+                                        : 'bg-gray-300'
+                                ]"
+                            >
+                                <template v-if="form.processing">
+                                    <ArrowPathIcon class="w-6 h-6 animate-spin mr-2" />
+                                    Saving...
+                                </template>
+                                <template v-else>
+                                    {{ nextAction }}
+                                </template>
+                            </PrimaryButton>
+                            
+                            <div class="flex gap-6">
+                                <div class="flex items-center gap-1.5 text-[10px] uppercase font-black" :class="capturedImage ? 'text-green-600' : 'text-gray-400'">
+                                    <CheckCircleIcon class="w-3.5 h-3.5" />
+                                    Selfie
+                                </div>
+                                <div class="flex items-center gap-1.5 text-[10px] uppercase font-black" :class="isLocationStable ? 'text-green-600' : 'text-gray-400'">
+                                    <CheckCircleIcon class="w-3.5 h-3.5" />
+                                    Stable
+                                </div>
+                                <div class="flex items-center gap-1.5 text-[10px] uppercase font-black" :class="isWithinStoreVicinity ? 'text-green-600' : 'text-gray-400'">
+                                    <CheckCircleIcon class="w-3.5 h-3.5" />
+                                    Vicinity
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <canvas ref="canvas" style="display:none;"></canvas>
+    </AppLayout>
+</template>
+
+<style scoped>
+.mirrored { transform: scaleX(-1); }
+</style>

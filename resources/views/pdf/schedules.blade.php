@@ -116,7 +116,7 @@
     </table>
 
     <div class="footer">
-        &copy; {{ date('Y') }} Amalgated Help Desk. All rights reserved.
+        &copy; {{ date('Y') }} Help Desk. All rights reserved.
     </div>
 </body>
 </html>

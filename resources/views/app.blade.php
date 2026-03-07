@@ -7,7 +7,7 @@
         <!-- CSRF Token -->
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Amalgated') }}</title>
+        <title inertia>{{ config('app.name', 'TAS') }}</title>
 
         <!-- Favicon -->
         <link rel="icon" type="image/x-icon" href="{{ asset('images/favicon_96x96.ico') }}">
@@ -17,6 +17,11 @@
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
+        <script>
+            window.config = {
+                google_maps_api_key: "{{ config('services.google.maps_api_key') }}"
+            };
+        </script>
         @routes
         @vite(['resources/js/app.js'])
         @inertiaHead

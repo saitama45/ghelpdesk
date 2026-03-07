@@ -36,7 +36,8 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sector/Area</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand/Cluster</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned User</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geofence</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Users</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -66,11 +67,23 @@
                                 <div class="text-xs text-gray-500">Cluster: {{ store.cluster }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div v-if="store.user" class="flex items-center">
-                                    <div class="h-6 w-6 bg-gray-200 rounded-full flex items-center justify-center mr-2">
-                                        <span class="text-[10px] font-bold text-gray-600">{{ store.user.name.charAt(0).toUpperCase() }}</span>
+                                <div v-if="store.latitude" class="text-xs space-y-1">
+                                    <div class="flex items-center text-blue-600 font-medium">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                        {{ store.radius_meters }}m Radius
                                     </div>
-                                    <span class="text-sm text-gray-900">{{ store.user.name }}</span>
+                                    <div class="text-gray-400 font-mono">{{ store.latitude.toFixed(4) }}, {{ store.longitude.toFixed(4) }}</div>
+                                </div>
+                                <span v-else class="text-[10px] text-orange-500 font-bold bg-orange-50 px-2 py-0.5 rounded uppercase">No Geofence</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <div v-if="store.users?.length > 0" class="flex flex-wrap gap-1 max-w-[200px]">
+                                    <span v-for="user in store.users" :key="user.id" 
+                                          class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-800 border border-gray-200"
+                                          :title="user.name"
+                                    >
+                                        {{ user.name }}
+                                    </span>
                                 </div>
                                 <span v-else class="text-xs text-gray-400 italic">Unassigned</span>
                             </td>
@@ -112,52 +125,86 @@
 
         <!-- Create/Edit Modal -->
         <div v-if="showModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
                 <div class="mt-3">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">
                         {{ isEditing ? 'Edit Store' : 'Create Store' }}
                     </h3>
                     <form @submit.prevent="submitForm">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Store Code</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Store Code</label>
                                 <input v-model="form.code" type="text" required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                                        placeholder="e.g. STR-001">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Store Name</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
                                 <input v-model="form.name" type="text" required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 border-b pb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Assign User</label>
-                                <Autocomplete 
-                                    v-model="form.user_id"
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Assign Users</label>
+                                <MultiAutocomplete 
+                                    v-model="form.user_ids"
                                     :options="users"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Search user..."
+                                    placeholder="Select users..."
                                 />
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Sector (1-8)</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Sector (1-8)</label>
                                 <input v-model="form.sector" type="number" min="1" max="8" required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
                         </div>
 
+                        <!-- Geofencing Section -->
+                        <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <h4 class="text-sm font-bold text-blue-800 mb-3 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                Geofence Settings
+                            </h4>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Latitude</label>
+                                    <input v-model="form.latitude" type="number" step="any"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Longitude</label>
+                                    <input v-model="form.longitude" type="number" step="any"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Radius (Meters)</label>
+                                    <input v-model="form.radius_meters" type="number" min="10"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-between items-center">
+                                <button type="button" @click="getCurrentLocation" 
+                                        class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center">
+                                    <svg v-if="!isLocating" class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    <svg v-else class="animate-spin h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    {{ isLocating ? 'Locating...' : 'Set to Current Location' }}
+                                </button>
+                                <p class="text-[10px] text-blue-500 italic">Determines the allowed vicinity for DTR logging.</p>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Area</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Area</label>
                                 <input v-model="form.area" type="text" required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Brand</label>
                                 <input v-model="form.brand" type="text" required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
@@ -165,14 +212,14 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Cluster</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
                                 <input v-model="form.cluster" type="text" required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
-                            <div v-if="isEditing" class="flex items-end pb-2">
+                            <div class="flex items-end pb-2">
                                 <label class="flex items-center">
                                     <input v-model="form.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                    <span class="ml-2 text-sm text-gray-700">Active</span>
+                                    <span class="ml-2 text-sm text-gray-700 font-medium">Active Store</span>
                                 </label>
                             </div>
                         </div>
@@ -184,7 +231,7 @@
                             </button>
                             <button type="submit" 
                                     class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                                {{ isEditing ? 'Update' : 'Create' }}
+                                {{ isEditing ? 'Update Store' : 'Create Store' }}
                             </button>
                         </div>
                     </form>
@@ -198,7 +245,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
-import Autocomplete from '@/Components/Autocomplete.vue'
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -219,15 +266,19 @@ const { hasPermission } = usePermission()
 const showModal = ref(false)
 const isEditing = ref(false)
 const currentStore = ref(null)
+const isLocating = ref(false)
 
 const form = reactive({
-    user_id: null,
+    user_ids: [],
     code: '',
     name: '',
     sector: 1,
     area: '',
     brand: '',
     cluster: '',
+    latitude: null,
+    longitude: null,
+    radius_meters: 150,
     is_active: true
 })
 
@@ -242,48 +293,70 @@ watch(() => props.stores, (newStores) => {
 const openCreateModal = () => {
     isEditing.value = false
     currentStore.value = null
-    form.user_id = null
-    form.code = ''
-    form.name = ''
-    form.sector = 1
-    form.area = ''
-    form.brand = ''
-    form.cluster = ''
-    form.is_active = true
+    Object.assign(form, {
+        user_ids: [],
+        code: '',
+        name: '',
+        sector: 1,
+        area: '',
+        brand: '',
+        cluster: '',
+        latitude: null,
+        longitude: null,
+        radius_meters: 150,
+        is_active: true
+    })
     showModal.value = true
 }
 
 const editStore = (store) => {
     isEditing.value = true
     currentStore.value = store
-    form.user_id = store.user_id
-    form.code = store.code
-    form.name = store.name
-    form.sector = store.sector
-    form.area = store.area
-    form.brand = store.brand
-    form.cluster = store.cluster
-    form.is_active = store.is_active
+    Object.assign(form, {
+        user_ids: store.users?.map(u => u.id) || [],
+        code: store.code,
+        name: store.name,
+        sector: store.sector,
+        area: store.area,
+        brand: store.brand,
+        cluster: store.cluster,
+        latitude: store.latitude,
+        longitude: store.longitude,
+        radius_meters: store.radius_meters || 150,
+        is_active: store.is_active
+    })
     showModal.value = true
 }
 
 const closeModal = () => {
     showModal.value = false
-    form.user_id = null
-    form.code = ''
-    form.name = ''
-    form.sector = 1
-    form.area = ''
-    form.brand = ''
-    form.cluster = ''
-    form.is_active = true
+}
+
+const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+        showError('Geolocation is not supported by your browser.')
+        return
+    }
+
+    isLocating.value = true
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            form.latitude = position.coords.latitude
+            form.longitude = position.coords.longitude
+            isLocating.value = false
+            showSuccess('Coordinates updated successfully.')
+        },
+        (error) => {
+            isLocating.value = false
+            showError('Error getting location: ' + error.message)
+        },
+        { enableHighAccuracy: true }
+    )
 }
 
 const submitForm = () => {
     const url = isEditing.value ? `/stores/${currentStore.value.id}` : '/stores'
-    const method = isEditing.value ? 'put' : 'post'
-    
-    const requestMethod = method === 'put' ? put : post
+    const requestMethod = isEditing.value ? put : post
     
     requestMethod(url, form, {
         onSuccess: () => {
