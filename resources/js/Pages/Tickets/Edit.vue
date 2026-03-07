@@ -356,6 +356,8 @@ const activities = computed(() => {
         activity_type: 'description',
         date: parseDate(props.ticket.created_at),
         user: props.ticket.reporter,
+        sender_name: props.ticket.sender_name,
+        sender_email: props.ticket.sender_email,
         text: props.ticket.description,
         // Attachments that are not linked to any comment (created with ticket)
         attachments: (props.ticket.attachments || []).filter(a => !a.comment_id)
@@ -683,8 +685,13 @@ const linkify = (text) => {
                                     
                                     <div class="flex justify-between items-start mb-1">
                                         <div class="flex items-center space-x-2">
-                                            <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                            <span class="text-xs text-gray-500">created this ticket on {{ formatDate(activity.date) }}</span>
+                                            <span class="font-semibold text-gray-900">
+                                                {{ activity.user ? activity.user.name : (activity.sender_name || 'External User') }}
+                                            </span>
+                                            <span class="text-xs text-gray-500">
+                                                <template v-if="activity.sender_email">({{ activity.sender_email }})</template>
+                                                created this ticket on {{ formatDate(activity.date) }}
+                                            </span>
                                         </div>
                                     </div>
                                     

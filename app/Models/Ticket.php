@@ -29,6 +29,9 @@ class Ticket extends Model
         'sub_category_id',
         'item_id',
         'parent_id',
+        'sender_email',
+        'sender_name',
+        'message_id',
     ];
 
     public function parent()

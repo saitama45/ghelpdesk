@@ -19,7 +19,7 @@
         <!-- Scripts -->
         <script>
             window.config = {
-                google_maps_api_key: "{{ config('services.google.maps_api_key') }}"
+                google_maps_api_key: "{{ \App\Models\Setting::get('google_maps_api_key', config('services.google.maps_api_key')) }}"
             };
         </script>
         @routes

@@ -82,7 +82,7 @@ onMounted(() => {
     if (route().current('users.*') || route().current('roles.*')) {
         openMenus.value.userManagement = true;
     }
-    if (route().current('profile.*')) {
+    if (route().current('profile.*') || route().current('settings.*')) {
         openMenus.value.settings = true;
     }
 });
@@ -342,6 +342,16 @@ onMounted(() => {
                     </button>
 
                     <div v-if="!isCollapsed && openMenus.settings" class="pl-10 space-y-1 mt-1">
+                        <Link
+                            v-if="hasPermission('settings.view')"
+                            :href="route('settings.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('settings.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>System Settings</span>
+                        </Link>
                         <Link
                             :href="route('profile.edit')"
                             :class="[

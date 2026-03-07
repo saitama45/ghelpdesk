@@ -432,6 +432,10 @@ const getTypeColor = (type) => {
                                 </div>
                                 <span class="text-gray-700 font-medium">{{ ticket.reporter.name }}</span>
                             </div>
+                            <div v-else-if="ticket.sender_email" class="flex flex-col">
+                                <span class="text-gray-700 font-medium">{{ ticket.sender_name || 'External User' }}</span>
+                                <span class="text-[10px] text-gray-400 truncate max-w-[150px]">{{ ticket.sender_email }}</span>
+                            </div>
                             <span v-else class="text-gray-400 italic">Unknown</span>
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap text-sm" @click.stop>

@@ -67,6 +67,10 @@ class RolesAndPermissionSeeder extends Seeder
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',
             'schedules.edit' => 'Edit schedules',
+
+            // Settings
+            'settings.view' => 'View system settings',
+            'settings.edit' => 'Edit system settings',
         ];
 
         // Create permissions
