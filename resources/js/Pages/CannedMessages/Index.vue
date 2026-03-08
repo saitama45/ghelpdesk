@@ -201,7 +201,6 @@ const submitForm = () => {
     requestMethod(url, form, {
         onSuccess: () => {
             closeModal()
-            showSuccess(isEditing.value ? 'Canned message updated successfully' : 'Canned message created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -218,7 +217,7 @@ const deleteMessage = async (message) => {
     
     if (confirmed) {
         destroy(`/canned-messages/${message.id}`, {
-            onSuccess: () => showSuccess('Canned message deleted successfully'),
+            onSuccess: () => {},
             onError: (errors) => {
                 const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete message'
                 showError(errorMessage)

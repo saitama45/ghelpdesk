@@ -81,7 +81,6 @@ const submitChildTicket = () => {
     childForm.post(route('tickets.store-child', props.ticket.id), {
         onSuccess: () => {
             showChildModal.value = false;
-            showSuccess('Child ticket and schedule created successfully');
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
@@ -420,7 +419,6 @@ const updateTicket = (options = {}) => {
     put(route('tickets.update', props.ticket.id), editForm.data(), {
         preserveScroll: true, // Keep scroll position during autosave
         onSuccess: () => {
-            showSuccess('Changes saved successfully');
             editForm.defaults(editForm.data()); // Update defaults to new state
             if (options.onSuccess) options.onSuccess();
         },
@@ -513,7 +511,6 @@ const addComment = () => {
             });
             commentForm.reset();
             if (commentFileInput.value) commentFileInput.value.value = '';
-            showSuccess('Comment added successfully');
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to add comment';
@@ -561,7 +558,6 @@ const deleteTicket = async () => {
         destroy(route('tickets.destroy', props.ticket.id), {
             onSuccess: () => {
                 router.visit(route('tickets.index'));
-                showSuccess('Ticket deleted successfully');
             },
             onError: (errors) => {
                 const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete ticket';

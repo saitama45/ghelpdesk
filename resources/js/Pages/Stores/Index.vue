@@ -427,7 +427,6 @@ const submitForm = () => {
     requestMethod(url, form, {
         onSuccess: () => {
             closeModal()
-            showSuccess(isEditing.value ? 'Store updated successfully' : 'Store created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -444,7 +443,7 @@ const deleteStore = async (store) => {
     
     if (confirmed) {
         destroy(`/stores/${store.id}`, {
-            onSuccess: () => showSuccess('Store deleted successfully'),
+            onSuccess: () => {},
             onError: (errors) => {
                 const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete store'
                 showError(errorMessage)
