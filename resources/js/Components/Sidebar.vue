@@ -169,7 +169,6 @@ onMounted(() => {
                                 route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
-                            <ClockIcon class="w-4 h-4 mr-2" />
                             <span>DTR</span>
                         </Link>
                         <Link
@@ -179,7 +178,6 @@ onMounted(() => {
                                 route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
-                            <ClipboardDocumentListIcon class="w-4 h-4 mr-2" />
                             <span>Attendance Logs</span>
                         </Link>
                         <Link
