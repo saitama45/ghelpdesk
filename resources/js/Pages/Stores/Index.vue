@@ -76,15 +76,17 @@
                                 </div>
                                 <span v-else class="text-[10px] text-orange-500 font-bold bg-orange-50 px-2 py-0.5 rounded uppercase">No Geofence</span>
                             </td>
-                            <td class="px-6 py-4">
-                                <div v-if="store.users?.length > 0" class="flex flex-wrap gap-1 max-w-[200px]">
-                                    <span v-for="user in store.users" :key="user.id" 
-                                          class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-800 border border-gray-200"
-                                          :title="user.name"
-                                    >
-                                        {{ user.name }}
-                                    </span>
-                                </div>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <button 
+                                    v-if="store.users?.length > 0"
+                                    @click="viewAssignedUsers(store)"
+                                    class="text-blue-600 hover:text-blue-800 text-xs font-medium flex items-center"
+                                >
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                    </svg>
+                                    View {{ store.users.length }} assigned User{{ store.users.length > 1 ? 's' : '' }}
+                                </button>
                                 <span v-else class="text-xs text-gray-400 italic">Unassigned</span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -244,6 +246,54 @@
                 </div>
             </div>
         </div>
+
+        <!-- Assigned Users Modal -->
+        <div v-if="showUsersModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showUsersModal = false"></div>
+                <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative">
+                    <div class="flex items-center justify-between mb-4 border-b pb-2">
+                        <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            Assigned Users
+                        </h3>
+                        <button @click="showUsersModal = false" class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="max-h-[60vh] overflow-y-auto">
+                        <div v-if="selectedStoreUsers.length > 0" class="grid grid-cols-1 gap-2">
+                            <div v-for="user in selectedStoreUsers" :key="user.id" 
+                                 class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-blue-50 transition-colors"
+                            >
+                                <div class="h-10 w-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm mr-3">
+                                    <span class="text-sm font-medium text-white">{{ user.name.charAt(0).toUpperCase() }}</span>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-gray-900">{{ user.name }}</div>
+                                    <div class="text-[10px] text-gray-500">{{ user.email }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="text-center py-8 text-gray-500 italic">
+                            No users assigned to this store.
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button @click="showUsersModal = false" 
+                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>
 
@@ -271,7 +321,9 @@ const { hasPermission } = usePermission()
 
 const showModal = ref(false)
 const isEditing = ref(false)
+const showUsersModal = ref(false)
 const currentStore = ref(null)
+const selectedStoreUsers = ref([])
 const isLocating = ref(false)
 
 const form = reactive({
@@ -339,6 +391,11 @@ const editStore = (store) => {
 
 const closeModal = () => {
     showModal.value = false
+}
+
+const viewAssignedUsers = (store) => {
+    selectedStoreUsers.value = store.users || []
+    showUsersModal.value = true
 }
 
 const getCurrentLocation = () => {

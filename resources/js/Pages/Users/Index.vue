@@ -19,8 +19,10 @@ const props = defineProps({
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showPasswordModal = ref(false);
+const showStoresModal = ref(false);
 const editingUser = ref(null);
 const resetPasswordUser = ref(null);
+const selectedUserStores = ref([]);
 const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
 const { showError } = useToast();
@@ -129,6 +131,11 @@ const resetPassword = (user) => {
     showPasswordModal.value = true;
 };
 
+const viewAssignedStores = (user) => {
+    selectedUserStores.value = user.stores || [];
+    showStoresModal.value = true;
+};
+
 const updatePassword = () => {
     put(route('users.reset-password', resetPasswordUser.value.id), passwordForm.data(), {
         onSuccess: () => {
@@ -188,6 +195,7 @@ const updatePassword = () => {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Stores</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
@@ -213,6 +221,19 @@ const updatePassword = () => {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{ user.department || '-' }}
+                        </td>
+                        <td class="px-6 py-4">
+                            <button 
+                                v-if="user.stores?.length > 0"
+                                @click="viewAssignedStores(user)"
+                                class="text-blue-600 hover:text-blue-800 text-xs font-medium flex items-center"
+                            >
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                                View {{ user.stores.length }} assigned Store{{ user.stores.length > 1 ? 's' : '' }}
+                            </button>
+                            <span v-else class="text-xs text-gray-400 italic">No Stores</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span :class="[
@@ -413,6 +434,56 @@ const updatePassword = () => {
                             <button type="submit" :disabled="passwordForm.processing" class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50">Reset Password</button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assigned Stores Modal -->
+        <div v-if="showStoresModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showStoresModal = false"></div>
+                <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative">
+                    <div class="flex items-center justify-between mb-4 border-b pb-2">
+                        <h3 class="text-lg font-bold text-gray-900 flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                            Assigned Stores
+                        </h3>
+                        <button @click="showStoresModal = false" class="text-gray-400 hover:text-gray-500">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div class="max-h-[60vh] overflow-y-auto">
+                        <div v-if="selectedUserStores.length > 0" class="grid grid-cols-1 gap-2">
+                            <div v-for="store in selectedUserStores" :key="store.id" 
+                                 class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-blue-50 transition-colors"
+                            >
+                                <div class="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-gray-900">{{ store.name }}</div>
+                                    <div class="text-[10px] text-blue-600 font-mono">CODE: {{ store.code || 'N/A' }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="text-center py-8 text-gray-500 italic">
+                            No stores assigned to this user.
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button @click="showStoresModal = false" 
+                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium">
+                            Close
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

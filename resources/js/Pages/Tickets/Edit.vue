@@ -10,6 +10,7 @@ import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
+import { ChatBubbleBottomCenterTextIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -17,6 +18,7 @@ const props = defineProps({
     companies: Array,
     users: Array,
     stores: Array,
+    cannedMessages: Array,
 });
 
 const page = usePage();
@@ -24,6 +26,18 @@ const { confirm } = useConfirm();
 const { put, destroy, post } = useErrorHandler();
 const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
+
+// Canned Messages State
+const showCannedMessages = ref(false);
+
+const applyCannedMessage = (message) => {
+    if (commentForm.comment_text) {
+        commentForm.comment_text += '\n' + message.content;
+    } else {
+        commentForm.comment_text = message.content;
+    }
+    showCannedMessages.value = false;
+};
 
 // Child Ticket State
 const showChildModal = ref(false);
@@ -948,6 +962,42 @@ const linkify = (text) => {
                                                 <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all" title="Attach files">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                                                 </button>
+
+                                                <!-- Canned Messages Dropdown -->
+                                                <div class="relative">
+                                                    <button 
+                                                        v-if="cannedMessages?.length > 0"
+                                                        type="button" 
+                                                        @click="showCannedMessages = !showCannedMessages" 
+                                                        class="p-1.5 text-orange-600 hover:text-orange-800 rounded-lg hover:bg-orange-100 transition-all" 
+                                                        title="Canned Messages"
+                                                    >
+                                                        <ChatBubbleBottomCenterTextIcon class="w-5 h-5" />
+                                                    </button>
+                                                    
+                                                    <div v-if="showCannedMessages" 
+                                                         class="absolute bottom-full left-0 mb-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden"
+                                                    >
+                                                        <div class="p-2 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                                                            <span class="text-xs font-bold text-gray-500 uppercase">Canned Messages</span>
+                                                            <button @click="showCannedMessages = false" class="text-gray-400 hover:text-gray-600">
+                                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                            </button>
+                                                        </div>
+                                                        <div class="max-h-48 overflow-y-auto">
+                                                            <button 
+                                                                v-for="msg in cannedMessages" 
+                                                                :key="msg.id"
+                                                                type="button"
+                                                                @click="applyCannedMessage(msg)"
+                                                                class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                                                            >
+                                                                <div class="font-bold truncate">{{ msg.title }}</div>
+                                                                <div class="text-[10px] text-gray-400 truncate">{{ msg.content }}</div>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <button 
                                                 type="button" 

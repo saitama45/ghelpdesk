@@ -71,6 +71,11 @@ class RolesAndPermissionSeeder extends Seeder
             // Settings
             'settings.view' => 'View system settings',
             'settings.edit' => 'Edit system settings',
+
+            // Canned Messages
+            'canned_messages.view' => 'View canned messages',
+            'canned_messages.create' => 'Create canned messages',
+            'canned_messages.edit' => 'Edit canned messages',
         ];
 
         // Create permissions
@@ -96,6 +101,8 @@ class RolesAndPermissionSeeder extends Seeder
             'items.view',
             'stores.view',
             'schedules.view',
+            'canned_messages.view',
+            'canned_messages.edit',
         ]);
         
         $user->givePermissionTo([

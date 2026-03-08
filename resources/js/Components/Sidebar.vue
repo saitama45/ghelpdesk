@@ -23,6 +23,7 @@ import {
     Cog6ToothIcon,
     QueueListIcon,
     ClockIcon,
+    ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -82,7 +83,7 @@ onMounted(() => {
     if (route().current('users.*') || route().current('roles.*')) {
         openMenus.value.userManagement = true;
     }
-    if (route().current('profile.*') || route().current('settings.*')) {
+    if (route().current('profile.*') || route().current('settings.*') || route().current('canned-messages.*')) {
         openMenus.value.settings = true;
     }
 });
@@ -351,6 +352,16 @@ onMounted(() => {
                             ]"
                         >
                             <span>System Settings</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('canned_messages.view')"
+                            :href="route('canned-messages.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('canned-messages.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Canned Messages</span>
                         </Link>
                         <Link
                             :href="route('profile.edit')"

@@ -13,7 +13,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['roles:id,name', 'stores:id,name']);
+        $query = User::with(['roles:id,name', 'stores:id,name,code']);
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {

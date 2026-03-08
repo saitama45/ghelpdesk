@@ -281,6 +281,7 @@ class TicketController extends Controller
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
@@ -288,6 +289,7 @@ class TicketController extends Controller
             'companies' => $companies,
             'users' => $users,
             'stores' => $stores,
+            'cannedMessages' => $cannedMessages,
         ]);
     }
 
