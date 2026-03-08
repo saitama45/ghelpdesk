@@ -13,6 +13,7 @@ class Store extends Model
         'area',
         'brand',
         'cluster',
+        'email',
         'latitude',
         'longitude',
         'radius_meters',

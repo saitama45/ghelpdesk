@@ -31,6 +31,7 @@ class StoreController extends Controller implements HasMiddleware
                   ->orWhere('area', 'like', "%{$request->search}%")
                   ->orWhere('brand', 'like', "%{$request->search}%")
                   ->orWhere('cluster', 'like', "%{$request->search}%")
+                  ->orWhere('email', 'like', "%{$request->search}%")
                   ->orWhereHas('users', function($q) use ($request) {
                       $q->where('name', 'like', "%{$request->search}%");
                   });
@@ -54,6 +55,7 @@ class StoreController extends Controller implements HasMiddleware
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'cluster' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
             'radius_meters' => 'nullable|integer|min:10|max:5000',
@@ -80,6 +82,7 @@ class StoreController extends Controller implements HasMiddleware
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'cluster' => 'required|string|max:255',
+            'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
             'radius_meters' => 'nullable|integer|min:10|max:5000',
