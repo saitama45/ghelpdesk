@@ -43,7 +43,6 @@ const applyCannedMessage = (message) => {
 const showChildModal = ref(false);
 const childForm = useForm({
     user_id: null,
-    store_id: null,
     status: 'On-site',
     start_time: '',
     end_time: '',
@@ -162,6 +161,7 @@ const getThumbnailUrl = (attachment) => {
 
 const editForm = useForm({
     company_id: props.ticket.company_id || '',
+    store_id: props.ticket.store_id || '',
     category_id: props.ticket.category_id || '',
     sub_category_id: props.ticket.sub_category_id || '',
     item_id: props.ticket.item_id || '',
@@ -437,6 +437,7 @@ const debouncedUpdate = debounce(() => {
 // Watchers for other fields (excluding Title and Description which are now manual save)
 watch(() => [
     editForm.company_id,
+    editForm.store_id,
     editForm.status,
     editForm.priority,
     editForm.severity,
@@ -1046,6 +1047,18 @@ const linkify = (text) => {
                             </div>
 
                             <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Store</label>
+                                <Autocomplete 
+                                    v-model="editForm.store_id"
+                                    :options="stores"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select store..."
+                                    :disabled="!hasPermission('tickets.edit')"
+                                />
+                            </div>
+
+                            <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
                                 <Autocomplete 
                                     v-model="editForm.category_id"
@@ -1312,28 +1325,18 @@ const linkify = (text) => {
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Store (Optional)</label>
-                            <Autocomplete 
-                                v-model="childForm.store_id"
-                                :options="stores"
-                                label-key="name"
-                                value-key="id"
-                                placeholder="Select store..."
-                            />
-                        </div>
-                        <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
                             <input v-model="childForm.start_time" type="datetime-local" required
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
                             <input v-model="childForm.end_time" type="datetime-local" required
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                         </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Pickup Time (From - To)</label>
                             <div class="flex items-center space-x-2">
@@ -1342,9 +1345,6 @@ const linkify = (text) => {
                                 <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                             </div>
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Backlogs Time (From - To)</label>
                             <div class="flex items-center space-x-2">
@@ -1353,12 +1353,13 @@ const linkify = (text) => {
                                 <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-                            <textarea v-model="childForm.remarks" rows="3"
-                                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                      placeholder="Provide details about the activity..."></textarea>
-                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
+                        <textarea v-model="childForm.remarks" rows="3"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  placeholder="Provide details about the activity..."></textarea>
                     </div>
 
                     <div class="flex justify-end space-x-3 pt-4 border-t">

@@ -10,8 +10,6 @@ class Ticket extends Model
 {
     use HasUuids, SoftDeletes;
 
-    // Removed custom timestamps constants as we are now using standard created_at/updated_at
-
     protected $fillable = [
         'ticket_key',
         'title',
@@ -25,6 +23,7 @@ class Ticket extends Model
         'project_id',
         'milestone_id',
         'company_id',
+        'store_id',
         'category_id',
         'sub_category_id',
         'item_id',
@@ -102,5 +101,10 @@ class Ticket extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function store()
+    {
+        return $this->belongsTo(Store::class);
     }
 }

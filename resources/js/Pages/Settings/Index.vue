@@ -1,16 +1,38 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
-import { Cog6ToothIcon, EnvelopeIcon, ShieldCheckIcon, MapIcon, EyeIcon, EyeSlashIcon, ChartBarIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
+import { 
+    Cog6ToothIcon, 
+    EnvelopeIcon, 
+    ShieldCheckIcon, 
+    MapIcon, 
+    EyeIcon, 
+    EyeSlashIcon, 
+    ChartBarIcon, 
+    PaperAirplaneIcon,
+    ServerIcon,
+    AdjustmentsHorizontalIcon,
+    CheckCircleIcon
+} from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     settings: Object
 });
+
+const activeTab = ref('mail');
+
+const tabs = [
+    { id: 'mail', name: 'Mail Configuration', icon: EnvelopeIcon, description: 'Manage inbound and outbound email settings.' },
+    { id: 'integrations', name: 'Integrations', icon: MapIcon, description: 'External API keys and third-party services.' },
+    { id: 'thresholds', name: 'Health Thresholds', icon: ChartBarIcon, description: 'Ticket count limits and status labels.' },
+];
+
+const currentTab = computed(() => tabs.find(t => t.id === activeTab.value));
 
 const showImapPassword = ref(false);
 const showMailPassword = ref(false);
@@ -56,355 +78,319 @@ const submit = () => {
 
     <AppLayout>
         <template #header>
-            System Settings
+            <div class="flex items-center space-x-2">
+                <Cog6ToothIcon class="w-6 h-6 text-gray-500" />
+                <span>System Settings</span>
+            </div>
         </template>
 
-        <div class="space-y-6">
-            <!-- Email Settings -->
-            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <div class="flex items-center space-x-3 mb-6 border-b pb-4">
-                    <div class="p-2 bg-blue-100 rounded-lg">
-                        <EnvelopeIcon class="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                        <h3 class="text-lg font-bold text-gray-900">Email Ticketing (IMAP)</h3>
-                        <p class="text-sm text-gray-500">Configure how the system fetches tickets from your support email inbox.</p>
-                    </div>
-                </div>
+        <div class="flex flex-col lg:flex-row gap-8">
+            <!-- Navigation Sidebar -->
+            <aside class="w-full lg:w-64 flex-shrink-0">
+                <nav class="space-y-1">
+                    <button
+                        v-for="tab in tabs"
+                        :key="tab.id"
+                        @click="activeTab = tab.id"
+                        type="button"
+                        :class="[
+                            activeTab === tab.id
+                                ? 'bg-blue-50 text-blue-700 border-blue-600'
+                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-transparent',
+                            'group flex items-center px-4 py-3 text-sm font-bold border-l-4 transition-all w-full text-left'
+                        ]"
+                    >
+                        <component
+                            :is="tab.icon"
+                            :class="[
+                                activeTab === tab.id ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500',
+                                'mr-3 h-5 w-5 flex-shrink-0'
+                            ]"
+                        />
+                        {{ tab.name }}
+                    </button>
+                </nav>
+            </aside>
 
-                <form @submit.prevent="submit" class="space-y-6 max-w-2xl">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <InputLabel for="imap_host" value="IMAP Host" />
-                            <TextInput
-                                id="imap_host"
-                                type="text"
-                                class="mt-1 block w-full"
-                                v-model="form.imap_host"
-                                placeholder="imap.gmail.com"
-                            />
-                            <InputError class="mt-2" :message="form.errors.imap_host" />
-                        </div>
-
-                        <div>
-                            <InputLabel for="imap_port" value="IMAP Port" />
-                            <TextInput
-                                id="imap_port"
-                                type="text"
-                                class="mt-1 block w-full"
-                                v-model="form.imap_port"
-                                placeholder="993"
-                            />
-                            <InputError class="mt-2" :message="form.errors.imap_port" />
-                        </div>
-
-                        <div>
-                            <InputLabel for="imap_encryption" value="Encryption" />
-                            <select
-                                id="imap_encryption"
-                                v-model="form.imap_encryption"
-                                class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
-                            >
-                                <option value="ssl">SSL</option>
-                                <option value="tls">TLS</option>
-                                <option value="notls">None</option>
-                            </select>
-                            <InputError class="mt-2" :message="form.errors.imap_encryption" />
-                        </div>
-
-                        <div>
-                            <InputLabel for="imap_username" value="Support Email" />
-                            <TextInput
-                                id="imap_username"
-                                type="email"
-                                class="mt-1 block w-full"
-                                v-model="form.imap_username"
-                                placeholder="support@example.com"
-                            />
-                            <InputError class="mt-2" :message="form.errors.imap_username" />
-                        </div>
-
-                        <div class="md:col-span-2">
-                            <InputLabel for="imap_password" value="Password / App Password" />
-                            <div class="relative mt-1">
-                                <TextInput
-                                    id="imap_password"
-                                    :type="showImapPassword ? 'text' : 'password'"
-                                    class="block w-full pr-10"
-                                    v-model="form.imap_password"
-                                    placeholder="••••••••••••"
-                                />
-                                <button 
-                                    type="button"
-                                    @click="showImapPassword = !showImapPassword"
-                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                                >
-                                    <EyeIcon v-if="!showImapPassword" class="h-5 w-5" />
-                                    <EyeSlashIcon v-else class="h-5 w-5" />
-                                </button>
-                            </div>
-                            <p class="mt-2 text-xs text-gray-500 flex items-center">
-                                <ShieldCheckIcon class="w-3 h-3 mr-1 text-green-600" />
-                                For Gmail, use a 16-character App Password.
+            <!-- Content Area -->
+            <div class="flex-1 max-w-4xl">
+                <form @submit.prevent="submit">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        
+                        <!-- Tab Header -->
+                        <div class="px-6 py-5 bg-gray-50 border-b border-gray-200">
+                            <h2 class="text-xl font-black text-gray-900">
+                                {{ currentTab.name }}
+                            </h2>
+                            <p class="text-sm text-gray-500 mt-1">
+                                {{ currentTab.description }}
                             </p>
-                            <InputError class="mt-2" :message="form.errors.imap_password" />
-                        </div>
-                    </div>
-
-                    <!-- Outgoing Mail Settings -->
-                    <div class="pt-8 mt-8 border-t border-gray-100">
-                        <div class="flex items-center space-x-3 mb-6">
-                            <div class="p-2 bg-green-100 rounded-lg">
-                                <PaperAirplaneIcon class="w-6 h-6 text-green-600" />
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-900">Outgoing Mail (SMTP)</h3>
-                                <p class="text-sm text-gray-500">Configure how the system sends notification emails.</p>
-                            </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <InputLabel for="mail_mailer" value="Mail Driver" />
-                                <select
-                                    id="mail_mailer"
-                                    v-model="form.mail_mailer"
-                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
-                                >
-                                    <option value="smtp">SMTP</option>
-                                    <option value="log">Log (Local Testing)</option>
-                                    <option value="sendmail">Sendmail</option>
-                                </select>
-                                <InputError class="mt-2" :message="form.errors.mail_mailer" />
-                            </div>
-
-                            <div v-if="form.mail_mailer === 'smtp'">
-                                <InputLabel for="mail_host" value="SMTP Host" />
-                                <TextInput
-                                    id="mail_host"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    v-model="form.mail_host"
-                                    placeholder="smtp.gmail.com"
-                                />
-                                <InputError class="mt-2" :message="form.errors.mail_host" />
-                            </div>
-
-                            <div v-if="form.mail_mailer === 'smtp'">
-                                <InputLabel for="mail_port" value="SMTP Port" />
-                                <TextInput
-                                    id="mail_port"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    v-model="form.mail_port"
-                                    placeholder="587"
-                                />
-                                <InputError class="mt-2" :message="form.errors.mail_port" />
-                            </div>
-
-                            <div v-if="form.mail_mailer === 'smtp'">
-                                <InputLabel for="mail_encryption" value="Encryption" />
-                                <select
-                                    id="mail_encryption"
-                                    v-model="form.mail_encryption"
-                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
-                                >
-                                    <option value="tls">TLS</option>
-                                    <option value="ssl">SSL</option>
-                                    <option value="none">None</option>
-                                </select>
-                                <InputError class="mt-2" :message="form.errors.mail_encryption" />
-                            </div>
-
-                            <div v-if="form.mail_mailer === 'smtp'">
-                                <InputLabel for="mail_username" value="SMTP Username" />
-                                <TextInput
-                                    id="mail_username"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    v-model="form.mail_username"
-                                    placeholder="user@example.com"
-                                />
-                                <InputError class="mt-2" :message="form.errors.mail_username" />
-                            </div>
-
-                            <div v-if="form.mail_mailer === 'smtp'">
-                                <InputLabel for="mail_password" value="SMTP Password" />
-                                <div class="relative mt-1">
-                                    <TextInput
-                                        id="mail_password"
-                                        :type="showMailPassword ? 'text' : 'password'"
-                                        class="block w-full pr-10"
-                                        v-model="form.mail_password"
-                                        placeholder="••••••••••••"
-                                    />
-                                    <button 
-                                        type="button"
-                                        @click="showMailPassword = !showMailPassword"
-                                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                                    >
-                                        <EyeIcon v-if="!showMailPassword" class="h-5 w-5" />
-                                        <EyeSlashIcon v-else class="h-5 w-5" />
-                                    </button>
-                                </div>
-                                <InputError class="mt-2" :message="form.errors.mail_password" />
-                            </div>
-
-                            <div>
-                                <InputLabel for="mail_from_address" value="From Email Address" />
-                                <TextInput
-                                    id="mail_from_address"
-                                    type="email"
-                                    class="mt-1 block w-full"
-                                    v-model="form.mail_from_address"
-                                    placeholder="noreply@example.com"
-                                />
-                                <InputError class="mt-2" :message="form.errors.mail_from_address" />
-                            </div>
-
-                            <div>
-                                <InputLabel for="mail_from_name" value="From Display Name" />
-                                <TextInput
-                                    id="mail_from_name"
-                                    type="text"
-                                    class="mt-1 block w-full"
-                                    v-model="form.mail_from_name"
-                                    placeholder="Helpdesk Support"
-                                />
-                                <InputError class="mt-2" :message="form.errors.mail_from_name" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Maps Settings -->
-                    <div class="pt-8 mt-8 border-t border-gray-100">
-                        <div class="flex items-center space-x-3 mb-6">
-                            <div class="p-2 bg-red-100 rounded-lg">
-                                <MapIcon class="w-6 h-6 text-red-600" />
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-900">Google Maps API</h3>
-                                <p class="text-sm text-gray-500">Configure the API key used for DTR location tracking and maps.</p>
-                            </div>
-                        </div>
-
-                        <div class="max-w-xl">
-                            <InputLabel for="google_maps_api_key" value="Google Maps API Key" />
-                            <div class="relative mt-1">
-                                <TextInput
-                                    id="google_maps_api_key"
-                                    :type="showMapsKey ? 'text' : 'password'"
-                                    class="block w-full font-mono text-sm pr-10"
-                                    v-model="form.google_maps_api_key"
-                                    placeholder="AIzaSy..."
-                                />
-                                <button 
-                                    type="button"
-                                    @click="showMapsKey = !showMapsKey"
-                                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                                >
-                                    <EyeIcon v-if="!showMapsKey" class="h-5 w-5" />
-                                    <EyeSlashIcon v-else class="h-5 w-5" />
-                                </button>
-                            </div>
-                            <InputError class="mt-2" :message="form.errors.google_maps_api_key" />
-                        </div>
-                    </div>
-
-                    <!-- Ticket Threshold Settings -->
-                    <div class="pt-8 mt-8 border-t border-gray-100">
-                        <div class="flex items-center space-x-3 mb-6">
-                            <div class="p-2 bg-purple-100 rounded-lg">
-                                <ChartBarIcon class="w-6 h-6 text-purple-600" />
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-900">Ticket Count Thresholds (per store)</h3>
-                                <p class="text-sm text-gray-500">Configure status colors and labels based on the number of open tickets per store.</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
-                                <div class="col-span-1">
-                                    <div class="flex items-center space-x-2 mb-2">
-                                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
-                                        <span class="text-sm font-medium text-gray-700">Healthy</span>
+                        <!-- Tab Content -->
+                        <div class="p-6 min-h-[400px]">
+                            
+                            <!-- Mail Tab -->
+                            <div v-if="activeTab === 'mail'" class="space-y-10">
+                                <!-- Inbound (IMAP) -->
+                                <section>
+                                    <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
+                                        <ServerIcon class="w-4 h-4 mr-2" />
+                                        Inbound Mail (IMAP)
+                                    </h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div class="md:col-span-2">
+                                            <InputLabel for="imap_username" value="Support Email Address" />
+                                            <TextInput id="imap_username" type="email" class="mt-1 block w-full" v-model="form.imap_username" placeholder="support@company.com" />
+                                            <InputError class="mt-2" :message="form.errors.imap_username" />
+                                        </div>
+                                        <div>
+                                            <InputLabel for="imap_host" value="IMAP Host" />
+                                            <TextInput id="imap_host" type="text" class="mt-1 block w-full" v-model="form.imap_host" placeholder="imap.gmail.com" />
+                                            <InputError class="mt-2" :message="form.errors.imap_host" />
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <InputLabel for="imap_port" value="Port" />
+                                                <TextInput id="imap_port" type="text" class="mt-1 block w-full" v-model="form.imap_port" placeholder="993" />
+                                            </div>
+                                            <div>
+                                                <InputLabel for="imap_encryption" value="Encryption" />
+                                                <select v-model="form.imap_encryption" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm">
+                                                    <option value="ssl">SSL</option>
+                                                    <option value="tls">TLS</option>
+                                                    <option value="notls">None</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <InputLabel for="imap_password" value="IMAP Password / App Password" />
+                                            <div class="relative mt-1">
+                                                <TextInput id="imap_password" :type="showImapPassword ? 'text' : 'password'" class="block w-full pr-10" v-model="form.imap_password" placeholder="••••••••••••" />
+                                                <button type="button" @click="showImapPassword = !showImapPassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                    <EyeIcon v-if="!showImapPassword" class="h-5 w-5" />
+                                                    <EyeSlashIcon v-else class="h-5 w-5" />
+                                                </button>
+                                            </div>
+                                            <p class="mt-2 text-[10px] text-gray-500 italic">For Gmail accounts, please generate and use a 16-character App Password.</p>
+                                        </div>
                                     </div>
-                                    <InputLabel value="Min Tickets" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_min" />
+                                </section>
+
+                                <div class="border-t border-gray-100"></div>
+
+                                <!-- Outbound (SMTP) -->
+                                <section>
+                                    <h3 class="text-xs font-black text-green-600 uppercase tracking-widest mb-6 flex items-center">
+                                        <PaperAirplaneIcon class="w-4 h-4 mr-2" />
+                                        Outbound Mail (SMTP)
+                                    </h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <InputLabel for="mail_from_name" value="Sender Display Name" />
+                                                <TextInput id="mail_from_name" type="text" class="mt-1 block w-full" v-model="form.mail_from_name" placeholder="Helpdesk Notifications" />
+                                            </div>
+                                            <div>
+                                                <InputLabel for="mail_from_address" value="Sender Email Address" />
+                                                <TextInput id="mail_from_address" type="email" class="mt-1 block w-full" v-model="form.mail_from_address" placeholder="noreply@company.com" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <InputLabel for="mail_mailer" value="Mail Driver" />
+                                            <select v-model="form.mail_mailer" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm">
+                                                <option value="smtp">SMTP</option>
+                                                <option value="log">Log (Testing)</option>
+                                                <option value="sendmail">Sendmail</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="form.mail_mailer === 'smtp'">
+                                            <InputLabel for="mail_host" value="SMTP Host" />
+                                            <TextInput id="mail_host" type="text" class="mt-1 block w-full" v-model="form.mail_host" placeholder="smtp.gmail.com" />
+                                        </div>
+                                        <div v-if="form.mail_mailer === 'smtp'" class="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <InputLabel for="mail_port" value="Port" />
+                                                <TextInput id="mail_port" type="text" class="mt-1 block w-full" v-model="form.mail_port" placeholder="587" />
+                                            </div>
+                                            <div>
+                                                <InputLabel for="mail_encryption" value="Encryption" />
+                                                <select v-model="form.mail_encryption" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm">
+                                                    <option value="tls">TLS</option>
+                                                    <option value="ssl">SSL</option>
+                                                    <option value="none">None</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div v-if="form.mail_mailer === 'smtp'">
+                                            <InputLabel for="mail_username" value="SMTP Username" />
+                                            <TextInput id="mail_username" type="text" class="mt-1 block w-full" v-model="form.mail_username" />
+                                        </div>
+                                        <div v-if="form.mail_mailer === 'smtp'" class="md:col-span-2">
+                                            <InputLabel for="mail_password" value="SMTP Password" />
+                                            <div class="relative mt-1">
+                                                <TextInput id="mail_password" :type="showMailPassword ? 'text' : 'password'" class="block w-full pr-10" v-model="form.mail_password" />
+                                                <button type="button" @click="showMailPassword = !showMailPassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                    <EyeIcon v-if="!showMailPassword" class="h-5 w-5" />
+                                                    <EyeSlashIcon v-else class="h-5 w-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- Integrations Tab -->
+                            <div v-if="activeTab === 'integrations'" class="space-y-8">
+                                <section>
+                                    <h3 class="text-xs font-black text-red-600 uppercase tracking-widest mb-6 flex items-center">
+                                        <MapIcon class="w-4 h-4 mr-2" />
+                                        Google Maps Platform
+                                    </h3>
+                                    <div class="max-w-xl">
+                                        <InputLabel for="google_maps_api_key" value="Google Maps API Key" />
+                                        <div class="relative mt-1">
+                                            <TextInput
+                                                id="google_maps_api_key"
+                                                :type="showMapsKey ? 'text' : 'password'"
+                                                class="block w-full font-mono text-sm pr-10"
+                                                v-model="form.google_maps_api_key"
+                                                placeholder="AIzaSy..."
+                                            />
+                                            <button type="button" @click="showMapsKey = !showMapsKey" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <EyeIcon v-if="!showMapsKey" class="h-5 w-5" />
+                                                <EyeSlashIcon v-else class="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                        <p class="mt-2 text-[10px] text-gray-500 italic">This key is used for Store Geofencing and DTR location verification.</p>
+                                        <InputError class="mt-2" :message="form.errors.google_maps_api_key" />
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- Thresholds Tab -->
+                            <div v-if="activeTab === 'thresholds'" class="space-y-6">
+                                <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start mb-8">
+                                    <AdjustmentsHorizontalIcon class="w-5 h-5 text-purple-600 mt-0.5 mr-3 flex-shrink-0" />
+                                    <p class="text-xs text-purple-700 leading-relaxed">
+                                        Define how the system categorizes store health based on the number of open tickets. These thresholds will reflect across the <strong>Store Management</strong> and <strong>Health Reports</strong>.
+                                    </p>
                                 </div>
-                                <div class="col-span-1">
-                                    <InputLabel value="Max Tickets" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_max" />
-                                </div>
-                                <div class="col-span-2">
-                                    <InputLabel value="Label" />
-                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_green_label" />
+
+                                <div class="space-y-4">
+                                    <!-- Green -->
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                        <div class="col-span-1">
+                                            <div class="flex items-center space-x-2 mb-2">
+                                                <div class="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Healthy</span>
+                                            </div>
+                                            <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_min" />
+                                        </div>
+                                        <div class="col-span-1">
+                                            <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_max" />
+                                        </div>
+                                        <div class="col-span-2">
+                                            <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_green_label" />
+                                        </div>
+                                    </div>
+
+                                    <!-- Yellow -->
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                        <div class="col-span-1">
+                                            <div class="flex items-center space-x-2 mb-2">
+                                                <div class="w-3 h-3 rounded-full bg-yellow-500 shadow-sm"></div>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Warning</span>
+                                            </div>
+                                            <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_min" />
+                                        </div>
+                                        <div class="col-span-1">
+                                            <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_max" />
+                                        </div>
+                                        <div class="col-span-2">
+                                            <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_yellow_label" />
+                                        </div>
+                                    </div>
+
+                                    <!-- Orange -->
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                        <div class="col-span-1">
+                                            <div class="flex items-center space-x-2 mb-2">
+                                                <div class="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></div>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">At-risk</span>
+                                            </div>
+                                            <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_min" />
+                                        </div>
+                                        <div class="col-span-1">
+                                            <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_max" />
+                                        </div>
+                                        <div class="col-span-2">
+                                            <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_orange_label" />
+                                        </div>
+                                    </div>
+
+                                    <!-- Red -->
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                        <div class="col-span-1">
+                                            <div class="flex items-center space-x-2 mb-2">
+                                                <div class="w-3 h-3 rounded-full bg-red-500 shadow-sm"></div>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Critical</span>
+                                            </div>
+                                            <InputLabel value="Min (and up)" class="!text-[9px] uppercase" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_red_min" />
+                                        </div>
+                                        <div class="col-span-3">
+                                            <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_red_label" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
-                                <div class="col-span-1">
-                                    <div class="flex items-center space-x-2 mb-2">
-                                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-                                        <span class="text-sm font-medium text-gray-700">Warning</span>
-                                    </div>
-                                    <InputLabel value="Min Tickets" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_min" />
-                                </div>
-                                <div class="col-span-1">
-                                    <InputLabel value="Max Tickets" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_max" />
-                                </div>
-                                <div class="col-span-2">
-                                    <InputLabel value="Label" />
-                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_yellow_label" />
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
-                                <div class="col-span-1">
-                                    <div class="flex items-center space-x-2 mb-2">
-                                        <div class="w-3 h-3 rounded-full bg-orange-500"></div>
-                                        <span class="text-sm font-medium text-gray-700">At-risk</span>
-                                    </div>
-                                    <InputLabel value="Min Tickets" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_min" />
-                                </div>
-                                <div class="col-span-1">
-                                    <InputLabel value="Max Tickets" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_max" />
-                                </div>
-                                <div class="col-span-2">
-                                    <InputLabel value="Label" />
-                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_orange_label" />
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
-                                <div class="col-span-1">
-                                    <div class="flex items-center space-x-2 mb-2">
-                                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                                        <span class="text-sm font-medium text-gray-700">Critical</span>
-                                    </div>
-                                    <InputLabel value="Min Tickets (and up)" />
-                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_red_min" />
-                                </div>
-                                <div class="col-span-3">
-                                    <InputLabel value="Label" />
-                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_red_label" />
-                                </div>
-                            </div>
                         </div>
-                    </div>
 
-                    <div class="flex items-center justify-end pt-4 border-t">
-                        <PrimaryButton :class="{ 'opacity-25': form.processing }" :disabled="form.processing">
-                            Save Configuration
-                        </PrimaryButton>
+                        <!-- Sticky Footer -->
+                        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                            <div>
+                                <Transition enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0" leave-active-class="transition ease-in-out duration-300" leave-to-class="opacity-0">
+                                    <div v-if="form.recentlySuccessful" class="text-sm font-bold text-green-600 flex items-center">
+                                        <CheckCircleIcon class="w-4 h-4 mr-1" />
+                                        Changes saved!
+                                    </div>
+                                </Transition>
+                                <div v-if="!form.recentlySuccessful" class="text-[10px] text-gray-400 italic">
+                                    * All changes are applied instantly after saving.
+                                </div>
+                            </div>
+                            <PrimaryButton 
+                                :class="{ 'opacity-25': form.processing }" 
+                                :disabled="form.processing"
+                                class="!px-8 !py-3 shadow-lg shadow-blue-100 font-black uppercase tracking-widest text-xs !bg-blue-600 hover:!bg-blue-700 text-white"
+                            >
+                                <span v-if="form.processing">Saving...</span>
+                                <span v-else>Save Configuration</span>
+                            </PrimaryButton>
+                        </div>
                     </div>
                 </form>
             </div>
         </div>
     </AppLayout>
 </template>
+
+<style scoped>
+/* Focus transition for better UX */
+input:focus, select:focus {
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+</style>

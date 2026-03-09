@@ -77,14 +77,42 @@ class EmailTicketService
     {
         $messageId = $message->getMessageId();
 
-        // Deduplication
+        // 1. Deduplication
         if (Ticket::where('message_id', $messageId)->exists()) {
             $message->setFlag('Seen');
             return false;
         }
 
+        $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
+        $supportEmail = strtolower(Setting::get('imap_username', ''));
+
+        // 2. Ignore Bounce Messages (Mailer-Daemon, Postmaster, etc.)
+        $bannedSenders = ['mailer-daemon', 'postmaster', 'no-reply', 'noreply'];
+        foreach ($bannedSenders as $banned) {
+            if (str_contains($senderEmail, $banned)) {
+                $message->setFlag('Seen');
+                return false;
+            }
+        }
+
+        // 3. Strict Recipient Check (Ensure the email was actually sent TO the support account)
+        // This prevents processing of "CC" or "BCC" spam if the mail server doesn't filter it.
+        $recipients = $message->getTo();
+        $isDirectlySent = false;
+        
+        foreach ($recipients as $recipient) {
+            if (strtolower($recipient->mail) === $supportEmail) {
+                $isDirectlySent = true;
+                break;
+            }
+        }
+
+        if (!$isDirectlySent && $supportEmail) {
+            $message->setFlag('Seen');
+            return false;
+        }
+
         $subject = $message->getSubject();
-        $senderEmail = $message->getFrom()[0]->mail;
         $senderName = $message->getFrom()[0]->full;
         $user = User::where('email', $senderEmail)->first();
 

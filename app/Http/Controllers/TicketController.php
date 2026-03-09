@@ -32,7 +32,8 @@ class TicketController extends Controller
         $query = Ticket::with([
             'reporter:id,name,profile_photo', 
             'assignee:id,name,profile_photo', 
-            'company:id,name', 
+            'company:id,name',
+            'store:id,name', 
             'slaMetric', 
             'children' => function($q) {
                 $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id')
@@ -46,34 +47,29 @@ class TicketController extends Controller
             $query->where('reporter_id', $user->id);
         }
 
-        // Filter by user's company access - temporarily disable Admin bypass for debugging
-        // if ($user->hasRole('Admin')) {
-        //     // Admin sees all tickets
-        // } else {
-            // Get companies from roles
-            $user->load('roles.companies');
-            $allowedCompanyIds = collect();
-            
-            foreach ($user->roles as $role) {
-                if ($role->companies) {
-                    $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
-                }
+        // Filter by user's company access
+        $user->load('roles.companies');
+        $allowedCompanyIds = collect();
+        
+        foreach ($user->roles as $role) {
+            if ($role->companies) {
+                $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
             }
-            
-            // Also include direct company assignment
-            if ($user->company_id) {
-                $allowedCompanyIds->push($user->company_id);
-            }
-            
-            $allowedCompanyIds = $allowedCompanyIds->unique();
-            
-            // If no companies are allowed, show no tickets
-            if ($allowedCompanyIds->isEmpty()) {
-                $query->whereRaw('1 = 0'); // This will return no results
-            } else {
-                $query->whereIn('company_id', $allowedCompanyIds);
-            }
-        // }
+        }
+        
+        // Also include direct company assignment
+        if ($user->company_id) {
+            $allowedCompanyIds->push($user->company_id);
+        }
+        
+        $allowedCompanyIds = $allowedCompanyIds->unique();
+        
+        // If no companies are allowed, show no tickets
+        if ($allowedCompanyIds->isEmpty()) {
+            $query->whereRaw('1 = 0'); // This will return no results
+        } else {
+            $query->whereIn('company_id', $allowedCompanyIds);
+        }
 
         // Apply status filters - default to 'open' if not provided
         $statusFilter = $request->get('status', 'open');
@@ -120,24 +116,18 @@ class TicketController extends Controller
             $q->where('is_assignable', true);
         })->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
+        $stores = Store::where('is_active', true)->orderBy('name')->get();
 
         return Inertia::render('Tickets/Index', [
             'tickets' => $tickets,
             'staff' => $staff,
             'companies' => $companies,
+            'stores' => $stores,
             'filters' => [
                 'status' => $statusFilter,
                 'search' => $request->search
             ],
         ]);
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        // Modal used in Index
     }
 
     /**
@@ -148,11 +138,9 @@ class TicketController extends Controller
         $data = $request->validated();
         
         $ticket = DB::transaction(function () use ($data, $request) {
-            // Lock the company record for update to prevent concurrent ticket key generation for the same company
             $company = Company::where('id', $data['company_id'])->lockForUpdate()->first();
             $companyCode = $company->code;
 
-            // Find the max ticket number for this company
             $maxNumber = Ticket::where('company_id', $data['company_id'])
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->get(['ticket_key'])
@@ -171,7 +159,6 @@ class TicketController extends Controller
 
             $ticket = Ticket::create($data);
 
-            // Handle file attachments
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     $fileName = time() . '_' . $file->getClientOriginalName();
@@ -189,29 +176,22 @@ class TicketController extends Controller
             return $ticket;
         });
 
-        // Load relationships for email
         $ticket->load(['reporter', 'assignee']);
-
         $sentTo = [];
 
-        // Send email to reporter
         if ($ticket->reporter && $ticket->reporter->email) {
             Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
             $sentTo[] = $ticket->reporter->email;
         }
 
-        // Send email to assignee (if different from reporter)
         if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
-            // Check if assignee role allows notification
             $shouldNotifyAssignee = $ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists();
-             
             if ($shouldNotifyAssignee) {
                 Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
                 $sentTo[] = $ticket->assignee->email;
             }
         }
 
-        // Send notification to users with 'notify_on_ticket_create' role
         $usersToNotify = User::whereHas('roles', function($q) {
             $q->where('notify_on_ticket_create', true);
         })->get();
@@ -223,16 +203,6 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Ticket created successfully.');
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Ticket $ticket)
-    {
-        return Inertia::render('Tickets/Show', [
-            'ticket' => $ticket->load('comments', 'attachments', 'reporter', 'assignee'),
-        ]);
     }
 
     /**
@@ -251,6 +221,7 @@ class TicketController extends Controller
             'reporter', 
             'assignee', 
             'company',
+            'store',
             'parent',
             'schedule.store',
             'slaMetric',
@@ -259,7 +230,6 @@ class TicketController extends Controller
             }
         ]);
 
-        // Auto-create SLA metric if missing but category has targets
         if (!$ticket->slaMetric && $ticket->category) {
             $category = $ticket->category;
             if ($category->response_time_hours || $category->resolution_time_hours) {
@@ -271,7 +241,7 @@ class TicketController extends Controller
                         ? \App\Services\SlaService::calculateTarget($ticket->created_at, $category->resolution_time_hours, $category)
                         : null,
                 ]);
-                $ticket->load('slaMetric'); // Reload
+                $ticket->load('slaMetric');
             }
         }
 
@@ -299,34 +269,28 @@ class TicketController extends Controller
     public function update(UpdateTicketRequest $request, Ticket $ticket)
     {
         $validated = $request->validated();
-        
-        // Fill the model with validated data but don't save yet
         $ticket->fill($validated);
         
-        // Check for changes
         if ($ticket->isDirty()) {
             $userId = auth()->id();
             $dirty = $ticket->getDirty();
             $assigneeChanged = false;
             
             foreach ($dirty as $column => $newValue) {
-                // Check if assignee changed
-                if ($column === 'assignee_id') {
-                    $assigneeChanged = true;
-                }
-
-                // Skip internal timestamps
+                if ($column === 'assignee_id') $assigneeChanged = true;
                 if ($column === 'updated_at') continue;
                 
                 $oldValue = $ticket->getOriginal($column);
                 
-                // Resolve names for IDs
                 if ($column === 'company_id') {
-                    $oldValue = \App\Models\Company::find($oldValue)?->name ?? $oldValue;
-                    $newValue = \App\Models\Company::find($newValue)?->name ?? $newValue;
+                    $oldValue = Company::find($oldValue)?->name ?? $oldValue;
+                    $newValue = Company::find($newValue)?->name ?? $newValue;
+                } elseif ($column === 'store_id') {
+                    $oldValue = Store::find($oldValue)?->name ?? $oldValue;
+                    $newValue = Store::find($newValue)?->name ?? $newValue;
                 } elseif (in_array($column, ['assignee_id', 'reporter_id'])) {
-                    $oldValue = \App\Models\User::find($oldValue)?->name ?? $oldValue;
-                    $newValue = \App\Models\User::find($newValue)?->name ?? $newValue;
+                    $oldValue = User::find($oldValue)?->name ?? $oldValue;
+                    $newValue = User::find($newValue)?->name ?? $newValue;
                 } elseif ($column === 'category_id') {
                     $oldValue = \App\Models\Category::find($oldValue)?->name ?? $oldValue;
                     $newValue = \App\Models\Category::find($newValue)?->name ?? $newValue;
@@ -338,7 +302,6 @@ class TicketController extends Controller
                     $newValue = \App\Models\Item::find($newValue)?->name ?? $newValue;
                 }
                 
-                // Create history record
                 \App\Models\TicketHistory::create([
                     'ticket_id' => $ticket->id,
                     'user_id' => $userId,
@@ -351,11 +314,9 @@ class TicketController extends Controller
             
             $ticket->save();
 
-            // Send email if assignee changed and new assignee exists
             if ($assigneeChanged && $ticket->assignee_id) {
                 $ticket->load('assignee');
                 if ($ticket->assignee && $ticket->assignee->email) {
-                    // Check if assignee role allows notification
                     if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
                         Mail::to($ticket->assignee->email)->send(new TicketAssigned($ticket, $ticket->assignee->name));
                     }
@@ -371,13 +332,10 @@ class TicketController extends Controller
      */
     public function destroy(Ticket $ticket)
     {
-        // Delete associated attachments from storage
         foreach ($ticket->attachments as $attachment) {
             Storage::disk('public')->delete($attachment->file_storage_path);
         }
-        
         $ticket->delete();
-
         return redirect()->route('tickets.index')->with('success', 'Ticket deleted successfully.');
     }
 
@@ -386,14 +344,12 @@ class TicketController extends Controller
      */
     public function storeChild(Request $request, Ticket $ticket)
     {
-        // Check if child ticket already exists
         if ($ticket->children()->exists()) {
             return redirect()->back()->withErrors(['error' => 'A child ticket already exists for this ticket.']);
         }
 
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
-            'store_id' => 'nullable|exists:stores,id',
             'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'start_time' => 'required|date',
             'end_time' => 'required|date|after_or_equal:start_time',
@@ -404,11 +360,10 @@ class TicketController extends Controller
             'remarks' => 'nullable|string',
         ]);
 
-        $childTicket = DB::transaction(function () use ($validated, $ticket, $request) {
+        $childTicket = DB::transaction(function () use ($validated, $ticket) {
             $company = $ticket->company;
             $companyCode = $company->code;
 
-            // Find the max ticket number for this company
             $maxNumber = Ticket::where('company_id', $ticket->company_id)
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->get(['ticket_key'])
@@ -433,15 +388,15 @@ class TicketController extends Controller
                 'reporter_id' => auth()->id(),
                 'assignee_id' => $validated['user_id'],
                 'company_id' => $ticket->company_id,
+                'store_id' => $ticket->store_id,
                 'category_id' => $ticket->category_id,
                 'parent_id' => $ticket->id,
             ]);
 
-            // Create schedule linked to this child ticket
             Schedule::create([
                 'ticket_id' => $childTicket->id,
                 'user_id' => $validated['user_id'],
-                'store_id' => $validated['store_id'],
+                'store_id' => $ticket->store_id,
                 'status' => $validated['status'],
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],
@@ -455,9 +410,7 @@ class TicketController extends Controller
             return $childTicket;
         });
 
-        return redirect()->back()->with([
-            'success' => 'Child ticket and schedule created successfully.',
-        ]);
+        return redirect()->back()->with('success', 'Child ticket and schedule created successfully.');
     }
 
     /**
@@ -477,7 +430,6 @@ class TicketController extends Controller
             'user_id' => auth()->id(),
         ]);
 
-        // SLA: Record first response if not already recorded and commenter is NOT the reporter
         $metric = $ticket->slaMetric;
         if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
             $now = now();
@@ -487,32 +439,21 @@ class TicketController extends Controller
             ]);
         }
 
-        // Load relationships for email logic
         $ticket->load(['reporter', 'assignee', 'comments.user']);
         $commenterId = auth()->id();
-
-        // 1. Identify recipients: Assignee + Reporter + All Previous Commenters
         $recipients = collect();
 
-        if ($ticket->assignee) {
-            $recipients->push($ticket->assignee);
-        }
-        if ($ticket->reporter) {
-            $recipients->push($ticket->reporter);
-        }
+        if ($ticket->assignee) $recipients->push($ticket->assignee);
+        if ($ticket->reporter) $recipients->push($ticket->reporter);
         foreach ($ticket->comments as $prevComment) {
-            if ($prevComment->user) {
-                $recipients->push($prevComment->user);
-            }
+            if ($prevComment->user) $recipients->push($prevComment->user);
         }
 
-        // 2. Filter recipients: Unique emails, active users, exclude current commenter
         $recipients = $recipients->unique('id')
             ->filter(function ($user) use ($commenterId) {
                 return $user->id != $commenterId && $user->email;
             });
 
-        // 3. Send emails
         foreach ($recipients as $recipient) {
             Mail::to($recipient->email)->send(new TicketCommentAdded($ticket, $comment, $recipient->name));
         }
@@ -535,31 +476,6 @@ class TicketController extends Controller
         return redirect()->back()->with('success', 'Comment added successfully.');
     }
 
-    /**
-     * Store attachments for the ticket.
-     */
-    public function storeAttachment(Request $request, Ticket $ticket)
-    {
-        $request->validate([
-            'attachments' => 'required|array',
-            'attachments.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,txt',
-        ]);
-
-        foreach ($request->file('attachments') as $file) {
-            $fileName = time() . '_' . $file->getClientOriginalName();
-            $filePath = $file->storeAs('ticket-attachments', $fileName, 'public');
-            
-            TicketAttachment::create([
-                'ticket_id' => $ticket->id,
-                'file_name' => $file->getClientOriginalName(),
-                'file_storage_path' => $filePath,
-                'file_size_bytes' => $file->getSize(),
-            ]);
-        }
-
-        return redirect()->back()->with('success', 'Attachments uploaded successfully.');
-    }
-
     public function getCategories()
     {
         return response()->json(\App\Models\Category::where('is_active', true)->orderBy('name')->get());
@@ -568,20 +484,13 @@ class TicketController extends Controller
     public function getSubCategories(Request $request)
     {
         $categoryId = $request->query('category_id');
-        
-        if (!$categoryId) {
-            return response()->json([]);
-        }
+        if (!$categoryId) return response()->json([]);
 
-        // Get subcategory IDs that are linked to this category in the Items table
         $subCategoryIds = \App\Models\Item::where('category_id', $categoryId)
             ->whereNotNull('sub_category_id')
             ->distinct()
             ->pluck('sub_category_id');
             
-        // If no links found in Item table, maybe return ALL subcategories as a fallback? 
-        // Or if the user strictly wants the Item table to be the source of truth:
-        
         $subCategories = \App\Models\SubCategory::whereIn('id', $subCategoryIds)
             ->where('is_active', true)
             ->orderBy('name')
@@ -595,9 +504,7 @@ class TicketController extends Controller
         $categoryId = $request->query('category_id') ?? $request->input('category_id');
         $subCategoryId = $request->query('sub_category_id') ?? $request->input('sub_category_id');
         
-        if (!$categoryId || !$subCategoryId) {
-            return response()->json([]);
-        }
+        if (!$categoryId || !$subCategoryId) return response()->json([]);
         
         $items = \App\Models\Item::where('category_id', $categoryId)
             ->where('sub_category_id', $subCategoryId)
@@ -608,15 +515,9 @@ class TicketController extends Controller
         return response()->json($items);
     }
 
-    /**
-     * Download an attachment.
-     */
     public function downloadAttachment(TicketAttachment $attachment)
     {
-        if (!Storage::disk('public')->exists($attachment->file_storage_path)) {
-            abort(404, 'File not found.');
-        }
-
+        if (!Storage::disk('public')->exists($attachment->file_storage_path)) abort(404, 'File not found.');
         return Storage::disk('public')->download($attachment->file_storage_path, $attachment->file_name);
     }
 

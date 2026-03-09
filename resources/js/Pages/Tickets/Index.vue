@@ -15,6 +15,7 @@ const props = defineProps({
     tickets: Object,
     staff: Array,
     companies: Array,
+    stores: Array,
     filters: Object,
 });
 
@@ -96,6 +97,7 @@ watch(() => props.tickets, (newTickets) => {
 
 const createForm = useForm({
     company_id: '',
+    store_id: '',
     category_id: '',
     sub_category_id: '',
     item_id: '',
@@ -357,6 +359,7 @@ const getTypeColor = (type) => {
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -390,6 +393,9 @@ const getTypeColor = (type) => {
                                     ↳ {{ child.title }}
                                 </div>
                             </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {{ ticket.store ? ticket.store.name : '-' }}
                         </td>
                          <td class="px-6 py-4 whitespace-nowrap">
                             <span class="text-xs font-bold uppercase tracking-tight" :class="getTypeColor(ticket.type)">
@@ -502,6 +508,17 @@ const getTypeColor = (type) => {
                                 <option value="">Select Company</option>
                                 <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
                             </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                            <Autocomplete 
+                                v-model="createForm.store_id"
+                                :options="stores"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select store..."
+                            />
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
