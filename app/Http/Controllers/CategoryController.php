@@ -43,10 +43,6 @@ class CategoryController extends Controller implements HasMiddleware
             'description' => 'nullable|string',
             'response_time_hours' => 'nullable|integer|min:0',
             'resolution_time_hours' => 'nullable|integer|min:0',
-            'business_start_time' => 'required|date_format:H:i',
-            'business_end_time' => 'required|date_format:H:i|after:business_start_time',
-            'working_days' => 'required|array',
-            'working_days.*' => 'integer|min:1|max:7',
         ]);
 
         Category::create([
@@ -54,9 +50,6 @@ class CategoryController extends Controller implements HasMiddleware
             'description' => $request->description,
             'response_time_hours' => $request->response_time_hours,
             'resolution_time_hours' => $request->resolution_time_hours,
-            'business_start_time' => $request->business_start_time,
-            'business_end_time' => $request->business_end_time,
-            'working_days' => $request->working_days,
             'is_active' => true,
         ]);
 
@@ -70,10 +63,6 @@ class CategoryController extends Controller implements HasMiddleware
             'description' => 'nullable|string',
             'response_time_hours' => 'nullable|integer|min:0',
             'resolution_time_hours' => 'nullable|integer|min:0',
-            'business_start_time' => 'required|date_format:H:i',
-            'business_end_time' => 'required|date_format:H:i|after:business_start_time',
-            'working_days' => 'required|array',
-            'working_days.*' => 'integer|min:1|max:7',
             'is_active' => 'boolean',
         ]);
 
@@ -82,9 +71,6 @@ class CategoryController extends Controller implements HasMiddleware
             'description' => $request->description,
             'response_time_hours' => $request->response_time_hours,
             'resolution_time_hours' => $request->resolution_time_hours,
-            'business_start_time' => $request->business_start_time,
-            'business_end_time' => $request->business_end_time,
-            'working_days' => $request->working_days,
             'is_active' => $request->boolean('is_active'),
         ]);
 

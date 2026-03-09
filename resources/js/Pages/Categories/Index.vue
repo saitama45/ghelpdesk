@@ -34,8 +34,6 @@
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Response</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Target Resolution</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -55,12 +53,6 @@
                                         <div class="text-sm text-gray-500">{{ category.description || 'No description' }}</div>
                                     </div>
                                 </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {{ category.response_time_hours ? category.response_time_hours + ' hours' : 'N/A' }}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {{ category.resolution_time_hours ? category.resolution_time_hours + ' hours' : 'N/A' }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span :class="category.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
@@ -116,45 +108,7 @@
                             <textarea v-model="form.description" rows="3"
                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
                         </div>
-                        <div class="grid grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Target Response (Hours)</label>
-                                <input v-model="form.response_time_hours" type="number" min="0"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Target Resolution (Hours)</label>
-                                <input v-model="form.resolution_time_hours" type="number" min="0"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                        </div>
 
-                        <div class="p-4 bg-gray-50 rounded-lg mb-4 border border-gray-200">
-                            <h4 class="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Business Hours (Operational Time)</h4>
-                            <div class="grid grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">Start Time</label>
-                                    <input v-model="form.business_start_time" type="time" required
-                                           class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-medium text-gray-600 mb-1">End Time</label>
-                                    <input v-model="form.business_end_time" type="time" required
-                                           class="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-gray-600 mb-2">Working Days</label>
-                                <div class="flex flex-wrap gap-2">
-                                    <label v-for="(day, index) in dayNames" :key="index" 
-                                           class="inline-flex items-center px-3 py-1 rounded-full border text-xs font-medium cursor-pointer transition-colors"
-                                           :class="form.working_days.includes(index + 1) ? 'bg-blue-100 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'">
-                                        <input type="checkbox" :value="index + 1" v-model="form.working_days" class="hidden">
-                                        {{ day }}
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
                         <div v-if="isEditing" class="mb-4">
                             <label class="flex items-center">
                                 <input v-model="form.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
@@ -202,16 +156,9 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const currentCategory = ref(null)
 
-const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
 const form = reactive({
     name: '',
     description: '',
-    response_time_hours: '',
-    resolution_time_hours: '',
-    business_start_time: '08:00',
-    business_end_time: '17:00',
-    working_days: [1, 2, 3, 4, 5],
     is_active: true
 })
 
@@ -228,11 +175,6 @@ const openCreateModal = () => {
     currentCategory.value = null
     form.name = ''
     form.description = ''
-    form.response_time_hours = ''
-    form.resolution_time_hours = ''
-    form.business_start_time = '08:00'
-    form.business_end_time = '17:00'
-    form.working_days = [1, 2, 3, 4, 5]
     form.is_active = true
     showModal.value = true
 }
@@ -242,11 +184,6 @@ const editCategory = (category) => {
     currentCategory.value = category
     form.name = category.name
     form.description = category.description || ''
-    form.response_time_hours = category.response_time_hours || ''
-    form.resolution_time_hours = category.resolution_time_hours || ''
-    form.business_start_time = category.business_start_time ? category.business_start_time.substring(0, 5) : '08:00'
-    form.business_end_time = category.business_end_time ? category.business_end_time.substring(0, 5) : '17:00'
-    form.working_days = category.working_days || [1, 2, 3, 4, 5]
     form.is_active = category.is_active
     showModal.value = true
 }

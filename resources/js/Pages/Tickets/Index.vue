@@ -72,6 +72,7 @@ const filterOptions = [
     { value: 'my_tickets', label: 'My Tickets' },
     { value: 'open', label: 'Open' },
     { value: 'in_progress', label: 'In Progress' },
+    { value: 'resolved', label: 'Resolved' },
     { value: 'waiting', label: 'Waiting' },
     { value: 'closed', label: 'Closed' },
     { value: 'unassigned', label: 'Unassigned' },
@@ -159,6 +160,15 @@ watch(() => createForm.category_id, (newVal) => {
 watch(() => createForm.sub_category_id, (newVal) => {
     createForm.item_id = '';
     fetchItems(createForm.category_id, newVal);
+});
+
+watch(() => createForm.item_id, (newVal) => {
+    if (newVal) {
+        const item = items.value.find(i => i.id === newVal);
+        if (item) {
+            createForm.priority = item.priority.toLowerCase();
+        }
+    }
 });
 
 // Set default company when modal opens or companies load
@@ -264,17 +274,19 @@ const acceptTicket = (ticket) => {
 
 
 const getPriorityColor = (priority) => {
-    switch (priority) {
+    const p = String(priority || '').toLowerCase();
+    switch (p) {
         case 'urgent': return 'text-red-900 bg-red-200';
         case 'high': return 'text-red-800 bg-red-100';
-        case 'medium': return 'text-yellow-800 bg-yellow-100';
-        case 'low': return 'text-green-800 bg-green-100';
+        case 'medium': return 'text-yellow-900 bg-yellow-200';
+        case 'low': return 'text-green-900 bg-green-200';
         default: return 'text-gray-800 bg-gray-100';
     }
 };
 
 const getPriorityBorder = (priority) => {
-    switch (priority) {
+    const p = String(priority || '').toLowerCase();
+    switch (p) {
         case 'urgent': return 'border-l-red-600';
         case 'high': return 'border-l-red-400';
         case 'medium': return 'border-l-yellow-400';
@@ -303,6 +315,27 @@ const getTypeColor = (type) => {
         default: return 'text-gray-600';
     }
 }
+
+const getSlaRowClass = (ticket) => {
+    if (!ticket.sla_metric) return 'border-l-gray-200 hover:bg-gray-50';
+    
+    const isBreached = ticket.sla_metric.is_response_breached || ticket.sla_metric.is_resolution_breached;
+    const isAllMet = ticket.sla_metric.first_response_at && ticket.sla_metric.resolved_at;
+    
+    if (isBreached) return 'border-l-red-600 !bg-red-50 hover:!bg-red-100/50';
+    if (isAllMet) return 'border-l-green-500 !bg-green-50 hover:!bg-green-100/50';
+    
+    // Default/Active based on item priority background
+    const priority = ticket.item?.priority?.toLowerCase() || ticket.priority?.toLowerCase();
+    let bgClass = 'hover:bg-gray-50';
+    
+    if (priority === 'urgent') bgClass = '!bg-red-50 hover:!bg-red-100/50';
+    else if (priority === 'high') bgClass = '!bg-orange-50 hover:!bg-orange-100/50';
+    else if (priority === 'medium') bgClass = '!bg-yellow-50 hover:!bg-yellow-100/50';
+    else if (priority === 'low') bgClass = '!bg-green-50 hover:!bg-green-100/50';
+
+    return getPriorityBorder(priority) + ' ' + bgClass;
+};
 </script>
 
 <template>
@@ -375,8 +408,11 @@ const getTypeColor = (type) => {
                         v-for="ticket in data" 
                         :key="ticket.id" 
                         @click="editTicket(ticket)"
-                        class="group hover:bg-blue-50/50 transition-all border-l-4"
-                        :class="[getPriorityBorder(ticket.priority), hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed']"
+                        class="group transition-all border-l-4"
+                        :class="[
+                            getSlaRowClass(ticket),
+                            hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed'
+                        ]"
                     >
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
                             <div>{{ ticket.ticket_key }}</div>
@@ -403,8 +439,8 @@ const getTypeColor = (type) => {
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.priority)">
-                                {{ ticket.priority }}
+                            <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
+                                {{ ticket.item?.priority || ticket.priority }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
@@ -572,28 +608,22 @@ const getTypeColor = (type) => {
                                     <option v-for="t in types" :key="t" :value="t">{{ t }}</option>
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
-                                <select v-model="createForm.priority" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm capitalize">
-                                    <option v-for="p in priorities" :key="p" :value="p">{{ p }}</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
                              <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Severity</label>
                                 <select v-model="createForm.severity" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm capitalize">
                                     <option v-for="s in severities" :key="s" :value="s">{{ s }}</option>
                                 </select>
                             </div>
-                            <div v-if="hasPermission('tickets.assign')">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assign To</label>
-                                <select v-model="createForm.assignee_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option value="">Unassigned</option>
-                                    <option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option>
-                                </select>
-                            </div>
                         </div>
+
+                        <div v-if="hasPermission('tickets.assign')">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assign To</label>
+                            <select v-model="createForm.assignee_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <option value="">Unassigned</option>
+                                <option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option>
+                            </select>
+                        </div>
+
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Attachments</label>
                             <input ref="fileInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt" @change="handleFileSelect" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">

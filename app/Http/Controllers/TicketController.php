@@ -34,9 +34,10 @@ class TicketController extends Controller
             'assignee:id,name,profile_photo', 
             'company:id,name',
             'store:id,name', 
+            'item:id,name,priority',
             'slaMetric', 
             'children' => function($q) {
-                $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id')
+                $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'status')
                   ->with('assignee:id,name,profile_photo');
             }
         ])
@@ -156,8 +157,25 @@ class TicketController extends Controller
             
             $data['ticket_key'] = "{$companyCode}-{$nextNumber}";
             $data['reporter_id'] = auth()->id();
+            // Ensure Manila Time
+            $data['created_at'] = now('Asia/Manila');
+
+            // Set priority from item
+            if (isset($data['item_id'])) {
+                $item = \App\Models\Item::find($data['item_id']);
+                if ($item) {
+                    $data['priority'] = strtolower($item->priority);
+                }
+            }
 
             $ticket = Ticket::create($data);
+
+            // Create SLA Metrics
+            \App\Models\TicketSlaMetric::create([
+                'ticket_id' => $ticket->id,
+                'response_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response'),
+                'resolution_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution'),
+            ]);
 
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
@@ -222,27 +240,21 @@ class TicketController extends Controller
             'assignee', 
             'company',
             'store',
+            'item',
             'parent',
             'schedule.store',
             'slaMetric',
             'children' => function($query) {
-                $query->with(['schedule.store', 'reporter', 'assignee']);
+                $query->with(['schedule.store', 'reporter', 'assignee'])->orderBy('created_at', 'asc');
             }
         ]);
 
-        if (!$ticket->slaMetric && $ticket->category) {
-            $category = $ticket->category;
-            if ($category->response_time_hours || $category->resolution_time_hours) {
-                $ticket->slaMetric()->create([
-                    'response_target_at' => $category->response_time_hours 
-                        ? \App\Services\SlaService::calculateTarget($ticket->created_at, $category->response_time_hours, $category)
-                        : null,
-                    'resolution_target_at' => $category->resolution_time_hours 
-                        ? \App\Services\SlaService::calculateTarget($ticket->created_at, $category->resolution_time_hours, $category)
-                        : null,
-                ]);
-                $ticket->load('slaMetric');
-            }
+        if (!$ticket->slaMetric) {
+            $ticket->slaMetric()->create([
+                'response_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response'),
+                'resolution_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution'),
+            ]);
+            $ticket->load('slaMetric');
         }
 
         $staff = User::whereHas('roles', function($q) {
@@ -269,6 +281,15 @@ class TicketController extends Controller
     public function update(UpdateTicketRequest $request, Ticket $ticket)
     {
         $validated = $request->validated();
+        
+        // Auto-update priority if item_id changed
+        if (isset($validated['item_id']) && $validated['item_id'] != $ticket->item_id) {
+            $item = \App\Models\Item::find($validated['item_id']);
+            if ($item) {
+                $validated['priority'] = strtolower($item->priority);
+            }
+        }
+
         $ticket->fill($validated);
         
         if ($ticket->isDirty()) {
@@ -308,11 +329,18 @@ class TicketController extends Controller
                     'column_changed' => $column,
                     'old_value' => (string) $oldValue,
                     'new_value' => (string) $newValue,
-                    'changed_at' => now(),
+                    'changed_at' => now('Asia/Manila'),
                 ]);
             }
             
+            $statusChanged = $ticket->isDirty('status');
+            $newStatus = $ticket->status;
             $ticket->save();
+
+            // SYNC STATUS TO PARENT AS A WHOLE
+            if ($statusChanged && $ticket->parent_id) {
+                $this->syncParentStatus($ticket->parent_id, $newStatus);
+            }
 
             if ($assigneeChanged && $ticket->assignee_id) {
                 $ticket->load('assignee');
@@ -325,6 +353,32 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Ticket updated successfully.');
+    }
+
+    /**
+     * Internal helper to sync parent status based on children
+     */
+    private function syncParentStatus($parentId, $triggeredStatus)
+    {
+        $parent = Ticket::find($parentId);
+        if (!$parent) return;
+
+        $allChildren = Ticket::where('parent_id', $parentId)->get();
+        
+        if (in_array($triggeredStatus, ['resolved', 'closed'])) {
+            // Check if ALL children are terminal (resolved or closed)
+            $allDone = $allChildren->every(function($child) {
+                return in_array($child->status, ['resolved', 'closed']);
+            });
+
+            if ($allDone) {
+                // If all are terminal, set parent to the triggered status (resolved or closed)
+                $parent->update(['status' => $triggeredStatus]);
+            }
+        } else {
+            // If any child is updated to an active status, parent reflects it
+            $parent->update(['status' => $triggeredStatus]);
+        }
     }
 
     /**
@@ -344,8 +398,9 @@ class TicketController extends Controller
      */
     public function storeChild(Request $request, Ticket $ticket)
     {
-        if ($ticket->children()->exists()) {
-            return redirect()->back()->withErrors(['error' => 'A child ticket already exists for this ticket.']);
+        // Allow creating multiple child tickets as long as the parent is Open or In Progress
+        if (!in_array($ticket->status, ['open', 'in_progress'])) {
+            return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open or In Progress tickets.']);
         }
 
         $validated = $request->validate([
@@ -390,7 +445,10 @@ class TicketController extends Controller
                 'company_id' => $ticket->company_id,
                 'store_id' => $ticket->store_id,
                 'category_id' => $ticket->category_id,
+                'sub_category_id' => $ticket->sub_category_id,
+                'item_id' => $ticket->item_id,
                 'parent_id' => $ticket->id,
+                'created_at' => now('Asia/Manila'),
             ]);
 
             Schedule::create([
@@ -405,6 +463,17 @@ class TicketController extends Controller
                 'backlogs_start' => $validated['backlogs_start'],
                 'backlogs_end' => $validated['backlogs_end'],
                 'remarks' => $validated['remarks'],
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            // Set parent to Open when a new child is added
+            $ticket->update(['status' => 'open']);
+
+            // Create SLA Metrics for child ticket
+            \App\Models\TicketSlaMetric::create([
+                'ticket_id' => $childTicket->id,
+                'response_target_at' => \App\Services\SlaService::calculateTarget($childTicket->created_at, $childTicket->item_id, 'response'),
+                'resolution_target_at' => \App\Services\SlaService::calculateTarget($childTicket->created_at, $childTicket->item_id, 'resolution'),
             ]);
 
             return $childTicket;
@@ -420,6 +489,7 @@ class TicketController extends Controller
     {
         $request->validate([
             'comment_text' => 'required|string|max:65535',
+            'status' => 'nullable|string|in:open,in_progress,resolved,closed,waiting',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,txt',
         ]);
@@ -428,11 +498,36 @@ class TicketController extends Controller
             'ticket_id' => $ticket->id,
             'comment_text' => $request->comment_text,
             'user_id' => auth()->id(),
+            'created_at' => now('Asia/Manila'),
         ]);
+
+        // HANDLE AUTOMATIC STATUS CHANGE
+        if ($request->filled('status')) {
+            $oldStatus = $ticket->status;
+            $newStatus = $request->status;
+            
+            if ($oldStatus !== $newStatus) {
+                $ticket->update(['status' => $newStatus]);
+                
+                \App\Models\TicketHistory::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => auth()->id(),
+                    'column_changed' => 'status',
+                    'old_value' => $oldStatus,
+                    'new_value' => $newStatus,
+                    'changed_at' => now('Asia/Manila'),
+                ]);
+
+                // SYNC TO PARENT IF APPLICABLE
+                if ($ticket->parent_id) {
+                    $this->syncParentStatus($ticket->parent_id, $newStatus);
+                }
+            }
+        }
 
         $metric = $ticket->slaMetric;
         if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
-            $now = now();
+            $now = now('Asia/Manila');
             $metric->update([
                 'first_response_at' => $now,
                 'is_response_breached' => $metric->response_target_at && $now->gt($metric->response_target_at),
@@ -469,11 +564,12 @@ class TicketController extends Controller
                     'file_name' => $file->getClientOriginalName(),
                     'file_storage_path' => $filePath,
                     'file_size_bytes' => $file->getSize(),
+                    'created_at' => now('Asia/Manila'),
                 ]);
             }
         }
 
-        return redirect()->back()->with('success', 'Comment added successfully.');
+        return redirect()->back()->with('success', 'Comment added and status updated.');
     }
 
     public function getCategories()

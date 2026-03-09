@@ -40,11 +40,13 @@ class ItemController extends Controller implements HasMiddleware
         $items = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
         $categories = Category::where('is_active', true)->get();
         $subCategories = SubCategory::where('is_active', true)->get();
+        $settings = \App\Models\Setting::all()->pluck('value', 'key');
 
         return Inertia::render('Items/Index', [
             'items' => $items,
             'categories' => $categories,
             'subCategories' => $subCategories,
+            'settings' => $settings,
         ]);
     }
 

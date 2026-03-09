@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('tickets:fetch-emails')->everyThirtySeconds();
+Schedule::command('tickets:auto-close')->hourly();

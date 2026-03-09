@@ -50,7 +50,7 @@
                 <thead class="bg-gray-50">
                     <slot name="header"></slot>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="divide-y divide-gray-200">
                     <slot name="body" :data="data" :isLoading="isLoading"></slot>
                 </tbody>
             </table>

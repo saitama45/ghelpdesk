@@ -20,6 +20,14 @@ class TicketComment extends Model
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
+    /**
+     * Prepare a date for array / JSON serialization.
+     */
+    protected function serializeDate(\DateTimeInterface $date): string
+    {
+        return $date->setTimezone(new \DateTimeZone('Asia/Manila'))->format('Y-m-d H:i:s');
+    }
+
     public function ticket()
     {
         return $this->belongsTo(Ticket::class);

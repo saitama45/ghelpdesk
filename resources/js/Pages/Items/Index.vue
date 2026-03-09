@@ -159,6 +159,19 @@
                                 </select>
                             </div>
                         </div>
+
+                        <!-- SLA Targets Display -->
+                        <div v-if="form.priority" class="grid grid-cols-2 gap-4 mb-6 p-3 rounded-lg border transition-colors duration-200" :class="getSlaBoxClass(form.priority)">
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" :class="getSlaLabelClass(form.priority)">Target Response</label>
+                                <div class="text-sm font-black" :class="getSlaValueClass(form.priority)">{{ getSlaTarget(form.priority, 'response') }} Hours</div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1" :class="getSlaLabelClass(form.priority)">Target Resolution</label>
+                                <div class="text-sm font-black" :class="getSlaValueClass(form.priority)">{{ getSlaTarget(form.priority, 'resolution') }} Hours</div>
+                            </div>
+                        </div>
+
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
                             <textarea v-model="form.description" rows="3"
@@ -200,7 +213,8 @@ import { usePermission } from '@/Composables/usePermission'
 const props = defineProps({
     items: Object,
     categories: Array,
-    subCategories: Array
+    subCategories: Array,
+    settings: Object
 })
 
 const { showSuccess, showError } = useToast()
@@ -208,6 +222,42 @@ const { confirm } = useConfirm()
 const { post, put, destroy } = useErrorHandler()
 const pagination = usePagination(props.items, 'items.index')
 const { hasPermission } = usePermission()
+
+const getSlaTarget = (priority, type) => {
+    if (!priority) return '0';
+    const key = `sla_${priority.toLowerCase()}_${type}`;
+    return props.settings[key] || (type === 'response' ? '24' : '72');
+};
+
+const getSlaBoxClass = (priority) => {
+    switch (priority) {
+        case 'Low': return 'bg-green-50 border-green-200';
+        case 'Medium': return 'bg-yellow-50 border-yellow-200';
+        case 'High': return 'bg-orange-50 border-orange-200';
+        case 'Urgent': return 'bg-red-50 border-red-200 shadow-sm';
+        default: return 'bg-gray-50 border-gray-200';
+    }
+};
+
+const getSlaLabelClass = (priority) => {
+    switch (priority) {
+        case 'Low': return 'text-green-600';
+        case 'Medium': return 'text-yellow-600';
+        case 'High': return 'text-orange-600';
+        case 'Urgent': return 'text-red-600';
+        default: return 'text-gray-500';
+    }
+};
+
+const getSlaValueClass = (priority) => {
+    switch (priority) {
+        case 'Low': return 'text-green-900';
+        case 'Medium': return 'text-yellow-900';
+        case 'High': return 'text-orange-900';
+        case 'Urgent': return 'text-red-900';
+        default: return 'text-gray-900';
+    }
+};
 
 const showModal = ref(false)
 const isEditing = ref(false)
@@ -302,9 +352,9 @@ const deleteItem = async (item) => {
 const getPriorityClass = (priority) => {
     switch (priority) {
         case 'Low':
-            return 'bg-gray-100 text-gray-800 border-gray-200'
+            return 'bg-green-100 text-green-800 border-green-200'
         case 'Medium':
-            return 'bg-blue-100 text-blue-800 border-blue-200'
+            return 'bg-yellow-100 text-yellow-800 border-yellow-200'
         case 'High':
             return 'bg-orange-100 text-orange-800 border-orange-200'
         case 'Urgent':

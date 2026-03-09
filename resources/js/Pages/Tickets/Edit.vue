@@ -10,7 +10,7 @@ import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
-import { ChatBubbleBottomCenterTextIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -174,6 +174,16 @@ const editForm = useForm({
     assignee_id: props.ticket.assignee_id || '',
 });
 
+// Watch item_id to update priority
+watch(() => editForm.item_id, (newVal) => {
+    if (newVal) {
+        const item = items.value.find(i => i.id === newVal);
+        if (item) {
+            editForm.priority = item.priority.toLowerCase();
+        }
+    }
+});
+
 const categories = ref([]);
 const subCategories = ref([]);
 const items = ref([]);
@@ -241,8 +251,17 @@ onUnmounted(() => {
 
 const commentForm = useForm({
     comment_text: '',
+    status: '',
     attachments: [],
 });
+
+const showStatusDropdown = ref(false);
+
+const submitWithStatus = (newStatus) => {
+    commentForm.status = newStatus;
+    addComment();
+    showStatusDropdown.value = false;
+};
 
 const commentFileInput = ref(null);
 
@@ -276,10 +295,10 @@ const formatDate = (dateInput) => {
         month: 'numeric', 
         day: 'numeric', 
         hour: 'numeric', 
-        minute: 'numeric', 
-        second: 'numeric',
+        minute: '2-digit', 
+        second: '2-digit',
         hour12: true,
-        timeZone: 'Asia/Manila'
+        timeZone: 'UTC'
     });
 };
 
@@ -287,18 +306,27 @@ const parseDate = (dateString) => {
     if (!dateString) return new Date(0);
     if (dateString instanceof Date) return dateString;
     
-    // If the string already contains timezone info (Z or +/-XX:XX), let the Date constructor handle it
-    if (dateString.includes('Z') || /[\+\-]\d{2}:\d{2}$/.test(dateString)) {
-        return new Date(dateString);
-    }
-
-    let s = String(dateString).replace(' ', 'T');
+    let s = String(dateString).trim();
     
-    // If it looks like a timestamp but lacks timezone info, force Manila (+08:00)
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s)) {
-        s += '+08:00';
+    // Check if it already has an offset (Z or +/-XX:XX)
+    if (s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return d;
     }
     
+    // Aggressively match only the date and time numbers
+    const match = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    
+    if (match) {
+        // We know the numbers in the DB are Manila time (from serializeDate in models)
+        // By forcing +08:00, we create a Date object whose UTC value matches the raw DB numbers
+        const [_, year, month, day, hour, minute, second] = match;
+        const forcedIso = `${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`;
+        const d = new Date(forcedIso);
+        if (!isNaN(d.getTime())) return d;
+    }
+    
+    // Final fallback
     const d = new Date(s);
     return isNaN(d.getTime()) ? new Date(dateString) : d;
 };
@@ -391,6 +419,7 @@ const activities = computed(() => {
 
 const formatColumnName = (column) => {
     if (column === 'company_id') return 'Company';
+    if (column === 'store_id') return 'Store';
     if (column === 'assignee_id') return 'Assignee';
     if (column === 'reporter_id') return 'Reporter';
     return column.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -433,6 +462,21 @@ const updateTicket = (options = {}) => {
 const debouncedUpdate = debounce(() => {
     updateTicket();
 }, 1000);
+
+// Watch for ticket changes to sync form state (important after status changes from comments)
+watch(() => props.ticket, (newTicket) => {
+    editForm.status = newTicket.status;
+    editForm.priority = newTicket.priority;
+    editForm.severity = newTicket.severity;
+    editForm.type = newTicket.type;
+    editForm.assignee_id = newTicket.assignee_id || '';
+    editForm.category_id = newTicket.category_id || '';
+    editForm.sub_category_id = newTicket.sub_category_id || '';
+    editForm.item_id = newTicket.item_id || '';
+    editForm.company_id = newTicket.company_id || '';
+    editForm.store_id = newTicket.store_id || '';
+    editForm.defaults(editForm.data()); // Reset dirty state
+}, { deep: true });
 
 // Watchers for other fields (excluding Title and Description which are now manual save)
 watch(() => [
@@ -503,6 +547,7 @@ const addComment = () => {
     // Inertia automatically handles FormData when files are present in the data object
     post(route('tickets.comments.store', props.ticket.id), {
         comment_text: commentForm.comment_text,
+        status: commentForm.status,
         attachments: attachmentsToUpload
     }, {
         onSuccess: () => {
@@ -572,8 +617,8 @@ const getPriorityColor = (priority) => {
     switch (priority) {
         case 'urgent': return 'text-red-900 bg-red-200';
         case 'high': return 'text-red-800 bg-red-100';
-        case 'medium': return 'text-yellow-800 bg-yellow-100';
-        case 'low': return 'text-green-800 bg-green-100';
+        case 'medium': return 'text-yellow-900 bg-yellow-200';
+        case 'low': return 'text-green-900 bg-green-200';
         default: return 'text-gray-800 bg-gray-100';
     }
 };
@@ -996,14 +1041,41 @@ const linkify = (text) => {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <button 
-                                                type="button" 
-                                                @click="addComment" 
-                                                :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
-                                                class="inline-flex items-center px-5 py-2 border border-transparent text-sm font-bold rounded-lg shadow-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:transform active:scale-95"
-                                            >
-                                                Post Response
-                                            </button>
+                                            <div class="flex items-center">
+                                                <div class="inline-flex rounded-lg shadow-md divide-x divide-blue-500">
+                                                    <button 
+                                                        type="button" 
+                                                        @click="submitWithStatus('resolved')" 
+                                                        :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
+                                                        class="inline-flex items-center px-4 py-2 text-sm font-bold rounded-l-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:transform active:scale-95 whitespace-nowrap"
+                                                    >
+                                                        <span v-if="commentForm.processing">Saving...</span>
+                                                        <span v-else>Send and set as Resolved</span>
+                                                    </button>
+                                                    
+                                                    <div class="relative">
+                                                        <button 
+                                                            type="button"
+                                                            @click="showStatusDropdown = !showStatusDropdown"
+                                                            :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
+                                                            class="inline-flex items-center p-2 text-sm font-bold rounded-r-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
+                                                        >
+                                                            <ChevronDownIcon class="w-5 h-5" />
+                                                        </button>
+
+                                                        <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                                            <div class="py-1">
+                                                                <button @click="submitWithStatus('open')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as Open</button>
+                                                                <button @click="submitWithStatus('in_progress')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as In Progress</button>
+                                                                <button @click="submitWithStatus('waiting')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as Waiting</button>
+                                                                <button @click="submitWithStatus('closed')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as Closed</button>
+                                                                <div class="border-t border-gray-100"></div>
+                                                                <button @click="submitWithStatus('')" class="w-full text-left px-4 py-2 text-sm text-blue-600 font-bold hover:bg-blue-50 border-t border-gray-100">Send Response Only</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1114,13 +1186,6 @@ const linkify = (text) => {
                                         <span v-else class="text-gray-400">Select Status</span>
                                     </template>
                                 </CustomSelect>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                                <select v-model="editForm.priority" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 capitalize disabled:bg-gray-100 disabled:text-gray-500">
-                                    <option v-for="p in priorities" :key="p" :value="p">{{ p }}</option>
-                                </select>
                             </div>
 
                             <div>
@@ -1245,7 +1310,7 @@ const linkify = (text) => {
 
                         <div class="pt-6 border-t space-y-3">
                             <button 
-                                v-if="hasPermission('tickets.edit') && (!ticket.children || ticket.children.length === 0)"
+                                v-if="hasPermission('tickets.edit') && (ticket.status === 'open' || ticket.status === 'in_progress')"
                                 type="button" 
                                 @click="openChildModal" 
                                 class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-medium text-blue-600 bg-white hover:bg-blue-50 transition-colors"
@@ -1270,9 +1335,22 @@ const linkify = (text) => {
                                     </Link>
                                     <span class="text-xs text-gray-600 truncate max-w-[200px]">{{ child.title }}</span>
                                 </div>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter" :class="getStatusColor(child.status)">
-                                    {{ child.status }}
-                                </span>
+                                <div class="flex items-center space-x-4">
+                                    <!-- Assigned User Badge -->
+                                    <div v-if="child.assignee" class="flex items-center bg-white px-2 py-1 rounded-md border border-gray-200 shadow-sm">
+                                        <div v-if="child.assignee.profile_photo" class="w-5 h-5 rounded-full overflow-hidden mr-1.5 border border-gray-100">
+                                            <img :src="'/storage/' + child.assignee.profile_photo" class="w-full h-full object-cover">
+                                        </div>
+                                        <div v-else class="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600 mr-1.5">
+                                            {{ child.assignee.name.charAt(0) }}
+                                        </div>
+                                        <span class="text-[10px] font-bold text-gray-700 truncate max-w-[80px]">{{ child.assignee.name }}</span>
+                                    </div>
+                                    
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter shrink-0" :class="getStatusColor(child.status)">
+                                        {{ child.status }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1336,7 +1414,7 @@ const linkify = (text) => {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div v-if="childForm.status === 'On-site' || childForm.status === 'WFH'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Pickup Time (From - To)</label>
                             <div class="flex items-center space-x-2">

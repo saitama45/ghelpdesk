@@ -133,7 +133,7 @@ class AttendanceController extends Controller implements HasMiddleware
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
             'photo_path' => $fileName,
-            'log_time' => now(),
+            'log_time' => now('Asia/Manila'),
             'device_info' => $request->input('device_info', $request->header('User-Agent')),
             'ip_address' => $request->input('public_ip', $request->ip()),
         ]);

@@ -226,9 +226,12 @@ const updateMap = async () => {
         
         if (!map) {
             try {
-                const { Map, Circle } = await google.maps.importLibrary("maps");
+                // Ensure element is still there after async imports
+                const { Map } = await google.maps.importLibrary("maps");
                 const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
                 
+                if (!mapElement.value) return;
+
                 map = new Map(mapElement.value, {
                     center: pos,
                     zoom: 17,

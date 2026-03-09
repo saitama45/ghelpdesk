@@ -14,21 +14,13 @@ class TicketObserver
      */
     public function created(Ticket $ticket): void
     {
-        $category = $ticket->category;
+        $now = Carbon::now();
         
-        if ($category && ($category->response_time_hours || $category->resolution_time_hours)) {
-            $now = Carbon::now();
-            
-            TicketSlaMetric::create([
-                'ticket_id' => $ticket->id,
-                'response_target_at' => $category->response_time_hours 
-                    ? SlaService::calculateTarget($now, $category->response_time_hours, $category)
-                    : null,
-                'resolution_target_at' => $category->resolution_time_hours 
-                    ? SlaService::calculateTarget($now, $category->resolution_time_hours, $category)
-                    : null,
-            ]);
-        }
+        TicketSlaMetric::create([
+            'ticket_id' => $ticket->id,
+            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response'),
+            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution'),
+        ]);
     }
 
     /**
@@ -37,25 +29,14 @@ class TicketObserver
     public function updated(Ticket $ticket): void
     {
         $metric = $ticket->slaMetric;
-        $category = $ticket->category;
-
-        if (!$category) return;
 
         if (!$metric) {
             // Try to create it if it doesn't exist
-            if ($category->response_time_hours || $category->resolution_time_hours) {
-                $metric = TicketSlaMetric::create([
-                    'ticket_id' => $ticket->id,
-                    'response_target_at' => $category->response_time_hours 
-                        ? SlaService::calculateTarget($ticket->created_at, $category->response_time_hours, $category)
-                        : null,
-                    'resolution_target_at' => $category->resolution_time_hours 
-                        ? SlaService::calculateTarget($ticket->created_at, $category->resolution_time_hours, $category)
-                        : null,
-                ]);
-            } else {
-                return;
-            }
+            $metric = TicketSlaMetric::create([
+                'ticket_id' => $ticket->id,
+                'response_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response'),
+                'resolution_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution'),
+            ]);
         }
 
         // 1. Handle First Response
@@ -93,16 +74,14 @@ class TicketObserver
                 if ($metric->response_target_at && !$metric->first_response_at) {
                     $data['response_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->response_target_at, 
-                        $pausedSeconds, 
-                        $category
+                        $pausedSeconds
                     );
                 }
                 
                 if ($metric->resolution_target_at && !$metric->resolved_at) {
                     $data['resolution_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->resolution_target_at, 
-                        $pausedSeconds, 
-                        $category
+                        $pausedSeconds
                     );
                 }
 

@@ -4,18 +4,27 @@ namespace App\Services;
 
 use Carbon\Carbon;
 use App\Models\Category;
+use App\Models\Setting;
 
 class SlaService
 {
     /**
      * Calculate the target datetime based on business hours.
      */
-    public static function calculateTarget(Carbon $startDate, int $hours, Category $category)
+    public static function calculateTarget(Carbon $startDate, $itemId, string $type = 'response')
     {
+        $item = \App\Models\Item::find($itemId);
+        $priority = $item ? strtolower($item->priority) : 'medium';
+
+        // Get target hours from settings based on priority and type
+        $hours = (int) Setting::get("sla_{$priority}_{$type}", $type === 'response' ? 24 : 72);
+
         $targetDate = $startDate->copy();
-        $startTime = $category->business_start_time; // e.g., "08:00:00"
-        $endTime = $category->business_end_time;     // e.g., "17:00:00"
-        $workingDays = $category->working_days;      // e.g., [1, 2, 3, 4, 5]
+        
+        $startTime = Setting::get('business_start_time', '08:00:00');
+        $endTime = Setting::get('business_end_time', '17:00:00');
+        $workingDaysRaw = Setting::get('working_days');
+        $workingDays = $workingDaysRaw ? json_decode($workingDaysRaw, true) : [1, 2, 3, 4, 5];
 
         // Parse work hours robustly
         $workStart = Carbon::parse($startTime);
@@ -64,7 +73,7 @@ class SlaService
     /**
      * Simply add seconds while respecting business hours (for resuming from pause).
      */
-    public static function addSecondsRespectingBusinessHours(Carbon $startDate, int $secondsToAdd, Category $category)
+    public static function addSecondsRespectingBusinessHours(Carbon $startDate, int $secondsToAdd, Category $category = null)
     {
         // For simplicity, we can treat "pause duration" as a direct push of the target, 
         // OR we can re-calculate the target using the original duration.
@@ -73,9 +82,11 @@ class SlaService
         // But if that push lands on a weekend, it should move to Monday.
         
         $newTarget = $startDate->copy()->addSeconds($secondsToAdd);
-        $startTime = $category->business_start_time;
-        $endTime = $category->business_end_time;
-        $workingDays = $category->working_days;
+        
+        $startTime = Setting::get('business_start_time', '08:00:00');
+        $endTime = Setting::get('business_end_time', '17:00:00');
+        $workingDaysRaw = Setting::get('working_days');
+        $workingDays = $workingDaysRaw ? json_decode($workingDaysRaw, true) : [1, 2, 3, 4, 5];
 
         $workStart = Carbon::parse($startTime);
         $workEnd = Carbon::parse($endTime);
