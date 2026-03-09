@@ -35,6 +35,14 @@ class SettingsController extends Controller implements HasMiddleware
             'imap_encryption' => 'nullable|string',
             'imap_username' => 'nullable|string',
             'imap_password' => 'nullable|string',
+            'mail_mailer' => 'nullable|string',
+            'mail_host' => 'nullable|string',
+            'mail_port' => 'nullable|numeric',
+            'mail_username' => 'nullable|string',
+            'mail_password' => 'nullable|string',
+            'mail_encryption' => 'nullable|string',
+            'mail_from_address' => 'nullable|email',
+            'mail_from_name' => 'nullable|string',
             'google_maps_api_key' => 'nullable|string',
             'threshold_green_min' => 'nullable|numeric',
             'threshold_green_max' => 'nullable|numeric',
@@ -51,7 +59,7 @@ class SettingsController extends Controller implements HasMiddleware
 
         foreach ($validated as $key => $value) {
             $group = 'general';
-            if (str_starts_with($key, 'imap_')) {
+            if (str_starts_with($key, 'imap_') || str_starts_with($key, 'mail_')) {
                 $group = 'mail';
             } elseif (str_starts_with($key, 'threshold_')) {
                 $group = 'thresholds';

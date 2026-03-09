@@ -6,13 +6,14 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
-import { Cog6ToothIcon, EnvelopeIcon, ShieldCheckIcon, MapIcon, EyeIcon, EyeSlashIcon, ChartBarIcon } from '@heroicons/vue/24/outline';
+import { Cog6ToothIcon, EnvelopeIcon, ShieldCheckIcon, MapIcon, EyeIcon, EyeSlashIcon, ChartBarIcon, PaperAirplaneIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     settings: Object
 });
 
 const showImapPassword = ref(false);
+const showMailPassword = ref(false);
 const showMapsKey = ref(false);
 
 const form = useForm({
@@ -21,6 +22,14 @@ const form = useForm({
     imap_encryption: props.settings.imap_encryption || 'ssl',
     imap_username: props.settings.imap_username || '',
     imap_password: props.settings.imap_password || '',
+    mail_mailer: props.settings.mail_mailer || 'smtp',
+    mail_host: props.settings.mail_host || '',
+    mail_port: props.settings.mail_port || '587',
+    mail_username: props.settings.mail_username || '',
+    mail_password: props.settings.mail_password || '',
+    mail_encryption: props.settings.mail_encryption || 'tls',
+    mail_from_address: props.settings.mail_from_address || '',
+    mail_from_name: props.settings.mail_from_name || '',
     google_maps_api_key: props.settings.google_maps_api_key || '',
     threshold_green_min: props.settings.threshold_green_min || 1,
     threshold_green_max: props.settings.threshold_green_max || 2,
@@ -139,6 +148,131 @@ const submit = () => {
                                 For Gmail, use a 16-character App Password.
                             </p>
                             <InputError class="mt-2" :message="form.errors.imap_password" />
+                        </div>
+                    </div>
+
+                    <!-- Outgoing Mail Settings -->
+                    <div class="pt-8 mt-8 border-t border-gray-100">
+                        <div class="flex items-center space-x-3 mb-6">
+                            <div class="p-2 bg-green-100 rounded-lg">
+                                <PaperAirplaneIcon class="w-6 h-6 text-green-600" />
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-900">Outgoing Mail (SMTP)</h3>
+                                <p class="text-sm text-gray-500">Configure how the system sends notification emails.</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <InputLabel for="mail_mailer" value="Mail Driver" />
+                                <select
+                                    id="mail_mailer"
+                                    v-model="form.mail_mailer"
+                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
+                                >
+                                    <option value="smtp">SMTP</option>
+                                    <option value="log">Log (Local Testing)</option>
+                                    <option value="sendmail">Sendmail</option>
+                                </select>
+                                <InputError class="mt-2" :message="form.errors.mail_mailer" />
+                            </div>
+
+                            <div v-if="form.mail_mailer === 'smtp'">
+                                <InputLabel for="mail_host" value="SMTP Host" />
+                                <TextInput
+                                    id="mail_host"
+                                    type="text"
+                                    class="mt-1 block w-full"
+                                    v-model="form.mail_host"
+                                    placeholder="smtp.gmail.com"
+                                />
+                                <InputError class="mt-2" :message="form.errors.mail_host" />
+                            </div>
+
+                            <div v-if="form.mail_mailer === 'smtp'">
+                                <InputLabel for="mail_port" value="SMTP Port" />
+                                <TextInput
+                                    id="mail_port"
+                                    type="text"
+                                    class="mt-1 block w-full"
+                                    v-model="form.mail_port"
+                                    placeholder="587"
+                                />
+                                <InputError class="mt-2" :message="form.errors.mail_port" />
+                            </div>
+
+                            <div v-if="form.mail_mailer === 'smtp'">
+                                <InputLabel for="mail_encryption" value="Encryption" />
+                                <select
+                                    id="mail_encryption"
+                                    v-model="form.mail_encryption"
+                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
+                                >
+                                    <option value="tls">TLS</option>
+                                    <option value="ssl">SSL</option>
+                                    <option value="none">None</option>
+                                </select>
+                                <InputError class="mt-2" :message="form.errors.mail_encryption" />
+                            </div>
+
+                            <div v-if="form.mail_mailer === 'smtp'">
+                                <InputLabel for="mail_username" value="SMTP Username" />
+                                <TextInput
+                                    id="mail_username"
+                                    type="text"
+                                    class="mt-1 block w-full"
+                                    v-model="form.mail_username"
+                                    placeholder="user@example.com"
+                                />
+                                <InputError class="mt-2" :message="form.errors.mail_username" />
+                            </div>
+
+                            <div v-if="form.mail_mailer === 'smtp'">
+                                <InputLabel for="mail_password" value="SMTP Password" />
+                                <div class="relative mt-1">
+                                    <TextInput
+                                        id="mail_password"
+                                        :type="showMailPassword ? 'text' : 'password'"
+                                        class="block w-full pr-10"
+                                        v-model="form.mail_password"
+                                        placeholder="••••••••••••"
+                                    />
+                                    <button 
+                                        type="button"
+                                        @click="showMailPassword = !showMailPassword"
+                                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                                    >
+                                        <EyeIcon v-if="!showMailPassword" class="h-5 w-5" />
+                                        <EyeSlashIcon v-else class="h-5 w-5" />
+                                    </button>
+                                </div>
+                                <InputError class="mt-2" :message="form.errors.mail_password" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="mail_from_address" value="From Email Address" />
+                                <TextInput
+                                    id="mail_from_address"
+                                    type="email"
+                                    class="mt-1 block w-full"
+                                    v-model="form.mail_from_address"
+                                    placeholder="noreply@example.com"
+                                />
+                                <InputError class="mt-2" :message="form.errors.mail_from_address" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="mail_from_name" value="From Display Name" />
+                                <TextInput
+                                    id="mail_from_name"
+                                    type="text"
+                                    class="mt-1 block w-full"
+                                    v-model="form.mail_from_name"
+                                    placeholder="Helpdesk Support"
+                                />
+                                <InputError class="mt-2" :message="form.errors.mail_from_name" />
+                            </div>
                         </div>
                     </div>
 

@@ -206,7 +206,6 @@ const createTicket = () => {
             showCreateModal.value = false;
             createForm.reset();
             if (fileInput.value) fileInput.value.value = '';
-            showSuccess('Ticket created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'

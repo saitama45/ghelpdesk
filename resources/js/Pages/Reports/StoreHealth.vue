@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { Head, router, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
-import { FunnelIcon, PrinterIcon, ArrowDownTrayIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import { FunnelIcon, PrinterIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/vue/24/outline';
 import axios from 'axios';
 
 const props = defineProps({
@@ -84,27 +84,9 @@ const getHealthStatus = (ticketCount) => {
     return { color: 'bg-gray-200' };
 };
 
-const printReport = () => {
-    window.print();
-};
-
-const exportCSV = () => {
-    let csvContent = "User,Store Code,Sector,Area,Ticket Count\n";
-    props.reportData.forEach(user => {
-        user.stores.forEach(store => {
-            csvContent += `"${user.name}","${store.code}","${store.sector}","${store.area}","${store.ticket_count}"\n`;
-        });
-    });
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `store_health_report_${props.filters.month_range}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+const exportPDF = () => {
+    const params = new URLSearchParams(filterForm.value).toString();
+    window.open(route('reports.store-health.pdf') + '?' + params, '_blank');
 };
 </script>
 
@@ -136,13 +118,9 @@ const exportCSV = () => {
                             <FunnelIcon class="w-4 h-4 mr-2" />
                             Generate
                         </button>
-                        <button @click="printReport" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200">
-                            <PrinterIcon class="w-4 h-4 mr-2" />
-                            Print
-                        </button>
-                        <button @click="exportCSV" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200">
-                            <ArrowDownTrayIcon class="w-4 h-4 mr-2" />
-                            CSV
+                        <button @click="exportPDF" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200">
+                            <DocumentArrowDownIcon class="w-4 h-4 mr-2" />
+                            Export PDF
                         </button>
                     </div>
                 </div>
