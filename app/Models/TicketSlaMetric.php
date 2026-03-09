@@ -29,6 +29,7 @@ class TicketSlaMetric extends Model
         'is_response_breached' => 'boolean',
         'is_resolution_breached' => 'boolean',
         'paused_at' => 'datetime',
+        'total_paused_seconds' => 'integer',
     ];
 
     public function ticket()

@@ -24,6 +24,17 @@
         .ticket-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
         .ticket-key { color: #2563eb; font-weight: 700; font-size: 14px; text-transform: uppercase; margin-bottom: 8px; display: block; }
         .ticket-title { font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 16px 0; line-height: 1.3; }
+
+        /* Status Section */
+        .status-container { text-align: center; margin: 24px 0; padding: 16px; border-radius: 8px; border: 1px dashed #e5e7eb; }
+        .status-label { font-size: 12px; font-weight: 800; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; display: block; letter-spacing: 1px; }
+        .status-value { font-size: 24px; font-weight: 900; display: inline-block; padding: 4px 16px; border-radius: 6px; text-transform: uppercase; }
+
+        .status-open { background-color: #dbeafe; color: #1e40af; }
+        .status-in_progress { background-color: #f3e8ff; color: #6b21a8; }
+        .status-resolved { background-color: #dcfce7; color: #166534; }
+        .status-closed { background-color: #f3f4f6; color: #374151; }
+        .status-waiting { background-color: #fef3c7; color: #92400e; }
         
         /* Comment Box */
         .comment-box { background-color: #ffffff; border-left: 4px solid #2563eb; padding: 16px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -56,7 +67,14 @@
         <div class="content">
             <p class="greeting">Hello {{ $recipientName }},</p>
             
-            <p style="margin-bottom: 24px;">A new comment has been added to ticket <strong>{{ $ticket->ticket_key }}</strong>.</p>
+            <p>A new comment has been added to ticket <strong>{{ $ticket->ticket_key }}</strong>.</p>
+
+            <div class="status-container">
+                <span class="status-label">Current Ticket Status</span>
+                <span class="status-value status-{{ $ticket->status }}">
+                    {{ strtoupper(str_replace('_', ' ', $ticket->status)) }}
+                </span>
+            </div>
             
             <div class="comment-box">
                 <div class="comment-author">{{ $comment->user->name }} commented:</div>
@@ -70,8 +88,17 @@
 
             <div style="text-align: center;">
                 <a href="{{ route('tickets.edit', $ticket->id) }}" class="action-button">
-                    View Conversation
+                    View Ticket Details
                 </a>
+
+                @if($ticket->status === 'resolved')
+                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px dashed #e5e7eb;">
+                    <p style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">If this ticket has been addressed to your satisfaction, you may close it now:</p>
+                    <a href="{{ URL::signedRoute('public.tickets.close', $ticket->id) }}" style="display: inline-block; background-color: #059669; color: #ffffff !important; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 700; text-align: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                        Yes, Close the Ticket
+                    </a>
+                </div>
+                @endif
             </div>
         </div>
 

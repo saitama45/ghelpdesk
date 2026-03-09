@@ -3,7 +3,6 @@
 namespace App\Mail;
 
 use App\Models\Ticket;
-use App\Models\TicketComment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -11,7 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class TicketCommentAdded extends Mailable
+class TicketSurveyRequest extends Mailable
 {
     use Queueable, SerializesModels;
 
@@ -20,7 +19,6 @@ class TicketCommentAdded extends Mailable
      */
     public function __construct(
         public Ticket $ticket,
-        public TicketComment $comment,
         public string $recipientName
     ) {}
 
@@ -29,9 +27,8 @@ class TicketCommentAdded extends Mailable
      */
     public function envelope(): Envelope
     {
-        $status = strtoupper(str_replace('_', ' ', $this->ticket->status));
         return new Envelope(
-            subject: "[{$this->ticket->ticket_key}] [{$status}] New Comment: {$this->ticket->title}",
+            subject: "[{$this->ticket->ticket_key}] Your feedback matters! Rate your support experience",
         );
     }
 
@@ -41,7 +38,7 @@ class TicketCommentAdded extends Mailable
     public function content(): Content
     {
         return new Content(
-            view: 'emails.tickets.commented',
+            view: 'emails.tickets.survey_request',
         );
     }
 

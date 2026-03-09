@@ -31,9 +31,9 @@ class StoreTicketRequest extends FormRequest
             'assignee_id' => 'nullable|exists:users,id',
             'company_id' => 'required|exists:companies,id',
             'store_id' => 'nullable|exists:stores,id',
-            'category_id' => 'required|exists:categories,id',
-            'sub_category_id' => 'required|exists:sub_categories,id',
-            'item_id' => 'required|exists:items,id',
+            'category_id' => 'nullable|exists:categories,id',
+            'sub_category_id' => 'nullable|exists:sub_categories,id',
+            'item_id' => 'nullable|exists:items,id',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,txt',
         ];

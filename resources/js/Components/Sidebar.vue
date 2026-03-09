@@ -122,11 +122,11 @@ const canSeeSettings = computed(() => {
 </script>
 
 <template>
-    <div class="flex">
+    <div class="flex h-screen sticky top-0">
         <!-- Sidebar -->
         <div
             :class="[
-                'bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col',
+                'bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col h-full',
                 isCollapsed ? 'w-20' : 'w-64'
             ]"
         >

@@ -26,41 +26,43 @@ class StoreReportController extends Controller implements HasMiddleware
     public function index(Request $request)
     {
         $userId = $request->input('user_id');
-        $monthRange = $request->input('month_range'); // format: 'YYYY-MM'
+        $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
 
-        $usersQuery = User::active()->whereHas('roles', function($q) {
-            $q->where('is_assignable', true);
-        })->with('stores');
+        // Query active tickets that have an assignee
+        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting'])
+            ->whereNull('parent_id')
+            ->whereNotNull('assignee_id');
 
-        if ($userId && $userId !== 'all') {
-            $usersQuery->where('id', $userId);
+        if ($asOfDate) {
+            $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
         }
 
-        $usersData = $usersQuery->get()->map(function ($user) use ($monthRange) {
-            $stores = $user->stores->map(function ($store) use ($monthRange) {
-                $ticketCountQuery = $store->tickets()->where('tickets.status', 'open');
-                
-                if ($monthRange) {
-                    $date = Carbon::parse($monthRange);
-                    $ticketCountQuery->whereYear('tickets.created_at', $date->year)
-                                     ->whereMonth('tickets.created_at', $date->month);
-                }
+        // Apply user filter to report data
+        $displayTicketsQuery = clone $ticketsQuery;
+        if ($userId && $userId !== 'all') {
+            $displayTicketsQuery->where('assignee_id', $userId);
+        }
 
-                $ticketCount = $ticketCountQuery->count();
+        $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])->get();
 
+        $usersData = $activeTickets->groupBy('assignee_id')->map(function ($tickets, $assigneeId) {
+            $assignee = $tickets->first()->assignee;
+            $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
+                $store = $storeTickets->first()->store;
+                if (!$store) return null;
                 return [
                     'id' => $store->id,
                     'code' => $store->code,
                     'name' => $store->name,
                     'sector' => $store->sector,
                     'area' => $store->area,
-                    'ticket_count' => $ticketCount,
+                    'ticket_count' => $storeTickets->count(),
                 ];
-            });
+            })->filter()->values();
 
             return [
-                'id' => $user->id,
-                'name' => $user->name,
+                'id' => $assigneeId,
+                'name' => $assignee?->name ?? 'Unknown',
                 'stores' => $stores,
             ];
         })->filter(function($u) {
@@ -73,40 +75,37 @@ class StoreReportController extends Controller implements HasMiddleware
 
         $thresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
 
-        // Calculate Summary for North/South Areas
+        // Calculate Summary for North/South Areas (Sectors 1-8)
         $summary = [
             'north' => [],
             'south' => []
         ];
 
-        // Fetch all relevant data for summary regardless of user filter
-        $allUsersData = User::active()->whereHas('roles', function($q) {
-            $q->where('is_assignable', true);
-        })->with('stores')->get();
+        // For summary, we need ALL active tickets regardless of user filter
+        $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
+        $allStores = Store::where('is_active', true)->get();
 
         for ($i = 1; $i <= 8; $i++) {
+            $sectorStores = $allStores->where('sector', $i);
             $maxTickets = 0;
-            $assignedUser = 'Unassigned';
-            
-            foreach ($allUsersData as $user) {
-                $sectorStores = $user->stores->where('sector', $i);
-                if ($sectorStores->isNotEmpty()) {
-                    $assignedUser = $user->name;
-                    foreach ($sectorStores as $store) {
-                        $countQuery = $store->tickets()->where('tickets.status', 'open');
-                        if ($monthRange) {
-                            $date = Carbon::parse($monthRange);
-                            $countQuery->whereYear('tickets.created_at', $date->year)
-                                       ->whereMonth('tickets.created_at', $date->month);
-                        }
-                        $maxTickets = max($maxTickets, $countQuery->count());
+            $sectorUserNames = [];
+
+            foreach ($sectorStores as $store) {
+                $storeTickets = $summaryTickets->where('store_id', $store->id);
+                $count = $storeTickets->count();
+                $maxTickets = max($maxTickets, $count);
+                
+                if ($count > 0) {
+                    $assigneeNames = $storeTickets->pluck('assignee.name')->filter()->unique()->toArray();
+                    foreach ($assigneeNames as $name) {
+                        $sectorUserNames[] = $name;
                     }
                 }
             }
 
             $sectorData = [
                 'sector' => $i,
-                'user' => $assignedUser,
+                'user' => empty($sectorUserNames) ? 'Unassigned' : implode(', ', array_unique($sectorUserNames)),
                 'max_tickets' => $maxTickets
             ];
 
@@ -124,7 +123,7 @@ class StoreReportController extends Controller implements HasMiddleware
             'thresholds' => $thresholds,
             'filters' => [
                 'user_id' => $userId ?? 'all',
-                'month_range' => $monthRange ?? Carbon::now()->format('Y-m'),
+                'as_of_date' => $asOfDate,
             ]
         ]);
     }
@@ -132,81 +131,82 @@ class StoreReportController extends Controller implements HasMiddleware
     public function pdf(Request $request)
     {
         $userId = $request->input('user_id');
-        $monthRange = $request->input('month_range'); // format: 'YYYY-MM'
+        $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
 
-        $usersQuery = User::active()->whereHas('roles', function($q) {
-            $q->where('is_assignable', true);
-        })->with('stores');
+        // Query active tickets that have an assignee
+        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting'])
+            ->whereNull('parent_id')
+            ->whereNotNull('assignee_id');
 
-        if ($userId && $userId !== 'all') {
-            $usersQuery->where('id', $userId);
+        if ($asOfDate) {
+            $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
         }
 
-        $usersData = $usersQuery->get()->map(function ($user) use ($monthRange) {
-            $stores = $user->stores->map(function ($store) use ($monthRange) {
-                $ticketCountQuery = $store->tickets()->where('tickets.status', 'open');
-                
-                if ($monthRange) {
-                    $date = Carbon::parse($monthRange);
-                    $ticketCountQuery->whereYear('tickets.created_at', $date->year)
-                                     ->whereMonth('tickets.created_at', $date->month);
-                }
+        // Apply user filter to report data
+        $displayTicketsQuery = clone $ticketsQuery;
+        if ($userId && $userId !== 'all') {
+            $displayTicketsQuery->where('assignee_id', $userId);
+        }
 
-                $ticketCount = $ticketCountQuery->count();
+        $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])->get();
 
+        $usersData = $activeTickets->groupBy('assignee_id')->map(function ($tickets, $assigneeId) {
+            $assignee = $tickets->first()->assignee;
+            $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
+                $store = $storeTickets->first()->store;
+                if (!$store) return null;
                 return (object)[
                     'id' => $store->id,
                     'code' => $store->code,
                     'name' => $store->name,
                     'sector' => $store->sector,
                     'area' => $store->area,
-                    'ticket_count' => $ticketCount,
+                    'ticket_count' => $storeTickets->count(),
                 ];
-            });
+            })->filter()->values();
 
             return (object)[
-                'id' => $user->id,
-                'name' => $user->name,
+                'id' => $assigneeId,
+                'name' => $assignee?->name ?? 'Unknown',
                 'stores' => $stores,
             ];
         })->filter(function($u) {
-            return $u->stores->count() > 0;
+            return count($u->stores) > 0;
         })->values();
 
         $thresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
 
+        // Calculate Summary for North/South Areas (Sectors 1-8)
         $summary = [
             'north' => [],
             'south' => []
         ];
 
-        $allUsersData = User::active()->whereHas('roles', function($q) {
-            $q->where('is_assignable', true);
-        })->with('stores')->get();
+        // For summary, we need ALL active tickets regardless of user filter
+        $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
+        $allStores = Store::where('is_active', true)->get();
 
         for ($i = 1; $i <= 8; $i++) {
+            $sectorStores = $allStores->where('sector', $i);
             $maxTickets = 0;
-            $assignedUser = 'Unassigned';
-            
-            foreach ($allUsersData as $user) {
-                $sectorStores = $user->stores->where('sector', $i);
-                if ($sectorStores->isNotEmpty()) {
-                    $assignedUser = $user->name;
-                    foreach ($sectorStores as $store) {
-                        $countQuery = $store->tickets()->where('tickets.status', 'open');
-                        if ($monthRange) {
-                            $date = Carbon::parse($monthRange);
-                            $countQuery->whereYear('tickets.created_at', $date->year)
-                                       ->whereMonth('tickets.created_at', $date->month);
-                        }
-                        $maxTickets = max($maxTickets, $countQuery->count());
+            $sectorUserNames = [];
+
+            foreach ($sectorStores as $store) {
+                $storeTickets = $summaryTickets->where('store_id', $store->id);
+                $count = $storeTickets->count();
+                $maxTickets = max($maxTickets, $count);
+                
+                if ($count > 0) {
+                    $assigneeNames = $storeTickets->pluck('assignee.name')->filter()->unique()->toArray();
+                    foreach ($assigneeNames as $name) {
+                        $sectorUserNames[] = $name;
                     }
                 }
             }
 
             $sectorData = (object)[
                 'sector' => $i,
-                'user' => $assignedUser,
+                'user' => empty($sectorUserNames) ? 'Unassigned' : implode(', ', array_unique($sectorUserNames)),
                 'max_tickets' => $maxTickets
             ];
 
@@ -221,7 +221,7 @@ class StoreReportController extends Controller implements HasMiddleware
             'reportData' => $usersData,
             'summary' => $summary,
             'thresholds' => $thresholds,
-            'monthRange' => $monthRange ? Carbon::parse($monthRange)->format('F Y') : Carbon::now()->format('F Y')
+            'asOfDate' => Carbon::parse($asOfDate)->format('F d, Y')
         ]);
 
         return $pdf->setPaper('a4', 'portrait')->stream('store-health-report.pdf');
@@ -229,15 +229,20 @@ class StoreReportController extends Controller implements HasMiddleware
 
     public function getTickets(Request $request, Store $store)
     {
-        $monthRange = $request->input('month_range');
+        $asOfDate = $request->input('as_of_date');
+        $userId = $request->input('user_id');
         
         $query = $store->tickets()
+            ->whereIn('tickets.status', ['open', 'in_progress', 'waiting'])
+            ->whereNull('tickets.parent_id')
             ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at');
 
-        if ($monthRange) {
-            $date = Carbon::parse($monthRange);
-            $query->whereYear('tickets.created_at', $date->year)
-                  ->whereMonth('tickets.created_at', $date->month);
+        if ($asOfDate) {
+            $query->whereDate('tickets.created_at', '<=', $asOfDate);
+        }
+
+        if ($userId && $userId !== 'all') {
+            $query->where('tickets.assignee_id', $userId);
         }
 
         $tickets = $query->latest()->get();

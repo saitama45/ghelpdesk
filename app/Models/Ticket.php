@@ -31,6 +31,7 @@ class Ticket extends Model
         'sender_email',
         'sender_name',
         'message_id',
+        'survey_token',
     ];
 
     public function parent()

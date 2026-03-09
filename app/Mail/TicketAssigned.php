@@ -27,8 +27,9 @@ class TicketAssigned extends Mailable
      */
     public function envelope(): Envelope
     {
+        $status = strtoupper(str_replace('_', ' ', $this->ticket->status));
         return new Envelope(
-            subject: "[{$this->ticket->ticket_key}] Ticket Assigned to You: {$this->ticket->title}",
+            subject: "[{$this->ticket->ticket_key}] [{$status}] Ticket Assigned: {$this->ticket->title}",
         );
     }
 

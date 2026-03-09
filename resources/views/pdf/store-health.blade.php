@@ -127,9 +127,9 @@
             ];
 
             if ($maxTickets >= $th['red_min']) return ['bg' => '#ef4444', 'text' => '#ffffff'];
-            if ($maxTickets == $th['orange_min']) return ['bg' => '#f97316', 'text' => '#ffffff'];
-            if ($maxTickets == $th['yellow_min']) return ['bg' => '#eab308', 'text' => '#1a202c'];
-            if ($maxTickets >= 1 && $maxTickets <= $th['green_max']) return ['bg' => '#22c55e', 'text' => '#ffffff'];
+            if ($maxTickets >= $th['orange_min']) return ['bg' => '#f97316', 'text' => '#ffffff'];
+            if ($maxTickets >= $th['yellow_min']) return ['bg' => '#eab308', 'text' => '#1a202c'];
+            if ($maxTickets >= 1) return ['bg' => '#22c55e', 'text' => '#ffffff'];
             
             return ['bg' => '#ffffff', 'text' => '#333'];
         }
@@ -143,16 +143,41 @@
             ];
 
             if ($count >= $th['red_min']) return '#ef4444';
-            if ($count == $th['orange_min']) return '#f97316';
-            if ($count == $th['yellow_min']) return '#eab308';
-            if ($count >= 1 && $count <= $th['green_max']) return '#22c55e';
+            if ($count >= $th['orange_min']) return '#f97316';
+            if ($count >= $th['yellow_min']) return '#eab308';
+            if ($count >= 1) return '#22c55e';
             return '#cbd5e0';
         }
     @endphp
 
     <div class="header">
         <h1>Store Health Report</h1>
-        <p>{{ $monthRange }}</p>
+        <p>As of {{ $asOfDate }}</p>
+    </div>
+
+    <!-- Legend -->
+    <div style="margin-bottom: 20px; border: 1px solid #e2e8f0; padding: 10px; border-radius: 5px;">
+        <table width="100%" style="border-collapse: collapse;">
+            <tr>
+                <td width="15%" style="font-weight: bold; font-size: 8pt; text-transform: uppercase; color: #4a5568;">Legend:</td>
+                <td width="20%">
+                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #22c55e; margin-right: 5px; border-radius: 2px;"></div>
+                    <span style="font-size: 8pt; color: #4a5568;">1-2 (Healthy)</span>
+                </td>
+                <td width="20%">
+                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #eab308; margin-right: 5px; border-radius: 2px;"></div>
+                    <span style="font-size: 8pt; color: #4a5568;">3 (Warning)</span>
+                </td>
+                <td width="20%">
+                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #f97316; margin-right: 5px; border-radius: 2px;"></div>
+                    <span style="font-size: 8pt; color: #4a5568;">4 (At-risk)</span>
+                </td>
+                <td width="25%">
+                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #ef4444; margin-right: 5px; border-radius: 2px;"></div>
+                    <span style="font-size: 8pt; color: #4a5568;">5+ (Critical)</span>
+                </td>
+            </tr>
+        </table>
     </div>
 
     <!-- North Area Summary -->

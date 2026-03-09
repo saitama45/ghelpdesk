@@ -16,7 +16,7 @@ const props = defineProps({
 
 const filterForm = ref({
     user_id: props.filters.user_id,
-    month_range: props.filters.month_range
+    as_of_date: props.filters.as_of_date
 });
 
 const getSummaryBoxColor = (maxTickets) => {
@@ -31,9 +31,9 @@ const getSummaryBoxColor = (maxTickets) => {
     };
 
     if (maxTickets >= th.red_min) return { class: 'bg-red-500 border-red-600 text-white', style: 'background-color: #ef4444' };
-    if (maxTickets === th.orange_min) return { class: 'bg-orange-500 border-orange-600 text-white', style: 'background-color: #f97316' };
-    if (maxTickets === th.yellow_min) return { class: 'bg-yellow-500 border-yellow-600 text-gray-900', style: 'background-color: #eab308' };
-    if (maxTickets >= 1 && maxTickets <= th.green_max) return { class: 'bg-green-500 border-green-600 text-white', style: 'background-color: #22c55e' };
+    if (maxTickets >= th.orange_min) return { class: 'bg-orange-500 border-orange-600 text-white', style: 'background-color: #f97316' };
+    if (maxTickets >= th.yellow_min) return { class: 'bg-yellow-500 border-yellow-600 text-gray-900', style: 'background-color: #eab308' };
+    if (maxTickets >= 1) return { class: 'bg-green-500 border-green-600 text-white', style: 'background-color: #22c55e' };
     
     return { class: 'bg-white border-gray-200', style: 'background-color: #ffffff' };
 };
@@ -43,12 +43,15 @@ const modalLoading = ref(false);
 const selectedStoreTickets = ref([]);
 const selectedStoreName = ref('');
 
-const fetchTickets = async (storeId) => {
+const fetchTickets = async (storeId, userId) => {
     modalLoading.value = true;
     showTicketsModal.value = true;
     try {
         const response = await axios.get(route('reports.store-health.tickets', storeId), {
-            params: { month_range: props.filters.month_range }
+            params: { 
+                as_of_date: filterForm.value.as_of_date,
+                user_id: userId
+            }
         });
         selectedStoreTickets.value = response.data.tickets;
         selectedStoreName.value = response.data.store_name;
@@ -110,8 +113,8 @@ const exportPDF = () => {
                         </select>
                     </div>
                     <div class="flex-1 min-w-[200px]">
-                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Month Range</label>
-                        <input type="month" v-model="filterForm.month_range" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">As of Date</label>
+                        <input type="date" v-model="filterForm.as_of_date" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                     </div>
                     <div class="flex space-x-2">
                         <button @click="applyFilters" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors">
@@ -122,6 +125,29 @@ const exportPDF = () => {
                             <DocumentArrowDownIcon class="w-4 h-4 mr-2" />
                             Export PDF
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Legend Section -->
+            <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <div class="flex items-center space-x-6 text-xs">
+                    <span class="font-bold text-gray-700 uppercase tracking-wider">Legend:</span>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 bg-green-500 rounded shadow-sm"></div>
+                        <span class="text-gray-600 font-medium">1 to 2 tickets (Healthy)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 bg-yellow-500 rounded shadow-sm"></div>
+                        <span class="text-gray-600 font-medium">3 tickets (Warning)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 bg-orange-500 rounded shadow-sm"></div>
+                        <span class="text-gray-600 font-medium">4 tickets (At-risk)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 bg-red-500 rounded shadow-sm"></div>
+                        <span class="text-gray-600 font-medium">5 tickets & above (Critical)</span>
                     </div>
                 </div>
             </div>
@@ -222,7 +248,7 @@ const exportPDF = () => {
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-center">
                                         <button 
                                             v-if="store.ticket_count > 0"
-                                            @click="fetchTickets(store.id)"
+                                            @click="fetchTickets(store.id, userData.id)"
                                             class="text-blue-600 hover:text-blue-800 hover:underline px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                                         >
                                             {{ store.ticket_count }}

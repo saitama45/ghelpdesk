@@ -24,6 +24,17 @@
         .ticket-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 24px; }
         .ticket-key { color: #2563eb; font-weight: 700; font-size: 14px; text-transform: uppercase; margin-bottom: 8px; display: block; }
         .ticket-title { font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 16px 0; line-height: 1.3; }
+
+        /* Status Section */
+        .status-container { text-align: center; margin: 24px 0; padding: 16px; border-radius: 8px; border: 1px dashed #e5e7eb; }
+        .status-label { font-size: 12px; font-weight: 800; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; display: block; letter-spacing: 1px; }
+        .status-value { font-size: 24px; font-weight: 900; display: inline-block; padding: 4px 16px; border-radius: 6px; text-transform: uppercase; }
+
+        .status-open { background-color: #dbeafe; color: #1e40af; }
+        .status-in_progress { background-color: #f3e8ff; color: #6b21a8; }
+        .status-resolved { background-color: #dcfce7; color: #166534; }
+        .status-closed { background-color: #f3f4f6; color: #374151; }
+        .status-waiting { background-color: #fef3c7; color: #92400e; }
         
         /* Details Grid */
         .details-table td { padding-bottom: 12px; vertical-align: top; }
@@ -63,7 +74,14 @@
         <div class="content">
             <p class="greeting">Hello {{ $recipientName }},</p>
             
-            <p style="margin-bottom: 24px;">The following ticket has been assigned to you and requires your attention.</p>
+            <p>The following ticket has been assigned to you and requires your attention.</p>
+
+            <div class="status-container">
+                <span class="status-label">Current Ticket Status</span>
+                <span class="status-value status-{{ $ticket->status }}">
+                    {{ strtoupper(str_replace('_', ' ', $ticket->status)) }}
+                </span>
+            </div>
             
             <div class="ticket-card">
                 <span class="ticket-key">{{ $ticket->ticket_key }}</span>
@@ -88,7 +106,7 @@
                     </tr>
                      <tr>
                         <td class="label">Reporter</td>
-                        <td class="value">{{ $ticket->reporter->name }}</td>
+                        <td class="value">{{ $ticket->reporter->name ?? $ticket->sender_name ?? 'External User' }}</td>
                     </tr>
                 </table>
                 

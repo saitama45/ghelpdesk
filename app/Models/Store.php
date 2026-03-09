@@ -40,6 +40,6 @@ class Store extends Model
 
     public function tickets()
     {
-        return $this->hasManyThrough(Ticket::class, Schedule::class, 'store_id', 'id', 'id', 'ticket_id');
+        return $this->hasMany(Ticket::class);
     }
 }

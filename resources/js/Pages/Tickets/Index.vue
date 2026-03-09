@@ -10,6 +10,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePagination } from '@/Composables/usePagination';
 import { usePermission } from '@/Composables/usePermission';
+import { useDateFormatter } from '@/Composables/useDateFormatter';
 
 const props = defineProps({
     tickets: Object,
@@ -27,6 +28,7 @@ const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
 const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
+const { formatDate } = useDateFormatter();
 
 // Computed property for available companies based on user roles
 const availableCompanies = computed(() => {
@@ -253,6 +255,10 @@ const acceptTicket = (ticket) => {
 
     const acceptForm = useForm({
         company_id: ticket.company_id,
+        store_id: ticket.store_id,
+        category_id: ticket.category_id,
+        sub_category_id: ticket.sub_category_id,
+        item_id: ticket.item_id,
         title: ticket.title,
         description: ticket.description,
         type: ticket.type,
@@ -263,7 +269,7 @@ const acceptTicket = (ticket) => {
     });
     
     put(route('tickets.update', ticket.id), acceptForm.data(), {
-        onSuccess: () => showSuccess('Ticket assigned to you successfully'),
+        onSuccess: () => {},
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot accept ticket'
             showError(errorMessage)
@@ -510,7 +516,7 @@ const getSlaRowClass = (ticket) => {
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
-                            <span>{{ new Date(ticket.created_at).toLocaleString() }}</span>
+                            <span>{{ formatDate(ticket.created_at) }}</span>
                             <!-- Hover instruction -->
                             <div v-if="hasPermission('tickets.edit')" class="absolute inset-y-0 right-4 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-100 px-2 py-1 rounded">View Details</span>

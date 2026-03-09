@@ -63,10 +63,10 @@ class TicketObserver
             } 
             // Resume SLA
             elseif ($oldStatus === 'waiting' && $metric->paused_at) {
-                $pausedSeconds = $metric->paused_at->diffInSeconds(Carbon::now());
+                $pausedSeconds = (int) $metric->paused_at->diffInSeconds(Carbon::now());
                 
                 $data = [
-                    'total_paused_seconds' => $metric->total_paused_seconds + $pausedSeconds,
+                    'total_paused_seconds' => (int) ($metric->total_paused_seconds + $pausedSeconds),
                     'paused_at' => null,
                 ];
 

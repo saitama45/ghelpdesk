@@ -538,19 +538,50 @@ class TicketController extends Controller
         $commenterId = auth()->id();
         $recipients = collect();
 
-        if ($ticket->assignee) $recipients->push($ticket->assignee);
-        if ($ticket->reporter) $recipients->push($ticket->reporter);
-        foreach ($ticket->comments as $prevComment) {
-            if ($prevComment->user) $recipients->push($prevComment->user);
+        // 1. Add Assignee
+        if ($ticket->assignee) {
+            $recipients->push([
+                'email' => $ticket->assignee->email,
+                'name' => $ticket->assignee->name,
+                'id' => $ticket->assignee->id
+            ]);
         }
 
-        $recipients = $recipients->unique('id')
-            ->filter(function ($user) use ($commenterId) {
-                return $user->id != $commenterId && $user->email;
-            });
+        // 2. Add Reporter (User)
+        if ($ticket->reporter) {
+            $recipients->push([
+                'email' => $ticket->reporter->email,
+                'name' => $ticket->reporter->name,
+                'id' => $ticket->reporter->id
+            ]);
+        } 
+        // 3. Add External Reporter (Sender Email)
+        elseif ($ticket->sender_email) {
+            $recipients->push([
+                'email' => $ticket->sender_email,
+                'name' => $ticket->sender_name ?? 'External User',
+                'id' => null
+            ]);
+        }
+
+        // 4. Add previous commenters
+        foreach ($ticket->comments as $prevComment) {
+            if ($prevComment->user) {
+                $recipients->push([
+                    'email' => $prevComment->user->email,
+                    'name' => $prevComment->user->name,
+                    'id' => $prevComment->user->id
+                ]);
+            }
+        }
+
+        // Filter and Unique
+        $recipients = $recipients->filter(function ($r) use ($commenterId) {
+            return ($r['id'] != $commenterId) && !empty($r['email']);
+        })->unique('email');
 
         foreach ($recipients as $recipient) {
-            Mail::to($recipient->email)->send(new TicketCommentAdded($ticket, $comment, $recipient->name));
+            Mail::to($recipient['email'])->send(new TicketCommentAdded($ticket, $comment, $recipient['name']));
         }
 
         if ($request->hasFile('attachments')) {

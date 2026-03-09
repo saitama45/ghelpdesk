@@ -5,12 +5,14 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Modal from '@/Components/Modal.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import { useDateFormatter } from '@/Composables/useDateFormatter';
 import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     logs: Object
 });
 
+const { formatDate } = useDateFormatter();
 const search = ref('');
 const isLoading = ref(false);
 
@@ -48,14 +50,6 @@ watch(search, (value) => {
         onFinish: () => isLoading.value = false
     });
 });
-
-const formatTime = (time) => {
-    return new Date(time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-};
-
-const formatDate = (time) => {
-    return new Date(time).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-};
 
 const getGoogleMapsUrl = (lat, lng) => {
     return `https://www.google.com/maps?q=${lat},${lng}`;
@@ -168,8 +162,8 @@ const stopDrag = () => {
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex flex-col">
-                            <span class="text-sm font-bold text-gray-900">{{ formatTime(log.log_time) }}</span>
-                            <span class="text-xs text-gray-500">{{ formatDate(log.log_time) }}</span>
+                            <span class="text-sm font-bold text-gray-900">{{ formatDate(log.log_time, { year: undefined, month: undefined, day: undefined }) }}</span>
+                            <span class="text-xs text-gray-500">{{ formatDate(log.log_time, { hour: undefined, minute: undefined, second: undefined }) }}</span>
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">

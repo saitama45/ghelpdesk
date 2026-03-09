@@ -55,4 +55,12 @@ Route::middleware('auth')->group(function () {
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 });
 
+// Public Routes (No Auth)
+Route::get('/public/tickets/{ticket}/close', [App\Http\Controllers\PublicTicketController::class, 'close'])->name('public.tickets.close');
+Route::get('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'showSurvey'])->name('public.survey');
+Route::post('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'submitSurvey'])->name('public.survey.submit');
+Route::get('/public/survey-thank-you', function () {
+    return Inertia::render('Public/SurveyThankYou');
+})->name('public.survey.thankyou');
+
 require __DIR__.'/auth.php';

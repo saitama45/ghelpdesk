@@ -27,8 +27,9 @@ class NewTicketCreated extends Mailable
      */
     public function envelope(): Envelope
     {
+        $status = strtoupper(str_replace('_', ' ', $this->ticket->status));
         return new Envelope(
-            subject: "[{$this->ticket->ticket_key}] New Ticket Created: {$this->ticket->title}",
+            subject: "[{$this->ticket->ticket_key}] [{$status}] New Ticket Created: {$this->ticket->title}",
         );
     }
 

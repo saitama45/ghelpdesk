@@ -10,6 +10,7 @@ import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
+import { useDateFormatter } from '@/Composables/useDateFormatter';
 import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -26,6 +27,7 @@ const { confirm } = useConfirm();
 const { put, destroy, post } = useErrorHandler();
 const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
+const { formatDate, parseDate } = useDateFormatter();
 
 // Canned Messages State
 const showCannedMessages = ref(false);
@@ -177,7 +179,7 @@ const editForm = useForm({
 // Watch item_id to update priority
 watch(() => editForm.item_id, (newVal) => {
     if (newVal) {
-        const item = items.value.find(i => i.id === newVal);
+        const item = items.value.find(i => i.id == newVal);
         if (item) {
             editForm.priority = item.priority.toLowerCase();
         }
@@ -224,18 +226,22 @@ const fetchItems = async (categoryId, subCategoryId) => {
 };
 
 watch(() => editForm.category_id, (newVal, oldVal) => {
-    if (oldVal !== undefined && oldVal !== newVal) {
-        editForm.sub_category_id = '';
-        editForm.item_id = '';
+    if (newVal != oldVal) {
+        if (oldVal !== undefined) {
+            editForm.sub_category_id = '';
+            editForm.item_id = '';
+        }
+        if (newVal) fetchSubCategories(newVal);
     }
-    fetchSubCategories(newVal);
 });
 
 watch(() => editForm.sub_category_id, (newVal, oldVal) => {
-    if (oldVal !== undefined && oldVal !== newVal) {
-        editForm.item_id = '';
+    if (newVal != oldVal) {
+        if (oldVal !== undefined) {
+            editForm.item_id = '';
+        }
+        if (newVal) fetchItems(editForm.category_id, newVal);
     }
-    fetchItems(editForm.category_id, newVal);
 });
 
 onMounted(() => {
@@ -286,50 +292,6 @@ const availableStatuses = computed(() => {
         return true;
     });
 });
-
-const formatDate = (dateInput) => {
-    if (!dateInput) return '';
-    const date = parseDate(dateInput);
-    return date.toLocaleString('en-US', { 
-        year: 'numeric', 
-        month: 'numeric', 
-        day: 'numeric', 
-        hour: 'numeric', 
-        minute: '2-digit', 
-        second: '2-digit',
-        hour12: true,
-        timeZone: 'UTC'
-    });
-};
-
-const parseDate = (dateString) => {
-    if (!dateString) return new Date(0);
-    if (dateString instanceof Date) return dateString;
-    
-    let s = String(dateString).trim();
-    
-    // Check if it already has an offset (Z or +/-XX:XX)
-    if (s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) {
-        const d = new Date(s);
-        if (!isNaN(d.getTime())) return d;
-    }
-    
-    // Aggressively match only the date and time numbers
-    const match = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
-    
-    if (match) {
-        // We know the numbers in the DB are Manila time (from serializeDate in models)
-        // By forcing +08:00, we create a Date object whose UTC value matches the raw DB numbers
-        const [_, year, month, day, hour, minute, second] = match;
-        const forcedIso = `${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`;
-        const d = new Date(forcedIso);
-        if (!isNaN(d.getTime())) return d;
-    }
-    
-    // Final fallback
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? new Date(dateString) : d;
-};
 
 // Image Navigation
 const allImages = computed(() => {
@@ -492,8 +454,8 @@ watch(() => [
 });
 
 // Classification Watcher: Only save when the full hierarchy (Category -> Sub -> Item) is complete
-watch(() => editForm.item_id, (newVal) => {
-    if (newVal) {
+watch(() => editForm.item_id, (newVal, oldVal) => {
+    if (newVal && newVal != oldVal && oldVal !== undefined) {
         updateTicket();
     }
 });
@@ -871,7 +833,9 @@ const linkify = (text) => {
                                     </div>
                                     
                                     <div class="flex items-center space-x-2 mb-1">
-                                        <span class="font-semibold text-gray-900">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
+                                        <span class="font-semibold text-gray-900">
+                                            {{ activity.user ? activity.user.name : (ticket.reporter ? ticket.reporter.name : (ticket.sender_name || 'Customer')) }}
+                                        </span>
                                         <span class="text-xs text-gray-500">{{ formatDate(activity.date) }}</span>
                                     </div>
                                     
@@ -1045,12 +1009,12 @@ const linkify = (text) => {
                                                 <div class="inline-flex rounded-lg shadow-md divide-x divide-blue-500">
                                                     <button 
                                                         type="button" 
-                                                        @click="submitWithStatus('resolved')" 
+                                                        @click="submitWithStatus('')" 
                                                         :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
                                                         class="inline-flex items-center px-4 py-2 text-sm font-bold rounded-l-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:transform active:scale-95 whitespace-nowrap"
                                                     >
                                                         <span v-if="commentForm.processing">Saving...</span>
-                                                        <span v-else>Send and set as Resolved</span>
+                                                        <span v-else>Send Response Only</span>
                                                     </button>
                                                     
                                                     <div class="relative">
@@ -1065,12 +1029,11 @@ const linkify = (text) => {
 
                                                         <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
                                                             <div class="py-1">
-                                                                <button @click="submitWithStatus('open')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as Open</button>
-                                                                <button @click="submitWithStatus('in_progress')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as In Progress</button>
-                                                                <button @click="submitWithStatus('waiting')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as Waiting</button>
-                                                                <button @click="submitWithStatus('closed')" class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50">Send and set as Closed</button>
-                                                                <div class="border-t border-gray-100"></div>
-                                                                <button @click="submitWithStatus('')" class="w-full text-left px-4 py-2 text-sm text-blue-600 font-bold hover:bg-blue-50 border-t border-gray-100">Send Response Only</button>
+                                                                <button @click="submitWithStatus('open')" :class="['w-full text-left px-4 py-2 text-sm font-bold transition-colors hover:opacity-80', getStatusColor('open')]">Send and set as Open</button>
+                                                                <button @click="submitWithStatus('in_progress')" :class="['w-full text-left px-4 py-2 text-sm font-bold transition-colors hover:opacity-80', getStatusColor('in_progress')]">Send and set as In Progress</button>
+                                                                <button @click="submitWithStatus('waiting')" :class="['w-full text-left px-4 py-2 text-sm font-bold transition-colors hover:opacity-80', getStatusColor('waiting')]">Send and set as Waiting</button>
+                                                                <button @click="submitWithStatus('resolved')" :class="['w-full text-left px-4 py-2 text-sm font-bold transition-colors hover:opacity-80', getStatusColor('resolved')]">Send and set as Resolved</button>
+                                                                <button @click="submitWithStatus('closed')" :class="['w-full text-left px-4 py-2 text-sm font-bold transition-colors hover:opacity-80 border-t border-gray-100', getStatusColor('closed')]">Send and set as Closed</button>
                                                             </div>
                                                         </div>
                                                     </div>

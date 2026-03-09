@@ -61,7 +61,7 @@ const isCurrentRoute = (routeName) => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-gray-50 flex overflow-hidden">
+    <div class="h-screen bg-gray-50 flex overflow-hidden">
         <!-- New Sidebar Component -->
         <Sidebar 
             :is-collapsed="isSidebarCollapsed" 
