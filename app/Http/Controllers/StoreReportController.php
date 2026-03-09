@@ -30,7 +30,6 @@ class StoreReportController extends Controller implements HasMiddleware
 
         // Query active tickets that have an assignee
         $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting'])
-            ->whereNull('parent_id')
             ->whereNotNull('assignee_id');
 
         if ($asOfDate) {
@@ -135,7 +134,6 @@ class StoreReportController extends Controller implements HasMiddleware
 
         // Query active tickets that have an assignee
         $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting'])
-            ->whereNull('parent_id')
             ->whereNotNull('assignee_id');
 
         if ($asOfDate) {
@@ -234,7 +232,6 @@ class StoreReportController extends Controller implements HasMiddleware
         
         $query = $store->tickets()
             ->whereIn('tickets.status', ['open', 'in_progress', 'waiting'])
-            ->whereNull('tickets.parent_id')
             ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at');
 
         if ($asOfDate) {
