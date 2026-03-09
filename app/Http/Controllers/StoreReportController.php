@@ -11,9 +11,18 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class StoreReportController extends Controller
+class StoreReportController extends Controller implements HasMiddleware
 {
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('can:reports.store_health', only: ['index', 'pdf', 'getTickets']),
+        ];
+    }
+
     public function index(Request $request)
     {
         $userId = $request->input('user_id');

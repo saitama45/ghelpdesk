@@ -8,9 +8,20 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 
-class AttendanceController extends Controller
+class AttendanceController extends Controller implements HasMiddleware
 {
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('can:attendance.view', only: ['index']),
+            new Middleware('can:attendance.logs', only: ['logs']),
+            new Middleware('can:attendance.create', only: ['log']),
+        ];
+    }
+
     public function index()
     {
         $user = auth()->user();

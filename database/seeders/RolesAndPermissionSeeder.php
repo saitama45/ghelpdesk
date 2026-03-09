@@ -16,6 +16,11 @@ class RolesAndPermissionSeeder extends Seeder
         $permissions = [
             // Dashboard
             'dashboard.view' => 'View dashboard',
+
+            // Attendance
+            'attendance.view' => 'View DTR',
+            'attendance.logs' => 'View attendance logs',
+            'attendance.create' => 'Can log attendance',
             
             // Tickets
             'tickets.view' => 'View tickets',
@@ -37,6 +42,7 @@ class RolesAndPermissionSeeder extends Seeder
             // Reports
             'reports.view' => 'View reports',
             'reports.export' => 'Export reports',
+            'reports.store_health' => 'View store health report',
 
             // Companies
             'companies.view' => 'View companies',
@@ -93,8 +99,10 @@ class RolesAndPermissionSeeder extends Seeder
         
         $techSupport->givePermissionTo([
             'dashboard.view',
+            'attendance.view', 'attendance.logs', 'attendance.create',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close',
             'users.view',
+            'reports.view', 'reports.store_health',
             'companies.view',
             'categories.view',
             'subcategories.view',
@@ -107,6 +115,7 @@ class RolesAndPermissionSeeder extends Seeder
         
         $user->givePermissionTo([
             'dashboard.view',
+            'attendance.view', 'attendance.create',
             'tickets.view', 'tickets.create',
         ]);
 

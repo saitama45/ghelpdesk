@@ -92,6 +92,33 @@ onMounted(() => {
         openMenus.value.reports = true;
     }
 });
+
+const canSeeOperations = computed(() => {
+    return hasPermission('attendance.view') || 
+           hasPermission('attendance.logs') || 
+           hasPermission('tickets.view') || 
+           hasPermission('schedules.view');
+});
+
+const canSeeReferences = computed(() => {
+    return hasPermission('companies.view') || 
+           hasPermission('stores.view') || 
+           hasPermission('categories.view') || 
+           hasPermission('subcategories.view') || 
+           hasPermission('items.view');
+});
+
+const canSeeUserManagement = computed(() => {
+    return hasPermission('users.view') || hasPermission('roles.view');
+});
+
+const canSeeReports = computed(() => {
+    return hasPermission('reports.view') && hasPermission('reports.store_health');
+});
+
+const canSeeSettings = computed(() => {
+    return hasPermission('settings.view') || hasPermission('canned_messages.view');
+});
 </script>
 
 <template>
@@ -147,12 +174,12 @@ onMounted(() => {
                 </Link>
 
                 <!-- Operations Section -->
-                <div class="space-y-1 pt-2">
+                <div v-if="canSeeOperations" class="space-y-1 pt-2">
                     <button
                         @click="toggleMenu('operations')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('schedules.*')) && !openMenus.operations
+                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*')) && !openMenus.operations
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -168,6 +195,7 @@ onMounted(() => {
 
                     <div v-if="!isCollapsed && openMenus.operations" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
+                            v-if="hasPermission('attendance.view')"
                             :href="route('attendance.index')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
@@ -177,6 +205,7 @@ onMounted(() => {
                             <span>DTR</span>
                         </Link>
                         <Link
+                            v-if="hasPermission('attendance.logs')"
                             :href="route('attendance.logs')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
@@ -186,6 +215,7 @@ onMounted(() => {
                             <span>Attendance Logs</span>
                         </Link>
                         <Link
+                            v-if="hasPermission('tickets.view')"
                             :href="route('tickets.index')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
@@ -208,7 +238,7 @@ onMounted(() => {
                 </div>
 
                 <!-- References Section -->
-                <div class="space-y-1 pt-1">
+                <div v-if="canSeeReferences" class="space-y-1 pt-1">
                     <button
                         @click="toggleMenu('references')"
                         :class="[
@@ -282,7 +312,7 @@ onMounted(() => {
                 </div>
 
                 <!-- User Management Section -->
-                <div class="space-y-1 pt-1">
+                <div v-if="canSeeUserManagement" class="space-y-1 pt-1">
                     <button
                         @click="toggleMenu('userManagement')"
                         :class="[
@@ -326,7 +356,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Reports Section -->
-                <div class="space-y-1 pt-1">
+                <div v-if="hasPermission('reports.view')" class="space-y-1 pt-1">
                     <button
                         @click="toggleMenu('reports')"
                         :class="[
@@ -347,6 +377,7 @@ onMounted(() => {
 
                     <div v-if="!isCollapsed && openMenus.reports" class="pl-10 space-y-1 mt-1">
                         <Link
+                            v-if="hasPermission('reports.store_health')"
                             :href="route('reports.store-health')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
@@ -359,7 +390,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Settings Section -->
-                <div class="space-y-1 pt-1">
+                <div v-if="canSeeSettings" class="space-y-1 pt-1">
                     <button
                         @click="toggleMenu('settings')"
                         :class="[
