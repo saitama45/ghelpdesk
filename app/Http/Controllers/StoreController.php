@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Store;
 use App\Models\User;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -23,7 +24,10 @@ class StoreController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Store::with('users:id,name');
+        $query = Store::with(['users:id,name'])
+            ->withCount(['tickets' => function($q) {
+                $q->where('tickets.status', 'open');
+            }]);
 
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%")
@@ -39,10 +43,12 @@ class StoreController extends Controller implements HasMiddleware
 
         $stores = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
         $users = User::active()->orderBy('name')->get(['id', 'name']);
+        $settings = Setting::where('group', 'thresholds')->pluck('value', 'key');
 
         return Inertia::render('Stores/Index', [
             'stores' => $stores,
             'users' => $users,
+            'settings' => $settings,
         ]);
     }
 

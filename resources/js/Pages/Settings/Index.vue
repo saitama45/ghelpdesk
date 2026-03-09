@@ -6,7 +6,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
-import { Cog6ToothIcon, EnvelopeIcon, ShieldCheckIcon, MapIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline';
+import { Cog6ToothIcon, EnvelopeIcon, ShieldCheckIcon, MapIcon, EyeIcon, EyeSlashIcon, ChartBarIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     settings: Object
@@ -22,6 +22,17 @@ const form = useForm({
     imap_username: props.settings.imap_username || '',
     imap_password: props.settings.imap_password || '',
     google_maps_api_key: props.settings.google_maps_api_key || '',
+    threshold_green_min: props.settings.threshold_green_min || 1,
+    threshold_green_max: props.settings.threshold_green_max || 2,
+    threshold_green_label: props.settings.threshold_green_label || 'Healthy',
+    threshold_yellow_min: props.settings.threshold_yellow_min || 3,
+    threshold_yellow_max: props.settings.threshold_yellow_max || 3,
+    threshold_yellow_label: props.settings.threshold_yellow_label || 'Warning',
+    threshold_orange_min: props.settings.threshold_orange_min || 4,
+    threshold_orange_max: props.settings.threshold_orange_max || 4,
+    threshold_orange_label: props.settings.threshold_orange_label || 'At-risk',
+    threshold_red_min: props.settings.threshold_red_min || 5,
+    threshold_red_label: props.settings.threshold_red_label || 'Critical',
 });
 
 const submit = () => {
@@ -163,6 +174,93 @@ const submit = () => {
                                 </button>
                             </div>
                             <InputError class="mt-2" :message="form.errors.google_maps_api_key" />
+                        </div>
+                    </div>
+
+                    <!-- Ticket Threshold Settings -->
+                    <div class="pt-8 mt-8 border-t border-gray-100">
+                        <div class="flex items-center space-x-3 mb-6">
+                            <div class="p-2 bg-purple-100 rounded-lg">
+                                <ChartBarIcon class="w-6 h-6 text-purple-600" />
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-900">Ticket Count Thresholds (per store)</h3>
+                                <p class="text-sm text-gray-500">Configure status colors and labels based on the number of open tickets per store.</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <div class="col-span-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                                        <span class="text-sm font-medium text-gray-700">Healthy</span>
+                                    </div>
+                                    <InputLabel value="Min Tickets" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_min" />
+                                </div>
+                                <div class="col-span-1">
+                                    <InputLabel value="Max Tickets" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_max" />
+                                </div>
+                                <div class="col-span-2">
+                                    <InputLabel value="Label" />
+                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_green_label" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <div class="col-span-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                        <span class="text-sm font-medium text-gray-700">Warning</span>
+                                    </div>
+                                    <InputLabel value="Min Tickets" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_min" />
+                                </div>
+                                <div class="col-span-1">
+                                    <InputLabel value="Max Tickets" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_max" />
+                                </div>
+                                <div class="col-span-2">
+                                    <InputLabel value="Label" />
+                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_yellow_label" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <div class="col-span-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <div class="w-3 h-3 rounded-full bg-orange-500"></div>
+                                        <span class="text-sm font-medium text-gray-700">At-risk</span>
+                                    </div>
+                                    <InputLabel value="Min Tickets" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_min" />
+                                </div>
+                                <div class="col-span-1">
+                                    <InputLabel value="Max Tickets" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_max" />
+                                </div>
+                                <div class="col-span-2">
+                                    <InputLabel value="Label" />
+                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_orange_label" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <div class="col-span-1">
+                                    <div class="flex items-center space-x-2 mb-2">
+                                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                        <span class="text-sm font-medium text-gray-700">Critical</span>
+                                    </div>
+                                    <InputLabel value="Min Tickets (and up)" />
+                                    <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_red_min" />
+                                </div>
+                                <div class="col-span-3">
+                                    <InputLabel value="Label" />
+                                    <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_red_label" />
+                                </div>
+                            </div>
                         </div>
                     </div>
 

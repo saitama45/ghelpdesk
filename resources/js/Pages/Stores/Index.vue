@@ -38,6 +38,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand/Cluster</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geofence</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Users</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket Health</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -88,6 +89,15 @@
                                     View {{ store.users.length }} assigned User{{ store.users.length > 1 ? 's' : '' }}
                                 </button>
                                 <span v-else class="text-xs text-gray-400 italic">Unassigned</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center space-x-2">
+                                    <div :class="[getHealthStatus(store.tickets_count).bg, 'px-2.5 py-1 rounded-full border flex items-center space-x-1.5 shadow-sm']">
+                                        <div :class="[getHealthStatus(store.tickets_count).dot, 'w-2 h-2 rounded-full shadow-sm']"></div>
+                                        <span class="text-xs font-bold uppercase tracking-tight">{{ getHealthStatus(store.tickets_count).label }}</span>
+                                        <span class="text-[10px] font-medium opacity-75">({{ store.tickets_count }})</span>
+                                    </div>
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span :class="store.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
@@ -310,7 +320,8 @@ import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
     stores: Object,
-    users: Array
+    users: Array,
+    settings: Object
 })
 
 const { showSuccess, showError } = useToast()
@@ -318,6 +329,25 @@ const { confirm } = useConfirm()
 const { post, put, destroy } = useErrorHandler()
 const pagination = usePagination(props.stores, 'stores.index')
 const { hasPermission } = usePermission()
+
+const getHealthStatus = (ticketCount) => {
+    const s = props.settings || {};
+    
+    // Default values if settings are not set
+    const thresholds = {
+        green: { min: parseInt(s.threshold_green_min) || 1, max: parseInt(s.threshold_green_max) || 2, label: s.threshold_green_label || 'Healthy', dot: 'bg-green-500', bg: 'bg-green-50 text-green-700 border-green-100' },
+        yellow: { min: parseInt(s.threshold_yellow_min) || 3, max: parseInt(s.threshold_yellow_max) || 3, label: s.threshold_yellow_label || 'Warning', dot: 'bg-yellow-500', bg: 'bg-yellow-50 text-yellow-700 border-yellow-100' },
+        orange: { min: parseInt(s.threshold_orange_min) || 4, max: parseInt(s.threshold_orange_max) || 4, label: s.threshold_orange_label || 'At-risk', dot: 'bg-orange-500', bg: 'bg-orange-50 text-orange-700 border-orange-100' },
+        red: { min: parseInt(s.threshold_red_min) || 5, label: s.threshold_red_label || 'Critical', dot: 'bg-red-500', bg: 'bg-red-50 text-red-700 border-red-100' }
+    };
+
+    if (ticketCount >= thresholds.red.min) return thresholds.red;
+    if (ticketCount >= thresholds.orange.min && (thresholds.orange.max ? ticketCount <= thresholds.orange.max : true)) return thresholds.orange;
+    if (ticketCount >= thresholds.yellow.min && (thresholds.yellow.max ? ticketCount <= thresholds.yellow.max : true)) return thresholds.yellow;
+    if (ticketCount >= thresholds.green.min && (thresholds.green.max ? ticketCount <= thresholds.green.max : true)) return thresholds.green;
+    
+    return { label: 'Clear', dot: 'bg-gray-300', bg: 'bg-gray-50 text-gray-600 border-gray-100' };
+};
 
 const showModal = ref(false)
 const isEditing = ref(false)

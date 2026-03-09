@@ -32,4 +32,14 @@ class Store extends Model
     {
         return $this->belongsToMany(User::class)->withTimestamps();
     }
+
+    public function schedules()
+    {
+        return $this->hasMany(Schedule::class);
+    }
+
+    public function tickets()
+    {
+        return $this->hasManyThrough(Ticket::class, Schedule::class, 'store_id', 'id', 'id', 'ticket_id');
+    }
 }

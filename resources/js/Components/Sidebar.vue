@@ -24,6 +24,7 @@ import {
     QueueListIcon,
     ClockIcon,
     ChatBubbleBottomCenterTextIcon,
+    PresentationChartLineIcon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -48,6 +49,7 @@ const openMenus = ref({
     references: false,
     userManagement: false,
     settings: false,
+    reports: false,
 });
 
 const toggleMenu = (menu) => {
@@ -85,6 +87,9 @@ onMounted(() => {
     }
     if (route().current('profile.*') || route().current('settings.*') || route().current('canned-messages.*')) {
         openMenus.value.settings = true;
+    }
+    if (route().current('reports.*')) {
+        openMenus.value.reports = true;
     }
 });
 </script>
@@ -316,6 +321,39 @@ onMounted(() => {
                             ]"
                         >
                             <span>Roles & Permissions</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Reports Section -->
+                <div class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('reports')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            route().current('reports.*') && !openMenus.reports
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <PresentationChartLineIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Reports</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.reports" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.reports" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Reports
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.reports" class="pl-10 space-y-1 mt-1">
+                        <Link
+                            :href="route('reports.store-health')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('reports.store-health') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Store Health Report</span>
                         </Link>
                     </div>
                 </div>
