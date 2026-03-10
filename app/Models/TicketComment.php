@@ -13,6 +13,8 @@ class TicketComment extends Model
         'ticket_id',
         'comment_text',
         'user_id',
+        'sender_email',
+        'sender_name',
     ];
 
     protected $casts = [

@@ -11,7 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -922,7 +922,6 @@ const linkify = (text) => {
                                                 {{ activity.user ? activity.user.name : (activity.sender_name || 'External User') }}
                                             </span>
                                             <span class="text-[10px] sm:text-xs text-gray-500 font-medium">
-                                                <template v-if="activity.sender_email" class="hidden sm:inline">({{ activity.sender_email }})</template>
                                                 on {{ formatDate(activity.date) }}
                                             </span>
                                         </div>
@@ -979,12 +978,14 @@ const linkify = (text) => {
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">
-                                            {{ activity.user ? activity.user.name.charAt(0) : '?' }}
+                                            {{ activity.user ? activity.user.name.charAt(0) : (activity.sender_name ? activity.sender_name.charAt(0) : '?') }}
                                         </div>
                                     </div>
                                     
                                     <div class="flex items-center space-x-2 mb-1">
-                                        <span class="font-bold text-gray-900 text-sm">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
+                                        <span class="font-bold text-gray-900 text-sm">
+                                            {{ activity.user ? activity.user.name : (activity.sender_name || activity.sender_email || 'External User') }}
+                                        </span>
                                         <span class="text-[10px] sm:text-xs text-gray-500 font-medium">{{ formatDate(activity.date) }}</span>
                                     </div>
                                     
@@ -1101,9 +1102,30 @@ const linkify = (text) => {
                                                 <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                                                 </button>
-                                                <button v-if="cannedMessages?.length > 0" type="button" @click="showCannedMessages = !showCannedMessages" class="p-1.5 text-orange-600 hover:text-orange-800 rounded-lg hover:bg-orange-100 transition-all">
-                                                    <ChatBubbleBottomCenterTextIcon class="w-5 h-5" />
-                                                </button>
+                                                <div class="relative">
+                                                    <button v-if="cannedMessages?.length > 0" type="button" @click="showCannedMessages = !showCannedMessages" class="p-1.5 text-orange-600 hover:text-orange-800 rounded-lg hover:bg-orange-100 transition-all">
+                                                        <ChatBubbleBottomCenterTextIcon class="w-5 h-5" />
+                                                    </button>
+                                                    <div v-if="showCannedMessages" class="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                                        <div class="p-2 border-b bg-gray-50 flex justify-between items-center">
+                                                            <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Canned Messages</span>
+                                                            <button @click="showCannedMessages = false" class="text-gray-400 hover:text-gray-600">
+                                                                <XMarkIcon class="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                        <div class="max-h-60 overflow-y-auto">
+                                                            <button 
+                                                                v-for="message in cannedMessages" 
+                                                                :key="message.id"
+                                                                @click="applyCannedMessage(message)"
+                                                                class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                                                            >
+                                                                <div class="font-bold text-xs text-blue-700 mb-1">{{ message.title }}</div>
+                                                                <div class="text-[10px] text-gray-600 line-clamp-2">{{ message.content }}</div>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div class="flex items-center w-full sm:w-auto">
                                                 <div class="inline-flex rounded-lg shadow-md divide-x divide-blue-500 w-full sm:w-auto">
@@ -1114,7 +1136,7 @@ const linkify = (text) => {
                                                         class="inline-flex items-center justify-center flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-black rounded-l-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:transform active:scale-95 whitespace-nowrap uppercase tracking-widest"
                                                     >
                                                         <span v-if="commentForm.processing">Saving...</span>
-                                                        <span v-else>Send</span>
+                                                        <span v-else>Send as Response Only</span>
                                                     </button>
                                                     <div class="relative">
                                                         <button 
@@ -1125,10 +1147,10 @@ const linkify = (text) => {
                                                         >
                                                             <ChevronDownIcon class="w-5 h-5" />
                                                         </button>
-                                                        <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                                        <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
                                                             <div class="py-1">
                                                                 <button v-for="s in availableStatuses" :key="s" @click="submitWithStatus(s)" :class="['w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors hover:opacity-80', getStatusColor(s)]">
-                                                                    {{ s.replace('_', ' ') }}
+                                                                    Send and set as {{ s.replace('_', ' ') }}
                                                                 </button>
                                                             </div>
                                                         </div>

@@ -30,9 +30,26 @@ class TicketCommentAdded extends Mailable
     public function envelope(): Envelope
     {
         $status = strtoupper(str_replace('_', ' ', $this->ticket->status));
-        return new Envelope(
-            subject: "[{$this->ticket->ticket_key}] [{$status}] New Comment: {$this->ticket->title}",
+        $subject = $this->ticket->title;
+        
+        // Ensure subject starts with Re: if it's a reply to an external email
+        if ($this->ticket->message_id && !str_starts_with(strtolower($subject), 're:')) {
+            $subject = 'Re: ' . $subject;
+        }
+
+        $envelope = new Envelope(
+            subject: $subject,
         );
+
+        // If this ticket came from an email, set headers to thread it
+        if ($this->ticket->message_id) {
+            $envelope->using(function ($message) {
+                $message->getHeaders()->addTextHeader('In-Reply-To', $this->ticket->message_id);
+                $message->getHeaders()->addTextHeader('References', $this->ticket->message_id);
+            });
+        }
+
+        return $envelope;
     }
 
     /**

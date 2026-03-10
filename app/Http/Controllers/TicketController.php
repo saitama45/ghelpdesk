@@ -200,6 +200,9 @@ class TicketController extends Controller
         if ($ticket->reporter && $ticket->reporter->email) {
             Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
             $sentTo[] = $ticket->reporter->email;
+        } elseif ($ticket->sender_email) {
+            Mail::to($ticket->sender_email)->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
+            $sentTo[] = $ticket->sender_email;
         }
 
         if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
@@ -501,6 +504,9 @@ class TicketController extends Controller
             'created_at' => now('Asia/Manila'),
         ]);
 
+        // Load user relationship immediately to avoid null errors in emails
+        $comment->load('user');
+
         // HANDLE AUTOMATIC STATUS CHANGE
         if ($request->filled('status')) {
             $oldStatus = $ticket->status;
@@ -539,26 +545,27 @@ class TicketController extends Controller
         $recipients = collect();
 
         // 1. Add Assignee
-        if ($ticket->assignee) {
+        if ($ticket->assignee && $ticket->assignee->email) {
             $recipients->push([
-                'email' => $ticket->assignee->email,
+                'email' => strtolower($ticket->assignee->email),
                 'name' => $ticket->assignee->name,
                 'id' => $ticket->assignee->id
             ]);
         }
 
-        // 2. Add Reporter (User)
-        if ($ticket->reporter) {
+        // 2. Add Reporter (Internal User)
+        if ($ticket->reporter && $ticket->reporter->email) {
             $recipients->push([
-                'email' => $ticket->reporter->email,
+                'email' => strtolower($ticket->reporter->email),
                 'name' => $ticket->reporter->name,
                 'id' => $ticket->reporter->id
             ]);
         } 
+        
         // 3. Add External Reporter (Sender Email)
-        elseif ($ticket->sender_email) {
+        if ($ticket->sender_email) {
             $recipients->push([
-                'email' => $ticket->sender_email,
+                'email' => strtolower($ticket->sender_email),
                 'name' => $ticket->sender_name ?? 'External User',
                 'id' => null
             ]);
@@ -566,22 +573,30 @@ class TicketController extends Controller
 
         // 4. Add previous commenters
         foreach ($ticket->comments as $prevComment) {
-            if ($prevComment->user) {
+            if ($prevComment->user && $prevComment->user->email) {
                 $recipients->push([
-                    'email' => $prevComment->user->email,
+                    'email' => strtolower($prevComment->user->email),
                     'name' => $prevComment->user->name,
                     'id' => $prevComment->user->id
                 ]);
             }
         }
 
-        // Filter and Unique
+        // Filter out the person who just commented and ensure email exists
         $recipients = $recipients->filter(function ($r) use ($commenterId) {
             return ($r['id'] != $commenterId) && !empty($r['email']);
         })->unique('email');
 
+        $supportEmail = \App\Models\Setting::get('imap_username');
+        
+        \Illuminate\Support\Facades\Log::info("Notifying recipients for comment on ticket {$ticket->ticket_key}: " . $recipients->pluck('email')->implode(', '));
+
         foreach ($recipients as $recipient) {
-            Mail::to($recipient['email'])->send(new TicketCommentAdded($ticket, $comment, $recipient['name']));
+            $mail = new TicketCommentAdded($ticket, $comment, $recipient['name']);
+            if ($supportEmail) {
+                $mail->replyTo($supportEmail);
+            }
+            Mail::to($recipient['email'])->send($mail);
         }
 
         if ($request->hasFile('attachments')) {

@@ -142,8 +142,47 @@ class EmailTicketService
         $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
         $user = User::where('email', $senderEmail)->first();
 
+        // --- THREADING LOGIC ---
+        $existingTicket = null;
+
+        // 1. Check In-Reply-To and References headers
+        $references = collect($message->getReferences())->merge($message->getInReplyTo())->filter()->unique();
+        if ($references->isNotEmpty()) {
+            $existingTicket = Ticket::whereIn('message_id', $references)->first();
+        }
+
+        // 2. Fallback: Check subject for Ticket Key (e.g., [TBG-123])
+        if (!$existingTicket && preg_match('/\[([A-Z0-9]+-\d+)\]/', $subject, $matches)) {
+            $existingTicket = Ticket::where('ticket_key', $matches[1])->first();
+        }
+
+        // 3. Fallback: Exact subject match (ignoring Re:)
+        if (!$existingTicket) {
+            $cleanSubject = preg_replace('/^(Re|Fwd):\s+/i', '', $subject);
+            $existingTicket = Ticket::where('title', $cleanSubject)
+                ->where('sender_email', $senderEmail)
+                ->orderBy('created_at', 'desc')
+                ->first();
+        }
+
+        if ($existingTicket) {
+            return $this->addEmailAsComment($existingTicket, $message, $user);
+        }
+
         return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user) {
-            $body = $message->getTextBody() ?: $message->getHTMLBody();
+            $body = $message->getTextBody();
+            
+            // If text body is empty, extract from HTML body carefully
+            if (!$body) {
+                $html = $message->getHTMLBody();
+                // Replace common block tags with newlines to preserve structure before stripping tags
+                $html = preg_replace('/<(br|p|div|li|tr|h1|h2|h3|h4|h5|h6)[^>]*>/i', "\n$0", $html);
+                $body = strip_tags($html);
+                // Decode HTML entities after stripping tags
+                $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
+            
+            $cleanBody = $this->stripQuotedText($body);
             
             $company = Company::where('code', 'TBG')->first() ?? Company::first();
             $companyId = $company ? $company->id : null;
@@ -167,7 +206,7 @@ class EmailTicketService
             $ticket = Ticket::create([
                 'ticket_key' => $ticketKey,
                 'title' => $subject,
-                'description' => substr($body, 0, 65535),
+                'description' => substr($cleanBody, 0, 65535),
                 'type' => 'task',
                 'status' => 'open',
                 'priority' => 'medium',
@@ -196,6 +235,149 @@ class EmailTicketService
             $message->setFlag('Seen');
             return true;
         });
+    }
+
+    /**
+     * Add the incoming email content as a comment to an existing ticket.
+     */
+    protected function addEmailAsComment(Ticket $ticket, $message, $user)
+    {
+        return DB::transaction(function () use ($ticket, $message, $user) {
+            $body = $message->getTextBody();
+            
+            // If text body is empty, extract from HTML body carefully
+            if (!$body) {
+                $html = $message->getHTMLBody();
+                // Replace common block tags with newlines to preserve structure before stripping tags
+                $html = preg_replace('/<(br|p|div|li|tr|h1|h2|h3|h4|h5|h6)[^>]*>/i', "\n$0", $html);
+                $body = strip_tags($html);
+                // Decode HTML entities after stripping tags
+                $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
+            
+            $cleanBody = $this->stripQuotedText($body);
+            
+            $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
+            $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
+
+            // Create the comment
+            $comment = \App\Models\TicketComment::create([
+                'ticket_id' => $ticket->id,
+                'comment_text' => substr($cleanBody, 0, 65535),
+                'user_id' => $user ? $user->id : null,
+                'sender_email' => $user ? null : $senderEmail,
+                'sender_name' => $user ? null : $senderName,
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            // Re-open ticket if it was resolved or closed
+            if (in_array($ticket->status, ['resolved', 'closed'])) {
+                $ticket->update(['status' => 'open']);
+                
+                \App\Models\TicketHistory::create([
+                    'ticket_id' => $ticket->id,
+                    'user_id' => $user ? $user->id : null,
+                    'column_changed' => 'status',
+                    'old_value' => $ticket->status,
+                    'new_value' => 'open',
+                    'changed_at' => now('Asia/Manila'),
+                ]);
+            }
+
+            // Attachments
+            $message->getAttachments()->each(function ($attachment) use ($ticket, $comment) {
+                $fileName = time() . '_' . $this->decodeMimeHeader($attachment->getName());
+                $filePath = 'ticket-attachments/' . $fileName;
+                Storage::disk('public')->put($filePath, $attachment->getContent());
+
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'comment_id' => $comment->id,
+                    'file_name' => $this->decodeMimeHeader($attachment->getName()),
+                    'file_storage_path' => $filePath,
+                    'file_size_bytes' => $attachment->size,
+                ]);
+            });
+
+            $message->setFlag('Seen');
+            return true;
+        });
+    }
+
+    /**
+     * Strip quoted text and reply headers from an email body.
+     */
+    protected function stripQuotedText($body)
+    {
+        // 1. Decode HTML entities first (handles &lt;, &gt;, &quot;, &#39;, etc.)
+        $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        
+        // 2. Normalize line endings and whitespace
+        $body = str_replace(["\r\n", "\r"], "\n", $body);
+        
+        // Replace narrow non-breaking space (common in Gmail timestamps) and NBSP with regular space
+        $body = str_replace(["\xe2\x80\xaf", "\xc2\xa0", "\t"], " ", $body);
+        
+        // Save original for fallback if truncation is too aggressive
+        $originalBody = $body;
+
+        // 3. Custom separator (highest priority)
+        $separator = "### Please type your reply above this line ###";
+        if (str_contains($body, $separator)) {
+            $parts = explode($separator, $body);
+            return trim($parts[0]);
+        }
+
+        // 4. Split on "On ... wrote:" pattern - this captures the reply header
+        if (preg_match('/\n\s*On\s+.+?wrote:\s*$/ims', $body, $matches, PREG_OFFSET_CAPTURE)) {
+            $body = substr($body, 0, $matches[0][1]);
+        }
+
+        // 5. Check for other common non-quote markers
+        $otherMarkers = [
+            '/(?:\n|^)\s*---\s*Original Message\s*---/i',
+            '/(?:\n|^)\s*-----Original Message-----/i',
+            '/(?:\n|^)\s*________________________________/i',
+            '/(?:\n|^)\s*Sent from my (?:iPhone|Android|Samsung|iPad)/i',
+            '/(?:\n|^)\s*From:\s+.*?\n(?:Sent|To|Subject):/is',
+            '/(?:\n|^)\s*---------- Forwarded message ---------/i',
+        ];
+
+        foreach ($otherMarkers as $marker) {
+            $parts = preg_split($marker, $body, 2);
+            if (count($parts) > 1) {
+                $body = $parts[0];
+            }
+        }
+
+        // 6. Line-by-line cleanup for standard signatures and loose quotes
+        $lines = explode("\n", $body);
+        $cleanLines = [];
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            
+            // Signature marker
+            if ($trimmed === '--' || $trimmed === '-- ') {
+                break;
+            }
+
+            // If we missed a quote block start (loose > characters)
+            if (str_starts_with($trimmed, '>')) {
+                break;
+            }
+
+            $cleanLines[] = $line;
+        }
+
+        $result = trim(implode("\n", $cleanLines));
+
+        // 7. Fallback: If we stripped everything, return the original (trimmed)
+        if (empty($result) && !empty(trim($originalBody))) {
+            return trim($originalBody);
+        }
+
+        return $result;
     }
 
     /**

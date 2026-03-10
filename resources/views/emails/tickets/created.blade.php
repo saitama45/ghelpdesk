@@ -65,6 +65,7 @@
 </head>
 <body>
     <div class="wrapper">
+        <p style="text-align: center; font-size: 10px; color: #9ca3af; margin: 10px 0;">### Please type your reply above this line ###</p>
         <!-- Header -->
         <div class="header">
             <h1>Help Desk Notification</h1>
