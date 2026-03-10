@@ -162,19 +162,40 @@
                 <td width="15%" style="font-weight: bold; font-size: 8pt; text-transform: uppercase; color: #4a5568;">Legend:</td>
                 <td width="20%">
                     <div style="display: inline-block; width: 10px; height: 10px; background-color: #22c55e; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">1-2 (Healthy)</span>
+                    <span style="font-size: 8pt; color: #4a5568;">
+                        @if(($thresholds['threshold_green_min'] ?? 1) == ($thresholds['threshold_green_max'] ?? 2))
+                            {{ $thresholds['threshold_green_min'] ?? 1 }}
+                        @else
+                            {{ $thresholds['threshold_green_min'] ?? 1 }}-{{ $thresholds['threshold_green_max'] ?? 2 }}
+                        @endif
+                        ({{ $thresholds['threshold_green_label'] ?? 'Healthy' }})
+                    </span>
                 </td>
                 <td width="20%">
                     <div style="display: inline-block; width: 10px; height: 10px; background-color: #eab308; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">3 (Warning)</span>
+                    <span style="font-size: 8pt; color: #4a5568;">
+                        @if(($thresholds['threshold_yellow_min'] ?? 3) == ($thresholds['threshold_yellow_max'] ?? 3))
+                            {{ $thresholds['threshold_yellow_min'] ?? 3 }}
+                        @else
+                            {{ $thresholds['threshold_yellow_min'] ?? 3 }}-{{ $thresholds['threshold_yellow_max'] ?? 3 }}
+                        @endif
+                        ({{ $thresholds['threshold_yellow_label'] ?? 'Warning' }})
+                    </span>
                 </td>
                 <td width="20%">
                     <div style="display: inline-block; width: 10px; height: 10px; background-color: #f97316; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">4 (At-risk)</span>
+                    <span style="font-size: 8pt; color: #4a5568;">
+                        @if(($thresholds['threshold_orange_min'] ?? 4) == ($thresholds['threshold_orange_max'] ?? 4))
+                            {{ $thresholds['threshold_orange_min'] ?? 4 }}
+                        @else
+                            {{ $thresholds['threshold_orange_min'] ?? 4 }}-{{ $thresholds['threshold_orange_max'] ?? 4 }}
+                        @endif
+                        ({{ $thresholds['threshold_orange_label'] ?? 'At-risk' }})
+                    </span>
                 </td>
                 <td width="25%">
                     <div style="display: inline-block; width: 10px; height: 10px; background-color: #ef4444; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">5+ (Critical)</span>
+                    <span style="font-size: 8pt; color: #4a5568;">{{ $thresholds['threshold_red_min'] ?? 5 }}+ ({{ $thresholds['threshold_red_label'] ?? 'Critical' }})</span>
                 </td>
             </tr>
         </table>

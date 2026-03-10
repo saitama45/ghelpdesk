@@ -135,19 +135,45 @@ const exportPDF = () => {
                     <span class="font-bold text-gray-700 uppercase tracking-wider">Legend:</span>
                     <div class="flex items-center space-x-2">
                         <div class="w-4 h-4 bg-green-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">1 to 2 tickets (Healthy)</span>
+                        <span class="text-gray-600 font-medium">
+                            <template v-if="(thresholds.threshold_green_min || 1) == (thresholds.threshold_green_max || 2)">
+                                {{ thresholds.threshold_green_min || 1 }} ticket{{ (thresholds.threshold_green_min || 1) != 1 ? 's' : '' }}
+                            </template>
+                            <template v-else>
+                                {{ thresholds.threshold_green_min || 1 }} to {{ thresholds.threshold_green_max || 2 }} tickets
+                            </template>
+                            ({{ thresholds.threshold_green_label || 'Healthy' }})
+                        </span>
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-4 h-4 bg-yellow-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">3 tickets (Warning)</span>
+                        <span class="text-gray-600 font-medium">
+                            <template v-if="(thresholds.threshold_yellow_min || 3) == (thresholds.threshold_yellow_max || 3)">
+                                {{ thresholds.threshold_yellow_min || 3 }} ticket{{ (thresholds.threshold_yellow_min || 3) != 1 ? 's' : '' }}
+                            </template>
+                            <template v-else>
+                                {{ thresholds.threshold_yellow_min || 3 }} to {{ thresholds.threshold_yellow_max || 3 }} tickets
+                            </template>
+                            ({{ thresholds.threshold_yellow_label || 'Warning' }})
+                        </span>
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-4 h-4 bg-orange-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">4 tickets (At-risk)</span>
+                        <span class="text-gray-600 font-medium">
+                            <template v-if="(thresholds.threshold_orange_min || 4) == (thresholds.threshold_orange_max || 4)">
+                                {{ thresholds.threshold_orange_min || 4 }} ticket{{ (thresholds.threshold_orange_min || 4) != 1 ? 's' : '' }}
+                            </template>
+                            <template v-else>
+                                {{ thresholds.threshold_orange_min || 4 }} to {{ thresholds.threshold_orange_max || 4 }} tickets
+                            </template>
+                            ({{ thresholds.threshold_orange_label || 'At-risk' }})
+                        </span>
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-4 h-4 bg-red-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">5 tickets & above (Critical)</span>
+                        <span class="text-gray-600 font-medium">
+                            {{ thresholds.threshold_red_min || 5 }} tickets & above ({{ thresholds.threshold_red_label || 'Critical' }})
+                        </span>
                     </div>
                 </div>
             </div>
