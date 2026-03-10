@@ -1,12 +1,16 @@
 #!/bin/bash
 
-# Copy our custom Nginx config to the system location
+# 1. Map the Nginx root to /public
 cp /home/site/wwwroot/default.conf /etc/nginx/sites-available/default
-
-# Reload Nginx to apply the new root (/public)
 service nginx reload
 
-# Run Laravel house-keeping
+# 2. Run migrations on your Azure SQL Database
 php /home/site/wwwroot/artisan migrate --force
+
+# 3. Optimize Laravel ON THE SERVER (This replaces the GitHub steps)
 php /home/site/wwwroot/artisan config:cache
 php /home/site/wwwroot/artisan route:cache
+php /home/site/wwwroot/artisan view:cache
+
+# 4. Fix permissions for storage (Crucial for Azure Linux)
+chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache

@@ -34,16 +34,6 @@ jobs:
       - name: Create Storage Link
         run: php artisan storage:link
 
-      - name: Clear Laravel Cache
-        run: |
-          php artisan route:clear
-          php artisan config:clear
-          php artisan cache:clear
-          php artisan view:clear
-        env:
-          DB_CONNECTION: sqlite
-          DB_DATABASE: ":memory:"
-
       # This replaces your "Deploy to FTP" steps with the high-speed Azure Deploy
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
