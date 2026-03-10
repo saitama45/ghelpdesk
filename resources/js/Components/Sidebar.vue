@@ -122,35 +122,33 @@ const canSeeSettings = computed(() => {
 </script>
 
 <template>
-    <div class="flex h-screen sticky top-0">
-        <!-- Sidebar -->
-        <div
-            :class="[
-                'bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col h-full',
-                isCollapsed ? 'w-20' : 'w-64'
-            ]"
-        >
-            <!-- Sidebar Header -->
-            <div class="flex items-center justify-between p-4 border-b border-gray-800">
-                <div v-if="!isCollapsed" class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
-                        <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
-                    </div>
-                    <span class="text-xl font-semibold">TAS</span>
+    <aside
+        :class="[
+            'bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col h-full shrink-0',
+            isCollapsed ? 'w-20' : 'w-64'
+        ]"
+    >
+        <!-- Sidebar Header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
+            <div v-if="!isCollapsed" class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
+                    <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
                 </div>
-
-                <button
-                    @click="toggleSidebar"
-                    class="p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200"
-                    :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-                >
-                    <Bars3Icon v-if="isCollapsed" class="w-5 h-5" />
-                    <XMarkIcon v-else class="w-5 h-5" />
-                </button>
+                <span class="text-xl font-semibold">TAS</span>
             </div>
 
-            <!-- Navigation -->
-            <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+            <button
+                @click="toggleSidebar"
+                class="p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200"
+                :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            >
+                <Bars3Icon v-if="isCollapsed" class="w-5 h-5" />
+                <XMarkIcon v-else class="w-5 h-5" />
+            </button>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
                 <!-- Dashboard Link -->
                 <Link
                     :href="route('dashboard')"
@@ -445,7 +443,7 @@ const canSeeSettings = computed(() => {
             </nav>
 
             <!-- User Section -->
-            <div class="p-4 border-t border-gray-800">
+            <div class="p-4 border-t border-gray-800 shrink-0">
                 <div class="flex items-center">
                     <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
                         <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
@@ -461,8 +459,7 @@ const canSeeSettings = computed(() => {
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+    </aside>
 </template>
 
 <style scoped>

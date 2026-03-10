@@ -131,121 +131,103 @@ const exportPDF = () => {
 
             <!-- Legend Section -->
             <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <div class="flex items-center space-x-6 text-xs">
-                    <span class="font-bold text-gray-700 uppercase tracking-wider">Legend:</span>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-4 h-4 bg-green-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">
-                            <template v-if="(thresholds.threshold_green_min || 1) == (thresholds.threshold_green_max || 2)">
-                                {{ thresholds.threshold_green_min || 1 }} ticket{{ (thresholds.threshold_green_min || 1) != 1 ? 's' : '' }}
-                            </template>
-                            <template v-else>
-                                {{ thresholds.threshold_green_min || 1 }} to {{ thresholds.threshold_green_max || 2 }} tickets
-                            </template>
-                            ({{ thresholds.threshold_green_label || 'Healthy' }})
-                        </span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-4 h-4 bg-yellow-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">
-                            <template v-if="(thresholds.threshold_yellow_min || 3) == (thresholds.threshold_yellow_max || 3)">
-                                {{ thresholds.threshold_yellow_min || 3 }} ticket{{ (thresholds.threshold_yellow_min || 3) != 1 ? 's' : '' }}
-                            </template>
-                            <template v-else>
-                                {{ thresholds.threshold_yellow_min || 3 }} to {{ thresholds.threshold_yellow_max || 3 }} tickets
-                            </template>
-                            ({{ thresholds.threshold_yellow_label || 'Warning' }})
-                        </span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-4 h-4 bg-orange-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">
-                            <template v-if="(thresholds.threshold_orange_min || 4) == (thresholds.threshold_orange_max || 4)">
-                                {{ thresholds.threshold_orange_min || 4 }} ticket{{ (thresholds.threshold_orange_min || 4) != 1 ? 's' : '' }}
-                            </template>
-                            <template v-else>
-                                {{ thresholds.threshold_orange_min || 4 }} to {{ thresholds.threshold_orange_max || 4 }} tickets
-                            </template>
-                            ({{ thresholds.threshold_orange_label || 'At-risk' }})
-                        </span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-4 h-4 bg-red-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-medium">
-                            {{ thresholds.threshold_red_min || 5 }} tickets & above ({{ thresholds.threshold_red_label || 'Critical' }})
-                        </span>
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-[10px] sm:text-xs">
+                    <span class="font-black text-gray-700 uppercase tracking-widest">Legend:</span>
+                    <div class="grid grid-cols-2 sm:flex sm:items-center gap-3 sm:gap-6">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded shadow-sm"></div>
+                            <span class="text-gray-600 font-bold">
+                                <template v-if="(thresholds.threshold_green_min || 1) == (thresholds.threshold_green_max || 2)">
+                                    {{ thresholds.threshold_green_min || 1 }}
+                                </template>
+                                <template v-else>
+                                    {{ thresholds.threshold_green_min || 1 }}-{{ thresholds.threshold_green_max || 2 }}
+                                </template>
+                                ({{ thresholds.threshold_green_label || 'Healthy' }})
+                            </span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 sm:w-4 sm:h-4 bg-yellow-500 rounded shadow-sm"></div>
+                            <span class="text-gray-600 font-bold">
+                                <template v-if="(thresholds.threshold_yellow_min || 3) == (thresholds.threshold_yellow_max || 3)">
+                                    {{ thresholds.threshold_yellow_min || 3 }}
+                                </template>
+                                <template v-else>
+                                    {{ thresholds.threshold_yellow_min || 3 }}-{{ thresholds.threshold_yellow_max || 3 }}
+                                </template>
+                                ({{ thresholds.threshold_yellow_label || 'Warning' }})
+                            </span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 sm:w-4 sm:h-4 bg-orange-500 rounded shadow-sm"></div>
+                            <span class="text-gray-600 font-bold">
+                                <template v-if="(thresholds.threshold_orange_min || 4) == (thresholds.threshold_orange_max || 4)">
+                                    {{ thresholds.threshold_orange_min || 4 }}
+                                </template>
+                                <template v-else>
+                                    {{ thresholds.threshold_orange_min || 4 }}-{{ thresholds.threshold_orange_max || 4 }}
+                                </template>
+                                ({{ thresholds.threshold_orange_label || 'At-risk' }})
+                            </span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 sm:w-4 sm:h-4 bg-red-500 rounded shadow-sm"></div>
+                            <span class="text-gray-600 font-bold">
+                                {{ thresholds.threshold_red_min || 5 }}+ ({{ thresholds.threshold_red_label || 'Critical' }})
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Area Summary Section -->
-            <div class="space-y-8 mb-8">
+            <div class="space-y-6 sm:space-y-8 mb-8">
                 <!-- North Area -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <table class="w-full border-collapse table-fixed">
-                        <thead>
-                            <tr class="bg-gray-800">
-                                <th colspan="4" class="py-2.5 text-sm font-bold text-white tracking-[0.5em] text-center uppercase border-b border-gray-700">
-                                    N O R T H &nbsp;&nbsp; A R E A
-                                </th>
-                            </tr>
-                            <tr class="bg-gray-50">
-                                <th v-for="item in summary.north" :key="item.sector" class="py-2 text-[10px] font-bold text-gray-600 uppercase tracking-wider border-r last:border-0 border-gray-200">
-                                    Sector {{ item.sector }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td v-for="item in summary.north" :key="item.sector" class="py-3 px-2 text-center border-r last:border-0 border-gray-200 h-12 align-middle">
-                                    <span class="text-xs font-bold text-blue-600 truncate block" :title="item.user">{{ item.user }}</span>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td v-for="item in summary.north" :key="item.sector" 
-                                    class="py-8 px-2 text-center border-r last:border-0 border-gray-200 align-middle text-2xl font-black transition-all duration-500 shadow-inner"
-                                    :class="getSummaryBoxColor(item.max_tickets).class"
-                                    :style="getSummaryBoxColor(item.max_tickets).style"
-                                >
-                                    {{ item.max_tickets }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="bg-gray-800 py-2.5 text-center">
+                        <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">N O R T H &nbsp;&nbsp; A R E A</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border-t border-gray-200">
+                        <div v-for="item in summary.north" :key="item.sector" class="flex flex-col">
+                            <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
+                                <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">Sector {{ item.sector }}</span>
+                            </div>
+                            <div class="p-2 text-center h-10 flex items-center justify-center">
+                                <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.user">{{ item.user }}</span>
+                            </div>
+                            <div 
+                                class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center"
+                                :class="getSummaryBoxColor(item.max_tickets).class"
+                                :style="getSummaryBoxColor(item.max_tickets).style"
+                            >
+                                {{ item.max_tickets }}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- South Area -->
                 <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <table class="w-full border-collapse table-fixed">
-                        <thead>
-                            <tr class="bg-gray-800">
-                                <th colspan="4" class="py-2.5 text-sm font-bold text-white tracking-[0.5em] text-center uppercase border-b border-gray-700">
-                                    S O U T H &nbsp;&nbsp; A R E A
-                                </th>
-                            </tr>
-                            <tr class="bg-gray-50">
-                                <th v-for="item in summary.south" :key="item.sector" class="py-2 text-[10px] font-bold text-gray-600 uppercase tracking-wider border-r last:border-0 border-gray-200">
-                                    Sector {{ item.sector }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td v-for="item in summary.south" :key="item.sector" class="py-3 px-2 text-center border-r last:border-0 border-gray-200 h-12 align-middle">
-                                    <span class="text-xs font-bold text-blue-600 truncate block" :title="item.user">{{ item.user }}</span>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td v-for="item in summary.south" :key="item.sector" 
-                                    class="py-8 px-2 text-center border-r last:border-0 border-gray-200 align-middle text-2xl font-black transition-all duration-500 shadow-inner"
-                                    :class="getSummaryBoxColor(item.max_tickets).class"
-                                    :style="getSummaryBoxColor(item.max_tickets).style"
-                                >
-                                    {{ item.max_tickets }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="bg-gray-800 py-2.5 text-center">
+                        <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">S O U T H &nbsp;&nbsp; A R E A</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border-t border-gray-200">
+                        <div v-for="item in summary.south" :key="item.sector" class="flex flex-col">
+                            <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
+                                <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">Sector {{ item.sector }}</span>
+                            </div>
+                            <div class="p-2 text-center h-10 flex items-center justify-center">
+                                <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.user">{{ item.user }}</span>
+                            </div>
+                            <div 
+                                class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center"
+                                :class="getSummaryBoxColor(item.max_tickets).class"
+                                :style="getSummaryBoxColor(item.max_tickets).style"
+                            >
+                                {{ item.max_tickets }}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

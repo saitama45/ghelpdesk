@@ -224,57 +224,88 @@ const updateMap = async () => {
     if (window.google && window.google.maps) {
         const pos = { lat: latitude.value, lng: longitude.value };
         
-        if (!map) {
-            try {
-                // Ensure element is still there after async imports
-                const { Map } = await google.maps.importLibrary("maps");
-                const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
-                
-                if (!mapElement.value) return;
+        try {
+            if (!map) {
+                // Try to use Advanced Markers first (requires Map ID)
+                try {
+                    const { Map } = await google.maps.importLibrary("maps");
+                    const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+                    
+                    if (!mapElement.value) return;
 
-                map = new Map(mapElement.value, {
-                    center: pos,
-                    zoom: 17,
-                    mapId: 'DTR_MAP_ID',
-                    disableDefaultUI: true,
-                });
-                
-                marker = new AdvancedMarkerElement({
-                    map: map,
-                    position: pos,
-                    title: "You are here",
-                });
-
-                // Draw circles for assigned stores
-                props.assignedStores.forEach(store => {
-                    const circle = new google.maps.Circle({
-                        strokeColor: "#3B82F6",
-                        strokeOpacity: 0.8,
-                        strokeWeight: 2,
-                        fillColor: "#3B82F6",
-                        fillOpacity: 0.15,
-                        map: map,
-                        center: { lat: store.latitude, lng: store.longitude },
-                        radius: store.radius_meters,
+                    map = new Map(mapElement.value, {
+                        center: pos,
+                        zoom: 17,
+                        mapId: 'DTR_MAP_ID',
+                        disableDefaultUI: true,
                     });
-                    geofenceCircles.push(circle);
-                });
+                    
+                    marker = new AdvancedMarkerElement({
+                        map: map,
+                        position: pos,
+                        title: "You are here",
+                    });
 
-            } catch (e) {
-                map = new google.maps.Map(mapElement.value, {
-                    center: pos,
-                    zoom: 17,
-                    disableDefaultUI: true,
-                });
-                marker = new google.maps.Marker({
-                    position: pos,
-                    map: map
-                });
+                    // Draw circles for assigned stores
+                    props.assignedStores.forEach(store => {
+                        if (store.latitude && store.longitude) {
+                            const circle = new google.maps.Circle({
+                                strokeColor: "#3B82F6",
+                                strokeOpacity: 0.8,
+                                strokeWeight: 2,
+                                fillColor: "#3B82F6",
+                                fillOpacity: 0.15,
+                                map: map,
+                                center: { lat: store.latitude, lng: store.longitude },
+                                radius: store.radius_meters || 100,
+                            });
+                            geofenceCircles.push(circle);
+                        }
+                    });
+                } catch (advError) {
+                    console.warn("Advanced markers failed, falling back to standard markers", advError);
+                    // Standard Fallback
+                    map = new google.maps.Map(mapElement.value, {
+                        center: pos,
+                        zoom: 17,
+                        disableDefaultUI: true,
+                    });
+                    marker = new google.maps.Marker({
+                        position: pos,
+                        map: map,
+                        title: "You are here"
+                    });
+                    
+                    props.assignedStores.forEach(store => {
+                        if (store.latitude && store.longitude) {
+                            const circle = new google.maps.Circle({
+                                strokeColor: "#3B82F6",
+                                strokeOpacity: 0.8,
+                                strokeWeight: 2,
+                                fillColor: "#3B82F6",
+                                fillOpacity: 0.15,
+                                map: map,
+                                center: { lat: store.latitude, lng: store.longitude },
+                                radius: store.radius_meters || 100,
+                            });
+                            geofenceCircles.push(circle);
+                        }
+                    });
+                }
+            } else {
+                // Map already exists, just update position
+                map.setCenter(pos);
+                if (marker) {
+                    if (typeof marker.setPosition === 'function') {
+                        marker.setPosition(pos);
+                    } else {
+                        marker.position = pos;
+                    }
+                }
             }
-        } else {
-            map.setCenter(pos);
-            if (marker.setPosition) marker.setPosition(pos);
-            else marker.position = pos;
+        } catch (globalError) {
+            console.error("Map update failed", globalError);
+            locationError.value = "Map display error. Check API Key restrictions.";
         }
     }
 };
@@ -472,36 +503,36 @@ const statusMessage = computed(() => {
 
                 <!-- Action Section -->
                 <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100">
-                    <div class="bg-gray-50 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 border border-gray-100 shadow-inner">
+                    <div class="bg-gray-50 rounded-xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-6 border border-gray-100 shadow-inner">
                         <div class="text-center md:text-left">
-                            <p class="text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
-                            <p class="text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
+                            <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
+                            <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
                             <div class="flex items-center gap-2 mt-1 justify-center md:justify-start">
                                 <div :class="['w-2 h-2 rounded-full animate-pulse', nextAction === 'Time In' ? 'bg-red-500' : 'bg-green-500']"></div>
-                                <p class="text-sm font-bold" :class="nextAction === 'Time In' ? 'text-red-600' : 'text-green-600'">
+                                <p class="text-xs sm:text-sm font-bold" :class="nextAction === 'Time In' ? 'text-red-600' : 'text-green-600'">
                                     Status: {{ nextAction === 'Time In' ? 'OUT' : 'IN' }}
                                 </p>
                             </div>
                         </div>
 
-                        <div class="flex flex-col items-center gap-3">
-                            <div v-if="!canSave" class="flex items-center gap-2 text-orange-600 bg-orange-50 px-4 py-2 rounded-lg border border-orange-100 text-sm font-bold">
-                                <ExclamationCircleIcon class="w-4 h-4" />
+                        <div class="flex flex-col items-center gap-3 w-full sm:w-auto">
+                            <div v-if="!canSave" class="flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100 text-[10px] sm:text-xs font-bold text-center">
+                                <ExclamationCircleIcon class="w-4 h-4 flex-shrink-0" />
                                 {{ statusMessage }}
                             </div>
 
                             <PrimaryButton 
                                 @click="submit" 
                                 :disabled="!canSave"
-                                class="px-16 py-5 text-xl font-black shadow-xl uppercase tracking-widest transition-all"
+                                class="w-full sm:px-16 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl uppercase tracking-widest transition-all"
                                 :class="[
                                     canSave 
-                                        ? (nextAction === 'Time In' ? 'bg-green-600 hover:bg-green-700 hover:scale-105' : 'bg-orange-600 hover:bg-orange-700 hover:scale-105') 
+                                        ? (nextAction === 'Time In' ? 'bg-green-600 hover:bg-green-700 active:scale-95' : 'bg-orange-600 hover:bg-orange-700 active:scale-95') 
                                         : 'bg-gray-300'
                                 ]"
                             >
                                 <template v-if="form.processing">
-                                    <ArrowPathIcon class="w-6 h-6 animate-spin mr-2" />
+                                    <ArrowPathIcon class="w-5 h-5 sm:w-6 sm:h-6 animate-spin mr-2" />
                                     Saving...
                                 </template>
                                 <template v-else>
@@ -509,17 +540,17 @@ const statusMessage = computed(() => {
                                 </template>
                             </PrimaryButton>
                             
-                            <div class="flex gap-6">
-                                <div class="flex items-center gap-1.5 text-[10px] uppercase font-black" :class="capturedImage ? 'text-green-600' : 'text-gray-400'">
-                                    <CheckCircleIcon class="w-3.5 h-3.5" />
+                            <div class="flex gap-4 sm:gap-6">
+                                <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="capturedImage ? 'text-green-600' : 'text-gray-400'">
+                                    <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                     Selfie
                                 </div>
-                                <div class="flex items-center gap-1.5 text-[10px] uppercase font-black" :class="isLocationStable ? 'text-green-600' : 'text-gray-400'">
-                                    <CheckCircleIcon class="w-3.5 h-3.5" />
+                                <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="isLocationStable ? 'text-green-600' : 'text-gray-400'">
+                                    <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                     Stable
                                 </div>
-                                <div class="flex items-center gap-1.5 text-[10px] uppercase font-black" :class="isWithinStoreVicinity ? 'text-green-600' : 'text-gray-400'">
-                                    <CheckCircleIcon class="w-3.5 h-3.5" />
+                                <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="isWithinStoreVicinity ? 'text-green-600' : 'text-gray-400'">
+                                    <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                     Vicinity
                                 </div>
                             </div>

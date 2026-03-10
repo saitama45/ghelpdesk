@@ -84,91 +84,93 @@ const getPriorityColor = (priority) => {
 
     <AppLayout>
         <template #header>
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <span class="text-xl font-bold text-gray-900">Dashboard</span>
-                
-                <div class="flex items-center space-x-2">
-                    <div class="flex items-center bg-white border border-gray-300 rounded-lg shadow-sm px-2">
-                        <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" /></svg>
-                        
-                        <select v-model="filterForm.year" class="border-0 focus:ring-0 text-sm py-1.5 bg-transparent">
-                            <option value="">All Years</option>
-                            <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
-                        </select>
-                        
-                        <div class="w-px h-4 bg-gray-300 mx-1"></div>
-                        
-                        <select v-model="filterForm.month" class="border-0 focus:ring-0 text-sm py-1.5 bg-transparent">
-                            <option value="">All Months</option>
-                            <option v-for="m in months" :key="m.id" :value="m.id">{{ m.name }}</option>
-                        </select>
-
-                        <button v-if="filterForm.year || filterForm.month" @click="clearFilters" class="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <h2 class="text-xl font-bold text-gray-900">Dashboard</h2>
         </template>
 
         <!-- Welcome Section -->
-        <div class="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl shadow-lg p-6 mb-8 text-white">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <div v-if="user.profile_photo" class="w-16 h-16 rounded-full border-4 border-white/30 overflow-hidden shadow-inner">
-                        <img :src="'/storage/' + user.profile_photo" class="w-full h-full object-cover" :alt="user.name">
-                    </div>
-                    <div v-else class="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold border-4 border-white/30">
-                        {{ user.name.charAt(0) }}
-                    </div>
-                    <div>
-                        <h2 class="text-2xl font-bold">Welcome back, {{ user.name }}!</h2>
-                        <p class="text-blue-100 mt-0.5">You have {{ stats.open + stats.in_progress }} active tickets needing attention.</p>
-                    </div>
+        <div class="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl shadow-lg p-4 sm:p-6 mb-6 text-white">
+            <div class="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4">
+                <div v-if="user.profile_photo" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-white/30 overflow-hidden shadow-inner flex-shrink-0">
+                    <img :src="'/storage/' + user.profile_photo" class="w-full h-full object-cover" :alt="user.name">
+                </div>
+                <div v-else class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold border-4 border-white/30 flex-shrink-0">
+                    {{ user.name.charAt(0) }}
+                </div>
+                <div>
+                    <h2 class="text-xl sm:text-2xl font-black">Welcome back, {{ user.name }}!</h2>
+                    <p class="text-blue-100 mt-1 text-sm sm:text-base">You have <span class="font-bold text-white underline decoration-blue-400">{{ stats.open + stats.in_progress }}</span> active tickets needing attention.</p>
                 </div>
             </div>
         </div>
 
+        <!-- Filters Section -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                Overview Performance
+            </h3>
+            
+            <div class="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm px-3 py-1.5 self-start sm:self-auto">
+                <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" /></svg>
+                
+                <select v-model="filterForm.year" class="border-0 focus:ring-0 text-sm font-bold text-gray-700 py-0 bg-transparent cursor-pointer">
+                    <option value="">All Years</option>
+                    <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
+                </select>
+                
+                <div class="w-px h-4 bg-gray-200 mx-2"></div>
+                
+                <select v-model="filterForm.month" class="border-0 focus:ring-0 text-sm font-bold text-gray-700 py-0 bg-transparent cursor-pointer">
+                    <option value="">All Months</option>
+                    <option v-for="m in months" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+
+                <button v-if="filterForm.year || filterForm.month" @click="clearFilters" class="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors" title="Clear Filters">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+        </div>
+
         <!-- Stats Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-            <div class="bg-white rounded-xl shadow-sm p-5 border-b-4 border-blue-500 flex flex-col justify-between">
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-8">
+            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-blue-500 flex flex-col justify-between">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total</p>
-                    <div class="p-2 bg-blue-50 rounded-lg"><svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></div>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Total</p>
+                    <div class="p-1.5 bg-blue-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></div>
                 </div>
-                <p class="text-3xl font-black text-gray-900 mt-2">{{ stats.total }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.total }}</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-5 border-b-4 border-yellow-500 flex flex-col justify-between">
+            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-yellow-500 flex flex-col justify-between">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Open</p>
-                    <div class="p-2 bg-yellow-50 rounded-lg"><svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Open</p>
+                    <div class="p-1.5 bg-yellow-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
                 </div>
-                <p class="text-3xl font-black text-gray-900 mt-2">{{ stats.open }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.open }}</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-5 border-b-4 border-purple-500 flex flex-col justify-between">
+            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-purple-500 flex flex-col justify-between">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">In Progress</p>
-                    <div class="p-2 bg-purple-50 rounded-lg"><svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Active</p>
+                    <div class="p-1.5 bg-purple-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
                 </div>
-                <p class="text-3xl font-black text-gray-900 mt-2">{{ stats.in_progress }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.in_progress }}</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-5 border-b-4 border-red-500 flex flex-col justify-between">
+            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-red-500 flex flex-col justify-between">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Unassigned</p>
-                    <div class="p-2 bg-red-50 rounded-lg"><svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg></div>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Urgent</p>
+                    <div class="p-1.5 bg-red-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg></div>
                 </div>
-                <p class="text-3xl font-black text-red-600 mt-2">{{ stats.unassigned }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-red-600 mt-1">{{ stats.unassigned }}</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-5 border-b-4 border-green-500 flex flex-col justify-between">
+            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-green-500 flex flex-col justify-between col-span-2 lg:col-span-1">
                 <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Resolved</p>
-                    <div class="p-2 bg-green-50 rounded-lg"><svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Closed</p>
+                    <div class="p-1.5 bg-green-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
                 </div>
-                <p class="text-3xl font-black text-gray-900 mt-2">{{ stats.closed }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.closed }}</p>
             </div>
         </div>
 
