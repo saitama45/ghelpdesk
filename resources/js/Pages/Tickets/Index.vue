@@ -190,10 +190,8 @@ watch(defaultCompanyId, (newId) => {
     }
 }, { immediate: true });
 
-const types = ['bug', 'feature', 'task', 'spike'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting'];
-const severities = ['critical', 'major', 'minor', 'cosmetic'];
 
 const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
@@ -279,6 +277,18 @@ const acceptTicket = (ticket) => {
 
 
 
+const priorityMap = {
+    'urgent': 'P1',
+    'high': 'P2',
+    'medium': 'P3',
+    'low': 'P4'
+};
+
+const getPriorityLabel = (priority) => {
+    const p = String(priority || '').toLowerCase();
+    return priorityMap[p] ? `${priorityMap[p]} ${p}` : p;
+};
+
 const getPriorityColor = (priority) => {
     const p = String(priority || '').toLowerCase();
     switch (p) {
@@ -311,16 +321,6 @@ const getStatusColor = (status) => {
         default: return 'text-gray-800 bg-gray-100';
     }
 };
-
-const getTypeColor = (type) => {
-    switch (type) {
-        case 'bug': return 'text-red-600';
-        case 'feature': return 'text-green-600';
-        case 'task': return 'text-blue-600';
-        case 'spike': return 'text-purple-600';
-        default: return 'text-gray-600';
-    }
-}
 
 const getSlaRowClass = (ticket) => {
     if (!ticket.sla_metric) return 'border-l-gray-200 hover:bg-gray-50';
@@ -371,27 +371,25 @@ const getSlaRowClass = (ticket) => {
                 @change-per-page="pagination.changePerPage"
             >
                 <template #actions>
-                    <div class="flex items-center space-x-3">
-                        <select 
-                            v-model="filterStatus" 
-                            @change="applyFilter"
-                            class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                        >
-                            <option v-for="option in filterOptions" :key="option.value" :value="option.value">
-                                {{ option.label }}
-                            </option>
-                        </select>
-                        <button
-                            v-if="hasPermission('tickets.create')"
-                            @click="showCreateModal = true"
-                            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm"
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <span>Create Ticket</span>
-                        </button>
-                    </div>
+                    <select 
+                        v-model="filterStatus" 
+                        @change="applyFilter"
+                        class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    >
+                        <option v-for="option in filterOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                    <button
+                        v-if="hasPermission('tickets.create')"
+                        @click="showCreateModal = true"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm whitespace-nowrap"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Create Ticket</span>
+                    </button>
                 </template>
 
                 <template #header>
@@ -399,7 +397,6 @@ const getSlaRowClass = (ticket) => {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA</th>
@@ -439,14 +436,9 @@ const getSlaRowClass = (ticket) => {
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {{ ticket.store ? ticket.store.name : '-' }}
                         </td>
-                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="text-xs font-bold uppercase tracking-tight" :class="getTypeColor(ticket.type)">
-                                {{ ticket.type }}
-                            </span>
-                        </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
-                                {{ ticket.item?.priority || ticket.priority }}
+                                {{ getPriorityLabel(ticket.item?.priority || ticket.priority) }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
@@ -607,19 +599,11 @@ const getSlaRowClass = (ticket) => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Description</label>
                             <textarea v-model="createForm.description" maxlength="65535" rows="4" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type</label>
-                                <select v-model="createForm.type" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm capitalize">
-                                    <option v-for="t in types" :key="t" :value="t">{{ t }}</option>
-                                </select>
-                            </div>
-                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Severity</label>
-                                <select v-model="createForm.severity" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm capitalize">
-                                    <option v-for="s in severities" :key="s" :value="s">{{ s }}</option>
-                                </select>
-                            </div>
+                        <div v-if="createForm.item_id" class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
+                            <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(createForm.priority)">
+                                {{ getPriorityLabel(createForm.priority) }}
+                            </span>
                         </div>
 
                         <div v-if="hasPermission('tickets.assign')">

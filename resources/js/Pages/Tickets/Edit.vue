@@ -248,10 +248,8 @@ const isEditingDescription = ref(false);
 const titleInput = ref(null);
 const descriptionInput = ref(null);
 
-const types = ['bug', 'feature', 'task', 'spike'];
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting'];
-const severities = ['critical', 'major', 'minor', 'cosmetic'];
 
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
@@ -574,6 +572,18 @@ const deleteTicket = async () => {
     }
 };
 
+const priorityMap = {
+    'urgent': 'P1',
+    'high': 'P2',
+    'medium': 'P3',
+    'low': 'P4'
+};
+
+const getPriorityLabel = (priority) => {
+    const p = String(priority || '').toLowerCase();
+    return priorityMap[p] ? `${priorityMap[p]} ${p}` : p;
+};
+
 const getPriorityColor = (priority) => {
     switch (priority) {
         case 'urgent': return 'text-red-900 bg-red-200';
@@ -747,18 +757,11 @@ const linkify = (text) => {
                                     </CustomSelect>
                                 </div>
 
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Severity</label>
-                                    <select v-model="editForm.severity" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm capitalize disabled:bg-gray-100 disabled:text-gray-500">
-                                        <option v-for="s in severities" :key="s" :value="s">{{ s }}</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Type</label>
-                                    <select v-model="editForm.type" :disabled="!hasPermission('tickets.edit')" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm capitalize disabled:bg-gray-100 disabled:text-gray-500">
-                                        <option v-for="t in types" :key="t" :value="t">{{ t }}</option>
-                                    </select>
+                                <div v-if="editForm.priority" class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
+                                    <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(editForm.priority)">
+                                        {{ getPriorityLabel(editForm.priority) }}
+                                    </span>
                                 </div>
                             </div>
                         </div>
