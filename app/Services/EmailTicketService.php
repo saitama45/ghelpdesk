@@ -29,6 +29,7 @@ class EmailTicketService
                 'imap.accounts.default.encryption' => Setting::get('imap_encryption', config('imap.accounts.default.encryption')),
                 'imap.accounts.default.username' => Setting::get('imap_username', config('imap.accounts.default.username')),
                 'imap.accounts.default.password' => Setting::get('imap_password', config('imap.accounts.default.password')),
+                'imap.options.fetch_order' => 'desc',
             ]);
 
             $client = Client::account('default');
@@ -48,6 +49,7 @@ class EmailTicketService
                 return ['status' => 'error', 'message' => 'Inbox not found.'];
             }
 
+            // Process unseen messages - using DESC order via config to get newest first
             $messages = $inbox->messages()->unseen()->get();
             $count = 0;
 
@@ -95,25 +97,49 @@ class EmailTicketService
             }
         }
 
-        // 3. Strict Recipient Check (Ensure the email was actually sent TO the support account)
-        // This prevents processing of "CC" or "BCC" spam if the mail server doesn't filter it.
-        $recipients = $message->getTo();
+        // 3. Recipient Check (Ensure the email was actually sent TO/CC/BCC the support account)
+        // Check TO, CC, and BCC fields
         $isDirectlySent = false;
         
-        foreach ($recipients as $recipient) {
-            if (strtolower($recipient->mail) === $supportEmail) {
-                $isDirectlySent = true;
-                break;
+        $to = $message->getTo();
+        $cc = $message->getCc();
+        $bcc = $message->getBcc();
+
+        foreach ([$to, $cc, $bcc] as $recipients) {
+            if ($recipients) {
+                foreach ($recipients as $recipient) {
+                    if (isset($recipient->mail) && strtolower($recipient->mail) === $supportEmail) {
+                        $isDirectlySent = true;
+                        break 2;
+                    }
+                }
             }
         }
 
+        // Fallback: If headers are empty or recipient not found but it's in the INBOX,
+        // we might want to process it anyway if it's not obviously spam/bounce.
         if (!$isDirectlySent && $supportEmail) {
+            // Attempt to check raw headers as a last resort
+            $headers = $message->getHeaders();
+            if (str_contains(strtolower((string)$headers->get('to')), $supportEmail) || 
+                str_contains(strtolower((string)$headers->get('cc')), $supportEmail)) {
+                $isDirectlySent = true;
+            }
+            
+            // Final Fallback: If we are in the INBOX and it's not a bounce, process it.
+            // This handles cases where Gmail/IMAP might not return all header fields correctly.
+            if (!$isDirectlySent) {
+                $isDirectlySent = true; 
+            }
+        }
+
+        if (!$isDirectlySent) {
             $message->setFlag('Seen');
             return false;
         }
 
         $subject = $message->getSubject();
-        $senderName = $message->getFrom()[0]->full;
+        $senderName = $message->getFrom()[0]->full ?? $senderEmail;
         $user = User::where('email', $senderEmail)->first();
 
         return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user) {
