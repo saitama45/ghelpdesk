@@ -138,8 +138,8 @@ class EmailTicketService
             return false;
         }
 
-        $subject = $message->getSubject();
-        $senderName = $message->getFrom()[0]->full ?? $senderEmail;
+        $subject = $this->decodeMimeHeader($message->getSubject());
+        $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
         $user = User::where('email', $senderEmail)->first();
 
         return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user) {
@@ -181,13 +181,13 @@ class EmailTicketService
 
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket) {
-                $fileName = time() . '_' . $attachment->getName();
+                $fileName = time() . '_' . $this->decodeMimeHeader($attachment->getName());
                 $filePath = 'ticket-attachments/' . $fileName;
                 Storage::disk('public')->put($filePath, $attachment->getContent());
 
                 TicketAttachment::create([
                     'ticket_id' => $ticket->id,
-                    'file_name' => $attachment->getName(),
+                    'file_name' => $this->decodeMimeHeader($attachment->getName()),
                     'file_storage_path' => $filePath,
                     'file_size_bytes' => $attachment->size,
                 ]);
@@ -196,5 +196,16 @@ class EmailTicketService
             $message->setFlag('Seen');
             return true;
         });
+    }
+
+    /**
+     * Decode MIME-encoded string (e.g. =?UTF-8?Q?...?=)
+     */
+    protected function decodeMimeHeader($string)
+    {
+        if (!$string) return '';
+        
+        // iconv_mime_decode is robust for handling various charsets and malformed strings.
+        return iconv_mime_decode($string, 0, 'UTF-8') ?: $string;
     }
 }

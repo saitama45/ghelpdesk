@@ -23,6 +23,11 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
+        // Force HTTPS if we are in production (Azure)
+        if (config('app.env') === 'production') {
+            URL::forceScheme('https');
+        }
+
         // Implicitly grant "Admin", "Dev", and "Solutions Admin" roles all permissions
         Gate::before(function ($user, $ability) {
             return $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) ? true : null;
