@@ -9,6 +9,7 @@ use App\Models\TicketAttachment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Webklex\IMAP\Facades\Client;
 
 class EmailTicketService
@@ -272,13 +273,14 @@ class EmailTicketService
 
             // Re-open ticket if it was resolved or closed
             if (in_array($ticket->status, ['resolved', 'closed'])) {
+                $oldStatus = $ticket->status;
                 $ticket->update(['status' => 'open']);
                 
                 \App\Models\TicketHistory::create([
                     'ticket_id' => $ticket->id,
                     'user_id' => $user ? $user->id : null,
                     'column_changed' => 'status',
-                    'old_value' => $ticket->status,
+                    'old_value' => $oldStatus,
                     'new_value' => 'open',
                     'changed_at' => now('Asia/Manila'),
                 ]);
@@ -309,60 +311,74 @@ class EmailTicketService
      */
     protected function stripQuotedText($body)
     {
-        // 1. Decode HTML entities first (handles &lt;, &gt;, &quot;, &#39;, etc.)
+        // 1. Decode HTML entities first
         $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         
         // 2. Normalize line endings and whitespace
         $body = str_replace(["\r\n", "\r"], "\n", $body);
         
-        // Replace narrow non-breaking space (common in Gmail timestamps) and NBSP with regular space
+        // Replace various whitespace characters with regular spaces
         $body = str_replace(["\xe2\x80\xaf", "\xc2\xa0", "\t"], " ", $body);
         
-        // Save original for fallback if truncation is too aggressive
-        $originalBody = $body;
-
-        // 3. Custom separator (highest priority)
+        // 3. Custom separator (Hard cut)
         $separator = "### Please type your reply above this line ###";
         if (str_contains($body, $separator)) {
             $parts = explode($separator, $body);
-            return trim($parts[0]);
+            $body = $parts[0]; // Truncate but CONTINUE to clean with regex
         }
 
-        // 4. Split on "On ... wrote:" pattern - this captures the reply header
-        if (preg_match('/\n\s*On\s+.+?wrote:\s*$/ims', $body, $matches, PREG_OFFSET_CAPTURE)) {
-            $body = substr($body, 0, $matches[0][1]);
-        }
-
-        // 5. Check for other common non-quote markers
-        $otherMarkers = [
-            '/(?:\n|^)\s*---\s*Original Message\s*---/i',
-            '/(?:\n|^)\s*-----Original Message-----/i',
-            '/(?:\n|^)\s*________________________________/i',
-            '/(?:\n|^)\s*Sent from my (?:iPhone|Android|Samsung|iPad)/i',
-            '/(?:\n|^)\s*From:\s+.*?\n(?:Sent|To|Subject):/is',
-            '/(?:\n|^)\s*---------- Forwarded message ---------/i',
+        // 4. Regex markers for reply headers
+        $markers = [
+            // Standard "On [date], [name] <[email]> wrote:"
+            // Aggressive multi-line check to catch 'On' followed by 'wrote' or 'sent'
+            '/\n\s*On\s+.{1,150}?(?:\d{4}|\d{1,2}:\d{2}).{1,100}?(?:wrote|sent):?/is',
+            '/\bOn\s+.{1,150}?(?:\d{4}|\d{1,2}:\d{2}).{1,100}?(?:wrote|sent):?/is',
+            
+            // "From: [name] [mailto:email] Sent: [date] To: [name]"
+            '/\n\s*From:\s+.{1,150}?\n?(?:Sent|To|Subject):/is',
+            '/\bFrom:\s+.{1,150}?\n?(?:Sent|To|Subject):/is',
+            
+            // Delimiter lines
+            '/-+\s*Original Message\s*-+/i',
+            '/________________________________/i',
+            '/-+\s*Forwarded message\s*-+/i',
         ];
 
-        foreach ($otherMarkers as $marker) {
-            $parts = preg_split($marker, $body, 2);
-            if (count($parts) > 1) {
-                $body = $parts[0];
+        $earliest = strlen($body);
+
+        foreach ($markers as $marker) {
+            if (preg_match($marker, $body, $matches, PREG_OFFSET_CAPTURE)) {
+                $pos = $matches[0][1];
+                if ($pos < $earliest) {
+                    $earliest = $pos;
+                }
             }
         }
 
-        // 6. Line-by-line cleanup for standard signatures and loose quotes
+        // Truncate at the earliest marker found
+        if ($earliest < strlen($body)) {
+            $body = substr($body, 0, $earliest);
+        }
+
+        // 5. Line-by-line cleanup for standard signatures and loose quotes
         $lines = explode("\n", $body);
         $cleanLines = [];
 
         foreach ($lines as $line) {
             $trimmed = trim($line);
             
-            // Signature marker
+            // Signature marker (standard --)
             if ($trimmed === '--' || $trimmed === '-- ') {
                 break;
             }
 
-            // If we missed a quote block start (loose > characters)
+            // Mobile app signature markers
+            if (preg_match('/^Sent from my (?:iPhone|Android|Samsung|iPad|device)/i', $trimmed)) {
+                break;
+            }
+
+            // If we hit a line that starts with a quote character '>', 
+            // it's a clear sign we've entered the quoted history
             if (str_starts_with($trimmed, '>')) {
                 break;
             }
@@ -372,9 +388,9 @@ class EmailTicketService
 
         $result = trim(implode("\n", $cleanLines));
 
-        // 7. Fallback: If we stripped everything, return the original (trimmed)
-        if (empty($result) && !empty(trim($originalBody))) {
-            return trim($originalBody);
+        // 6. Fallback: If we stripped everything, return original body trimmed
+        if (empty($result)) {
+             return trim($body);
         }
 
         return $result;

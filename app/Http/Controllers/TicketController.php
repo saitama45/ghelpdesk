@@ -160,6 +160,10 @@ class TicketController extends Controller
             // Ensure Manila Time
             $data['created_at'] = now('Asia/Manila');
 
+            // Default values for removed UI fields
+            $data['type'] = $data['type'] ?? 'task';
+            $data['severity'] = $data['severity'] ?? 'minor';
+
             // Set priority from item
             if (isset($data['item_id'])) {
                 $item = \App\Models\Item::find($data['item_id']);

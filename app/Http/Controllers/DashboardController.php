@@ -67,6 +67,11 @@ class DashboardController extends Controller
             ->take(5)
             ->get()
             ->map(function ($ticket) {
+                $reporterName = $ticket->reporter ? $ticket->reporter->name : ($ticket->sender_name ?: 'Unknown');
+                if (str_contains($reporterName, '<')) {
+                    $reporterName = trim(explode('<', $reporterName)[0]);
+                }
+
                 return [
                     'id' => $ticket->id,
                     'key' => $ticket->ticket_key ?? $ticket->id,
@@ -75,7 +80,7 @@ class DashboardController extends Controller
                     'priority' => $ticket->priority,
                     'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
                     'created_at' => $ticket->created_at->diffForHumans(),
-                    'reporter' => $ticket->reporter ? $ticket->reporter->name : 'Unknown',
+                    'reporter' => $reporterName,
                     'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
                 ];
             });
@@ -132,10 +137,15 @@ class DashboardController extends Controller
             })
             ->latest()->take(10)->get()
             ->map(function ($comment) {
+                $displayName = $comment->user ? $comment->user->name : ($comment->sender_name ?: 'Unknown User');
+                if (str_contains($displayName, '<')) {
+                    $displayName = trim(explode('<', $displayName)[0]);
+                }
+
                 return [
                     'type' => 'comment',
                     'id' => $comment->id,
-                    'user' => $comment->user ? $comment->user->name : 'Unknown User',
+                    'user' => $displayName,
                     'user_photo' => $comment->user ? $comment->user->profile_photo : null,
                     'action' => 'commented on',
                     'comment_text' => $comment->comment_text,
