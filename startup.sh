@@ -1,14 +1,12 @@
-# Inside startup.sh
-composer install --no-dev --optimize-autoloader
-php artisan migrate --force
-# ... (rest of the Nginx reload commands)
+#!/bin/bash
 
-# Copy the custom Nginx config to the system folder
+# Copy our custom Nginx config to the system location
 cp /home/site/wwwroot/default.conf /etc/nginx/sites-available/default
 
-# Reload Nginx to apply changes
+# Reload Nginx to apply the new root (/public)
 service nginx reload
 
-# Run Laravel optimizations
+# Run Laravel house-keeping
+php /home/site/wwwroot/artisan migrate --force
 php /home/site/wwwroot/artisan config:cache
 php /home/site/wwwroot/artisan route:cache
