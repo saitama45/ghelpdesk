@@ -40,6 +40,9 @@ jobs:
           php artisan config:clear
           php artisan cache:clear
           php artisan view:clear
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ":memory:"
 
       # This replaces your "Deploy to FTP" steps with the high-speed Azure Deploy
       - name: 'Deploy to Azure Web App'
