@@ -90,9 +90,14 @@ class RolesAndPermissionSeeder extends Seeder
         }
 
         // Create roles
-        $admin = Role::firstOrCreate(['name' => 'Admin']);
-        $techSupport = Role::firstOrCreate(['name' => 'Tech Support']);
-        $user = Role::firstOrCreate(['name' => 'User']);
+        $admin = Role::firstOrCreate(['name' => 'Admin'], ['landing_page' => 'dashboard']);
+        $techSupport = Role::firstOrCreate(['name' => 'Tech Support'], ['landing_page' => 'tickets.index']);
+        $user = Role::firstOrCreate(['name' => 'User'], ['landing_page' => 'dashboard']);
+
+        // Update existing roles if they were already created without landing_page
+        $admin->update(['landing_page' => 'dashboard']);
+        $techSupport->update(['landing_page' => 'tickets.index']);
+        $user->update(['landing_page' => 'dashboard']);
 
         // Assign permissions to roles
         $admin->givePermissionTo(Permission::all());

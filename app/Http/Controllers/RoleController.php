@@ -35,6 +35,7 @@ class RoleController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255|unique:roles',
+            'landing_page' => 'nullable|string|max:255',
             'permissions' => 'array',
             'companies' => 'required|array|min:1',
             'is_assignable' => 'boolean',
@@ -44,6 +45,7 @@ class RoleController extends Controller
 
         $role = Role::create([
             'name' => $request->name,
+            'landing_page' => $request->landing_page,
             'is_assignable' => $request->boolean('is_assignable'),
             'notify_on_ticket_create' => $request->boolean('notify_on_ticket_create'),
             'notify_on_ticket_assign' => $request->boolean('notify_on_ticket_assign'),
@@ -64,6 +66,7 @@ class RoleController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255|unique:roles,name,' . $role->id,
+            'landing_page' => 'nullable|string|max:255',
             'permissions' => 'array',
             'companies' => 'required|array|min:1',
             'is_assignable' => 'boolean',
@@ -72,6 +75,7 @@ class RoleController extends Controller
         ]);
 
         $role->name = $request->name;
+        $role->landing_page = $request->landing_page;
         $role->is_assignable = $request->boolean('is_assignable');
         $role->notify_on_ticket_create = $request->boolean('notify_on_ticket_create');
         $role->notify_on_ticket_assign = $request->boolean('notify_on_ticket_assign');

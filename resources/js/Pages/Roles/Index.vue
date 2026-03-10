@@ -35,6 +35,7 @@
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Landing Page</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Permissions</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -54,6 +55,11 @@
                                         <div class="text-sm text-gray-500">{{ role.permissions.length }} permissions assigned</div>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                                    {{ getLandingPageLabel(role.landing_page) }}
+                                </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <button 
@@ -134,6 +140,17 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">Role Name</label>
                             <input v-model="form.name" type="text" required
                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Default Landing Page</label>
+                            <select v-model="form.landing_page" 
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <optgroup v-for="group in landingPageOptions" :key="group.group" :label="group.group">
+                                    <option v-for="opt in group.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                                </optgroup>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Where users with this role will land after logging in.</p>
                         </div>
 
                         <div class="mb-4">
@@ -269,8 +286,66 @@ const isEditing = ref(false)
 const currentRole = ref(null)
 const selectedRole = ref(null)
 
+const landingPageOptions = [
+    {
+        group: 'General',
+        options: [
+            { label: 'Dashboard', value: 'dashboard' },
+        ]
+    },
+    {
+        group: 'Operations',
+        options: [
+            { label: 'DTR (Attendance)', value: 'attendance.index' },
+            { label: 'Attendance Logs', value: 'attendance.logs' },
+            { label: 'Tickets', value: 'tickets.index' },
+            { label: 'Scheduling', value: 'schedules.index' },
+        ]
+    },
+    {
+        group: 'Reports',
+        options: [
+            { label: 'Store Health Report', value: 'reports.store-health' },
+        ]
+    },
+    {
+        group: 'References',
+        options: [
+            { label: 'Companies', value: 'companies.index' },
+            { label: 'Stores', value: 'stores.index' },
+            { label: 'Categories', value: 'categories.index' },
+            { label: 'Sub-Categories', value: 'sub-categories.index' },
+            { label: 'Items', value: 'items.index' },
+        ]
+    },
+    {
+        group: 'User Management',
+        options: [
+            { label: 'Users', value: 'users.index' },
+            { label: 'Roles & Permissions', value: 'roles.index' },
+        ]
+    },
+    {
+        group: 'Settings',
+        options: [
+            { label: 'System Settings', value: 'settings.index' },
+            { label: 'Canned Messages', value: 'canned-messages.index' },
+            { label: 'My Profile', value: 'profile.edit' },
+        ]
+    }
+]
+
+const getLandingPageLabel = (value) => {
+    for (const group of landingPageOptions) {
+        const found = group.options.find(opt => opt.value === value);
+        if (found) return found.label;
+    }
+    return 'Dashboard';
+}
+
 const form = reactive({
     name: '',
+    landing_page: 'dashboard',
     permissions: [],
     companies: [],
     is_assignable: false,
@@ -300,6 +375,7 @@ const openCreateModal = () => {
     isEditing.value = false
     currentRole.value = null
     form.name = ''
+    form.landing_page = 'dashboard'
     form.permissions = []
     form.companies = []
     form.is_assignable = false
@@ -312,6 +388,7 @@ const editRole = (role) => {
     isEditing.value = true
     currentRole.value = role
     form.name = role.name
+    form.landing_page = role.landing_page || 'dashboard'
     form.permissions = role.permissions.map(p => p.name)
     form.companies = role.companies ? role.companies.map(c => c.id) : []
     form.is_assignable = !!role.is_assignable
@@ -323,6 +400,7 @@ const editRole = (role) => {
 const closeModal = () => {
     showModal.value = false
     form.name = ''
+    form.landing_page = 'dashboard'
     form.permissions = []
     form.companies = []
     form.is_assignable = false

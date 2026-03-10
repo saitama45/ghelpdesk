@@ -42,9 +42,12 @@ class RoleService
     /**
      * Create a new role with permissions
      */
-    public static function createRole($name, $permissions = [])
+    public static function createRole($name, $permissions = [], $landingPage = 'dashboard')
     {
-        $role = Role::create(['name' => $name]);
+        $role = Role::create([
+            'name' => $name,
+            'landing_page' => $landingPage
+        ]);
         
         if (!empty($permissions)) {
             $role->givePermissionTo($permissions);
