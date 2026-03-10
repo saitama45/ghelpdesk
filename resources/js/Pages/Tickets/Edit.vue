@@ -401,9 +401,15 @@ const updateTicket = (options = {}) => {
         return;
     }
     
-    // Check if form is dirty to avoid unnecessary requests (optional but good practice)
+    // Check if form is dirty to avoid unnecessary requests
     if (!editForm.isDirty) {
         if (options.onSuccess) options.onSuccess();
+        return;
+    }
+
+    if (editForm.processing) {
+        // If already processing, try again after a short delay
+        setTimeout(() => updateTicket(options), 500);
         return;
     }
 
@@ -450,13 +456,13 @@ watch(() => [
     editForm.type,
     editForm.assignee_id
 ], () => {
-    updateTicket();
+    debouncedUpdate();
 });
 
 // Classification Watcher: Only save when the full hierarchy (Category -> Sub -> Item) is complete
 watch(() => editForm.item_id, (newVal, oldVal) => {
     if (newVal && newVal != oldVal && oldVal !== undefined) {
-        updateTicket();
+        debouncedUpdate();
     }
 });
 const startEditingTitle = () => {
