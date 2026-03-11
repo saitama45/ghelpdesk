@@ -22,7 +22,7 @@
                         <button 
                             v-if="hasPermission('stores.create')"
                             @click="openCreateModal" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -136,36 +136,45 @@
         </div>
 
         <!-- Create/Edit Modal -->
-        <div v-if="showModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div class="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-                <div class="mt-3">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">
-                        {{ isEditing ? 'Edit Store' : 'Create Store' }}
-                    </h3>
-                    <form @submit.prevent="submitForm">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900">
+                            {{ isEditing ? 'Edit Store' : 'Create Store' }}
+                        </h3>
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="submitForm" class="space-y-5">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Store Code</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Code</label>
                                 <input v-model="form.code" type="text" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
                                        placeholder="e.g. STR-001">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Name</label>
                                 <input v-model="form.name" type="text" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Store Email</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Email</label>
                                 <input v-model="form.email" type="email"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
                                        placeholder="e.g. store@example.com">
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 border-b pb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Assign Users</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assign Users</label>
                                 <MultiAutocomplete 
                                     v-model="form.user_ids"
                                     :options="users"
@@ -175,80 +184,76 @@
                                 />
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Sector (1-8)</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector (1-8)</label>
                                 <input v-model="form.sector" type="number" min="1" max="8" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
                         </div>
 
                         <!-- Geofencing Section -->
-                        <div class="mb-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <h4 class="text-sm font-bold text-blue-800 mb-3 flex items-center">
-                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                Geofence Settings
+                        <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm">
+                            <h4 class="text-xs font-bold text-blue-800 mb-3 flex items-center uppercase tracking-widest">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                Geofence Configuration
                             </h4>
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Latitude</label>
+                                    <label class="block text-[10px] font-black text-blue-600 uppercase mb-1">Latitude</label>
                                     <input v-model="form.latitude" type="number" step="any"
-                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono">
+                                           class="block w-full border-blue-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Longitude</label>
+                                    <label class="block text-[10px] font-black text-blue-600 uppercase mb-1">Longitude</label>
                                     <input v-model="form.longitude" type="number" step="any"
-                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono">
+                                           class="block w-full border-blue-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Radius (Meters)</label>
+                                    <label class="block text-[10px] font-black text-blue-600 uppercase mb-1">Radius (Meters)</label>
                                     <input v-model="form.radius_meters" type="number" min="10"
-                                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                           class="block w-full border-blue-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-between items-center">
                                 <button type="button" @click="getCurrentLocation" 
-                                        class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center">
-                                    <svg v-if="!isLocating" class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    <svg v-else class="animate-spin h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    {{ isLocating ? 'Locating...' : 'Set to Current Location' }}
+                                        class="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm transition-all active:scale-95">
+                                    <svg v-if="!isLocating" class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    <svg v-else class="animate-spin h-3.5 w-3.5 mr-1.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    {{ isLocating ? 'Locating...' : 'Use Current GPS Position' }}
                                 </button>
-                                <p class="text-[10px] text-blue-500 italic">Determines the allowed vicinity for DTR logging.</p>
+                                <p class="text-[10px] text-blue-500 italic font-medium">Controls the allowed vicinity for DTR attendance logging.</p>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Area</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Area</label>
                                 <input v-model="form.area" type="text" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
                                 <input v-model="form.brand" type="text" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cluster</label>
                                 <input v-model="form.cluster" type="text" required
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                            </div>
-                            <div class="flex items-end pb-2">
-                                <label class="flex items-center">
-                                    <input v-model="form.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                    <span class="ml-2 text-sm text-gray-700 font-medium">Active Store</span>
-                                </label>
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
                         </div>
 
-                        <div class="flex justify-end space-x-3 pt-4 border-t">
+                        <div class="flex items-center pt-2">
+                            <input v-model="form.is_active" type="checkbox" id="is_active_store" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <label for="is_active_store" class="ml-2 text-sm font-bold text-gray-700">Active Store Location</label>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="closeModal" 
-                                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
                                 Cancel
                             </button>
                             <button type="submit" 
-                                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                                    class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all">
                                 {{ isEditing ? 'Update Store' : 'Create Store' }}
                             </button>
                         </div>
@@ -260,7 +265,7 @@
         <!-- Assigned Users Modal -->
         <div v-if="showUsersModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75" @click="showUsersModal = false"></div>
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showUsersModal = false"></div>
                 <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative">
                     <div class="flex items-center justify-between mb-4 border-b pb-2">
                         <h3 class="text-lg font-bold text-gray-900 flex items-center">

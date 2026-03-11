@@ -560,7 +560,7 @@ const getSlaRowClass = (ticket) => {
         <!-- Create Ticket Modal -->
         <div v-if="showCreateModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm" @click="showCreateModal = false"></div>
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showCreateModal = false"></div>
                 <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-100">
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="text-xl font-bold text-gray-900">Create New Ticket</h3>

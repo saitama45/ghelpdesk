@@ -752,7 +752,7 @@ const scrollToSection = (sectionId) => {
         <!-- Expanded Video Modal -->
         <div
             v-if="isVideoExpanded"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
             @click="closeVideoExpanded"
         >
             <div class="relative w-full h-full flex items-center justify-center p-4" @click.stop>

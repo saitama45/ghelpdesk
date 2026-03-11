@@ -4,7 +4,7 @@
             <div class="flex min-h-screen items-center justify-center p-4">
                 <!-- Backdrop -->
                 <div 
-                    class="fixed inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
+                    class="fixed inset-0 bg-black/20 backdrop-blur-md transition-opacity duration-300"
                     :class="show ? 'opacity-100' : 'opacity-0'"
                     @click="cancel"
                 ></div>

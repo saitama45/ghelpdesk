@@ -23,7 +23,7 @@
                         <button 
                             v-if="hasPermission('roles.create')"
                             @click="openCreateModal" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -104,23 +104,32 @@
         </div>
 
         <!-- Permissions Modal -->
-        <div v-if="showPermissionsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
-                <div class="mt-3">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">
-                        Permissions for "{{ selectedRole?.name }}"
-                    </h3>
-                    <div class="max-h-96 overflow-y-auto">
+        <div v-if="showPermissionsModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closePermissionsModal"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900">
+                            Permissions: {{ selectedRole?.name }}
+                        </h3>
+                        <button @click="closePermissionsModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                         <div class="flex flex-wrap gap-2">
                             <span v-for="permission in selectedRole?.permissions" :key="permission.id" 
-                                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">
                                 {{ permission.name }}
                             </span>
                         </div>
                     </div>
-                    <div class="flex justify-end mt-4">
+                    <div class="flex justify-end mt-8 pt-4 border-t">
                         <button @click="closePermissionsModal" 
-                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">
+                                class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-bold shadow-sm">
                             Close
                         </button>
                     </div>
@@ -129,125 +138,126 @@
         </div>
 
         <!-- Create/Edit Modal -->
-        <div v-if="showModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-                <div class="mt-3">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">
-                        {{ isEditing ? 'Edit Role' : 'Create Role' }}
-                    </h3>
-                    <form @submit.prevent="submitForm">
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Role Name</label>
-                            <input v-model="form.name" type="text" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
+        <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900">
+                            {{ isEditing ? 'Edit Role' : 'Create Role' }}
+                        </h3>
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
 
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Default Landing Page</label>
-                            <select v-model="form.landing_page" 
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <optgroup v-for="group in landingPageOptions" :key="group.group" :label="group.group">
-                                    <option v-for="opt in group.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                                </optgroup>
-                            </select>
-                            <p class="text-xs text-gray-500 mt-1">Where users with this role will land after logging in.</p>
-                        </div>
-
-                        <div class="mb-4">
-                            <label class="flex items-center space-x-3 cursor-pointer">
-                                <span class="text-sm font-medium text-gray-700">Can be assigned to tickets?</span>
-                                <div class="relative">
-                                    <input type="checkbox" v-model="form.is_assignable" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                </div>
-                            </label>
-                            <p class="text-xs text-gray-500 mt-1">Users with this role will appear in the "Assignee" dropdown on tickets.</p>
-                        </div>
-
-                        <div class="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                            <h4 class="text-sm font-medium text-gray-900 mb-3">Notification Settings</h4>
-                            <div class="space-y-4">
-                                <label class="flex items-center justify-between cursor-pointer">
-                                    <span class="text-sm font-medium text-gray-700">Notify on Ticket Creation?</span>
-                                    <div class="relative">
-                                        <input type="checkbox" v-model="form.notify_on_ticket_create" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                    </div>
-                                </label>
-                                
-                                <label class="flex items-center justify-between cursor-pointer">
-                                    <span class="text-sm font-medium text-gray-700">Notify when Assigned?</span>
-                                    <div class="relative">
-                                        <input type="checkbox" v-model="form.notify_on_ticket_assign" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                    </div>
-                                </label>
+                    <form @submit.prevent="submitForm" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Role Name</label>
+                                <input v-model="form.name" type="text" required
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
-                            <p class="text-xs text-gray-500 mt-2">Configure when users with this role should receive email notifications.</p>
+
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Default Landing Page</label>
+                                <select v-model="form.landing_page" 
+                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    <optgroup v-for="group in landingPageOptions" :key="group.group" :label="group.group">
+                                        <option v-for="opt in group.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                                    </optgroup>
+                                </select>
+                            </div>
                         </div>
 
-                            <div class="mb-6">
-                                <div class="flex items-center justify-between mb-2">
-                                    <label class="block text-sm font-medium text-gray-700">Companies</label>
-                                    <label class="flex items-center space-x-2 text-xs text-blue-600 hover:text-blue-800 cursor-pointer">
-                                        <input type="checkbox" 
-                                            :checked="form.companies.length === companies.length && companies.length > 0"
-                                            @change="toggleAllCompanies"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                        <span>Select All</span>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="flex flex-col justify-center p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <div class="relative">
+                                        <input type="checkbox" v-model="form.is_assignable" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                    <span class="text-sm font-bold text-blue-900">Assignable to Tickets</span>
+                                </label>
+                                <p class="text-[10px] text-blue-600 mt-1 uppercase font-bold italic">Users with this role appear in "Assignee" list.</p>
+                            </div>
+
+                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Email Notifications</h4>
+                                <div class="space-y-3">
+                                    <label class="flex items-center justify-between cursor-pointer group">
+                                        <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">On Ticket Creation</span>
+                                        <div class="relative">
+                                            <input type="checkbox" v-model="form.notify_on_ticket_create" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </div>
+                                    </label>
+                                    
+                                    <label class="flex items-center justify-between cursor-pointer group">
+                                        <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">When Assigned</span>
+                                        <div class="relative">
+                                            <input type="checkbox" v-model="form.notify_on_ticket_assign" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </div>
                                     </label>
                                 </div>
-                                <div class="space-y-2 max-h-32 overflow-y-auto border rounded-lg p-3">
-                                    <label v-for="company in companies" :key="company.id" class="flex items-center">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="md:col-span-1">
+                                <div class="flex items-center justify-between mb-2">
+                                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Companies</label>
+                                    <button type="button" @click="toggleAllCompanies" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800">
+                                        {{ form.companies.length === companies.length ? 'Unselect All' : 'Select All' }}
+                                    </button>
+                                </div>
+                                <div class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white shadow-inner custom-scrollbar">
+                                    <label v-for="company in companies" :key="company.id" class="flex items-center group cursor-pointer">
                                         <input type="checkbox" :value="company.id" v-model="form.companies"
-                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                        <span class="ml-2 text-sm text-gray-700">{{ company.name }}</span>
+                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors">
+                                        <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors">{{ company.name }}</span>
                                     </label>
                                 </div>
                             </div>
 
-                            <div class="mb-6">
+                            <div class="md:col-span-2">
                                 <div class="flex items-center justify-between mb-2">
-                                    <label class="block text-sm font-medium text-gray-700">Permissions</label>
-                                    <label class="flex items-center space-x-2 text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer">
-                                        <input type="checkbox"
-                                            :checked="areAllPermissionsSelected"
-                                            @change="toggleAllPermissions"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                        <span>Select All Permissions</span>
-                                    </label>
+                                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Permissions</label>
+                                    <button type="button" @click="toggleAllPermissions" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800">
+                                        {{ areAllPermissionsSelected ? 'Unselect All' : 'Select All' }}
+                                    </button>
                                 </div>
-                                <div class="space-y-4">
-                                    <div v-for="(perms, category) in permissions" :key="category" class="border rounded-lg p-4">
-                                        <div class="flex items-center justify-between mb-2">
-                                            <h4 class="font-medium text-gray-900 capitalize">{{ category }}</h4>
-                                            <label class="flex items-center space-x-2 text-xs text-gray-600 hover:text-gray-900 cursor-pointer">
-                                                <input type="checkbox" 
-                                                    :checked="isCategorySelected(perms)" 
-                                                    @change="toggleCategory(category, perms)"
-                                                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                                <span>Select All</span>
-                                            </label>
+                                <div class="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                                    <div v-for="(perms, category) in permissions" :key="category" class="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                        <div class="flex items-center justify-between mb-3 border-b border-gray-200 pb-2">
+                                            <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest">{{ category }}</h4>
+                                            <button type="button" @click="toggleCategory(category, perms)" class="text-[10px] font-bold text-blue-600 uppercase hover:text-blue-800">
+                                                {{ isCategorySelected(perms) ? 'Clear' : 'All' }}
+                                            </button>
                                         </div>
-                                        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                            <label v-for="permission in sortPermissions(perms)" :key="permission.id" class="flex items-center">
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <label v-for="permission in sortPermissions(perms)" :key="permission.id" class="flex items-center group cursor-pointer">
                                                 <input type="checkbox" :value="permission.name" v-model="form.permissions"
-                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                                <span class="ml-2 text-sm text-gray-700">{{ permission.name.split('.')[1] }}</span>
+                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors">
+                                                <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors">{{ permission.name.split('.')[1] }}</span>
                                             </label>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                        <div class="flex justify-end space-x-3">
+                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="closeModal" 
-                                    class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
                                 Cancel
                             </button>
                             <button type="submit" 
-                                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-                                {{ isEditing ? 'Update' : 'Create' }}
+                                    class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all">
+                                {{ isEditing ? 'Update Role' : 'Create Role' }}
                             </button>
                         </div>
                     </form>
