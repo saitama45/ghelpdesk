@@ -8,10 +8,10 @@ service nginx reload
 chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
 
 # 3. Increase PHP-FPM worker limits correctly (Fixes the 502 error)
-sed -i 's/pm.max_children = 5/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
-sed -i 's/pm.start_servers = 2/pm.start_servers = 4/g' /usr/local/etc/php-fpm.d/www.conf
-sed -i 's/pm.min_spare_servers = 1/pm.min_spare_servers = 2/g' /usr/local/etc/php-fpm.d/www.conf
-sed -i 's/pm.max_spare_servers = 3/pm.max_spare_servers = 6/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/^pm.max_children = .*/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/^pm.start_servers = .*/pm.start_servers = 4/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 2/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 6/g' /usr/local/etc/php-fpm.d/www.conf
 
 # 4. Clear the cache IMMEDIATELY (Fixes the 500 error)
 # We do this before the background tasks to ensure the very first request is clean.
