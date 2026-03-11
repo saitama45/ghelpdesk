@@ -7,16 +7,19 @@ service nginx reload
 # 2. Fix permissions (Fast)
 chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
 
-# 3. Increase PHP-FPM worker limit (Fixes max_children error)
+# 3. Increase PHP-FPM worker limits correctly (Fixes the 502 error)
 sed -i 's/pm.max_children = 5/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
-sed -i 's/pm.start_servers = 2/pm.start_servers = 5/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/pm.start_servers = 2/pm.start_servers = 4/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/pm.min_spare_servers = 1/pm.min_spare_servers = 2/g' /usr/local/etc/php-fpm.d/www.conf
+sed -i 's/pm.max_spare_servers = 3/pm.max_spare_servers = 6/g' /usr/local/etc/php-fpm.d/www.conf
 
-# 4. Run background tasks (Ensures migrations and cache are updated)
+# 4. Clear the cache IMMEDIATELY (Fixes the 500 error)
+# We do this before the background tasks to ensure the very first request is clean.
+php /home/site/wwwroot/artisan config:clear
+php /home/site/wwwroot/artisan cache:clear
+
+# 5. Run remaining tasks in background
 (
-  echo "⏳ Clearing old cache..."
-  php /home/site/wwwroot/artisan config:clear
-  php /home/site/wwwroot/artisan cache:clear
-  
   echo "⏳ Running migrations..."
   php /home/site/wwwroot/artisan migrate --force
   
@@ -27,7 +30,7 @@ sed -i 's/pm.start_servers = 2/pm.start_servers = 5/g' /usr/local/etc/php-fpm.d/
   echo "✅ Background tasks finished!"
 ) &
 
-# 5. Start the Laravel Scheduler loop
+# 6. Start the Laravel Scheduler loop
 (while true; do
   php /home/site/wwwroot/artisan schedule:run >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1
   sleep 60
