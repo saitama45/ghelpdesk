@@ -27,9 +27,16 @@ class TicketSurveyRequest extends Mailable
      */
     public function envelope(): Envelope
     {
-        return new Envelope(
+        $envelope = new Envelope(
             subject: "[{$this->ticket->ticket_key}] Your feedback matters! Rate your support experience",
         );
+
+        $envelope->using(function ($message) {
+            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
+            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
+        });
+
+        return $envelope;
     }
 
     /**

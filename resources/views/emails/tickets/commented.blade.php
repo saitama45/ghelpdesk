@@ -106,7 +106,7 @@
         <!-- Footer -->
         <div class="footer">
             <p>&copy; {{ date('Y') }} {{ config('app.name') }}. All rights reserved.</p>
-            <p>This is an automated message, please do not reply directly to this email.</p>
+            <p>You can reply directly to this email to add a comment to this ticket.</p>
         </div>
     </div>
 </body>

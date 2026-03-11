@@ -29,11 +29,11 @@ class TicketCommentAdded extends Mailable
      */
     public function envelope(): Envelope
     {
-        $status = strtoupper(str_replace('_', ' ', $this->ticket->status));
         $subject = $this->ticket->title;
         
-        // Ensure subject starts with Re: if it's a reply to an external email
-        if ($this->ticket->message_id && !str_starts_with(strtolower($subject), 're:')) {
+        // To maintain threading in Yahoo/Gmail/Outlook, we must keep the original subject 
+        // and only prepend "Re: " if it's not already there.
+        if (!str_starts_with(strtolower($subject), 're:')) {
             $subject = 'Re: ' . $subject;
         }
 
@@ -41,13 +41,19 @@ class TicketCommentAdded extends Mailable
             subject: $subject,
         );
 
-        // If this ticket came from an email, set headers to thread it
-        if ($this->ticket->message_id) {
-            $envelope->using(function ($message) {
+        // Set headers to improve deliverability and threading
+        $envelope->using(function ($message) {
+            // Auto-Submitted header helps bypass some automated spam filters 
+            // without breaking the conversation thread.
+            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
+            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
+            
+            // This is the critical part for "Email Threading"
+            if ($this->ticket->message_id) {
                 $message->getHeaders()->addTextHeader('In-Reply-To', $this->ticket->message_id);
                 $message->getHeaders()->addTextHeader('References', $this->ticket->message_id);
-            });
-        }
+            }
+        });
 
         return $envelope;
     }

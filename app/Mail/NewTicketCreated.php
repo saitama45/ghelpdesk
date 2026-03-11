@@ -28,9 +28,16 @@ class NewTicketCreated extends Mailable
     public function envelope(): Envelope
     {
         $status = strtoupper(str_replace('_', ' ', $this->ticket->status));
-        return new Envelope(
+        $envelope = new Envelope(
             subject: "[{$this->ticket->ticket_key}] [{$status}] New Ticket Created: {$this->ticket->title}",
         );
+
+        $envelope->using(function ($message) {
+            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
+            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
+        });
+
+        return $envelope;
     }
 
     /**
