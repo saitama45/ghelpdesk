@@ -14,3 +14,10 @@ php /home/site/wwwroot/artisan view:cache
 
 # 4. Fix permissions for storage (Crucial for Azure Linux)
 chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
+
+# 5. Start the Laravel Scheduler loop in the background
+# This will run 'php artisan schedule:run' every 60 seconds
+(while true; do
+  php /home/site/wwwroot/artisan schedule:run >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1
+  sleep 60
+done) &
