@@ -111,9 +111,7 @@ return [
             'prefix_indexes' => true,
             'encrypt' => 'yes',
             'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'yes'),
-            'database_isolation_level' => 32, // PDO::SQLSRV_TXN_READ_COMMITTED_SNAPSHOT
             'options' => [
-                1002 => true, // PDO::SQLSRV_ATTR_FETCHES_NUMERIC_TYPE
                 PDO::ATTR_TIMEOUT => 30,
             ],
         ],
