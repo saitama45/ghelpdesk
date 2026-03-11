@@ -111,6 +111,11 @@ return [
             'prefix_indexes' => true,
             'encrypt' => 'yes',
             'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'yes'),
+            'database_isolation_level' => PDO::SQLSRV_TXN_READ_COMMITTED_SNAPSHOT,
+            'options' => [
+                PDO::SQLSRV_ATTR_FETCHES_NUMERIC_TYPE => true,
+                PDO::ATTR_TIMEOUT => 30, // 30 second timeout
+            ],
         ],
 
     ],
