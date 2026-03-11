@@ -59,7 +59,7 @@ class AutoCloseResolvedTickets extends Command
                 }
             }
 
-            // 3. Calculate when it should close based on business hours
+            // 3. Calculate when it should close based on GLOBAL business hours
             $closeDeadline = SlaService::addSecondsRespectingBusinessHours($baseTime, $hours * 3600);
 
             if ($now->greaterThanOrEqualTo($closeDeadline)) {

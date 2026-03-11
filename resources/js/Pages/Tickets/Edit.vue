@@ -1060,7 +1060,7 @@ const linkify = (text) => {
                         </div>
 
                         <!-- Sticky Comment Input -->
-                        <div class="sticky bottom-0 z-10 -mx-4 sm:-mx-6 -mb-0 p-4 sm:p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg">
+                        <div v-if="ticket.status !== 'closed'" class="sticky bottom-0 z-10 -mx-4 sm:-mx-6 -mb-0 p-4 sm:p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg">
                             <div class="flex space-x-3 sm:space-x-4">
                                 <div class="flex-shrink-0 hidden xs:block">
                                     <div v-if="$page.props.auth.user.profile_photo" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">

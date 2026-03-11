@@ -243,7 +243,22 @@ class EmailTicketService
      */
     protected function addEmailAsComment(Ticket $ticket, $message, $user)
     {
-        return DB::transaction(function () use ($ticket, $message, $user) {
+        $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
+        $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
+
+        // LOCK-OUT LOGIC: If ticket is closed, do not allow new comments via email.
+        // Send a notification to the customer instead.
+        if ($ticket->status === 'closed') {
+            \Illuminate\Support\Facades\Mail::to($senderEmail)->send(
+                new \App\Mail\ClosedTicketReplyNotification($ticket, $senderName)
+            );
+            
+            Log::info("Email stripping: Sent ClosedTicketReplyNotification to {$senderEmail} for ticket {$ticket->ticket_key}");
+            $message->setFlag('Seen');
+            return true;
+        }
+
+        return DB::transaction(function () use ($ticket, $message, $user, $senderEmail, $senderName) {
             $body = $message->getTextBody();
             
             // If text body is empty, extract from HTML body carefully
@@ -257,9 +272,6 @@ class EmailTicketService
             }
             
             $cleanBody = $this->stripQuotedText($body);
-            
-            $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
-            $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
 
             // Create the comment
             $comment = \App\Models\TicketComment::create([
@@ -271,8 +283,9 @@ class EmailTicketService
                 'created_at' => now('Asia/Manila'),
             ]);
 
-            // Re-open ticket if it was resolved or closed
-            if (in_array($ticket->status, ['resolved', 'closed'])) {
+            // RE-OPEN TRIGGER: If a customer replies to an Open, Waiting, or Resolved ticket,
+            // set status to Open to alert the staff.
+            if (in_array($ticket->status, ['waiting', 'resolved'])) {
                 $oldStatus = $ticket->status;
                 $ticket->update(['status' => 'open']);
                 
@@ -283,7 +296,10 @@ class EmailTicketService
                     'old_value' => $oldStatus,
                     'new_value' => 'open',
                     'changed_at' => now('Asia/Manila'),
+                    'remarks' => 'Ticket automatically re-opened due to customer email reply.'
                 ]);
+            } elseif ($ticket->status === 'open') {
+                // Already open, no status change needed but we could log that it's still open if desired.
             }
 
             // Attachments

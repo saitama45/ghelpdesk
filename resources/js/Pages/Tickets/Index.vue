@@ -30,6 +30,30 @@ const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
 const { formatDate } = useDateFormatter();
 
+// Real-time clock for SLA calculations
+const currentTime = ref(new Date());
+let timer;
+
+onMounted(() => {
+    pagination.updateData(props.tickets);
+    timer = setInterval(() => {
+        currentTime.value = new Date();
+    }, 60000); // Update every minute
+});
+
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+    if (timer) clearInterval(timer);
+});
+
+const isNearlyDue = (targetAt) => {
+    if (!targetAt) return false;
+    const target = new Date(targetAt);
+    const diff = target - currentTime.value;
+    // Nearly due = less than 1 hour (3600000 ms) and not yet past
+    return diff > 0 && diff < 3600000;
+};
+
 // Computed property for available companies based on user roles
 const availableCompanies = computed(() => {
     const user = page.props.auth.user;
@@ -448,14 +472,28 @@ const getSlaRowClass = (ticket) => {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div v-if="ticket.sla_metric" class="flex flex-col space-y-1">
+                                <!-- Response SLA -->
                                 <span v-if="ticket.sla_metric.response_target_at" 
-                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border"
-                                      :class="ticket.sla_metric.is_response_breached ? 'bg-red-100 text-red-700 border-red-200' : (ticket.sla_metric.first_response_at ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-100')">
+                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border items-center shadow-sm"
+                                      :class="[
+                                          ticket.sla_metric.is_response_breached ? 'bg-red-100 text-red-700 border-red-200 animate-pulse-red' : 
+                                          (ticket.sla_metric.first_response_at ? 'bg-green-100 text-green-700 border-green-200' : 
+                                          (isNearlyDue(ticket.sla_metric.response_target_at) ? 'bg-yellow-100 text-yellow-700 border-yellow-300 animate-pulse-yellow' : 'bg-blue-50 text-blue-700 border-blue-100'))
+                                      ]">
+                                    <svg v-if="ticket.sla_metric.is_response_breached" class="w-2 h-2 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                    <svg v-else-if="isNearlyDue(ticket.sla_metric.response_target_at) && !ticket.sla_metric.first_response_at" class="w-2 h-2 mr-1 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
                                     RES: {{ ticket.sla_metric.is_response_breached ? 'BREACH' : (ticket.sla_metric.first_response_at ? 'MET' : 'OK') }}
                                 </span>
+                                <!-- Resolution SLA -->
                                 <span v-if="ticket.sla_metric.resolution_target_at" 
-                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border"
-                                      :class="ticket.sla_metric.is_resolution_breached ? 'bg-red-100 text-red-700 border-red-200' : (ticket.sla_metric.resolved_at ? 'bg-green-100 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-100')">
+                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border items-center shadow-sm"
+                                      :class="[
+                                          ticket.sla_metric.is_resolution_breached ? 'bg-red-100 text-red-700 border-red-200 animate-pulse-red' : 
+                                          (ticket.sla_metric.resolved_at ? 'bg-green-100 text-green-700 border-green-200' : 
+                                          (isNearlyDue(ticket.sla_metric.resolution_target_at) ? 'bg-yellow-100 text-yellow-700 border-yellow-300 animate-pulse-yellow' : 'bg-blue-50 text-blue-700 border-blue-100'))
+                                      ]">
+                                    <svg v-if="ticket.sla_metric.is_resolution_breached" class="w-2 h-2 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                    <svg v-else-if="isNearlyDue(ticket.sla_metric.resolution_target_at) && !ticket.sla_metric.resolved_at" class="w-2 h-2 mr-1 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
                                     SLV: {{ ticket.sla_metric.is_resolution_breached ? 'BREACH' : (ticket.sla_metric.resolved_at ? 'MET' : 'OK') }}
                                 </span>
                             </div>
@@ -638,3 +676,20 @@ const getSlaRowClass = (ticket) => {
 
     </AppLayout>
 </template>
+
+<style scoped>
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); background-color: #fee2e2; }
+}
+@keyframes pulse-yellow {
+  0%, 100% { background-color: #fef9c3; border-color: #fde047; }
+  50% { background-color: #fef08a; border-color: #facc15; }
+}
+.animate-pulse-red {
+  animation: pulse-red 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.animate-pulse-yellow {
+  animation: pulse-yellow 2s ease-in-out infinite;
+}
+</style>

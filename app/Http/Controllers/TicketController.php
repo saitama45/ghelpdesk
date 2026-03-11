@@ -480,6 +480,11 @@ class TicketController extends Controller
      */
     public function storeComment(Request $request, Ticket $ticket)
     {
+        // LOCK-OUT LOGIC: If ticket is closed, do not allow new comments via UI
+        if ($ticket->status === 'closed') {
+            return redirect()->back()->withErrors(['error' => 'This ticket is already closed and cannot accept new comments.']);
+        }
+
         $request->validate([
             'comment_text' => 'required|string|max:65535',
             'status' => 'nullable|string|in:open,in_progress,resolved,closed,waiting',

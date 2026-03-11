@@ -1,12 +1,12 @@
 import { usePage } from '@inertiajs/vue3';
 
 export function usePermission() {
+    const user = usePage().props.auth.user || {};
+    const userRoles = user.roles?.map(r => r.name) || [];
+
     const hasPermission = (name) => {
-        const user = usePage().props.auth.user || {};
-        const roles = user.roles?.map(r => r.name) || [];
-        
         // Super Admin check
-        if (roles.some(role => ['Admin'].includes(role))) {
+        if (userRoles.some(role => ['Admin'].includes(role))) {
             return true;
         }
 
@@ -18,5 +18,13 @@ export function usePermission() {
         return names.some(name => hasPermission(name));
     };
 
-    return { hasPermission, hasAnyPermission };
+    const hasRole = (name) => {
+        return userRoles.includes(name);
+    };
+
+    const hasAnyRole = (names) => {
+        return names.some(name => userRoles.includes(name));
+    };
+
+    return { hasPermission, hasAnyPermission, hasRole, hasAnyRole };
 }
