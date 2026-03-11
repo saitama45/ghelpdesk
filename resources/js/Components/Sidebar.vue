@@ -113,7 +113,7 @@ const canSeeUserManagement = computed(() => {
 });
 
 const canSeeReports = computed(() => {
-    return hasPermission('reports.view') && hasPermission('reports.store_health');
+    return hasPermission('reports.view') && (hasPermission('reports.store_health') || hasPermission('reports.sla_performance'));
 });
 
 const canSeeSettings = computed(() => {
@@ -383,6 +383,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Store Health Report</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('reports.sla_performance')"
+                            :href="route('reports.sla-performance')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('reports.sla-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>SLA Performance Report</span>
                         </Link>
                     </div>
                 </div>

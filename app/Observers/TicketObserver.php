@@ -15,11 +15,12 @@ class TicketObserver
     public function created(Ticket $ticket): void
     {
         $now = Carbon::now();
+        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->sub_unit : null;
         
         TicketSlaMetric::create([
             'ticket_id' => $ticket->id,
-            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response'),
-            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution'),
+            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $subUnit),
+            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $subUnit),
         ]);
     }
 
@@ -29,20 +30,18 @@ class TicketObserver
     public function updated(Ticket $ticket): void
     {
         $metric = $ticket->slaMetric;
+        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->sub_unit : null;
 
         if (!$metric) {
             // Try to create it if it doesn't exist
             $metric = TicketSlaMetric::create([
                 'ticket_id' => $ticket->id,
-                'response_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response'),
-                'resolution_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution'),
+                'response_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit),
+                'resolution_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit),
             ]);
         }
 
-        // 1. Handle First Response
-        // Removed assignment check. Basis for response time is now strictly commenting (handled in TicketController).
-
-        // 2. Handle Resolution
+        // Handle Resolution
         if ($ticket->wasChanged('status')) {
             $newStatus = $ticket->status;
             $oldStatus = $ticket->getOriginal('status');
@@ -74,18 +73,37 @@ class TicketObserver
                 if ($metric->response_target_at && !$metric->first_response_at) {
                     $data['response_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->response_target_at, 
-                        $pausedSeconds
+                        $pausedSeconds,
+                        null,
+                        $subUnit
                     );
                 }
                 
                 if ($metric->resolution_target_at && !$metric->resolved_at) {
                     $data['resolution_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->resolution_target_at, 
-                        $pausedSeconds
+                        $pausedSeconds,
+                        null,
+                        $subUnit
                     );
                 }
 
                 $metric->update($data);
+            }
+        }
+
+        // Handle Assignment Change (Recalculate SLA targets for the new team's hours)
+        if ($ticket->wasChanged('assignee_id') && $metric) {
+            $updates = [];
+            if (!$metric->first_response_at) {
+                $updates['response_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit);
+            }
+            if (!$metric->resolved_at) {
+                $updates['resolution_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit);
+            }
+            
+            if (!empty($updates)) {
+                $metric->update($updates);
             }
         }
     }

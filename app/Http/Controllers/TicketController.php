@@ -174,13 +174,6 @@ class TicketController extends Controller
 
             $ticket = Ticket::create($data);
 
-            // Create SLA Metrics
-            \App\Models\TicketSlaMetric::create([
-                'ticket_id' => $ticket->id,
-                'response_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response'),
-                'resolution_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution'),
-            ]);
-
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     $fileName = time() . '_' . $file->getClientOriginalName();
@@ -475,13 +468,6 @@ class TicketController extends Controller
 
             // Set parent to Open when a new child is added
             $ticket->update(['status' => 'open']);
-
-            // Create SLA Metrics for child ticket
-            \App\Models\TicketSlaMetric::create([
-                'ticket_id' => $childTicket->id,
-                'response_target_at' => \App\Services\SlaService::calculateTarget($childTicket->created_at, $childTicket->item_id, 'response'),
-                'resolution_target_at' => \App\Services\SlaService::calculateTarget($childTicket->created_at, $childTicket->item_id, 'resolution'),
-            ]);
 
             return $childTicket;
         });

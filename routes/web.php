@@ -49,6 +49,9 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/store-health', [\App\Http\Controllers\StoreReportController::class, 'index'])->name('reports.store-health');
     Route::get('reports/store-health/pdf', [\App\Http\Controllers\StoreReportController::class, 'pdf'])->name('reports.store-health.pdf');
     Route::get('reports/store-health/{store}/tickets', [\App\Http\Controllers\StoreReportController::class, 'getTickets'])->name('reports.store-health.tickets');
+    Route::get('reports/sla-performance', [\App\Http\Controllers\SlaReportController::class, 'index'])->name('reports.sla-performance');
+    Route::get('reports/sla-performance/pdf', [\App\Http\Controllers\SlaReportController::class, 'pdf'])->name('reports.sla-performance.pdf');
+    Route::get('reports/sla-performance/tickets', [\App\Http\Controllers\SlaReportController::class, 'getTickets'])->name('reports.sla-performance.tickets');
 
     Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');

@@ -22,10 +22,12 @@ import {
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
-    settings: Object
+    settings: Object,
+    subUnits: Array
 });
 
 const activeTab = ref('mail');
+const selectedSubUnit = ref('global');
 
 const tabs = [
     { id: 'mail', name: 'Mail Configuration', icon: EnvelopeIcon, description: 'Manage inbound and outbound email settings.' },
@@ -43,6 +45,15 @@ const showMapsKey = ref(false);
 
 const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+const slugify = (text) => {
+    return text.toString().toLowerCase()
+        .replace(/\s+/g, '_')           // Replace spaces with _
+        .replace(/[^\w-]+/g, '')       // Remove all non-word chars
+        .replace(/--+/g, '_')           // Replace multiple - with single _
+        .replace(/^-+/, '')             // Trim - from start of text
+        .replace(/-+$/, '');            // Trim - from end of text
+};
+
 const parseWorkingDays = (days) => {
     if (!days) return [1, 2, 3, 4, 5];
     try {
@@ -52,48 +63,81 @@ const parseWorkingDays = (days) => {
     }
 };
 
-const form = useForm({
-    imap_host: props.settings.imap_host || '',
-    imap_port: props.settings.imap_port || '993',
-    imap_encryption: props.settings.imap_encryption || 'ssl',
-    imap_username: props.settings.imap_username || '',
-    imap_password: props.settings.imap_password || '',
-    mail_mailer: props.settings.mail_mailer || 'smtp',
-    mail_host: props.settings.mail_host || '',
-    mail_port: props.settings.mail_port || '587',
-    mail_username: props.settings.mail_username || '',
-    mail_password: props.settings.mail_password || '',
-    mail_encryption: props.settings.mail_encryption || 'tls',
-    mail_from_address: props.settings.mail_from_address || '',
-    mail_from_name: props.settings.mail_from_name || '',
-    google_maps_api_key: props.settings.google_maps_api_key || '',
-    threshold_green_min: props.settings.threshold_green_min || 1,
-    threshold_green_max: props.settings.threshold_green_max || 2,
-    threshold_green_label: props.settings.threshold_green_label || 'Healthy',
-    threshold_yellow_min: props.settings.threshold_yellow_min || 3,
-    threshold_yellow_max: props.settings.threshold_yellow_max || 3,
-    threshold_yellow_label: props.settings.threshold_yellow_label || 'Warning',
-    threshold_orange_min: props.settings.threshold_orange_min || 4,
-    threshold_orange_max: props.settings.threshold_orange_max || 4,
-    threshold_orange_label: props.settings.threshold_orange_label || 'At-risk',
-    threshold_red_min: props.settings.threshold_red_min || 5,
-    threshold_red_label: props.settings.threshold_red_label || 'Critical',
-    business_start_time: props.settings.business_start_time || '08:00',
-    business_end_time: props.settings.business_end_time || '17:00',
-    working_days: parseWorkingDays(props.settings.working_days),
-    sla_low_response: props.settings.sla_low_response || 24,
-    sla_low_resolution: props.settings.sla_low_resolution || 72,
-    sla_low_label: props.settings.sla_low_label || 'P4',
-    sla_medium_response: props.settings.sla_medium_response || 8,
-    sla_medium_resolution: props.settings.sla_medium_resolution || 48,
-    sla_medium_label: props.settings.sla_medium_label || 'P3',
-    sla_high_response: props.settings.sla_high_response || 4,
-    sla_high_resolution: props.settings.sla_high_resolution || 24,
-    sla_high_label: props.settings.sla_high_label || 'P2',
-    sla_urgent_response: props.settings.sla_urgent_response || 1,
-    sla_urgent_resolution: props.settings.sla_urgent_resolution || 8,
-    sla_urgent_label: props.settings.sla_urgent_label || 'P1',
-    auto_close_resolved_hours: props.settings.auto_close_resolved_hours || 72,
+const getInitialFormData = () => {
+    const data = {
+        imap_host: props.settings.imap_host || '',
+        imap_port: props.settings.imap_port || '993',
+        imap_encryption: props.settings.imap_encryption || 'ssl',
+        imap_username: props.settings.imap_username || '',
+        imap_password: props.settings.imap_password || '',
+        mail_mailer: props.settings.mail_mailer || 'smtp',
+        mail_host: props.settings.mail_host || '',
+        mail_port: props.settings.mail_port || '587',
+        mail_username: props.settings.mail_username || '',
+        mail_password: props.settings.mail_password || '',
+        mail_encryption: props.settings.mail_encryption || 'tls',
+        mail_from_address: props.settings.mail_from_address || '',
+        mail_from_name: props.settings.mail_from_name || '',
+        google_maps_api_key: props.settings.google_maps_api_key || '',
+        threshold_green_min: props.settings.threshold_green_min || 1,
+        threshold_green_max: props.settings.threshold_green_max || 2,
+        threshold_green_label: props.settings.threshold_green_label || 'Healthy',
+        threshold_yellow_min: props.settings.threshold_yellow_min || 3,
+        threshold_yellow_max: props.settings.threshold_yellow_max || 3,
+        threshold_yellow_label: props.settings.threshold_yellow_label || 'Warning',
+        threshold_orange_min: props.settings.threshold_orange_min || 4,
+        threshold_orange_max: props.settings.threshold_orange_max || 4,
+        threshold_orange_label: props.settings.threshold_orange_label || 'At-risk',
+        threshold_red_min: props.settings.threshold_red_min || 5,
+        threshold_red_label: props.settings.threshold_red_label || 'Critical',
+        business_start_time: props.settings.business_start_time || '08:00',
+        business_end_time: props.settings.business_end_time || '17:00',
+        working_days: parseWorkingDays(props.settings.working_days),
+        sla_low_response: props.settings.sla_low_response || 24,
+        sla_low_resolution: props.settings.sla_low_resolution || 72,
+        sla_low_label: props.settings.sla_low_label || 'P4',
+        sla_medium_response: props.settings.sla_medium_response || 8,
+        sla_medium_resolution: props.settings.sla_medium_resolution || 48,
+        sla_medium_label: props.settings.sla_medium_label || 'P3',
+        sla_high_response: props.settings.sla_high_response || 4,
+        sla_high_resolution: props.settings.sla_high_resolution || 24,
+        sla_high_label: props.settings.sla_high_label || 'P2',
+        sla_urgent_response: props.settings.sla_urgent_response || 1,
+        sla_urgent_resolution: props.settings.sla_urgent_resolution || 8,
+        sla_urgent_label: props.settings.sla_urgent_label || 'P1',
+        auto_close_resolved_hours: props.settings.auto_close_resolved_hours || 72,
+    };
+
+    // Add sub-unit specific settings
+    props.subUnits.forEach(unit => {
+        const slug = slugify(unit);
+        data[`business_start_time_${slug}`] = props.settings[`business_start_time_${slug}`] || props.settings.business_start_time || '08:00';
+        data[`business_end_time_${slug}`] = props.settings[`business_end_time_${slug}`] || props.settings.business_end_time || '17:00';
+        data[`working_days_${slug}`] = parseWorkingDays(props.settings[`working_days_${slug}`] || props.settings.working_days);
+    });
+
+    return data;
+};
+
+const form = useForm(getInitialFormData());
+
+const subUnitOptions = computed(() => {
+    return [
+        { id: 'global', name: 'Global Default' },
+        ...props.subUnits.map(unit => ({ id: slugify(unit), name: unit }))
+    ];
+});
+
+const currentStartTimeKey = computed(() => {
+    return selectedSubUnit.value === 'global' ? 'business_start_time' : `business_start_time_${selectedSubUnit.value}`;
+});
+
+const currentEndTimeKey = computed(() => {
+    return selectedSubUnit.value === 'global' ? 'business_end_time' : `business_end_time_${selectedSubUnit.value}`;
+});
+
+const currentWorkingDaysKey = computed(() => {
+    return selectedSubUnit.value === 'global' ? 'working_days' : `working_days_${selectedSubUnit.value}`;
 });
 
 const submit = () => {
@@ -272,21 +316,41 @@ const submit = () => {
 
                             <!-- Business Hours Tab -->
                             <div v-if="activeTab === 'business_hours'" class="space-y-8">
+                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between mb-6">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="p-2 bg-blue-600 rounded-lg">
+                                            <AdjustmentsHorizontalIcon class="w-5 h-5 text-white" />
+                                        </div>
+                                        <div>
+                                            <h4 class="text-sm font-black text-blue-900 uppercase tracking-tight">Configure Hours For:</h4>
+                                            <p class="text-[10px] text-blue-600 font-bold">Select "Global Default" or a specific Sub-Unit</p>
+                                        </div>
+                                    </div>
+                                    <select 
+                                        v-model="selectedSubUnit"
+                                        class="border-blue-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg text-sm font-black text-blue-700 bg-white shadow-sm"
+                                    >
+                                        <option v-for="option in subUnitOptions" :key="option.id" :value="option.id">
+                                            {{ option.name }}
+                                        </option>
+                                    </select>
+                                </div>
+
                                 <section>
                                     <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
                                         <ClockIcon class="w-4 h-4 mr-2" />
-                                        Operational Time
+                                        Operational Time ({{ subUnitOptions.find(o => o.id === selectedSubUnit)?.name }})
                                     </h3>
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-xl">
                                         <div>
-                                            <InputLabel for="business_start_time" value="Start Time" />
-                                            <TextInput id="business_start_time" type="time" class="mt-1 block w-full" v-model="form.business_start_time" />
-                                            <InputError class="mt-2" :message="form.errors.business_start_time" />
+                                            <InputLabel :for="currentStartTimeKey" value="Start Time" />
+                                            <TextInput :id="currentStartTimeKey" type="time" class="mt-1 block w-full" v-model="form[currentStartTimeKey]" />
+                                            <InputError class="mt-2" :message="form.errors[currentStartTimeKey]" />
                                         </div>
                                         <div>
-                                            <InputLabel for="business_end_time" value="End Time" />
-                                            <TextInput id="business_end_time" type="time" class="mt-1 block w-full" v-model="form.business_end_time" />
-                                            <InputError class="mt-2" :message="form.errors.business_end_time" />
+                                            <InputLabel :for="currentEndTimeKey" value="End Time" />
+                                            <TextInput :id="currentEndTimeKey" type="time" class="mt-1 block w-full" v-model="form[currentEndTimeKey]" />
+                                            <InputError class="mt-2" :message="form.errors[currentEndTimeKey]" />
                                         </div>
                                     </div>
                                 </section>
@@ -296,18 +360,18 @@ const submit = () => {
                                 <section>
                                     <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
                                         <AdjustmentsHorizontalIcon class="w-4 h-4 mr-2" />
-                                        Working Days
+                                        Working Days ({{ subUnitOptions.find(o => o.id === selectedSubUnit)?.name }})
                                     </h3>
                                     <div class="flex flex-wrap gap-3">
                                         <label v-for="(day, index) in dayNames" :key="index" 
                                                class="inline-flex items-center px-4 py-2 rounded-xl border text-sm font-bold cursor-pointer transition-all shadow-sm"
-                                               :class="form.working_days.includes(index + 1) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'">
-                                            <input type="checkbox" :value="index + 1" v-model="form.working_days" class="hidden">
+                                               :class="form[currentWorkingDaysKey].includes(index + 1) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'">
+                                            <input type="checkbox" :value="index + 1" v-model="form[currentWorkingDaysKey]" class="hidden">
                                             {{ day }}
                                         </label>
                                     </div>
-                                    <p class="mt-4 text-[10px] text-gray-400 italic">These days are used to calculate SLA deadlines and response times.</p>
-                                    <InputError class="mt-2" :message="form.errors.working_days" />
+                                    <p class="mt-4 text-[10px] text-gray-400 italic">These days are used to calculate SLA deadlines and response times for {{ selectedSubUnit === 'global' ? 'all tickets by default' : 'tickets assigned to this sub-unit' }}.</p>
+                                    <InputError class="mt-2" :message="form.errors[currentWorkingDaysKey]" />
                                 </section>
                             </div>
 

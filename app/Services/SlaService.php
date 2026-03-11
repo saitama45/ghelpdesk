@@ -9,9 +9,23 @@ use App\Models\Setting;
 class SlaService
 {
     /**
+     * Get a setting with optional sub-unit override.
+     */
+    private static function getSetting($key, $subUnit = null, $default = null)
+    {
+        if ($subUnit) {
+            $slug = \Illuminate\Support\Str::slug($subUnit, '_');
+            $overrideKey = "{$key}_{$slug}";
+            $value = Setting::get($overrideKey);
+            if ($value !== null) return $value;
+        }
+        return Setting::get($key, $default);
+    }
+
+    /**
      * Calculate the target datetime based on business hours.
      */
-    public static function calculateTarget(Carbon $startDate, $itemId, string $type = 'response')
+    public static function calculateTarget(Carbon $startDate, $itemId, string $type = 'response', $subUnit = null)
     {
         $item = \App\Models\Item::find($itemId);
         $priority = $item ? strtolower($item->priority) : 'medium';
@@ -21,15 +35,14 @@ class SlaService
 
         $targetDate = $startDate->copy();
         
-        $startTime = Setting::get('business_start_time', '08:00:00');
-        $endTime = Setting::get('business_end_time', '17:00:00');
-        $workingDaysRaw = Setting::get('working_days');
+        $startTime = self::getSetting('business_start_time', $subUnit, '08:00:00');
+        $endTime = self::getSetting('business_end_time', $subUnit, '17:00:00');
+        $workingDaysRaw = self::getSetting('working_days', $subUnit);
         $workingDays = $workingDaysRaw ? json_decode($workingDaysRaw, true) : [1, 2, 3, 4, 5];
 
         // Parse work hours robustly
         $workStart = Carbon::parse($startTime);
         $workEnd = Carbon::parse($endTime);
-        $dailyWorkSeconds = $workStart->diffInSeconds($workEnd);
         
         $secondsToAdd = $hours * 3600;
 
@@ -73,19 +86,13 @@ class SlaService
     /**
      * Simply add seconds while respecting business hours (for resuming from pause).
      */
-    public static function addSecondsRespectingBusinessHours(Carbon $startDate, int $secondsToAdd, Category $category = null)
+    public static function addSecondsRespectingBusinessHours(Carbon $startDate, int $secondsToAdd, Category $category = null, $subUnit = null)
     {
-        // For simplicity, we can treat "pause duration" as a direct push of the target, 
-        // OR we can re-calculate the target using the original duration.
-        // Usually, ITIL logic says if you were paused for 1 hour, your deadline is pushed by 1 hour.
-        
-        // But if that push lands on a weekend, it should move to Monday.
-        
         $newTarget = $startDate->copy()->addSeconds($secondsToAdd);
         
-        $startTime = Setting::get('business_start_time', '08:00:00');
-        $endTime = Setting::get('business_end_time', '17:00:00');
-        $workingDaysRaw = Setting::get('working_days');
+        $startTime = self::getSetting('business_start_time', $subUnit, '08:00:00');
+        $endTime = self::getSetting('business_end_time', $subUnit, '17:00:00');
+        $workingDaysRaw = self::getSetting('working_days', $subUnit);
         $workingDays = $workingDaysRaw ? json_decode($workingDaysRaw, true) : [1, 2, 3, 4, 5];
 
         $workStart = Carbon::parse($startTime);

@@ -43,6 +43,7 @@ class RolesAndPermissionSeeder extends Seeder
             'reports.view' => 'View reports',
             'reports.export' => 'Export reports',
             'reports.store_health' => 'View store health report',
+            'reports.sla_performance' => 'View SLA performance report',
 
             // Companies
             'companies.view' => 'View companies',
@@ -107,7 +108,7 @@ class RolesAndPermissionSeeder extends Seeder
             'attendance.view', 'attendance.logs', 'attendance.create',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close',
             'users.view',
-            'reports.view', 'reports.store_health',
+            'reports.view', 'reports.store_health', 'reports.sla_performance',
             'companies.view',
             'categories.view',
             'subcategories.view',
