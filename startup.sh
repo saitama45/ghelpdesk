@@ -4,27 +4,25 @@
 cp /home/site/wwwroot/default.conf /etc/nginx/sites-available/default
 service nginx reload
 
-# 2. Fix permissions for storage and cache (Fast and Crucial)
+# 2. Fix permissions (Fast)
 chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
 
-# 3. Run migrations on your Azure SQL Database (Can be slow, so we do it before caching)
-# We only do this once to ensure DB is ready.
-php /home/site/wwwroot/artisan migrate --force
+# 3. Run migrations and Caching in the BACKGROUND
+# This allows the web server to start IMMEDIATELY so Azure sees it as "Healthy"
+(
+  echo "⏳ Background tasks starting..."
+  php /home/site/wwwroot/artisan migrate --force
+  php /home/site/wwwroot/artisan config:cache
+  php /home/site/wwwroot/artisan route:cache
+  php /home/site/wwwroot/artisan view:cache
+  echo "✅ Background tasks finished!"
+) &
 
-# 4. Clear old caches to avoid state issues
-php /home/site/wwwroot/artisan config:clear
-php /home/site/wwwroot/artisan cache:clear
-
-# 5. Optimize Laravel (Caching)
-# If these are slow, they can be moved to background or handled by GitHub Actions
-php /home/site/wwwroot/artisan config:cache
-php /home/site/wwwroot/artisan route:cache
-php /home/site/wwwroot/artisan view:cache
-
-# 6. Start the Laravel Scheduler loop in the background
+# 4. Start the Laravel Scheduler loop
+# We'll add a check to make sure it doesn't overlap too much
 (while true; do
   php /home/site/wwwroot/artisan schedule:run >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1
   sleep 60
 done) &
 
-echo "🚀 Startup completed successfully!"
+echo "🚀 Startup script finished! Handing over to php-fpm."
