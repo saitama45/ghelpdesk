@@ -111,9 +111,6 @@ return [
             'prefix_indexes' => true,
             'encrypt' => 'yes',
             'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'yes'),
-            'options' => [
-                PDO::ATTR_TIMEOUT => 30,
-            ],
         ],
 
     ],
