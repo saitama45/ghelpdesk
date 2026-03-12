@@ -29,7 +29,12 @@ const logout = () => {
 const userMenuOpen = ref(false);
 const userMenuRef = ref(null);
 const { success, error, warning, info } = useToast();
-const { showConfirmModal, confirmTitle, confirmMessage, handleConfirm, handleCancel } = useConfirm();
+const { 
+    showConfirmModal, 
+    confirmState,
+    handleConfirm, 
+    handleCancel 
+} = useConfirm();
 const { hasPermission } = usePermission();
 
 const handleClickOutside = (event) => {
@@ -182,8 +187,11 @@ const isCurrentRoute = (routeName) => {
         <!-- Confirm Modal -->
         <ConfirmModal 
             :show="showConfirmModal" 
-            :title="confirmTitle" 
-            :message="confirmMessage" 
+            :title="confirmState.title" 
+            :message="confirmState.message" 
+            :confirm-label="confirmState.confirmLabel"
+            :cancel-label="confirmState.cancelLabel"
+            :variant="confirmState.variant"
             @confirm="handleConfirm" 
             @cancel="handleCancel" 
         />

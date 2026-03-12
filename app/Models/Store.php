@@ -12,6 +12,7 @@ class Store extends Model
         'sector',
         'area',
         'brand',
+        'class',
         'cluster',
         'email',
         'latitude',

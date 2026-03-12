@@ -18,6 +18,7 @@ class ProjectTask extends Model
         'name',
         'category',
         'assigned_to',
+        'external_assignment',
         'support_by',
         'status',
         'progress',

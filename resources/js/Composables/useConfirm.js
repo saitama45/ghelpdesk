@@ -1,16 +1,25 @@
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 
 const showConfirmModal = ref(false)
-const confirmTitle = ref('')
-const confirmMessage = ref('')
+const confirmState = reactive({
+    title: 'Confirm Action',
+    message: 'Are you sure you want to proceed?',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+    variant: 'danger'
+})
+
 let confirmCallback = null
 let cancelCallback = null
 
 export function useConfirm() {
     const confirm = (options = {}) => {
-        return new Promise((resolve, reject) => {
-            confirmTitle.value = options.title || 'Confirm Delete'
-            confirmMessage.value = options.message || 'Are you sure you want to delete this item? This action cannot be undone.'
+        return new Promise((resolve) => {
+            confirmState.title = options.title || 'Confirm Action'
+            confirmState.message = options.message || 'Are you sure you want to proceed?'
+            confirmState.confirmLabel = options.confirmLabel || 'Confirm'
+            confirmState.cancelLabel = options.cancelLabel || 'Cancel'
+            confirmState.variant = options.variant || 'danger'
             
             confirmCallback = () => {
                 showConfirmModal.value = false
@@ -36,8 +45,7 @@ export function useConfirm() {
 
     return {
         showConfirmModal,
-        confirmTitle,
-        confirmMessage,
+        confirmState,
         confirm,
         handleConfirm,
         handleCancel

@@ -3,10 +3,58 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProjectTask;
+use App\Models\Project;
+use App\Models\ActivityTemplate;
 use Illuminate\Http\Request;
 
 class ProjectTaskController extends Controller
 {
+    public function applyTemplates(Project $project)
+    {
+        $store = $project->store;
+        
+        if (!$store) {
+            return redirect()->back()->with('error', 'Project does not have an assigned store.');
+        }
+
+        $storeClass = $store->class ?? 'Regular';
+
+        $templates = ActivityTemplate::whereIn('store_class', [$storeClass, 'Both'])
+            ->orderBy('order')
+            ->get();
+
+        if ($templates->isEmpty()) {
+            return redirect()->back()->with('info', 'No activity templates found for this store class.');
+        }
+
+        $addedCount = 0;
+
+        foreach ($templates as $template) {
+            // Check if task already exists to prevent duplicates
+            $exists = ProjectTask::where('project_id', $project->id)
+                ->where('name', $template->name)
+                ->exists();
+
+            if (!$exists) {
+                ProjectTask::create([
+                    'project_id' => $project->id,
+                    'name' => $template->name,
+                    'category' => $template->category,
+                    'status' => 'Pending',
+                    'progress' => 0,
+                    'order' => $template->order,
+                ]);
+                $addedCount++;
+            }
+        }
+
+        if ($addedCount > 0) {
+            return redirect()->back()->with('success', "Applied {$addedCount} task templates successfully.");
+        }
+
+        return redirect()->back()->with('info', 'All applicable templates have already been added.');
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -25,8 +73,22 @@ class ProjectTaskController extends Controller
 
         // Convert empty strings to null for database foreign keys
         $validated['parent_task_id'] = ($validated['parent_task_id'] ?? null) ?: null;
-        $validated['assigned_to'] = ($validated['assigned_to'] ?? null) ?: null;
         $validated['support_by'] = ($validated['support_by'] ?? null) ?: null;
+
+        // Logic for Assignment: Handle both User IDs and External Names
+        $assignment = ($validated['assigned_to'] ?? null) ?: null;
+        if ($assignment) {
+            if (is_numeric($assignment)) {
+                $validated['assigned_to'] = $assignment;
+                $validated['external_assignment'] = null;
+            } else {
+                $validated['assigned_to'] = null;
+                $validated['external_assignment'] = $assignment;
+            }
+        } else {
+            $validated['assigned_to'] = null;
+            $validated['external_assignment'] = null;
+        }
 
         $task = ProjectTask::create($validated);
 
@@ -46,11 +108,24 @@ class ProjectTaskController extends Controller
             'order' => 'sometimes|integer',
         ]);
 
-        if (array_key_exists('assigned_to', $validated)) {
-            $validated['assigned_to'] = $validated['assigned_to'] ?: null;
-        }
         if (array_key_exists('support_by', $validated)) {
             $validated['support_by'] = $validated['support_by'] ?: null;
+        }
+
+        if (array_key_exists('assigned_to', $validated)) {
+            $assignment = $validated['assigned_to'] ?: null;
+            if ($assignment) {
+                if (is_numeric($assignment)) {
+                    $validated['assigned_to'] = $assignment;
+                    $validated['external_assignment'] = null;
+                } else {
+                    $validated['assigned_to'] = null;
+                    $validated['external_assignment'] = $assignment;
+                }
+            } else {
+                $validated['assigned_to'] = null;
+                $validated['external_assignment'] = null;
+            }
         }
 
         $projects_task->update($validated);

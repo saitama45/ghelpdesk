@@ -36,6 +36,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sector/Area</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand/Cluster</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geofence</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Users</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket Health</th>
@@ -66,6 +67,15 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm text-gray-900">{{ store.brand }}</div>
                                 <div class="text-xs text-gray-500">Cluster: {{ store.cluster }}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span v-if="store.class === 'Kitchen'" class="px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-lg border border-amber-100 flex items-center w-fit">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                                    Kitchen
+                                </span>
+                                <span v-else class="px-2 py-1 bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-100">
+                                    Regular
+                                </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div v-if="store.latitude" class="text-xs space-y-1">
@@ -236,6 +246,14 @@
                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
                             <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Class</label>
+                                <select v-model="form.class" required
+                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    <option value="Regular">Regular</option>
+                                    <option value="Kitchen">Kitchen</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-3">
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cluster</label>
                                 <input v-model="form.cluster" type="text" required
                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
@@ -369,6 +387,7 @@ const form = reactive({
     sector: 1,
     area: '',
     brand: '',
+    class: 'Regular',
     cluster: '',
     latitude: null,
     longitude: null,
@@ -395,6 +414,7 @@ const openCreateModal = () => {
         sector: 1,
         area: '',
         brand: '',
+        class: 'Regular',
         cluster: '',
         latitude: null,
         longitude: null,
@@ -415,6 +435,7 @@ const editStore = (store) => {
         sector: store.sector,
         area: store.area,
         brand: store.brand,
+        class: store.class || 'Regular',
         cluster: store.cluster,
         latitude: store.latitude,
         longitude: store.longitude,

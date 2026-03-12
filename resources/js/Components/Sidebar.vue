@@ -79,7 +79,7 @@ onMounted(() => {
     if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*')) {
         openMenus.value.operations = true;
     }
-    if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*')) {
+    if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -103,6 +103,7 @@ const canSeeOperations = computed(() => {
 const canSeeReferences = computed(() => {
     return hasPermission('companies.view') || 
            hasPermission('stores.view') || 
+           hasPermission('activity_templates.view') || 
            hasPermission('categories.view') || 
            hasPermission('subcategories.view') || 
            hasPermission('items.view');
@@ -298,6 +299,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Stores</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('activity_templates.view')"
+                            :href="route('activity-templates.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('activity-templates.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Activity Templates</span>
                         </Link>
                         <Link
                             v-if="hasPermission('categories.view')"

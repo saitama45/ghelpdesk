@@ -13,7 +13,8 @@ import {
     FunnelIcon,
     ArrowsPointingOutIcon,
     PencilSquareIcon,
-    XMarkIcon
+    XMarkIcon,
+    DocumentDuplicateIcon
 } from '@heroicons/vue/24/outline';
 
 import { useToast } from '@/Composables/useToast.js';
@@ -24,12 +25,13 @@ const props = defineProps({
     users: Array,
 });
 
-const { success } = useToast();
+const { success, info } = useToast();
 const { confirm: confirmAction } = useConfirm();
 const isAddingTask = ref(false);
 const isEditing = ref(false);
 const editingTaskId = ref(null);
 const showFilters = ref(false);
+const isApplyingTemplates = ref(false);
 
 // Refs for scroll syncing (Simplified to single container)
 const mainWorkspaceRef = ref(null);
@@ -62,13 +64,55 @@ const stats = computed(() => {
     const completed = tasks.filter(t => t.status === 'Done').length;
     const ongoing = tasks.filter(t => t.status === 'Ongoing').length;
     const pending = tasks.filter(t => t.status === 'Pending').length;
-    
+
     // Calculate average progress
     const totalProgressSum = tasks.reduce((sum, t) => sum + (t.progress || 0), 0);
     const progress = total > 0 ? Math.round(totalProgressSum / total) : 0;
-    
+
     return { total, completed, ongoing, pending, progress };
 });
+
+const projectTeamMembers = computed(() => {
+    // Relationship is named teamMembers in the Model
+    const team = props.project.teamMembers || props.project.team_members || [];
+    
+    return team.map(m => {
+        if (m.user) {
+            return {
+                id: m.user.id,
+                name: m.user.name,
+                is_external: false
+            };
+        } else {
+            return {
+                id: m.external_name, // Use name as ID for external
+                name: m.external_name,
+                is_external: true
+            };
+        }
+    });
+});
+
+const applyActivityTemplates = async () => {
+    const storeClass = props.project.store?.class || 'Regular';
+    const ok = await confirmAction({
+        title: 'Apply Activity Templates',
+        message: `Are you sure you want to auto-populate tasks based on the "${storeClass}" store class? Existing tasks will not be duplicated.`,
+        confirmLabel: 'Apply Templates',
+        cancelLabel: 'Cancel',
+        variant: 'primary'
+    });
+    
+    if (ok) {
+        isApplyingTemplates.value = true;
+        useForm({}).post(route('projects.apply-templates', props.project.id), {
+            preserveScroll: true,
+            onFinish: () => {
+                isApplyingTemplates.value = false;
+            }
+        });
+    }
+};
 
 const saveTask = () => {
     if (isEditing.value) {
@@ -135,7 +179,9 @@ const updateTaskField = (task, field, value) => {
 const deleteTask = async (taskId) => {
     const ok = await confirmAction({
         title: 'Delete Task',
-        message: 'Are you sure you want to permanently delete this task? This cannot be undone.'
+        message: 'Are you sure you want to permanently delete this task? This cannot be undone.',
+        confirmLabel: 'Delete',
+        variant: 'danger'
     });
     
     if (ok) {
@@ -309,6 +355,13 @@ const isWeekend = (date) => {
             </div>
 
             <div class="flex items-center space-x-2">
+                <button @click="applyActivityTemplates" 
+                        class="inline-flex items-center px-4 py-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95 disabled:opacity-50"
+                        :disabled="isApplyingTemplates"
+                >
+                    <DocumentDuplicateIcon class="w-4 h-4 mr-2" />
+                    {{ isApplyingTemplates ? 'Applying...' : 'Apply Templates' }}
+                </button>
                 <button @click="showFilters = !showFilters" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
                     <FunnelIcon class="w-5 h-5" />
                 </button>
@@ -346,7 +399,7 @@ const isWeekend = (date) => {
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Assigned To</label>
                         <select v-model="form.assigned_to" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
                             <option value="">Unassigned</option>
-                            <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
+                            <option v-for="member in projectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                         </select>
                         <div v-if="form.errors.assigned_to" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.assigned_to }}</div>
                     </div>
