@@ -83,6 +83,14 @@ class RolesAndPermissionSeeder extends Seeder
             'canned_messages.view' => 'View canned messages',
             'canned_messages.create' => 'Create canned messages',
             'canned_messages.edit' => 'Edit canned messages',
+
+            // Projects (NSO Tracker)
+            'projects.view' => 'View project tracker',
+            'projects.create' => 'Create new projects',
+            'projects.edit' => 'Edit project details',
+            'projects.delete' => 'Delete projects',
+            'projects.manage_tasks' => 'Manage project tasks',
+            'projects.manage_assets' => 'Manage project assets',
         ];
 
         // Create permissions
@@ -117,6 +125,9 @@ class RolesAndPermissionSeeder extends Seeder
             'schedules.view',
             'canned_messages.view',
             'canned_messages.edit',
+            'projects.view',
+            'projects.manage_tasks',
+            'projects.manage_assets',
         ]);
         
         $user->givePermissionTo([

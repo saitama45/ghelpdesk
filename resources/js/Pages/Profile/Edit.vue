@@ -9,7 +9,7 @@ const props = defineProps({
 });
 
 const activeTab = ref('profile');
-const { showSuccess, showError } = useToast();
+const { showError } = useToast();
 
 const profileForm = useForm({
     name: props.user.name,
@@ -52,10 +52,9 @@ const updateProfile = () => {
         // Method spoofing for file upload via PUT route
         profileForm.transform((data) => ({
             ...data,
-            _method: 'PUT',
+            _method: 'PATCH',
         })).post(route('profile.update'), {
-            onSuccess: () => {
-                showSuccess('Profile updated successfully');
+        onSuccess: () => {
                 photoPreview.value = null;
                 const fileInput = document.getElementById('photo');
                 if (fileInput) fileInput.value = null;
@@ -68,9 +67,8 @@ const updateProfile = () => {
         return;
     }
 
-    profileForm.put(route('profile.update'), {
+    profileForm.patch(route('profile.update'), {
         onSuccess: () => {
-            showSuccess('Profile updated successfully');
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to update profile';
@@ -83,7 +81,6 @@ const updatePassword = () => {
     passwordForm.put(route('profile.password'), {
         onSuccess: () => {
             passwordForm.reset();
-            showSuccess('Password updated successfully');
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to update password';

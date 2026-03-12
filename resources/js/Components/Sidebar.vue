@@ -171,6 +171,29 @@ const canSeeSettings = computed(() => {
                     </div>
                 </Link>
 
+                <!-- Project Tracker Link -->
+                <Link
+                    v-if="hasPermission('projects.view')"
+                    :href="route('projects.index')"
+                    :class="[
+                        'flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                        route().current('projects.*')
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ]"
+                >
+                    <ClipboardDocumentListIcon
+                        :class="[
+                            'w-5 h-5 flex-shrink-0',
+                            isCollapsed ? 'mx-auto' : 'mr-3'
+                        ]"
+                    />
+                    <span v-if="!isCollapsed" class="truncate font-medium">Project Tracker</span>
+                    <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                        Project Tracker
+                    </div>
+                </Link>
+
                 <!-- Operations Section -->
                 <div v-if="canSeeOperations" class="space-y-1 pt-2">
                     <button
@@ -309,50 +332,6 @@ const canSeeSettings = computed(() => {
                     </div>
                 </div>
 
-                <!-- User Management Section -->
-                <div v-if="canSeeUserManagement" class="space-y-1 pt-1">
-                    <button
-                        @click="toggleMenu('userManagement')"
-                        :class="[
-                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('users.*') || route().current('roles.*')) && !openMenus.userManagement
-                                ? 'bg-gray-800 text-blue-400'
-                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        ]"
-                    >
-                        <UserGroupIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">User Management</span>
-                        <ChevronDownIcon v-if="!isCollapsed && openMenus.userManagement" class="w-4 h-4 ml-2" />
-                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.userManagement" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            User Management
-                        </div>
-                    </button>
-
-                    <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 space-y-1 mt-1">
-                        <Link
-                            v-if="hasPermission('users.view')"
-                            :href="route('users.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Users</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('roles.view')"
-                            :href="route('roles.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Roles & Permissions</span>
-                        </Link>
-                    </div>
-                </div>
-
                 <!-- Reports Section -->
                 <div v-if="hasPermission('reports.view')" class="space-y-1 pt-1">
                     <button
@@ -393,6 +372,50 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>SLA Performance Report</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- User Management Section -->
+                <div v-if="canSeeUserManagement" class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('userManagement')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('users.*') || route().current('roles.*')) && !openMenus.userManagement
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <UserGroupIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">User Management</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.userManagement" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.userManagement" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            User Management
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 space-y-1 mt-1">
+                        <Link
+                            v-if="hasPermission('users.view')"
+                            :href="route('users.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Users</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('roles.view')"
+                            :href="route('roles.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Roles & Permissions</span>
                         </Link>
                     </div>
                 </div>

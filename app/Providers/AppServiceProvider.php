@@ -35,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         \App\Models\Ticket::observe(\App\Observers\TicketObserver::class);
+        \App\Models\ProjectTask::observe(\App\Observers\ProjectTaskObserver::class);
 
         // Override config from database - skip if running in console to prevent CI issues
         if (!app()->runningInConsole()) {

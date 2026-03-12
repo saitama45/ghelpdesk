@@ -33,9 +33,14 @@ class Store extends Model
         return $this->belongsToMany(User::class)->withTimestamps();
     }
 
-    public function schedules()
+    public function schedules(): HasMany
     {
         return $this->hasMany(Schedule::class);
+    }
+
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
     }
 
     public function tickets()
