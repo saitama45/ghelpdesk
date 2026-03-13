@@ -106,6 +106,7 @@ const getInitialFormData = () => {
         sla_urgent_resolution: props.settings.sla_urgent_resolution || 8,
         sla_urgent_label: props.settings.sla_urgent_label || 'P1',
         auto_close_resolved_hours: props.settings.auto_close_resolved_hours || 72,
+        waiting_aging_alarm_days: props.settings.waiting_aging_alarm_days || 3,
     };
 
     // Add sub-unit specific settings
@@ -600,6 +601,26 @@ const submit = () => {
                                         <div class="col-span-3">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
                                             <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_red_label" />
+                                        </div>
+                                    </div>
+
+                                    <div class="border-t border-gray-100 my-6"></div>
+
+                                    <!-- Waiting Aging Alarm -->
+                                    <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                                        <div class="flex items-center space-x-2 mb-4">
+                                            <ClockIcon class="w-4 h-4 text-orange-600" />
+                                            <span class="text-xs font-black text-orange-700 uppercase tracking-widest">Waiting Status Aging Alarm</span>
+                                        </div>
+                                        <div class="max-w-xs">
+                                            <InputLabel value="Aging Days threshold" class="!text-[10px] uppercase text-orange-600" />
+                                            <div class="flex items-center space-x-3 mt-1">
+                                                <TextInput type="number" class="block w-full border-orange-200 focus:border-orange-500 focus:ring-orange-500" v-model="form.waiting_aging_alarm_days" />
+                                                <span class="text-xs font-bold text-orange-400">Days</span>
+                                            </div>
+                                            <p class="mt-2 text-[9px] text-orange-400 italic">
+                                                Tickets in "Waiting for service provider" or "Waiting for clients feedback?" statuses for longer than these days will trigger an alarm on the dashboard.
+                                            </p>
                                         </div>
                                     </div>
                                 </div>

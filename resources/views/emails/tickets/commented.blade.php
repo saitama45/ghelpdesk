@@ -34,7 +34,8 @@
         .status-in_progress { background-color: #f3e8ff; color: #6b21a8; }
         .status-resolved { background-color: #dcfce7; color: #166534; }
         .status-closed { background-color: #f3f4f6; color: #374151; }
-        .status-waiting { background-color: #fef3c7; color: #92400e; }
+        .status-waiting_service_provider { background-color: #fef3c7; color: #92400e; }
+        .status-waiting_client_feedback { background-color: #dbeafe; color: #1e40af; }
         
         /* Comment Box */
         .comment-box { background-color: #ffffff; border-left: 4px solid #2563eb; padding: 16px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
@@ -73,7 +74,7 @@
             <div class="status-container">
                 <span class="status-label">Current Ticket Status</span>
                 <span class="status-value status-{{ $ticket->status }}">
-                    {{ strtoupper(str_replace('_', ' ', $ticket->status)) }}
+                    {{ $ticket->status === 'waiting_service_provider' ? 'WAITING FOR SERVICE PROVIDER' : ($ticket->status === 'waiting_client_feedback' ? 'WAITING FOR CLIENTS FEEDBACK?' : strtoupper(str_replace('_', ' ', $ticket->status))) }}
                 </span>
             </div>
             

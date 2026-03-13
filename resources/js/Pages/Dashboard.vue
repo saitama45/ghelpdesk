@@ -1,7 +1,8 @@
 <script setup>
 import { Head, usePage, Link, router } from '@inertiajs/vue3';
-import { computed, reactive, watch, onMounted } from 'vue';
+import { ref, computed, reactive, watch, onMounted } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import Modal from '@/Components/Modal.vue';
 import axios from 'axios';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -10,6 +11,8 @@ const props = defineProps({
     recentActivity: Array,
     myTickets: Array,
     recentTickets: Array,
+    alarmedWaitingTickets: Array,
+    urgentTickets: Array,
     filters: Object,
     years: Array,
     months: Array,
@@ -63,8 +66,17 @@ const getStatusColor = (status) => {
         case 'open': return 'bg-blue-100 text-blue-800';
         case 'in_progress': return 'bg-purple-100 text-purple-800';
         case 'closed': return 'bg-gray-100 text-gray-800';
-        case 'waiting': return 'bg-orange-100 text-orange-800';
+        case 'waiting_service_provider': return 'bg-orange-100 text-orange-800';
+        case 'waiting_client_feedback': return 'bg-blue-100 text-blue-800';
         default: return 'bg-gray-100 text-gray-800';
+    }
+};
+
+const getStatusLabel = (status) => {
+    switch (status) {
+        case 'waiting_service_provider': return 'Waiting for service provider';
+        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        default: return status ? status.replace('_', ' ') : '';
     }
 };
 
@@ -77,6 +89,9 @@ const getPriorityColor = (priority) => {
         default: return 'text-gray-600 bg-gray-50';
     }
 };
+
+const showWaitingAlarmModal = ref(false);
+const showUrgentModal = ref(false);
 </script>
 
 <template>
@@ -132,7 +147,7 @@ const getPriorityColor = (priority) => {
         </div>
 
         <!-- Stats Grid -->
-        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-8">
+        <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
             <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-blue-500 flex flex-col justify-between">
                 <div class="flex items-center justify-between">
                     <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Total</p>
@@ -157,12 +172,52 @@ const getPriorityColor = (priority) => {
                 <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.in_progress }}</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-red-500 flex flex-col justify-between">
+            <div 
+                class="rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-orange-500 flex flex-col justify-between cursor-pointer transition-all duration-500" 
+                :class="[
+                    stats.waiting_alarm > 0 
+                        ? 'bg-orange-50 ring-2 ring-orange-300 animate-waiting-alarm' 
+                        : 'bg-white hover:bg-orange-50'
+                ]"
+                @click="showWaitingAlarmModal = true"
+            >
                 <div class="flex items-center justify-between">
-                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Urgent</p>
-                    <div class="p-1.5 bg-red-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg></div>
+                    <p class="text-[10px] sm:text-xs font-black uppercase tracking-widest" :class="stats.waiting_alarm > 0 ? 'text-orange-700' : 'text-orange-600'">Waiting Alarm</p>
+                    <div class="p-1.5 rounded-lg hidden sm:block" :class="stats.waiting_alarm > 0 ? 'bg-orange-200' : 'bg-orange-100'">
+                        <svg class="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
                 </div>
-                <p class="text-2xl sm:text-3xl font-black text-red-600 mt-1">{{ stats.unassigned }}</p>
+                <div class="flex items-end justify-between">
+                    <p class="text-2xl sm:text-3xl font-black text-orange-600 mt-1">{{ stats.waiting_alarm }}</p>
+                    <span v-if="stats.waiting_alarm > 0" class="flex h-3 w-3 mb-2">
+                        <span class="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-orange-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-orange-600"></span>
+                    </span>
+                </div>
+            </div>
+
+            <div 
+                class="rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-red-500 flex flex-col justify-between cursor-pointer transition-all duration-500"
+                :class="[
+                    stats.urgent > 0 
+                        ? 'bg-red-50 ring-2 ring-red-300 animate-waiting-alarm' 
+                        : 'bg-white hover:bg-red-50'
+                ]"
+                @click="showUrgentModal = true"
+            >
+                <div class="flex items-center justify-between">
+                    <p class="text-[10px] sm:text-xs font-black uppercase tracking-widest" :class="stats.urgent > 0 ? 'text-red-700' : 'text-gray-400'">Urgent (P1)</p>
+                    <div class="p-1.5 rounded-lg hidden sm:block" :class="stats.urgent > 0 ? 'bg-red-200' : 'bg-red-50'">
+                        <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    </div>
+                </div>
+                <div class="flex items-end justify-between">
+                    <p class="text-2xl sm:text-3xl font-black text-red-600 mt-1">{{ stats.urgent }}</p>
+                    <span v-if="stats.urgent > 0" class="flex h-3 w-3 mb-2">
+                        <span class="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+                    </span>
+                </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-green-500 flex flex-col justify-between col-span-2 lg:col-span-1">
@@ -206,7 +261,7 @@ const getPriorityColor = (priority) => {
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ ticket.company_name }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span :class="['px-2.5 py-0.5 inline-flex text-xs font-bold rounded-full border', getStatusColor(ticket.status)]">
-                                            {{ ticket.status.replace('_', ' ') }}
+                                            {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -254,7 +309,7 @@ const getPriorityColor = (priority) => {
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">{{ ticket.assignee }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span :class="['px-2.5 py-0.5 inline-flex text-xs font-bold rounded-full border', getStatusColor(ticket.status)]">
-                                            {{ ticket.status.replace('_', ' ') }}
+                                            {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
@@ -327,5 +382,133 @@ const getPriorityColor = (priority) => {
                 </div>
             </div>
         </div>
+
+        <!-- Waiting Alarm Tickets Modal -->
+        <Modal :show="showWaitingAlarmModal" @close="showWaitingAlarmModal = false" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 text-orange-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Aged Waiting Tickets
+                        <span class="ml-2 px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">
+                            {{ alarmedWaitingTickets.length }}
+                        </span>
+                    </h2>
+                    <button @click="showWaitingAlarmModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-if="alarmedWaitingTickets.length > 0" class="space-y-3">
+                        <div v-for="ticket in alarmedWaitingTickets" :key="ticket.id" class="p-4 bg-orange-50 border border-orange-100 rounded-xl hover:shadow-md transition-all group">
+                            <div class="flex justify-between items-start">
+                                <div class="flex flex-col">
+                                    <div class="flex items-center space-x-2">
+                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ ticket.key }}
+                                        </Link>
+                                        <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
+                                            {{ getStatusLabel(ticket.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] font-black text-orange-600 uppercase tracking-widest">Aging</p>
+                                    <p class="text-lg font-black text-orange-700">{{ parseFloat(ticket.aging_days).toFixed(1) }} Days</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-end">
+                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                    Open Ticket
+                                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500 italic">
+                        No tickets have reached the aging threshold yet.
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="showWaitingAlarmModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Urgent Tickets Modal -->
+        <Modal :show="showUrgentModal" @close="showUrgentModal = false" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Urgent (P1) Tickets
+                        <span class="ml-2 px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded-full">
+                            {{ urgentTickets.length }}
+                        </span>
+                    </h2>
+                    <button @click="showUrgentModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-if="urgentTickets.length > 0" class="space-y-3">
+                        <div v-for="ticket in urgentTickets" :key="ticket.id" class="p-4 bg-red-50 border border-red-100 rounded-xl hover:shadow-md transition-all group">
+                            <div class="flex justify-between items-start">
+                                <div class="flex flex-col">
+                                    <div class="flex items-center space-x-2">
+                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ ticket.key }}
+                                        </Link>
+                                        <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
+                                            {{ getStatusLabel(ticket.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Fixed Priority: {{ ticket.priority }}</span>
+                                        <span v-if="ticket.item_priority" class="text-[9px] font-bold text-red-500 uppercase tracking-tighter">Current Item Priority: {{ ticket.item_priority }}</span>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] font-black text-red-600 uppercase tracking-widest">Created</p>
+                                    <p class="text-xs font-bold text-red-700">{{ ticket.created_at }}</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-end">
+                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                    Open Ticket
+                                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500 italic">
+                        No urgent tickets found.
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="showUrgentModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>
+
+<style scoped>
+@keyframes pulse-subtle {
+  0%, 100% { transform: scale(1); box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+  50% { transform: scale(1.03); box-shadow: 0 10px 15px -3px rgba(251, 146, 60, 0.2), 0 4px 6px -2px rgba(251, 146, 60, 0.1); }
+}
+.animate-waiting-alarm {
+  animation: pulse-subtle 3s infinite ease-in-out;
+}
+</style>

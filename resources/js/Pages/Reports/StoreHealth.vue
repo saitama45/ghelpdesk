@@ -87,6 +87,14 @@ const getHealthStatus = (ticketCount) => {
     return { color: 'bg-gray-200' };
 };
 
+const getStatusLabel = (status) => {
+    switch (status) {
+        case 'waiting_service_provider': return 'Waiting for service provider';
+        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        default: return status ? status.replace('_', ' ') : '';
+    }
+};
+
 const exportPDF = () => {
     const params = new URLSearchParams(filterForm.value).toString();
     window.open(route('reports.store-health.pdf') + '?' + params, '_blank');
@@ -335,9 +343,10 @@ const exportPDF = () => {
                                               'bg-green-100 text-green-700': ticket.status === 'open',
                                               'bg-blue-100 text-blue-700': ticket.status === 'in_progress',
                                               'bg-gray-100 text-gray-700': ticket.status === 'closed',
-                                              'bg-yellow-100 text-yellow-700': ticket.status === 'waiting'
+                                              'bg-yellow-100 text-yellow-700': ticket.status === 'waiting_service_provider',
+                                              'bg-blue-100 text-blue-700': ticket.status === 'waiting_client_feedback'
                                           }">
-                                        {{ ticket.status }}
+                                        {{ getStatusLabel(ticket.status) }}
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500">

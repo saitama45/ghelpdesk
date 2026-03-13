@@ -57,11 +57,11 @@ class TicketObserver
             }
 
             // 3. Handle Pausing (Waiting factors)
-            if ($newStatus === 'waiting') {
+            if (in_array($newStatus, ['waiting_service_provider', 'waiting_client_feedback'])) {
                 $metric->update(['paused_at' => Carbon::now()]);
             } 
             // Resume SLA
-            elseif ($oldStatus === 'waiting' && $metric->paused_at) {
+            elseif (in_array($oldStatus, ['waiting_service_provider', 'waiting_client_feedback']) && $metric->paused_at) {
                 $pausedSeconds = (int) $metric->paused_at->diffInSeconds(Carbon::now());
                 
                 $data = [

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHistory;
+use App\Models\Setting;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
@@ -50,13 +52,67 @@ class DashboardController extends Controller
             $filteredQuery->whereMonth('created_at', $month);
         }
 
+        // Waiting Aging Alarm Logic
+        $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
+        $alarmDate = Carbon::now('Asia/Manila')->subDays($agingDays);
+        
+        $alarmedWaitingQuery = (clone $query)
+            ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+            ->where('updated_at', '<=', $alarmDate);
+            
+        $alarmedWaitingTickets = (clone $alarmedWaitingQuery)
+            ->select('id', 'ticket_key', 'title', 'status', 'updated_at')
+            ->get()
+            ->map(function($ticket) {
+                $updatedAt = Carbon::parse($ticket->updated_at);
+                $now = Carbon::now('Asia/Manila');
+                // Calculate precise days as float and round to 1 decimal
+                $agingDays = round($updatedAt->diffInMinutes($now) / (60 * 24), 1);
+
+                return [
+                    'id' => $ticket->id,
+                    'key' => $ticket->ticket_key,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'aging_days' => $agingDays,
+                ];
+            });
+
+        // Urgent (P1) Tickets Logic
+        $urgentTicketsQuery = (clone $query)
+            ->where(function($q) {
+                $q->where('priority', 'urgent')
+                  ->orWhereHas('item', function($iq) {
+                      $iq->where('priority', 'Urgent');
+                  });
+            })
+            ->where('status', '!=', 'closed');
+            
+        $urgentTickets = (clone $urgentTicketsQuery)
+            ->with(['item'])
+            ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'item_id', 'priority')
+            ->get()
+            ->map(function($ticket) {
+                return [
+                    'id' => $ticket->id,
+                    'key' => $ticket->ticket_key,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'priority' => $ticket->priority,
+                    'item_priority' => $ticket->item?->priority,
+                    'created_at' => $ticket->created_at->diffForHumans(),
+                ];
+            });
+
         // Stats (Filtered)
         $stats = [
             'total' => (clone $filteredQuery)->count(),
             'open' => (clone $filteredQuery)->where('status', 'open')->count(),
             'in_progress' => (clone $filteredQuery)->where('status', 'in_progress')->count(),
             'closed' => (clone $filteredQuery)->where('status', 'closed')->count(),
-            'waiting' => (clone $filteredQuery)->where('status', 'waiting')->count(),
+            'waiting' => (clone $filteredQuery)->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])->count(),
+            'waiting_alarm' => $alarmedWaitingTickets->count(),
+            'urgent' => $urgentTickets->count(),
             'unassigned' => (clone $filteredQuery)->whereNull('assignee_id')->count(),
         ];
         
@@ -174,6 +230,8 @@ class DashboardController extends Controller
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'myTickets' => $myTickets,
+            'alarmedWaitingTickets' => $alarmedWaitingTickets,
+            'urgentTickets' => $urgentTickets,
             'recentActivity' => $activities,
             'filters' => [
                 'year' => (int)$year ?: null,

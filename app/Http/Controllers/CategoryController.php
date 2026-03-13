@@ -41,15 +41,11 @@ class CategoryController extends Controller implements HasMiddleware
         $request->validate([
             'name' => 'required|string|max:255|unique:categories,name',
             'description' => 'nullable|string',
-            'response_time_hours' => 'nullable|integer|min:0',
-            'resolution_time_hours' => 'nullable|integer|min:0',
         ]);
 
         Category::create([
             'name' => $request->name,
             'description' => $request->description,
-            'response_time_hours' => $request->response_time_hours,
-            'resolution_time_hours' => $request->resolution_time_hours,
             'is_active' => true,
         ]);
 
@@ -61,16 +57,12 @@ class CategoryController extends Controller implements HasMiddleware
         $request->validate([
             'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
             'description' => 'nullable|string',
-            'response_time_hours' => 'nullable|integer|min:0',
-            'resolution_time_hours' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
 
         $category->update([
             'name' => $request->name,
             'description' => $request->description,
-            'response_time_hours' => $request->response_time_hours,
-            'resolution_time_hours' => $request->resolution_time_hours,
             'is_active' => $request->boolean('is_active'),
         ]);
 

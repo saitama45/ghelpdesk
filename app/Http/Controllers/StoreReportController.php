@@ -29,7 +29,7 @@ class StoreReportController extends Controller implements HasMiddleware
         $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
 
         // Query active tickets that have an assignee
-        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting'])
+        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
             ->whereNotNull('assignee_id');
 
         if ($asOfDate) {
@@ -133,7 +133,7 @@ class StoreReportController extends Controller implements HasMiddleware
         $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
 
         // Query active tickets that have an assignee
-        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting'])
+        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
             ->whereNotNull('assignee_id');
 
         if ($asOfDate) {
@@ -231,7 +231,7 @@ class StoreReportController extends Controller implements HasMiddleware
         $userId = $request->input('user_id');
         
         $query = $store->tickets()
-            ->whereIn('tickets.status', ['open', 'in_progress', 'waiting'])
+            ->whereIn('tickets.status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
             ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at');
 
         if ($asOfDate) {

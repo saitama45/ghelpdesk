@@ -249,7 +249,7 @@ const titleInput = ref(null);
 const descriptionInput = ref(null);
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting'];
+const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
 
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
@@ -600,8 +600,17 @@ const getStatusColor = (status) => {
         case 'in_progress': return 'text-purple-800 bg-purple-100';
         case 'resolved': return 'text-green-800 bg-green-100';
         case 'closed': return 'text-gray-600 bg-gray-200';
-        case 'waiting': return 'text-orange-800 bg-orange-100';
+        case 'waiting_service_provider': return 'text-orange-800 bg-orange-100';
+        case 'waiting_client_feedback': return 'text-blue-800 bg-blue-100';
         default: return 'text-gray-800 bg-gray-100';
+    }
+};
+
+const getStatusLabel = (status) => {
+    switch (status) {
+        case 'waiting_service_provider': return 'Waiting for service provider';
+        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        default: return status.replace('_', ' ');
     }
 };
 
@@ -745,12 +754,12 @@ const linkify = (text) => {
                                     >
                                         <template #option="{ option }">
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black capitalize border" :class="getStatusColor(option)">
-                                                {{ option.replace('_', ' ') }}
+                                                {{ getStatusLabel(option) }}
                                             </span>
                                         </template>
                                         <template #trigger="{ selected }">
                                             <span v-if="selected" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black capitalize border" :class="getStatusColor(selected)">
-                                                {{ selected.replace('_', ' ') }}
+                                                {{ getStatusLabel(selected) }}
                                             </span>
                                             <span v-else class="text-gray-400 text-sm">Select Status</span>
                                         </template>
@@ -1153,7 +1162,7 @@ const linkify = (text) => {
                                                         <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
                                                             <div class="py-1">
                                                                 <button v-for="s in availableStatuses" :key="s" @click="submitWithStatus(s)" :class="['w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors hover:opacity-80', getStatusColor(s)]">
-                                                                    Send and set as {{ s.replace('_', ' ') }}
+                                                                    Send and set as {{ getStatusLabel(s) }}
                                                                 </button>
                                                             </div>
                                                         </div>

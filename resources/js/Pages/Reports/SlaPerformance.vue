@@ -71,6 +71,14 @@ const getProgressColor = (percentage) => {
     if (percentage >= 85) return 'bg-yellow-500';
     return 'bg-red-500';
 };
+
+const getStatusLabel = (status) => {
+    switch (status) {
+        case 'waiting_service_provider': return 'Waiting for service provider';
+        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        default: return status ? status.replace('_', ' ') : '';
+    }
+};
 </script>
 
 <template>
@@ -281,9 +289,10 @@ const getProgressColor = (percentage) => {
                                               'bg-blue-100 text-blue-700': ticket.status === 'in_progress',
                                               'bg-green-100 text-green-800': ticket.status === 'resolved',
                                               'bg-gray-100 text-gray-700': ticket.status === 'closed',
-                                              'bg-yellow-100 text-yellow-700': ticket.status === 'waiting'
+                                              'bg-yellow-100 text-yellow-700': ticket.status === 'waiting_service_provider',
+                                              'bg-blue-100 text-blue-700': ticket.status === 'waiting_client_feedback'
                                           }">
-                                        {{ ticket.status.replace('_', ' ') }}
+                                        {{ getStatusLabel(ticket.status) }}
                                     </span>
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500">

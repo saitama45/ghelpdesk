@@ -34,7 +34,8 @@
         .status-in_progress { background-color: #f3e8ff; color: #6b21a8; }
         .status-resolved { background-color: #dcfce7; color: #166534; }
         .status-closed { background-color: #f3f4f6; color: #374151; }
-        .status-waiting { background-color: #fef3c7; color: #92400e; }
+        .status-waiting_service_provider { background-color: #fef3c7; color: #92400e; }
+        .status-waiting_client_feedback { background-color: #dbeafe; color: #1e40af; }
         
         /* Details Grid */
         .details-table td { padding-bottom: 12px; vertical-align: top; }
@@ -80,7 +81,7 @@
             <div class="status-container">
                 <span class="status-label">Current Ticket Status</span>
                 <span class="status-value status-{{ $ticket->status }}">
-                    {{ strtoupper(str_replace('_', ' ', $ticket->status)) }}
+                    {{ $ticket->status === 'waiting_service_provider' ? 'WAITING FOR SERVICE PROVIDER' : ($ticket->status === 'waiting_client_feedback' ? 'WAITING FOR CLIENTS FEEDBACK?' : strtoupper(str_replace('_', ' ', $ticket->status))) }}
                 </span>
             </div>
             
@@ -91,7 +92,7 @@
                 <table class="details-table">
                     <tr>
                         <td class="label">Status</td>
-                        <td class="value">{{ ucfirst(str_replace('_', ' ', $ticket->status)) }}</td>
+                        <td class="value">{{ $ticket->status === 'waiting_service_provider' ? 'Waiting for service provider' : ($ticket->status === 'waiting_client_feedback' ? 'Waiting for clients feedback?' : ucfirst(str_replace('_', ' ', $ticket->status))) }}</td>
                     </tr>
                     <tr>
                         <td class="label">Priority</td>

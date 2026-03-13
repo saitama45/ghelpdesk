@@ -99,7 +99,8 @@ const filterOptions = [
     { value: 'open', label: 'Open' },
     { value: 'in_progress', label: 'In Progress' },
     { value: 'resolved', label: 'Resolved' },
-    { value: 'waiting', label: 'Waiting' },
+    { value: 'waiting_service_provider', label: 'Waiting for service provider' },
+    { value: 'waiting_client_feedback', label: 'Waiting for clients feedback?' },
     { value: 'closed', label: 'Closed' },
     { value: 'unassigned', label: 'Unassigned' },
 ];
@@ -215,7 +216,7 @@ watch(defaultCompanyId, (newId) => {
 }, { immediate: true });
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting'];
+const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
 
 const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
@@ -341,8 +342,17 @@ const getStatusColor = (status) => {
         case 'in_progress': return 'text-purple-800 bg-purple-100';
         case 'resolved': return 'text-green-800 bg-green-100';
         case 'closed': return 'text-gray-600 bg-gray-200';
-        case 'waiting': return 'text-orange-800 bg-orange-100';
+        case 'waiting_service_provider': return 'text-orange-800 bg-orange-100';
+        case 'waiting_client_feedback': return 'text-blue-800 bg-blue-100';
         default: return 'text-gray-800 bg-gray-100';
+    }
+};
+
+const getStatusLabel = (status) => {
+    switch (status) {
+        case 'waiting_service_provider': return 'Waiting for service provider';
+        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        default: return status.replace('_', ' ');
     }
 };
 
@@ -467,7 +477,7 @@ const getSlaRowClass = (ticket) => {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize border" :class="getStatusColor(ticket.status)">
-                                {{ ticket.status.replace('_', ' ') }}
+                                {{ getStatusLabel(ticket.status) }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
@@ -568,7 +578,7 @@ const getSlaRowClass = (ticket) => {
                         <div class="flex flex-col items-end">
                             <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
                             <select v-model="createForm.status" required class="bg-gray-50 border-none rounded-lg text-xs font-bold capitalize focus:ring-0 cursor-pointer shadow-sm" :class="getStatusColor(createForm.status)">
-                                <option v-for="s in statuses" :key="s" :value="s">{{ s.replace('_', ' ') }}</option>
+                                <option v-for="s in statuses" :key="s" :value="s">{{ getStatusLabel(s) }}</option>
                             </select>
                          </div>
                     </div>
