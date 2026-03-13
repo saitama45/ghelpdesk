@@ -12,23 +12,26 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Migrate existing data
-        DB::table('tickets')->where('status', 'waiting')->update(['status' => 'waiting_service_provider']);
-
         $driver = DB::connection()->getDriverName();
+
+        // 1. Drop existing constraint first so we can update the data
         if ($driver === 'sqlsrv' || $driver === 'mysql') {
             if ($driver === 'sqlsrv') {
                 DB::statement("ALTER TABLE tickets DROP CONSTRAINT IF EXISTS CK_Tickets_Status");
             } else {
-                // For MySQL, drop the constraint if it exists (requires MySQL 8.0.19+)
-                // or just ignore if it's not strictly enforced in older versions
                 try {
                     DB::statement("ALTER TABLE tickets DROP CHECK CK_Tickets_Status");
                 } catch (\Exception $e) {
                     // Ignore if constraint doesn't exist
                 }
             }
-            
+        }
+
+        // 2. Migrate existing data
+        DB::table('tickets')->where('status', 'waiting')->update(['status' => 'waiting_service_provider']);
+
+        // 3. Add the new constraint
+        if ($driver === 'sqlsrv' || $driver === 'mysql') {
             DB::statement("ALTER TABLE tickets ADD CONSTRAINT CK_Tickets_Status CHECK (status IN ('open', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'))");
         }
     }
@@ -38,10 +41,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Migrate data back
-        DB::table('tickets')->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])->update(['status' => 'waiting']);
-
         $driver = DB::connection()->getDriverName();
+
+        // 1. Drop constraint
         if ($driver === 'sqlsrv' || $driver === 'mysql') {
             if ($driver === 'sqlsrv') {
                 DB::statement("ALTER TABLE tickets DROP CONSTRAINT IF EXISTS CK_Tickets_Status");
@@ -51,6 +53,13 @@ return new class extends Migration
                 } catch (\Exception $e) {
                 }
             }
+        }
+
+        // 2. Migrate data back
+        DB::table('tickets')->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])->update(['status' => 'waiting']);
+
+        // 3. Restore old constraint
+        if ($driver === 'sqlsrv' || $driver === 'mysql') {
             DB::statement("ALTER TABLE tickets ADD CONSTRAINT CK_Tickets_Status CHECK (status IN ('open', 'in_progress', 'resolved', 'closed', 'waiting'))");
         }
     }
