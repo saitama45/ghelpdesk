@@ -273,7 +273,8 @@ class EmailTicketService
             $companyCode = $company ? $company->code : 'EXT';
 
             // Generate Ticket Key
-            $maxNumber = Ticket::where('company_id', $companyId)
+            $maxNumber = Ticket::withTrashed()
+                ->where('company_id', $companyId)
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->get(['ticket_key'])
                 ->map(function ($t) {
