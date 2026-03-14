@@ -142,7 +142,7 @@ class TicketController extends Controller
             $company = Company::where('id', $data['company_id'])->lockForUpdate()->first();
             $companyCode = $company->code;
 
-            $maxNumber = Ticket::where('company_id', $data['company_id'])
+            $maxNumber = Ticket::withTrashed()
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->get(['ticket_key'])
                 ->map(function ($ticket) {
@@ -419,7 +419,7 @@ class TicketController extends Controller
             $company = $ticket->company;
             $companyCode = $company->code;
 
-            $maxNumber = Ticket::where('company_id', $ticket->company_id)
+            $maxNumber = Ticket::withTrashed()
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->get(['ticket_key'])
                 ->map(function ($t) {
