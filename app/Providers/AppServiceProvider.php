@@ -22,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Illuminate\Support\Facades\Log::debug("AppServiceProvider: Booting...");
         Vite::prefetch(concurrency: 3);
 
         // Force HTTPS if we are in production (Azure)

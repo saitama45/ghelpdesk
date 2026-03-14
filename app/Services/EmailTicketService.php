@@ -153,29 +153,30 @@ class EmailTicketService
     protected function processMessage($message)
     {
         $messageId = $message->getMessageId();
+        $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
+        Log::debug("EmailTicketService: Processing message {$messageId} from {$senderEmail}");
 
         // 1. Deduplication
         if (Ticket::where('message_id', $messageId)->exists()) {
+            Log::info("EmailTicketService: Skipping message {$messageId} - Ticket already exists.");
             $message->setFlag('Seen');
             return false;
         }
 
-        $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
         $supportEmail = strtolower(Setting::get('imap_username', ''));
 
-        // 2. Ignore Bounce Messages (Mailer-Daemon, Postmaster, etc.)
+        // 2. Ignore Bounce Messages
         $bannedSenders = ['mailer-daemon', 'postmaster', 'no-reply', 'noreply'];
         foreach ($bannedSenders as $banned) {
             if (str_contains($senderEmail, $banned)) {
+                Log::info("EmailTicketService: Skipping message {$messageId} - Banned sender.");
                 $message->setFlag('Seen');
                 return false;
             }
         }
 
-        // 3. Recipient Check (Ensure the email was actually sent TO/CC/BCC the support account)
-        // Check TO, CC, and BCC fields
+        // 3. Recipient Check
         $isDirectlySent = false;
-        
         $to = $message->getTo();
         $cc = $message->getCc();
         $bcc = $message->getBcc();
@@ -191,27 +192,31 @@ class EmailTicketService
             }
         }
 
-        // Fallback: If headers are empty or recipient not found but it's in the INBOX,
-        // we might want to process it anyway if it's not obviously spam/bounce.
-        if (!$isDirectlySent && $supportEmail) {
-            // Attempt to check raw headers as a last resort
-            $headers = $message->getHeaders();
-            if (str_contains(strtolower((string)$headers->get('to')), $supportEmail) || 
-                str_contains(strtolower((string)$headers->get('cc')), $supportEmail)) {
-                $isDirectlySent = true;
+        if (!$isDirectlySent) {
+            Log::debug("EmailTicketService: Message {$messageId} not directly sent to {$supportEmail}. Checking fallback...");
+            
+            // Fallback
+            if ($supportEmail) {
+                $headers = $message->getHeaders();
+                if (str_contains(strtolower((string)$headers->get('to')), $supportEmail) || 
+                    str_contains(strtolower((string)$headers->get('cc')), $supportEmail)) {
+                    $isDirectlySent = true;
+                }
             }
             
-            // Final Fallback: If we are in the INBOX and it's not a bounce, process it.
-            // This handles cases where Gmail/IMAP might not return all header fields correctly.
+            // Final Fallback (If it's in the inbox, we usually want it)
             if (!$isDirectlySent) {
+                Log::info("EmailTicketService: Message {$messageId} hit final fallback to TRUE.");
                 $isDirectlySent = true; 
             }
         }
 
         if (!$isDirectlySent) {
+            Log::info("EmailTicketService: Skipping message {$messageId} - Not for support email {$supportEmail}.");
             $message->setFlag('Seen');
             return false;
         }
+
 
         $subject = $this->decodeMimeHeader($message->getSubject());
         $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
