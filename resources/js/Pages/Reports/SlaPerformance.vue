@@ -43,7 +43,7 @@ const fetchTickets = async (userId, userName, type, status) => {
     modalTitle.value = `${userName}: ${type.charAt(0).toUpperCase() + type.slice(1)} ${status.toUpperCase()}`;
     
     try {
-        const response = await axios.get(route('reports.sla-performance.tickets'), {
+        const response = await axios.get(route('reports.sla-performance.tickets', undefined, false), {
             params: { 
                 user_id: userId,
                 type: type,

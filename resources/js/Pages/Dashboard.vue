@@ -23,7 +23,7 @@ const { hasPermission } = usePermission();
 onMounted(() => {
     // Trigger email sync in the background when dashboard loads
     if (hasPermission('tickets.view')) {
-        axios.post(route('tickets.sync')).catch(e => console.warn("Email sync failed", e));
+        axios.post(route('tickets.sync', undefined, false)).catch(e => console.warn("Email sync failed", e));
     }
 });
 

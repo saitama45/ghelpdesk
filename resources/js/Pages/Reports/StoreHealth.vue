@@ -47,7 +47,7 @@ const fetchTickets = async (storeId, userId) => {
     modalLoading.value = true;
     showTicketsModal.value = true;
     try {
-        const response = await axios.get(route('reports.store-health.tickets', storeId), {
+        const response = await axios.get(route('reports.store-health.tickets', storeId, false), {
             params: { 
                 as_of_date: filterForm.value.as_of_date,
                 user_id: userId

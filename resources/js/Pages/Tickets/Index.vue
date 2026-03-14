@@ -145,7 +145,7 @@ const items = ref([]);
 
 const fetchCategories = async () => {
     try {
-        const response = await axios.get(route('tickets.data.categories'));
+        const response = await axios.get(route('tickets.data.categories', undefined, false));
         categories.value = response.data;
     } catch (error) {
         console.error('Error fetching categories:', error);

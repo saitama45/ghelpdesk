@@ -154,7 +154,7 @@ const testConnection = () => {
     testingConnection.value = true;
     testResult.value = null;
 
-    axios.post(route('settings.test-imap'), {
+    axios.post(route('settings.test-imap', undefined, false), {
         imap_host: form.imap_host,
         imap_port: form.imap_port,
         imap_encryption: form.imap_encryption,
