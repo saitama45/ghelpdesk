@@ -4,40 +4,41 @@
 cp /home/site/wwwroot/default.conf /etc/nginx/sites-available/default
 service nginx reload
 
-# 2. Fix permissions (Fast)
-chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
+# 2. Ensure critical storage directories exist (Azure workaround for "View path not found")
+echo "📂 Ensuring storage directory structure..."
+mkdir -p /home/site/wwwroot/storage/app/public
+mkdir -p /home/site/wwwroot/storage/framework/cache/data
+mkdir -p /home/site/wwwroot/storage/framework/sessions
+mkdir -p /home/site/wwwroot/storage/framework/views
+mkdir -p /home/site/wwwroot/storage/logs
 
-# 3. Increase PHP-FPM worker limits correctly (Fixes the 502 error)
+# 3. Fix permissions (Fast)
+echo "🔐 Setting permissions..."
+chmod -R 775 /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
+chown -R www-data:www-data /home/site/wwwroot/storage /home/site/wwwroot/bootstrap/cache
+
+# 4. Increase PHP-FPM worker limits
 sed -i 's/^pm.max_children = .*/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
 sed -i 's/^pm.start_servers = .*/pm.start_servers = 4/g' /usr/local/etc/php-fpm.d/www.conf
 sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 2/g' /usr/local/etc/php-fpm.d/www.conf
 sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 6/g' /usr/local/etc/php-fpm.d/www.conf
 
-# 4. Clear the cache IMMEDIATELY (Fixes the 500 error)
-# We do this before the background tasks to ensure the very first request is clean.
+# 5. Clear ALL caches to ensure fresh environment variables are used
+# We avoid artisan config:cache because AppServiceProvider uses DB settings to override config.
+echo "🧹 Clearing caches..."
 php /home/site/wwwroot/artisan config:clear
 php /home/site/wwwroot/artisan cache:clear
+php /home/site/wwwroot/artisan view:clear
+php /home/site/wwwroot/artisan route:clear
 
-# 5. Run remaining tasks in background
-(
-  echo "⏳ Running migrations..."
-  php /home/site/wwwroot/artisan migrate --force
-  
-  echo "⏳ Rebuilding optimization cache..."
-  php /home/site/wwwroot/artisan config:cache
-  php /home/site/wwwroot/artisan route:cache
-  php /home/site/wwwroot/artisan view:cache
-  echo "✅ Background tasks finished!"
-) &
+# 6. Run migrations synchronously
+echo "⏳ Running migrations..."
+php /home/site/wwwroot/artisan migrate --force
 
-# 6. Start the Laravel Scheduler loop
-# We use nohup and disown to ensure the loop stays alive even if this shell exits.
-echo "🚀 Starting Laravel Scheduler loop..."
+# 7. Start the Laravel Scheduler loop (Daemon mode)
+# Using schedule:work ensures everyThirtySeconds() tasks are hit precisely.
+echo "🚀 Starting Laravel Scheduler worker..."
 touch /home/site/wwwroot/storage/logs/scheduler.log
-nohup bash -c "while true; do
-  echo \"[\$(date)] Running schedule:run...\" >> /home/site/wwwroot/storage/logs/scheduler.log
-  php /home/site/wwwroot/artisan schedule:run >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1
-  sleep 60
-done" > /dev/null 2>&1 &
+nohup php /home/site/wwwroot/artisan schedule:work >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1 &
 
 echo "🚀 Startup script finished! Handing over to php-fpm."

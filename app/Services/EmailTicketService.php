@@ -18,8 +18,8 @@ class EmailTicketService
     {
         // 1. Check if we should sync (Optional: throttle to 30 seconds to avoid IMAP overhead)
         $lastSync = Setting::get('last_email_sync_at');
-        if ($lastSync && now()->parse($lastSync)->addSeconds(30)->isFuture()) {
-            return ['status' => 'skipped', 'message' => 'Synced recently.'];
+        if ($lastSync && now()->parse($lastSync)->addSeconds(20)->isFuture()) {
+            return ['status' => 'skipped', 'message' => 'Synced recently (within 20s).'];
         }
 
         Log::info("EmailTicketService: Starting email fetch process...");
@@ -37,12 +37,12 @@ class EmailTicketService
             
             config($imapConfig);
 
-            Log::debug("EmailTicketService: Attempting IMAP connection to " . $imapConfig['imap.accounts.default.host']);
+            Log::debug("EmailTicketService: Connecting to " . $imapConfig['imap.accounts.default.host'] . " as " . $imapConfig['imap.accounts.default.username']);
 
             $client = Client::account('default');
             $client->connect();
 
-            Log::debug("EmailTicketService: Connected successfully. Searching for INBOX...");
+            Log::debug("EmailTicketService: Connected. Available folders: " . $client->getFolders()->map(fn($f) => $f->name)->implode(', '));
 
             $folders = $client->getFolders();
             $inbox = null;
@@ -55,33 +55,36 @@ class EmailTicketService
             }
 
             if (!$inbox) {
-                Log::error("EmailTicketService: Inbox folder not found on server.");
-                return ['status' => 'error', 'message' => 'Inbox not found.'];
+                Log::error("EmailTicketService: Inbox folder not found.");
+                return ['status' => 'error', 'message' => 'Inbox not found. Available: ' . $client->getFolders()->map(fn($f) => $f->name)->implode(', ')];
             }
 
-            // Process unseen messages - using DESC order via config to get newest first
+            // Diagnostic: Count all messages vs unseen
+            $allMessagesCount = $inbox->messages()->all()->get()->count();
             $messages = $inbox->messages()->unseen()->get();
+            $unseenCount = count($messages);
+
+            Log::info("EmailTicketService: Inbox stats - Total: {$allMessagesCount}, Unseen: {$unseenCount}");
+
             $count = 0;
-
-            Log::info("EmailTicketService: Found " . count($messages) . " unseen messages.");
-
             foreach ($messages as $message) {
+                Log::debug("EmailTicketService: Checking message: " . $message->getSubject());
                 try {
                     if ($this->processMessage($message)) {
                         $count++;
                     }
                 } catch (\Exception $me) {
-                    Log::error("EmailTicketService: Failed to process message " . $message->getMessageId() . ": " . $me->getMessage());
-                    // Continue with next message
+                    Log::error("EmailTicketService: Message processing error: " . $me->getMessage());
                 }
             }
 
-            // 3. Update Last Sync Time
+
+            // 3. Update Last Sync Time (Using Manila time for display, but Laravel handles the Carbon comparison)
             Setting::set('last_email_sync_at', now()->toDateTimeString(), 'system');
 
             $client->disconnect();
 
-            Log::info("EmailTicketService: Finished. Processed {$count} tickets.");
+            Log::info("EmailTicketService: Fetch completed. Processed {$count} tickets.");
 
             return [
                 'status' => 'success',
@@ -90,13 +93,11 @@ class EmailTicketService
             ];
 
         } catch (\Exception $e) {
-            Log::error("EmailTicketService: Fatal error during fetch: " . $e->getMessage(), [
-                'exception' => $e,
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error("EmailTicketService: Fetch failed: " . $e->getMessage());
             return ['status' => 'error', 'message' => $e->getMessage()];
         }
     }
+
 
     /**
      * Test the IMAP connection with provided settings or stored settings.

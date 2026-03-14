@@ -12,6 +12,7 @@ class FetchEmails extends Command
 
     public function handle(EmailTicketService $service)
     {
+        \Illuminate\Support\Facades\Log::info("FetchEmails Command: Signature tickets:fetch-emails triggered.");
         $this->info("Connecting to IMAP server via Service...");
         $result = $service->fetchAndProcess();
 
