@@ -22,7 +22,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        \Illuminate\Support\Facades\Log::debug("AppServiceProvider: Booting...");
         Vite::prefetch(concurrency: 3);
 
         // Force HTTPS if we are in production (Azure)
@@ -48,7 +47,6 @@ class AppServiceProvider extends ServiceProvider
                     $settings = \App\Models\Setting::where('group', 'mail')->pluck('value', 'key');
 
                     if ($settings->isNotEmpty()) {
-                        // ... rest of settings logic ...
                         if ($settings->has('mail_mailer')) config(['mail.default' => $settings->get('mail_mailer')]);
                         if ($settings->has('mail_host')) config(['mail.mailers.smtp.host' => $settings->get('mail_host')]);
                         if ($settings->has('mail_port')) config(['mail.mailers.smtp.port' => $settings->get('mail_port')]);
@@ -65,7 +63,10 @@ class AppServiceProvider extends ServiceProvider
                     }
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning("AppServiceProvider: Could not load database settings. Using environment defaults. Error: " . $e->getMessage());
+                // Only log warning if NOT running in console (to avoid build-time rsync issues)
+                if (!app()->runningInConsole()) {
+                    \Illuminate\Support\Facades\Log::warning("AppServiceProvider: Could not load database settings. Using environment defaults. Error: " . $e->getMessage());
+                }
             }
         }
 
