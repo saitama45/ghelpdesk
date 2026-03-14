@@ -21,22 +21,22 @@ chmod -R 775 /home/site/wwwroot/bootstrap/cache
 # 4. Increase PHP-FPM limits
 sed -i 's/^pm.max_children = .*/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
 
-# 5. Reset Application State
-# We CLEAR first, then optionally cache. 
-# CAUTION: If using DB settings, do NOT config:cache in startup if DB might be slow to connect.
-echo "🧹 Resetting cache..."
+# 5. Clear Application Caches
+# We do NOT run config:cache because we need dynamic DB settings in AppServiceProvider.
+echo "🧹 Clearing caches..."
 php /home/site/wwwroot/artisan config:clear
 php /home/site/wwwroot/artisan cache:clear
 php /home/site/wwwroot/artisan view:clear
 php /home/site/wwwroot/artisan route:clear
 
 # 6. Run migrations Synchronously
+# We add a timeout to prevent startup hanging forever if DB is down.
 echo "⏳ Running migrations..."
-php /home/site/wwwroot/artisan migrate --force
+php /home/site/wwwroot/artisan migrate --force --no-interaction
 
 # 7. Start the Laravel Scheduler Worker
 # Using schedule:work is much more reliable for 30-second tasks.
-echo "🚀 Starting Laravel Scheduler (Daemon mode)..."
+echo "🚀 Starting Laravel Scheduler worker..."
 touch /home/site/wwwroot/storage/logs/scheduler.log
 nohup php /home/site/wwwroot/artisan schedule:work >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1 &
 
