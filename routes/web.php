@@ -45,6 +45,7 @@ Route::middleware('auth')->group(function () {
     
     Route::get('settings', [\App\Http\Controllers\SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [\App\Http\Controllers\SettingsController::class, 'update'])->name('settings.update');
+    Route::post('settings/test-imap', [\App\Http\Controllers\SettingsController::class, 'testImap'])->name('settings.test-imap');
     Route::resource('canned-messages', \App\Http\Controllers\CannedMessageController::class)->except(['show', 'create', 'edit']);
 
     Route::get('reports/store-health', [\App\Http\Controllers\StoreReportController::class, 'index'])->name('reports.store-health');

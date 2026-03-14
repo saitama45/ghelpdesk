@@ -56,4 +56,11 @@ class SettingsController extends Controller implements HasMiddleware
 
         return redirect()->back()->with('success', 'Settings updated successfully.');
     }
+
+    public function testImap(Request $request, \App\Services\EmailTicketService $service)
+    {
+        $result = $service->testConnection($request->all());
+
+        return response()->json($result);
+    }
 }

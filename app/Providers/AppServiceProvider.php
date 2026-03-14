@@ -37,8 +37,8 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Ticket::observe(\App\Observers\TicketObserver::class);
         \App\Models\ProjectTask::observe(\App\Observers\ProjectTaskObserver::class);
 
-        // Override config from database - skip if running in console to prevent CI issues
-        if (!app()->runningInConsole()) {
+        // Override config from database - skip only if running in testing environment
+        if (config('app.env') !== 'testing') {
             try {
                 if (\Illuminate\Support\Facades\Schema::hasTable('settings')) {
                     $settings = \App\Models\Setting::where('group', 'mail')->pluck('value', 'key');

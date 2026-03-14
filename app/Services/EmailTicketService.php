@@ -22,19 +22,27 @@ class EmailTicketService
             return ['status' => 'skipped', 'message' => 'Synced recently.'];
         }
 
+        Log::info("EmailTicketService: Starting email fetch process...");
+
         try {
             // 2. Configure IMAP from Database Settings
-            config([
+            $imapConfig = [
                 'imap.accounts.default.host' => Setting::get('imap_host', config('imap.accounts.default.host')),
                 'imap.accounts.default.port' => Setting::get('imap_port', config('imap.accounts.default.port')),
                 'imap.accounts.default.encryption' => Setting::get('imap_encryption', config('imap.accounts.default.encryption')),
                 'imap.accounts.default.username' => Setting::get('imap_username', config('imap.accounts.default.username')),
                 'imap.accounts.default.password' => Setting::get('imap_password', config('imap.accounts.default.password')),
                 'imap.options.fetch_order' => 'desc',
-            ]);
+            ];
+            
+            config($imapConfig);
+
+            Log::debug("EmailTicketService: Attempting IMAP connection to " . $imapConfig['imap.accounts.default.host']);
 
             $client = Client::account('default');
             $client->connect();
+
+            Log::debug("EmailTicketService: Connected successfully. Searching for INBOX...");
 
             $folders = $client->getFolders();
             $inbox = null;
@@ -47,6 +55,7 @@ class EmailTicketService
             }
 
             if (!$inbox) {
+                Log::error("EmailTicketService: Inbox folder not found on server.");
                 return ['status' => 'error', 'message' => 'Inbox not found.'];
             }
 
@@ -54,9 +63,16 @@ class EmailTicketService
             $messages = $inbox->messages()->unseen()->get();
             $count = 0;
 
+            Log::info("EmailTicketService: Found " . count($messages) . " unseen messages.");
+
             foreach ($messages as $message) {
-                if ($this->processMessage($message)) {
-                    $count++;
+                try {
+                    if ($this->processMessage($message)) {
+                        $count++;
+                    }
+                } catch (\Exception $me) {
+                    Log::error("EmailTicketService: Failed to process message " . $message->getMessageId() . ": " . $me->getMessage());
+                    // Continue with next message
                 }
             }
 
@@ -65,6 +81,8 @@ class EmailTicketService
 
             $client->disconnect();
 
+            Log::info("EmailTicketService: Finished. Processed {$count} tickets.");
+
             return [
                 'status' => 'success',
                 'message' => "Processed {$count} new tickets.",
@@ -72,9 +90,64 @@ class EmailTicketService
             ];
 
         } catch (\Exception $e) {
+            Log::error("EmailTicketService: Fatal error during fetch: " . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
             return ['status' => 'error', 'message' => $e->getMessage()];
         }
     }
+
+    /**
+     * Test the IMAP connection with provided settings or stored settings.
+     */
+    public function testConnection($params = null)
+    {
+        try {
+            if ($params) {
+                config([
+                    'imap.accounts.default.host' => $params['imap_host'] ?? config('imap.accounts.default.host'),
+                    'imap.accounts.default.port' => $params['imap_port'] ?? config('imap.accounts.default.port'),
+                    'imap.accounts.default.encryption' => $params['imap_encryption'] ?? config('imap.accounts.default.encryption'),
+                    'imap.accounts.default.username' => $params['imap_username'] ?? config('imap.accounts.default.username'),
+                    'imap.accounts.default.password' => $params['imap_password'] ?? config('imap.accounts.default.password'),
+                ]);
+            } else {
+                config([
+                    'imap.accounts.default.host' => Setting::get('imap_host', config('imap.accounts.default.host')),
+                    'imap.accounts.default.port' => Setting::get('imap_port', config('imap.accounts.default.port')),
+                    'imap.accounts.default.encryption' => Setting::get('imap_encryption', config('imap.accounts.default.encryption')),
+                    'imap.accounts.default.username' => Setting::get('imap_username', config('imap.accounts.default.username')),
+                    'imap.accounts.default.password' => Setting::get('imap_password', config('imap.accounts.default.password')),
+                ]);
+            }
+
+            $client = Client::account('default');
+            $client->connect();
+            
+            $folders = $client->getFolders();
+            $inboxFound = false;
+            foreach ($folders as $folder) {
+                if (strtolower($folder->name) === 'inbox') {
+                    $inboxFound = true;
+                    break;
+                }
+            }
+
+            $client->disconnect();
+            
+            return [
+                'status' => 'success',
+                'message' => 'Connection successful! ' . ($inboxFound ? 'Inbox found.' : 'Connected, but Inbox folder not found.')
+            ];
+        } catch (\Exception $e) {
+            return [
+                'status' => 'error',
+                'message' => 'Connection failed: ' . $e->getMessage()
+            ];
+        }
+    }
+
 
     protected function processMessage($message)
     {

@@ -31,9 +31,13 @@ php /home/site/wwwroot/artisan cache:clear
 ) &
 
 # 6. Start the Laravel Scheduler loop
-(while true; do
+# We use nohup and disown to ensure the loop stays alive even if this shell exits.
+echo "🚀 Starting Laravel Scheduler loop..."
+touch /home/site/wwwroot/storage/logs/scheduler.log
+nohup bash -c "while true; do
+  echo \"[\$(date)] Running schedule:run...\" >> /home/site/wwwroot/storage/logs/scheduler.log
   php /home/site/wwwroot/artisan schedule:run >> /home/site/wwwroot/storage/logs/scheduler.log 2>&1
   sleep 60
-done) &
+done" > /dev/null 2>&1 &
 
 echo "🚀 Startup script finished! Handing over to php-fpm."

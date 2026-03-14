@@ -146,6 +146,34 @@ const submit = () => {
         preserveScroll: true,
     });
 };
+
+const testingConnection = ref(false);
+const testResult = ref(null);
+
+const testConnection = () => {
+    testingConnection.value = true;
+    testResult.value = null;
+
+    axios.post(route('settings.test-imap'), {
+        imap_host: form.imap_host,
+        imap_port: form.imap_port,
+        imap_encryption: form.imap_encryption,
+        imap_username: form.imap_username,
+        imap_password: form.imap_password,
+    })
+    .then(response => {
+        testResult.value = response.data;
+    })
+    .catch(error => {
+        testResult.value = {
+            status: 'error',
+            message: 'Request failed: ' + (error.response?.data?.message || error.message)
+        };
+    })
+    .finally(() => {
+        testingConnection.value = false;
+    });
+};
 </script>
 
 <template>
@@ -209,10 +237,16 @@ const submit = () => {
                             <div v-if="activeTab === 'mail'" class="space-y-10">
                                 <!-- Inbound (IMAP) -->
                                 <section>
-                                    <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
-                                        <ServerIcon class="w-4 h-4 mr-2" />
-                                        Inbound Mail (IMAP)
-                                    </h3>
+                                    <div class="flex items-center justify-between mb-6">
+                                        <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center">
+                                            <ServerIcon class="w-4 h-4 mr-2" />
+                                            Inbound Mail (IMAP)
+                                        </h3>
+                                        <div v-if="settings.last_email_sync_at" class="flex items-center text-[10px] font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                                            <ClockIcon class="w-3 h-3 mr-1" />
+                                            Last sync: {{ settings.last_email_sync_at }}
+                                        </div>
+                                    </div>
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div class="md:col-span-2">
                                             <InputLabel for="imap_username" value="Support Email Address" />
@@ -247,7 +281,24 @@ const submit = () => {
                                                     <EyeSlashIcon v-else class="h-5 w-5" />
                                                 </button>
                                             </div>
-                                            <p class="mt-2 text-[10px] text-gray-500 italic">For Gmail accounts, please generate and use a 16-character App Password.</p>
+                                            <div class="mt-4 flex items-center justify-between">
+                                                <p class="text-[10px] text-gray-500 italic">For Gmail accounts, please generate and use a 16-character App Password.</p>
+                                                <button 
+                                                    type="button" 
+                                                    @click="testConnection" 
+                                                    :disabled="testingConnection"
+                                                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150"
+                                                >
+                                                    <span v-if="testingConnection">Testing...</span>
+                                                    <span v-else>Test Connection</span>
+                                                </button>
+                                            </div>
+
+                                            <div v-if="testResult" class="mt-4 p-4 rounded-lg border flex items-start space-x-3" :class="testResult.status === 'success' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'">
+                                                <CheckCircleIcon v-if="testResult.status === 'success'" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+                                                <div v-else class="w-5 h-5 flex-shrink-0 mt-0.5 rounded-full bg-red-600 text-white flex items-center justify-center text-[10px] font-bold">X</div>
+                                                <p class="text-xs font-bold leading-relaxed">{{ testResult.message }}</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </section>
