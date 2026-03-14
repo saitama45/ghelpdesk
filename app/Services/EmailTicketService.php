@@ -67,14 +67,17 @@ class EmailTicketService
             Log::info("EmailTicketService: Inbox stats - Total: {$allMessagesCount}, Unseen: {$unseenCount}");
 
             $count = 0;
+            $errors = [];
             foreach ($messages as $message) {
                 Log::debug("EmailTicketService: Checking message: " . $message->getSubject());
                 try {
                     if ($this->processMessage($message)) {
                         $count++;
                     }
-                } catch (\Exception $me) {
-                    Log::error("EmailTicketService: Message processing error: " . $me->getMessage());
+                } catch (\Throwable $me) {
+                    $errorMsg = $me->getMessage();
+                    Log::error("EmailTicketService: Message processing error: " . $errorMsg);
+                    $errors[] = "Subject '" . mb_substr($message->getSubject(), 0, 50) . "': " . $errorMsg;
                 }
             }
 
@@ -87,9 +90,10 @@ class EmailTicketService
             Log::info("EmailTicketService: Fetch completed. Processed {$count} tickets.");
 
             return [
-                'status' => 'success',
-                'message' => "Processed {$count} new tickets.",
-                'count' => $count
+                'status' => empty($errors) ? 'success' : 'warning',
+                'message' => "Processed {$count} new tickets." . (empty($errors) ? '' : ' Errors encountered: ' . implode(' | ', $errors)),
+                'count' => $count,
+                'errors' => $errors
             ];
 
         } catch (\Exception $e) {
@@ -285,16 +289,16 @@ class EmailTicketService
 
             $ticket = Ticket::create([
                 'ticket_key' => $ticketKey,
-                'title' => $subject,
-                'description' => substr($cleanBody, 0, 65535),
+                'title' => mb_substr($subject, 0, 255),
+                'description' => mb_substr($cleanBody, 0, 65535),
                 'type' => 'task',
                 'status' => 'open',
                 'priority' => 'medium',
                 'severity' => 'minor',
                 'reporter_id' => $user ? $user->id : null,
-                'sender_email' => $senderEmail,
-                'sender_name' => $senderName,
-                'message_id' => $messageId,
+                'sender_email' => mb_substr($senderEmail, 0, 255),
+                'sender_name' => mb_substr($senderName, 0, 255),
+                'message_id' => mb_substr($messageId, 0, 255),
                 'company_id' => $companyId,
             ]);
 

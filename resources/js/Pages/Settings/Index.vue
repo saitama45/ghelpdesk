@@ -148,6 +148,7 @@ const submit = () => {
 };
 
 const testingConnection = ref(false);
+const syncingEmails = ref(false);
 const testResult = ref(null);
 
 const testConnection = () => {
@@ -172,6 +173,29 @@ const testConnection = () => {
     })
     .finally(() => {
         testingConnection.value = false;
+    });
+};
+
+const syncEmails = () => {
+    syncingEmails.value = true;
+    testResult.value = null;
+
+    axios.post(route('tickets.sync', {}, false))
+    .then(response => {
+        testResult.value = response.data;
+        if (response.data.status === 'success' || response.data.status === 'warning') {
+             // force reload to get updated last sync time from props
+             router.reload({ only: ['settings'] });
+        }
+    })
+    .catch(error => {
+        testResult.value = {
+            status: 'error',
+            message: 'Sync failed: ' + (error.response?.data?.message || error.message)
+        };
+    })
+    .finally(() => {
+        syncingEmails.value = false;
     });
 };
 </script>
@@ -242,9 +266,20 @@ const testConnection = () => {
                                             <ServerIcon class="w-4 h-4 mr-2" />
                                             Inbound Mail (IMAP)
                                         </h3>
-                                        <div v-if="settings.last_email_sync_at" class="flex items-center text-[10px] font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
-                                            <ClockIcon class="w-3 h-3 mr-1" />
-                                            Last sync: {{ settings.last_email_sync_at }}
+                                        <div class="flex items-center space-x-2">
+                                            <div v-if="settings.last_email_sync_at" class="flex items-center text-[10px] font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                                                <ClockIcon class="w-3 h-3 mr-1" />
+                                                Last sync: {{ settings.last_email_sync_at }}
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                @click="syncEmails" 
+                                                :disabled="syncingEmails"
+                                                class="flex items-center text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-full transition-colors disabled:opacity-50"
+                                            >
+                                                <span v-if="syncingEmails">Syncing...</span>
+                                                <span v-else>Sync Now</span>
+                                            </button>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
