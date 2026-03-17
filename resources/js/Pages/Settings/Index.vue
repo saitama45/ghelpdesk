@@ -28,6 +28,7 @@ const props = defineProps({
 
 const activeTab = ref('mail');
 const selectedSubUnit = ref('global');
+const selectedThresholdSubUnit = ref('global');
 
 const tabs = [
     { id: 'mail', name: 'Mail Configuration', icon: EnvelopeIcon, description: 'Manage inbound and outbound email settings.' },
@@ -117,6 +118,25 @@ const getInitialFormData = () => {
         data[`working_days_${slug}`] = parseWorkingDays(props.settings[`working_days_${slug}`] || props.settings.working_days);
     });
 
+    // Add sub-unit specific threshold settings
+    props.subUnits.forEach(unit => {
+        const slug = slugify(unit);
+        const defaults = {
+            green_min: 1, green_max: 2, green_label: 'Healthy',
+            yellow_min: 3, yellow_max: 3, yellow_label: 'Warning',
+            orange_min: 4, orange_max: 4, orange_label: 'At-risk',
+            red_min: 5, red_label: 'Critical',
+        };
+        Object.entries(defaults).forEach(([field, fallback]) => {
+            const parts = field.split('_');
+            const color = parts[0];
+            const suffix = parts.slice(1).join('_');
+            const key = `threshold_${color}_${suffix}_${slug}`;
+            const globalKey = `threshold_${color}_${suffix}`;
+            data[key] = props.settings[key] || props.settings[globalKey] || fallback;
+        });
+    });
+
     return data;
 };
 
@@ -140,6 +160,12 @@ const currentEndTimeKey = computed(() => {
 const currentWorkingDaysKey = computed(() => {
     return selectedSubUnit.value === 'global' ? 'working_days' : `working_days_${selectedSubUnit.value}`;
 });
+
+const thresholdKey = (color, field) => {
+    return selectedThresholdSubUnit.value === 'global'
+        ? `threshold_${color}_${field}`
+        : `threshold_${color}_${field}_${selectedThresholdSubUnit.value}`;
+};
 
 const submit = () => {
     form.put(route('settings.update'), {
@@ -606,6 +632,26 @@ const syncEmails = () => {
 
                             <!-- Thresholds Tab -->
                             <div v-if="activeTab === 'thresholds'" class="space-y-6">
+                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between mb-2">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="p-2 bg-blue-600 rounded-lg">
+                                            <AdjustmentsHorizontalIcon class="w-5 h-5 text-white" />
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-black text-blue-900">Threshold Configuration</p>
+                                            <p class="text-xs text-blue-600">Configure per sub-unit or set a global default.</p>
+                                        </div>
+                                    </div>
+                                    <select
+                                        v-model="selectedThresholdSubUnit"
+                                        class="border-blue-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg text-sm font-black text-blue-700 bg-white shadow-sm"
+                                    >
+                                        <option v-for="option in subUnitOptions" :key="option.id" :value="option.id">
+                                            {{ option.name }}
+                                        </option>
+                                    </select>
+                                </div>
+
                                 <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start mb-8">
                                     <AdjustmentsHorizontalIcon class="w-5 h-5 text-purple-600 mt-0.5 mr-3 flex-shrink-0" />
                                     <p class="text-xs text-purple-700 leading-relaxed">
@@ -622,15 +668,15 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Healthy</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_min" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'min')]" />
                                         </div>
                                         <div class="col-span-1">
                                             <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_green_max" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'max')]" />
                                         </div>
                                         <div class="col-span-2">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
-                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_green_label" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'label')]" />
                                         </div>
                                     </div>
 
@@ -642,15 +688,15 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Warning</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_min" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'min')]" />
                                         </div>
                                         <div class="col-span-1">
                                             <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_yellow_max" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'max')]" />
                                         </div>
                                         <div class="col-span-2">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
-                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_yellow_label" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'label')]" />
                                         </div>
                                     </div>
 
@@ -662,15 +708,15 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">At-risk</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_min" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'min')]" />
                                         </div>
                                         <div class="col-span-1">
                                             <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_orange_max" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'max')]" />
                                         </div>
                                         <div class="col-span-2">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
-                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_orange_label" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'label')]" />
                                         </div>
                                     </div>
 
@@ -682,11 +728,11 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Critical</span>
                                             </div>
                                             <InputLabel value="Min (and up)" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form.threshold_red_min" />
+                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('red', 'min')]" />
                                         </div>
                                         <div class="col-span-3">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
-                                            <TextInput type="text" class="mt-1 block w-full" v-model="form.threshold_red_label" />
+                                            <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('red', 'label')]" />
                                         </div>
                                     </div>
 
