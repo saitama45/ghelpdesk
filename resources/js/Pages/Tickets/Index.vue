@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, reactive, onMounted, watch, computed } from 'vue';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
@@ -215,6 +215,71 @@ watch(defaultCompanyId, (newId) => {
     }
 }, { immediate: true });
 
+// ── Bulk Selection ────────────────────────────────────────────────────────
+const selectedIds = ref([])
+
+const allSelected = computed(() =>
+    pagination.data.value.length > 0 &&
+    pagination.data.value.every(t => selectedIds.value.includes(t.id))
+)
+
+const toggleAll = () => {
+    selectedIds.value = allSelected.value ? [] : pagination.data.value.map(t => t.id)
+}
+
+watch(() => [pagination.currentPage.value, pagination.search.value], () => {
+    selectedIds.value = []
+})
+
+// ── Bulk Form ─────────────────────────────────────────────────────────────
+const bulkForm = reactive({
+    store_id: '', category_id: '', sub_category_id: '', item_id: '', assignee_id: ''
+})
+const bulkCategories = ref([])
+const bulkSubCategories = ref([])
+const bulkItems = ref([])
+const isBulkSubmitting = ref(false)
+
+watch(() => selectedIds.value.length > 0, (visible) => {
+    if (visible && bulkCategories.value.length === 0) {
+        axios.get(route('tickets.data.categories', undefined, false))
+             .then(r => { bulkCategories.value = r.data })
+    }
+})
+
+watch(() => bulkForm.category_id, (val) => {
+    bulkForm.sub_category_id = ''; bulkForm.item_id = ''
+    bulkSubCategories.value = []; bulkItems.value = []
+    if (val) axios.get(`/tickets/data/subcategories?category_id=${val}`)
+                  .then(r => { bulkSubCategories.value = r.data })
+})
+
+watch(() => bulkForm.sub_category_id, (val) => {
+    bulkForm.item_id = ''; bulkItems.value = []
+    if (val) axios.get(`/tickets/data/items?category_id=${bulkForm.category_id}&sub_category_id=${val}`)
+                  .then(r => { bulkItems.value = r.data })
+})
+
+const submitBulk = () => {
+    if (!selectedIds.value.length || isBulkSubmitting.value) return
+    isBulkSubmitting.value = true
+    const payload = { ticket_ids: selectedIds.value }
+    if (bulkForm.store_id)        payload.store_id        = bulkForm.store_id
+    if (bulkForm.category_id)     payload.category_id     = bulkForm.category_id
+    if (bulkForm.sub_category_id) payload.sub_category_id = bulkForm.sub_category_id
+    if (bulkForm.item_id)         payload.item_id         = bulkForm.item_id
+    if (bulkForm.assignee_id)     payload.assignee_id     = bulkForm.assignee_id
+
+    post(route('tickets.bulk-update'), payload, {
+        onSuccess: () => {
+            selectedIds.value = []
+            Object.keys(bulkForm).forEach(k => bulkForm[k] = '')
+        },
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Bulk update failed'),
+        onFinish: () => { isBulkSubmitting.value = false }
+    })
+}
+
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
 
@@ -387,6 +452,80 @@ const getSlaRowClass = (ticket) => {
         </template>
 
         <div class="space-y-6">
+            <!-- Bulk Action Toolbar -->
+            <Transition
+                enter-active-class="transition ease-out duration-200"
+                enter-from-class="opacity-0 -translate-y-2"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition ease-in duration-150"
+                leave-from-class="opacity-100 translate-y-0"
+                leave-to-class="opacity-0 -translate-y-2"
+            >
+                <div v-if="selectedIds.length > 0"
+                     class="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-wrap items-end gap-3 shadow-sm">
+
+                    <div class="text-sm font-bold text-blue-700 self-center whitespace-nowrap mr-2">
+                        {{ selectedIds.length }} ticket(s) selected
+                    </div>
+
+                    <!-- Store -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Store</label>
+                        <Autocomplete v-model="bulkForm.store_id" :options="stores"
+                                      label-key="name" value-key="id" placeholder="Unchanged..." />
+                    </div>
+
+                    <!-- Category -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Category</label>
+                        <Autocomplete v-model="bulkForm.category_id" :options="bulkCategories"
+                                      label-key="name" value-key="id" placeholder="Unchanged..." />
+                    </div>
+
+                    <!-- Sub-Category -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Sub-Category</label>
+                        <Autocomplete v-model="bulkForm.sub_category_id" :options="bulkSubCategories"
+                                      label-key="name" value-key="id" placeholder="Unchanged..."
+                                      :disabled="!bulkForm.category_id" />
+                    </div>
+
+                    <!-- Item -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Item</label>
+                        <Autocomplete v-model="bulkForm.item_id" :options="bulkItems"
+                                      label-key="name" value-key="id" placeholder="Unchanged..."
+                                      :disabled="!bulkForm.sub_category_id" />
+                    </div>
+
+                    <!-- Assignee -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Assignee</label>
+                        <select v-model="bulkForm.assignee_id"
+                                class="border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 min-w-[140px] py-2 px-3">
+                            <option value="">— Unchanged —</option>
+                            <option v-for="p in staff" :key="p.id" :value="p.id">{{ p.name }}</option>
+                        </select>
+                    </div>
+
+                    <!-- Buttons -->
+                    <div class="flex gap-2 self-end ml-auto">
+                        <button @click="selectedIds = []"
+                                class="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                            Clear
+                        </button>
+                        <button @click="submitBulk" :disabled="isBulkSubmitting"
+                                class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors flex items-center gap-2">
+                            <svg v-if="isBulkSubmitting" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Apply to {{ selectedIds.length }}
+                        </button>
+                    </div>
+                </div>
+            </Transition>
+
             <!-- Data Table -->
             <DataTable
                 title="Ticket Management"
@@ -428,6 +567,10 @@ const getSlaRowClass = (ticket) => {
 
                 <template #header>
                     <tr>
+                        <th class="px-4 py-3 w-10">
+                            <input type="checkbox" :checked="allSelected" @change="toggleAll"
+                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                        </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
@@ -441,16 +584,21 @@ const getSlaRowClass = (ticket) => {
                 </template>
 
                 <template #body="{ data }">
-                    <tr 
-                        v-for="ticket in data" 
-                        :key="ticket.id" 
+                    <tr
+                        v-for="ticket in data"
+                        :key="ticket.id"
                         @click="editTicket(ticket)"
                         class="group transition-all border-l-4"
                         :class="[
                             getSlaRowClass(ticket),
-                            hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed'
+                            hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed',
+                            selectedIds.includes(ticket.id) ? '!bg-blue-50' : ''
                         ]"
                     >
+                        <td class="px-4 py-4 w-10" @click.stop>
+                            <input type="checkbox" :value="ticket.id" v-model="selectedIds"
+                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
                             <div>{{ ticket.ticket_key }}</div>
                             <div v-for="child in ticket.children" :key="child.id" class="text-[10px] text-blue-600 mt-1">

@@ -19,9 +19,19 @@
                     @change-per-page="pagination.changePerPage"
                 >
                     <template #actions>
-                        <button 
+                        <button
                             v-if="hasPermission('stores.create')"
-                            @click="openCreateModal" 
+                            @click="openImportModal"
+                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            <span>Import</span>
+                        </button>
+                        <button
+                            v-if="hasPermission('stores.create')"
+                            @click="openCreateModal"
                             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,6 +152,116 @@
                         </tr>
                     </template>
                 </DataTable>
+            </div>
+        </div>
+
+        <!-- Import Modal -->
+        <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeImportModal"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900">Import Stores</h3>
+                        <button @click="closeImportModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <p class="text-sm text-gray-600">
+                            Import stores in bulk using an Excel file. Columns: <span class="font-semibold">code</span>, <span class="font-semibold">name</span>, <span class="font-semibold">email</span>,
+                            <span class="font-semibold">sector</span> (1–8), <span class="font-semibold">area</span>, <span class="font-semibold">brand</span>,
+                            <span class="font-semibold">class</span> (dropdown: Regular/Kitchen), <span class="font-semibold">cluster</span>,
+                            <span class="font-semibold">latitude</span>, <span class="font-semibold">longitude</span>, <span class="font-semibold">radius_meters</span>,
+                            <span class="font-semibold">is_active</span> (1 or 0),
+                            <span class="font-semibold">users</span> (semicolon-separated emails, e.g. <span class="font-mono text-xs">john@x.com;jane@x.com</span>).
+                        </p>
+
+                        <!-- Template Download -->
+                        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
+                            <a href="/stores/template" class="flex items-center space-x-3 text-blue-600 hover:text-blue-800 transition-colors group">
+                                <div class="h-10 w-10 bg-blue-100 group-hover:bg-blue-200 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors">
+                                    <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-semibold">Download Excel Template</div>
+                                    <div class="text-xs text-gray-500">stores-import-template.xlsx</div>
+                                </div>
+                            </a>
+                        </div>
+
+                        <!-- Divider -->
+                        <div class="flex items-center space-x-3">
+                            <div class="flex-1 border-t border-gray-200"></div>
+                            <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Then Upload</span>
+                            <div class="flex-1 border-t border-gray-200"></div>
+                        </div>
+
+                        <!-- File Upload -->
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Upload Excel File</label>
+                            <div v-if="!importFile"
+                                 @click="importFileInput.click()"
+                                 class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 p-6 text-center cursor-pointer transition-colors">
+                                <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                <p class="text-sm text-gray-600 font-medium">Click to choose an Excel file</p>
+                                <p class="text-xs text-gray-400 mt-1">XLSX only, max 5MB</p>
+                            </div>
+                            <div v-else class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <div class="flex items-center space-x-2 min-w-0">
+                                    <svg class="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span class="text-sm font-medium text-green-800 truncate">{{ importFile.name }}</span>
+                                </div>
+                                <button @click="removeImportFile" type="button" class="text-gray-400 hover:text-red-500 transition-colors ml-2 flex-shrink-0">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <input ref="importFileInput" type="file" accept=".xlsx" class="hidden" @change="handleImportFileSelect">
+                        </div>
+
+                        <!-- Import Result -->
+                        <div v-if="importResult" class="rounded-lg p-4" :class="importResult.errors.length === 0 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'">
+                            <div class="flex items-center space-x-2 mb-1">
+                                <svg v-if="importResult.errors.length === 0" class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <svg v-else class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <span class="text-sm font-semibold" :class="importResult.errors.length === 0 ? 'text-green-800' : 'text-yellow-800'">
+                                    {{ importResult.imported }} store{{ importResult.imported !== 1 ? 's' : '' }} imported
+                                </span>
+                            </div>
+                            <ul v-if="importResult.errors.length > 0" class="space-y-0.5 max-h-28 overflow-y-auto mt-2">
+                                <li v-for="(error, i) in importResult.errors" :key="i" class="text-xs text-red-700">{{ error }}</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between pt-6 border-t mt-6">
+                        <button type="button" @click="closeImportModal"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Close
+                        </button>
+                        <button type="button" @click="submitImport" :disabled="!importFile || isImporting"
+                                class="px-6 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2">
+                            <svg v-if="isImporting" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>{{ isImporting ? 'Importing...' : 'Import' }}</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -332,6 +452,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue'
+import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
@@ -373,6 +494,11 @@ const getHealthStatus = (ticketCount) => {
 };
 
 const showModal = ref(false)
+const showImportModal = ref(false)
+const importFile = ref(null)
+const importFileInput = ref(null)
+const isImporting = ref(false)
+const importResult = ref(null)
 const isEditing = ref(false)
 const showUsersModal = ref(false)
 const currentStore = ref(null)
@@ -402,6 +528,53 @@ onMounted(() => {
 watch(() => props.stores, (newStores) => {
     pagination.updateData(newStores)
 }, { deep: true })
+
+const handleImportFileSelect = (event) => {
+    importFile.value = event.target.files[0] || null
+    importResult.value = null
+}
+
+const removeImportFile = () => {
+    importFile.value = null
+    importResult.value = null
+    if (importFileInput.value) importFileInput.value.value = ''
+}
+
+const submitImport = async () => {
+    if (!importFile.value || isImporting.value) return
+    isImporting.value = true
+    importResult.value = null
+
+    const formData = new FormData()
+    formData.append('file', importFile.value)
+
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        const response = await fetch('/stores/import', {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            body: formData
+        })
+        const result = await response.json()
+        importResult.value = result
+        if (result.imported > 0) {
+            showSuccess(`${result.imported} store${result.imported === 1 ? '' : 's'} imported successfully`)
+            router.reload({ only: ['stores'] })
+        }
+    } catch {
+        showError('Import failed. Please try again.')
+    } finally {
+        isImporting.value = false
+    }
+}
+
+const openImportModal = () => { showImportModal.value = true }
+const closeImportModal = () => {
+    showImportModal.value = false
+    importFile.value = null
+    importResult.value = null
+    if (importFileInput.value) importFileInput.value.value = ''
+}
 
 const openCreateModal = () => {
     isEditing.value = false

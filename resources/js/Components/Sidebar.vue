@@ -135,7 +135,7 @@ const canSeeSettings = computed(() => {
                 <div class="w-10 h-10 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
                     <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
                 </div>
-                <span class="text-xl font-semibold">TAS</span>
+                <span class="text-xl font-semibold leading-none">Helpdesk</span>
             </div>
 
             <button

@@ -202,6 +202,17 @@
                                             <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                                         </div>
                                     </label>
+
+                                    <label class="flex items-center justify-between cursor-pointer group">
+                                        <span class="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors flex items-center gap-1.5">
+                                            On Urgent Ticket
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">P1</span>
+                                        </span>
+                                        <div class="relative">
+                                            <input type="checkbox" v-model="form.notify_on_urgent_ticket" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -360,7 +371,8 @@ const form = reactive({
     companies: [],
     is_assignable: false,
     notify_on_ticket_create: false,
-    notify_on_ticket_assign: false
+    notify_on_ticket_assign: false,
+    notify_on_urgent_ticket: false
 })
 
 onMounted(() => {
@@ -391,6 +403,7 @@ const openCreateModal = () => {
     form.is_assignable = false
     form.notify_on_ticket_create = false
     form.notify_on_ticket_assign = false
+    form.notify_on_urgent_ticket = false
     showModal.value = true
 }
 
@@ -404,6 +417,7 @@ const editRole = (role) => {
     form.is_assignable = !!role.is_assignable
     form.notify_on_ticket_create = !!role.notify_on_ticket_create
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign
+    form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket
     showModal.value = true
 }
 
@@ -416,6 +430,7 @@ const closeModal = () => {
     form.is_assignable = false
     form.notify_on_ticket_create = false
     form.notify_on_ticket_assign = false
+    form.notify_on_urgent_ticket = false
 }
 
 const submitForm = () => {

@@ -170,7 +170,7 @@ const editForm = useForm({
     title: props.ticket.title,
     description: props.ticket.description,
     type: props.ticket.type,
-    priority: props.ticket.priority,
+    priority: props.ticket.priority ? String(props.ticket.priority).toLowerCase() : '',
     status: props.ticket.status,
     severity: props.ticket.severity,
     assignee_id: props.ticket.assignee_id || '',
@@ -215,10 +215,20 @@ const fetchItems = async (categoryId, subCategoryId) => {
     }
 };
 
-onMounted(() => {
+onMounted(async () => {
     fetchCategories();
     if (props.ticket.category_id) fetchSubCategories(props.ticket.category_id);
-    if (props.ticket.category_id && props.ticket.sub_category_id) fetchItems(props.ticket.category_id, props.ticket.sub_category_id);
+    if (props.ticket.category_id && props.ticket.sub_category_id) {
+        await fetchItems(props.ticket.category_id, props.ticket.sub_category_id);
+        // Sync priority from the current item's latest value (in case it was changed in Items management)
+        if (props.ticket.item_id) {
+            const item = items.value.find(i => i.id == props.ticket.item_id);
+            if (item) {
+                editForm.priority = item.priority.toLowerCase();
+                editForm.defaults(editForm.data()); // reset dirty state so it doesn't auto-save on load
+            }
+        }
+    }
     window.addEventListener('keydown', handleKeydown);
 });
 
@@ -403,7 +413,7 @@ const debouncedUpdate = debounce(() => {
 // Watch for ticket changes to sync form state (important after status changes from comments)
 watch(() => props.ticket, (newTicket) => {
     editForm.status = newTicket.status;
-    editForm.priority = newTicket.priority;
+    editForm.priority = newTicket.priority ? String(newTicket.priority).toLowerCase() : '';
     editForm.severity = newTicket.severity;
     editForm.type = newTicket.type;
     editForm.assignee_id = newTicket.assignee_id || '';
@@ -585,7 +595,7 @@ const getPriorityLabel = (priority) => {
 };
 
 const getPriorityColor = (priority) => {
-    switch (priority) {
+    switch (String(priority || '').toLowerCase()) {
         case 'urgent': return 'text-red-900 bg-red-200';
         case 'high': return 'text-red-800 bg-red-100';
         case 'medium': return 'text-yellow-900 bg-yellow-200';
@@ -1058,10 +1068,41 @@ const linkify = (text) => {
                                             {{ activity.user ? activity.user.name.charAt(0) : '?' }}
                                         </div>
                                     </div>
-                                    
-                                    <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-1">
+
+                                    <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
                                         <span class="font-bold text-gray-900 text-sm">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium">created child <Link :href="route('tickets.edit', activity.id)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link> on {{ formatDate(activity.date) }}</span>
+                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium">created child ticket <Link :href="route('tickets.edit', activity.id)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link> on {{ formatDate(activity.date) }}</span>
+                                    </div>
+
+                                    <div class="text-xs bg-purple-50 border border-purple-100 rounded-lg p-3 space-y-1.5">
+                                        <div v-if="activity.assignee" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Assigned To</span>
+                                            <span class="font-semibold text-gray-800">{{ activity.assignee.name }}</span>
+                                        </div>
+                                        <div v-if="activity.schedule" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Schedule</span>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">{{ activity.schedule.status }}</span>
+                                        </div>
+                                        <div v-if="activity.schedule" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Time</span>
+                                            <span class="text-gray-700">{{ formatDate(activity.schedule.start_time) }} – {{ formatDate(activity.schedule.end_time) }}</span>
+                                        </div>
+                                        <div v-if="activity.schedule && (activity.schedule.pickup_start || activity.schedule.backlogs_start)" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Add'l Times</span>
+                                            <span class="text-gray-600 text-[11px]">
+                                                <span v-if="activity.schedule.pickup_start">Pickup: {{ activity.schedule.pickup_start }}–{{ activity.schedule.pickup_end }}</span>
+                                                <span v-if="activity.schedule.pickup_start && activity.schedule.backlogs_start"> &nbsp;|&nbsp; </span>
+                                                <span v-if="activity.schedule.backlogs_start">Backlogs: {{ activity.schedule.backlogs_start }}–{{ activity.schedule.backlogs_end }}</span>
+                                            </span>
+                                        </div>
+                                        <div v-if="activity.schedule && activity.schedule.store" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Store</span>
+                                            <span class="text-gray-700">{{ activity.schedule.store.name }}</span>
+                                        </div>
+                                        <div v-if="activity.schedule && activity.schedule.remarks" class="flex items-start gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Remarks</span>
+                                            <span class="text-gray-700 whitespace-pre-wrap">{{ activity.schedule.remarks }}</span>
+                                        </div>
                                     </div>
                                 </template>
                             </div>
@@ -1213,6 +1254,28 @@ const linkify = (text) => {
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
                             <input v-model="childForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        </div>
+                    </div>
+
+                    <div v-if="childForm.status === 'On-site' || childForm.status === 'WFH'" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
+                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Times</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="block text-xs font-medium text-gray-600">Pickup Time (From - To)</label>
+                                <div class="flex items-center space-x-2">
+                                    <input v-model="childForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <span class="text-gray-400">-</span>
+                                    <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-xs font-medium text-gray-600">Backlogs Time (From - To)</label>
+                                <div class="flex items-center space-x-2">
+                                    <input v-model="childForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <span class="text-gray-400">-</span>
+                                    <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                </div>
+                            </div>
                         </div>
                     </div>
 

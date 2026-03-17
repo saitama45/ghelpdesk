@@ -119,6 +119,27 @@ const getEventColor = (status) => {
     }
 };
 
+const getTicketPriorityColor = (priority) => {
+    switch (String(priority || '').toLowerCase()) {
+        case 'urgent': return 'bg-red-600 text-white border-red-700';
+        case 'high':   return 'bg-orange-500 text-white border-orange-600';
+        case 'medium': return 'bg-yellow-500 text-white border-yellow-600';
+        case 'low':    return 'bg-green-600 text-white border-green-700';
+        default:       return 'bg-slate-500 text-white border-slate-600';
+    }
+};
+
+const getChipColor = (event) => {
+    if (event.ticket?.priority) {
+        return getTicketPriorityColor(event.ticket.priority);
+    }
+    return getEventColor(event.status);
+};
+
+const isUrgentTicket = (event) => {
+    return String(event.ticket?.priority || '').toLowerCase() === 'urgent';
+};
+
 const formatTime = (dateString) => {
     return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
@@ -219,16 +240,21 @@ const formatDateLong = (date) => {
                             @click.stop="emit('event-click', event)"
                             class="group relative py-1 px-2 text-[10px] leading-none shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 border"
                             :class="[
-                                getEventColor(event.status),
+                                getChipColor(event),
                                 getEventStatus(event, day.date).isStart ? 'rounded-l-lg ml-1 border-l-2' : '-ml-2 border-l-0',
                                 getEventStatus(event, day.date).isEnd ? 'rounded-r-lg mr-1 border-r-2' : '-mr-2 border-r-0',
-                                !getEventStatus(event, day.date).isStart && !getEventStatus(event, day.date).isEnd ? 'border-x-0' : ''
+                                !getEventStatus(event, day.date).isStart && !getEventStatus(event, day.date).isEnd ? 'border-x-0' : '',
+                                isUrgentTicket(event) ? 'ring-2 ring-red-400 ring-offset-1 shadow-red-300/60 shadow-md' : ''
                             ]"
-                            :title="`${event.user?.name}: ${event.status}`"
+                            :title="`${event.user?.name}: ${event.status}${event.ticket ? ` [${event.ticket.ticket_key}] ${String(event.ticket.priority).toUpperCase()}` : ''}${isUrgentTicket(event) ? ' ⚠ URGENT P1' : ''}`"
                         >
                             <div class="flex flex-col gap-0.5">
                                 <div class="font-black truncate flex items-center gap-1">
                                     <span v-if="getEventStatus(event, day.date).isStart" class="w-1 h-1 rounded-full bg-white animate-pulse"></span>
+                                    <span
+                                        v-if="isUrgentTicket(event)"
+                                        class="inline-flex items-center px-1 rounded text-[8px] font-black bg-red-500 text-white leading-tight animate-pulse flex-shrink-0"
+                                    >P1</span>
                                     <span v-if="event.ticket" class="opacity-75 font-normal">[{{ event.ticket.ticket_key }}]</span>
                                     {{ event.user?.name }}
                                 </div>
@@ -274,15 +300,29 @@ const formatDateLong = (date) => {
                             :key="event.id"
                             @click="() => { emit('event-click', event); closeDayModal(); }"
                             class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group"
+                            :class="isUrgentTicket(event) ? 'border-l-2 !border-l-red-500 pl-2' : ''"
                         >
                             <div class="flex items-start gap-3">
-                                <div class="w-3 h-3 rounded-full mt-1 shrink-0" :class="getEventColor(event.status).split(' ')[0]"></div>
+                                <div class="w-3 h-3 rounded-full mt-1 shrink-0" :class="getChipColor(event).split(' ')[0]"></div>
                                 <div class="flex-1">
                                     <div class="flex justify-between items-start">
-                                        <p class="text-sm font-bold text-gray-900">{{ event.user?.name }}</p>
-                                        <span class="text-[10px] font-medium text-gray-400">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
+                                        <div class="flex items-center gap-1.5 flex-wrap">
+                                            <p class="text-sm font-bold text-gray-900">{{ event.user?.name }}</p>
+                                            <span
+                                                v-if="isUrgentTicket(event)"
+                                                class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-red-500 text-white animate-pulse"
+                                            >⚠ P1 URGENT</span>
+                                            <span
+                                                v-else-if="event.ticket?.priority"
+                                                class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
+                                                :class="getChipColor(event).split(' ')[0]"
+                                            >{{ String(event.ticket.priority).toUpperCase() }}</span>
+                                        </div>
+                                        <span class="text-[10px] font-medium text-gray-400 shrink-0 ml-2">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
                                     </div>
-                                    <p class="text-xs text-gray-500 font-medium">{{ event.status }}</p>
+                                    <p class="text-xs text-gray-500 font-medium">
+                                        {{ event.status }}<span v-if="event.ticket" class="ml-1 text-gray-400">[{{ event.ticket.ticket_key }}]</span>
+                                    </p>
                                     <p v-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
                                 </div>
                             </div>

@@ -104,10 +104,25 @@ class DashboardController extends Controller
                 ];
             });
 
+        // New Tickets Logic
+        $newTicketsQuery = (clone $filteredQuery)
+            ->where('status', 'open')
+            ->whereNull('category_id')
+            ->whereNull('sub_category_id')
+            ->whereNull('item_id')
+            ->whereNull('assignee_id');
+
+        // Modal Lists (limited to 100 to prevent performance issues)
+        $totalTicketsList = (clone $filteredQuery)->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
+        $openTicketsList = (clone $filteredQuery)->where('status', 'open')->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
+        $newTicketsList = (clone $newTicketsQuery)->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
+        $closedTicketsList = (clone $filteredQuery)->where('status', 'closed')->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
+
         // Stats (Filtered)
         $stats = [
             'total' => (clone $filteredQuery)->count(),
             'open' => (clone $filteredQuery)->where('status', 'open')->count(),
+            'new' => (clone $newTicketsQuery)->count(),
             'in_progress' => (clone $filteredQuery)->where('status', 'in_progress')->count(),
             'closed' => (clone $filteredQuery)->where('status', 'closed')->count(),
             'waiting' => (clone $filteredQuery)->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])->count(),
@@ -232,6 +247,10 @@ class DashboardController extends Controller
             'myTickets' => $myTickets,
             'alarmedWaitingTickets' => $alarmedWaitingTickets,
             'urgentTickets' => $urgentTickets,
+            'totalTicketsList' => $totalTicketsList,
+            'openTicketsList' => $openTicketsList,
+            'newTicketsList' => $newTicketsList,
+            'closedTicketsList' => $closedTicketsList,
             'recentActivity' => $activities,
             'filters' => [
                 'year' => (int)$year ?: null,

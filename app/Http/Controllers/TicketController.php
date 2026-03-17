@@ -217,6 +217,20 @@ class TicketController extends Controller
         foreach ($usersToNotify as $userToNotify) {
             if ($userToNotify->email && !in_array($userToNotify->email, $sentTo)) {
                 Mail::to($userToNotify->email)->send(new NewTicketCreated($ticket, 'Admin'));
+                $sentTo[] = $userToNotify->email;
+            }
+        }
+
+        if (strtolower($ticket->priority) === 'urgent') {
+            $urgentWatchers = User::whereHas('roles', function ($q) {
+                $q->where('notify_on_urgent_ticket', true);
+            })->get();
+
+            foreach ($urgentWatchers as $watcher) {
+                if ($watcher->email && !in_array($watcher->email, $sentTo)) {
+                    Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
+                    $sentTo[] = $watcher->email;
+                }
             }
         }
 
@@ -342,11 +356,27 @@ class TicketController extends Controller
                 $this->syncParentStatus($ticket->parent_id, $newStatus);
             }
 
+            $alreadyNotified = [];
+
             if ($assigneeChanged && $ticket->assignee_id) {
                 $ticket->load('assignee');
                 if ($ticket->assignee && $ticket->assignee->email) {
                     if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
                         Mail::to($ticket->assignee->email)->send(new TicketAssigned($ticket, $ticket->assignee->name));
+                        $alreadyNotified[] = $ticket->assignee->email;
+                    }
+                }
+            }
+
+            if (strtolower($ticket->priority) === 'urgent') {
+                $urgentWatchers = User::whereHas('roles', function ($q) {
+                    $q->where('notify_on_urgent_ticket', true);
+                })->get();
+
+                foreach ($urgentWatchers as $watcher) {
+                    if ($watcher->email && !in_array($watcher->email, $alreadyNotified)) {
+                        Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
+                        $alreadyNotified[] = $watcher->email;
                     }
                 }
             }
@@ -662,5 +692,41 @@ class TicketController extends Controller
     {
         $result = $service->fetchAndProcess();
         return response()->json($result);
+    }
+
+    public function bulkUpdate(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.edit'), 403);
+
+        $validated = $request->validate([
+            'ticket_ids'      => 'required|array|min:1',
+            'ticket_ids.*'    => 'exists:tickets,id',
+            'store_id'        => 'nullable|exists:stores,id',
+            'category_id'     => 'nullable|exists:categories,id',
+            'sub_category_id' => 'nullable|exists:sub_categories,id',
+            'item_id'         => 'nullable|exists:items,id',
+            'assignee_id'     => 'nullable|exists:users,id',
+        ]);
+
+        $fields  = ['store_id', 'category_id', 'sub_category_id', 'item_id', 'assignee_id'];
+        $updates = collect($fields)
+            ->filter(fn($k) => $request->has($k))
+            ->mapWithKeys(fn($k) => [$k => $validated[$k]])
+            ->all();
+
+        if (empty($updates)) {
+            return redirect()->back()->withErrors(['bulk' => 'No fields selected for update.']);
+        }
+
+        if (!empty($updates['item_id'])) {
+            $item = \App\Models\Item::find($updates['item_id']);
+            if ($item) {
+                $updates['priority'] = strtolower($item->priority);
+            }
+        }
+
+        $count = Ticket::whereIn('id', $validated['ticket_ids'])->update($updates);
+
+        return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
     }
 }

@@ -13,6 +13,10 @@ const props = defineProps({
     recentTickets: Array,
     alarmedWaitingTickets: Array,
     urgentTickets: Array,
+    totalTicketsList: Array,
+    openTicketsList: Array,
+    newTicketsList: Array,
+    closedTicketsList: Array,
     filters: Object,
     years: Array,
     months: Array,
@@ -92,6 +96,10 @@ const getPriorityColor = (priority) => {
 
 const showWaitingAlarmModal = ref(false);
 const showUrgentModal = ref(false);
+const showTotalModal = ref(false);
+const showOpenModal = ref(false);
+const showNewModal = ref(false);
+const showClosedModal = ref(false);
 </script>
 
 <template>
@@ -148,7 +156,10 @@ const showUrgentModal = ref(false);
 
         <!-- Stats Grid -->
         <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-blue-500 flex flex-col justify-between">
+            <div 
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-blue-500 flex flex-col justify-between cursor-pointer hover:bg-blue-50 transition-colors"
+                @click="showTotalModal = true"
+            >
                 <div class="flex items-center justify-between">
                     <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Total</p>
                     <div class="p-1.5 bg-blue-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></div>
@@ -156,20 +167,26 @@ const showUrgentModal = ref(false);
                 <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.total }}</p>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-yellow-500 flex flex-col justify-between">
+            <div 
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-purple-500 flex flex-col justify-between cursor-pointer hover:bg-purple-50 transition-colors"
+                @click="showNewModal = true"
+            >
+                <div class="flex items-center justify-between">
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">New</p>
+                    <div class="p-1.5 bg-purple-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+                </div>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.new }}</p>
+            </div>
+
+            <div 
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-yellow-500 flex flex-col justify-between cursor-pointer hover:bg-yellow-50 transition-colors"
+                @click="showOpenModal = true"
+            >
                 <div class="flex items-center justify-between">
                     <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Open</p>
                     <div class="p-1.5 bg-yellow-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
                 </div>
                 <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.open }}</p>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-purple-500 flex flex-col justify-between">
-                <div class="flex items-center justify-between">
-                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Active</p>
-                    <div class="p-1.5 bg-purple-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
-                </div>
-                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.in_progress }}</p>
             </div>
 
             <div 
@@ -220,7 +237,10 @@ const showUrgentModal = ref(false);
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-green-500 flex flex-col justify-between col-span-2 lg:col-span-1">
+            <div 
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-green-500 flex flex-col justify-between col-span-2 lg:col-span-1 cursor-pointer hover:bg-green-50 transition-colors"
+                @click="showClosedModal = true"
+            >
                 <div class="flex items-center justify-between">
                     <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Closed</p>
                     <div class="p-1.5 bg-green-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
@@ -497,6 +517,206 @@ const showUrgentModal = ref(false);
                     <button @click="showUrgentModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">
                         Close
                     </button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Total Tickets Modal -->
+        <Modal :show="showTotalModal" @close="showTotalModal = false" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                        Total Tickets (Latest 100)
+                        <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                            {{ totalTicketsList?.length || 0 }}
+                        </span>
+                    </h2>
+                    <button @click="showTotalModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-if="totalTicketsList?.length > 0" class="space-y-3">
+                        <div v-for="ticket in totalTicketsList" :key="ticket.id" class="p-4 bg-gray-50 border border-gray-100 rounded-xl hover:shadow-md transition-all group">
+                            <div class="flex justify-between items-start">
+                                <div class="flex flex-col">
+                                    <div class="flex items-center space-x-2">
+                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ ticket.key }}
+                                        </Link>
+                                        <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
+                                            {{ getStatusLabel(ticket.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Created</p>
+                                    <p class="text-xs font-bold text-gray-600">{{ ticket.created_at }}</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-end">
+                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                    Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500 italic">No tickets found.</div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button @click="showTotalModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- New Tickets Modal -->
+        <Modal :show="showNewModal" @close="showNewModal = false" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        New Tickets (Uncategorized & Unassigned)
+                        <span class="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
+                            {{ newTicketsList?.length || 0 }}
+                        </span>
+                    </h2>
+                    <button @click="showNewModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-if="newTicketsList?.length > 0" class="space-y-3">
+                        <div v-for="ticket in newTicketsList" :key="ticket.id" class="p-4 bg-purple-50 border border-purple-100 rounded-xl hover:shadow-md transition-all group">
+                            <div class="flex justify-between items-start">
+                                <div class="flex flex-col">
+                                    <div class="flex items-center space-x-2">
+                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ ticket.key }}
+                                        </Link>
+                                        <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
+                                            {{ getStatusLabel(ticket.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] font-black text-purple-600 uppercase tracking-widest">Created</p>
+                                    <p class="text-xs font-bold text-purple-700">{{ ticket.created_at }}</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-end">
+                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                    Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500 italic">No new tickets found.</div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button @click="showNewModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Open Tickets Modal -->
+        <Modal :show="showOpenModal" @close="showOpenModal = false" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Open Tickets (Latest 100)
+                        <span class="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                            {{ openTicketsList?.length || 0 }}
+                        </span>
+                    </h2>
+                    <button @click="showOpenModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-if="openTicketsList?.length > 0" class="space-y-3">
+                        <div v-for="ticket in openTicketsList" :key="ticket.id" class="p-4 bg-yellow-50 border border-yellow-100 rounded-xl hover:shadow-md transition-all group">
+                            <div class="flex justify-between items-start">
+                                <div class="flex flex-col">
+                                    <div class="flex items-center space-x-2">
+                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ ticket.key }}
+                                        </Link>
+                                        <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
+                                            {{ getStatusLabel(ticket.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] font-black text-yellow-600 uppercase tracking-widest">Created</p>
+                                    <p class="text-xs font-bold text-yellow-700">{{ ticket.created_at }}</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-end">
+                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                    Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500 italic">No open tickets found.</div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button @click="showOpenModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Closed Tickets Modal -->
+        <Modal :show="showClosedModal" @close="showClosedModal = false" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6 border-b pb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                        <svg class="w-6 h-6 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        Closed Tickets (Latest 100)
+                        <span class="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                            {{ closedTicketsList?.length || 0 }}
+                        </span>
+                    </h2>
+                    <button @click="showClosedModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-if="closedTicketsList?.length > 0" class="space-y-3">
+                        <div v-for="ticket in closedTicketsList" :key="ticket.id" class="p-4 bg-green-50 border border-green-100 rounded-xl hover:shadow-md transition-all group">
+                            <div class="flex justify-between items-start">
+                                <div class="flex flex-col">
+                                    <div class="flex items-center space-x-2">
+                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ ticket.key }}
+                                        </Link>
+                                        <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
+                                            {{ getStatusLabel(ticket.status) }}
+                                        </span>
+                                    </div>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] font-black text-green-600 uppercase tracking-widest">Created</p>
+                                    <p class="text-xs font-bold text-green-700">{{ ticket.created_at }}</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex justify-end">
+                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                    Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-12 text-gray-500 italic">No closed tickets found.</div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button @click="showClosedModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
                 </div>
             </div>
         </Modal>
