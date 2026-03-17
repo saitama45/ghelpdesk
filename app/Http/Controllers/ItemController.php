@@ -9,6 +9,12 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ItemController extends Controller implements HasMiddleware
 {
@@ -86,5 +92,200 @@ class ItemController extends Controller implements HasMiddleware
     {
         $item->delete();
         return redirect()->back()->with('success', 'Item deleted successfully');
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:xlsx,csv,txt|max:5120']);
+
+        $path = $request->file('file')->getRealPath();
+        $spreadsheet = IOFactory::load($path);
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+
+        $header = array_map('trim', array_shift($rows));
+
+        $categoryMap    = Category::pluck('id', 'name')->toArray();
+        $subCategoryMap = SubCategory::pluck('id', 'name')->toArray();
+
+        $imported = 0;
+        $errors   = [];
+        $rowNum   = 1;
+
+        foreach ($rows as $line) {
+            $rowNum++;
+
+            // Skip completely empty rows (can appear at end of xlsx)
+            if (empty(array_filter($line, fn($v) => $v !== null && $v !== ''))) {
+                continue;
+            }
+
+            if (count($line) !== count($header)) {
+                $errors[] = "Row {$rowNum}: column count mismatch, skipped.";
+                continue;
+            }
+
+            $data = array_combine($header, array_map(fn($v) => trim((string) $v), $line));
+
+            // Resolve category name → ID
+            $categoryId = null;
+            if (!empty($data['category'])) {
+                if (!isset($categoryMap[$data['category']])) {
+                    $errors[] = "Row {$rowNum}: category '{$data['category']}' not found.";
+                    continue;
+                }
+                $categoryId = $categoryMap[$data['category']];
+            }
+
+            // Resolve sub_category name → ID
+            $subCategoryId = null;
+            if (!empty($data['sub_category'])) {
+                if (!isset($subCategoryMap[$data['sub_category']])) {
+                    $errors[] = "Row {$rowNum}: sub_category '{$data['sub_category']}' not found.";
+                    continue;
+                }
+                $subCategoryId = $subCategoryMap[$data['sub_category']];
+            }
+
+            $validator = \Validator::make([
+                'name'            => $data['name'] ?? null,
+                'description'     => $data['description'] ?? null,
+                'priority'        => $data['priority'] ?? null,
+                'category_id'     => $categoryId,
+                'sub_category_id' => $subCategoryId,
+                'is_active'       => $data['is_active'] ?? '1',
+            ], [
+                'name'            => 'required|string|max:255|unique:items,name',
+                'description'     => 'nullable|string',
+                'priority'        => 'required|in:Low,Medium,High,Urgent',
+                'category_id'     => 'nullable|exists:categories,id',
+                'sub_category_id' => 'nullable|exists:sub_categories,id',
+                'is_active'       => 'nullable|in:0,1',
+            ]);
+
+            if ($validator->fails()) {
+                $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
+                continue;
+            }
+
+            Item::create([
+                'name'            => $data['name'],
+                'description'     => $data['description'] ?: null,
+                'priority'        => $data['priority'],
+                'category_id'     => $categoryId,
+                'sub_category_id' => $subCategoryId,
+                'is_active'       => isset($data['is_active']) ? (bool) $data['is_active'] : true,
+            ]);
+            $imported++;
+        }
+
+        return response()->json(['imported' => $imported, 'errors' => $errors]);
+    }
+
+    public function template()
+    {
+        $categories    = Category::where('is_active', true)->orderBy('name')->get();
+        $subCategories = SubCategory::where('is_active', true)->orderBy('name')->get();
+
+        $spreadsheet = new Spreadsheet();
+
+        // ── Hidden Lists sheet ──────────────────────────────────────────
+        $listsSheet = $spreadsheet->createSheet(1);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $listsSheet->setCellValue('A1', 'Categories');
+        foreach ($categories as $i => $cat) {
+            $listsSheet->setCellValue('A' . ($i + 2), $cat->name);
+        }
+
+        $listsSheet->setCellValue('B1', 'Sub-Categories');
+        foreach ($subCategories as $i => $sub) {
+            $listsSheet->setCellValue('B' . ($i + 2), $sub->name);
+        }
+
+        $priorities = ['Low', 'Medium', 'High', 'Urgent'];
+        $listsSheet->setCellValue('C1', 'Priority');
+        foreach ($priorities as $i => $p) {
+            $listsSheet->setCellValue('C' . ($i + 2), $p);
+        }
+
+        // ── Import Template sheet ───────────────────────────────────────
+        $sheet = $spreadsheet->getSheet(0);
+        $sheet->setTitle('Import Template');
+
+        // Headers
+        $headers = ['name', 'description', 'priority', 'category', 'sub_category', 'is_active'];
+        foreach ($headers as $i => $h) {
+            $col = chr(65 + $i); // A–F
+            $sheet->setCellValue("{$col}1", $h);
+        }
+
+        // Example row
+        $sheet->setCellValue('A2', 'Example Item');
+        $sheet->setCellValue('B2', 'A short description');
+        $sheet->setCellValue('C2', 'Medium');
+        $sheet->setCellValue('D2', $categories->first()?->name ?? '');
+        $sheet->setCellValue('E2', $subCategories->first()?->name ?? '');
+        $sheet->setCellValue('F2', '1');
+
+        // Header styling
+        $sheet->getStyle('A1:F1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:F1')->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+
+        // Auto-size columns A–F
+        foreach (range('A', 'F') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        // ── Data Validation ─────────────────────────────────────────────
+        $catCount = $categories->count();
+        $subCount = $subCategories->count();
+
+        // Priority dropdown — C2:C1001
+        $priorityValidation = $sheet->getCell('C2')->getDataValidation();
+        $priorityValidation->setType(DataValidation::TYPE_LIST)
+            ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+            ->setAllowBlank(false)
+            ->setShowDropDown(false)
+            ->setFormula1('Lists!$C$2:$C$5')
+            ->setSqref('C2:C1001');
+
+        // Category dropdown — D2:D1001
+        if ($catCount > 0) {
+            $catValidation = $sheet->getCell('D2')->getDataValidation();
+            $catValidation->setType(DataValidation::TYPE_LIST)
+                ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+                ->setAllowBlank(true)
+                ->setShowDropDown(false)
+                ->setFormula1('Lists!$A$2:$A$' . ($catCount + 1))
+                ->setSqref('D2:D1001');
+        }
+
+        // Sub-Category dropdown — E2:E1001
+        if ($subCount > 0) {
+            $subValidation = $sheet->getCell('E2')->getDataValidation();
+            $subValidation->setType(DataValidation::TYPE_LIST)
+                ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+                ->setAllowBlank(true)
+                ->setShowDropDown(false)
+                ->setFormula1('Lists!$B$2:$B$' . ($subCount + 1))
+                ->setSqref('E2:E1001');
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer   = new Xlsx($spreadsheet);
+        $filename = 'items-import-template.xlsx';
+        $httpHeaders = [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'max-age=0',
+        ];
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, $httpHeaders);
     }
 }

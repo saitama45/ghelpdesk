@@ -25,6 +25,12 @@ Route::middleware('auth')->group(function () {
     
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::resource('companies', CompanyController::class)->except(['show', 'create', 'edit']);
+    Route::get('categories/template', [\App\Http\Controllers\CategoryController::class, 'template'])->name('categories.template');
+    Route::post('categories/import', [\App\Http\Controllers\CategoryController::class, 'import'])->name('categories.import');
+    Route::get('sub-categories/template', [\App\Http\Controllers\SubCategoryController::class, 'template'])->name('sub-categories.template');
+    Route::post('sub-categories/import', [\App\Http\Controllers\SubCategoryController::class, 'import'])->name('sub-categories.import');
+    Route::get('items/template', [\App\Http\Controllers\ItemController::class, 'template'])->name('items.template');
+    Route::post('items/import', [\App\Http\Controllers\ItemController::class, 'import'])->name('items.import');
     Route::resource('categories', \App\Http\Controllers\CategoryController::class)->except(['show', 'create', 'edit']);
     Route::resource('sub-categories', \App\Http\Controllers\SubCategoryController::class)->except(['show', 'create', 'edit']);
     Route::resource('items', \App\Http\Controllers\ItemController::class)->except(['show', 'create', 'edit']);
