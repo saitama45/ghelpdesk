@@ -34,6 +34,11 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         $user = Auth::user();
+        
+        if ($user) {
+            $user->updateStatus('online');
+        }
+
         $landingPage = 'dashboard';
 
         // Check if user has a role with a specific landing page
@@ -59,6 +64,11 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $user = Auth::user();
+        if ($user) {
+            $user->updateStatus('offline');
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

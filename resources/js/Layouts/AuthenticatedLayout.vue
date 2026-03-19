@@ -9,12 +9,15 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { usePermission } from '@/Composables/usePermission.js';
 import Toast from '@/Components/Toast.vue';
 import { useToast } from '@/Composables/useToast.js';
-import { watch, onMounted } from 'vue';
+import { watch, onMounted, onUnmounted } from 'vue';
+import UserStatus from '@/Components/UserStatus.vue';
+import { usePresence } from '@/Composables/usePresence.js';
 
 const showingNavigationDropdown = ref(false);
 const { hasPermission } = usePermission();
 const { success, error, warning, info } = useToast();
 const page = usePage();
+const { init: initPresence, destroy: destroyPresence, currentStatus } = usePresence();
 
 const checkFlashMessages = () => {
     const flash = page.props.flash || {};
@@ -26,6 +29,11 @@ const checkFlashMessages = () => {
 
 onMounted(() => {
     checkFlashMessages();
+    initPresence();
+});
+
+onUnmounted(() => {
+    destroyPresence();
 });
 
 watch(() => page.props.flash, () => {
@@ -104,6 +112,13 @@ watch(() => page.props.flash, () => {
                                 >
                                     Scheduling
                                 </NavLink>
+                                <NavLink
+                                    v-if="hasPermission('presence.view')"
+                                    :href="route('presence.index')"
+                                    :active="route().current('presence.*')"
+                                >
+                                    Presence
+                                </NavLink>
                             </div>
                         </div>
 
@@ -117,6 +132,7 @@ watch(() => page.props.flash, () => {
                                                 type="button"
                                                 class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
                                             >
+                                                <UserStatus :status="currentStatus" size="lg" class="mr-2" />
                                                 {{ $page.props.auth.user.name }}
 
                                                 <svg
@@ -259,8 +275,9 @@ watch(() => page.props.flash, () => {
                     >
                         <div class="px-4">
                             <div
-                                class="text-base font-medium text-gray-800"
+                                class="text-base font-medium text-gray-800 flex items-center"
                             >
+                                <UserStatus :status="currentStatus" size="lg" class="mr-2" />
                                 {{ $page.props.auth.user.name }}
                             </div>
                             <div class="text-sm font-medium text-gray-500">

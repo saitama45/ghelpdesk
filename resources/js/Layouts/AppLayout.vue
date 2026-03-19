@@ -8,11 +8,14 @@ import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { useToast } from '@/Composables/useToast.js';
 import { useConfirm } from '@/Composables/useConfirm.js';
 import { usePermission } from '@/Composables/usePermission.js';
+import UserStatus from '@/Components/UserStatus.vue';
+import { usePresence } from '@/Composables/usePresence.js';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const sidebarOpen = ref(false);
 const isSidebarCollapsed = ref(false);
+const { init: initPresence, destroy: destroyPresence, currentStatus } = usePresence();
 
 const toggleSidebar = () => {
     if (window.innerWidth < 1024) {
@@ -54,6 +57,7 @@ const checkFlashMessages = () => {
 onMounted(() => {
     document.addEventListener('click', handleClickOutside);
     checkFlashMessages();
+    initPresence();
 });
 
 watch(() => page.props.flash, () => {
@@ -62,6 +66,7 @@ watch(() => page.props.flash, () => {
 
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside);
+    destroyPresence();
 });
 
 watch(() => page.url, () => {
@@ -128,11 +133,14 @@ const isCurrentRoute = (routeName) => {
                                 @click="userMenuOpen = !userMenuOpen"
                                 class="flex items-center space-x-2 p-1 sm:p-2 text-sm rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                                <div v-if="user.profile_photo" class="h-8 w-8 rounded-full overflow-hidden border border-gray-200">
-                                    <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
-                                </div>
-                                <div v-else class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
-                                    <span class="text-sm font-medium text-white">{{ user.name?.charAt(0) || 'U' }}</span>
+                                <div class="relative">
+                                    <div v-if="user.profile_photo" class="h-8 w-8 rounded-full overflow-hidden border border-gray-200">
+                                        <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
+                                    </div>
+                                    <div v-else class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                        <span class="text-sm font-medium text-white">{{ user.name?.charAt(0) || 'U' }}</span>
+                                    </div>
+                                    <UserStatus :status="currentStatus" size="lg" class="absolute -bottom-0.5 -right-0.5 border-2 border-white" />
                                 </div>
                                 <span class="hidden md:block text-gray-700 font-medium">{{ user.name }}</span>
                                 <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

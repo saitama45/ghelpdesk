@@ -97,6 +97,9 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.delete' => 'Delete projects',
             'projects.manage_tasks' => 'Manage project tasks',
             'projects.manage_assets' => 'Manage project assets',
+
+            // Presence
+            'presence.view' => 'View online users and their status history',
         ];
 
         // Create permissions
@@ -134,6 +137,7 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.view',
             'projects.manage_tasks',
             'projects.manage_assets',
+            'presence.view',
         ]);
         
         $user->givePermissionTo([

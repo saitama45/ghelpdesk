@@ -24,6 +24,8 @@ class User extends Authenticatable
         'position',
         'is_active',
         'last_login',
+        'status',
+        'last_activity_at',
         'profile_photo',
         'company_id',
     ];
@@ -38,6 +40,47 @@ class User extends Authenticatable
         return $this->hasMany(AttendanceLog::class);
     }
 
+    public function userPresenceLogs()
+    {
+        return $this->hasMany(UserPresenceLog::class);
+    }
+
+    public function lastPresenceLog()
+    {
+        return $this->hasOne(UserPresenceLog::class)->latestOfMany();
+    }
+
+    public function updateStatus(string $status): void
+    {
+        if ($this->status === $status) {
+            $this->update(['last_activity_at' => now()]);
+            return;
+        }
+
+        // Close the previous log
+        $lastLog = $this->lastPresenceLog;
+        if ($lastLog && !$lastLog->ended_at) {
+            $endedAt = now();
+            // Use diffInSeconds with absolute set to true, and cast to int
+            $duration = abs((int) $endedAt->diffInSeconds($lastLog->started_at));
+            $lastLog->update([
+                'ended_at' => $endedAt,
+                'duration_seconds' => $duration,
+            ]);
+        }
+
+        // Create new log
+        $this->userPresenceLogs()->create([
+            'status' => $status,
+            'started_at' => now(),
+        ]);
+
+        $this->update([
+            'status' => $status,
+            'last_activity_at' => now(),
+        ]);
+    }
+
     public function lastAttendanceLog()
     {
         return $this->hasOne(AttendanceLog::class)->latestOfMany();
@@ -49,6 +92,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login' => 'datetime',
+            'last_activity_at' => 'datetime',
             'is_active' => 'boolean',
         ];
     }

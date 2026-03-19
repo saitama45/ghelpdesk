@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('tickets:fetch-emails')->everyThirtySeconds();
 Schedule::command('tickets:auto-close')->hourly();
+Schedule::command('presence:update-stale')->everyMinute();

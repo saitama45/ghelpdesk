@@ -66,10 +66,20 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/sla-performance/pdf', [\App\Http\Controllers\SlaReportController::class, 'pdf'])->name('reports.sla-performance.pdf');
     Route::get('reports/sla-performance/tickets', [\App\Http\Controllers\SlaReportController::class, 'getTickets'])->name('reports.sla-performance.tickets');
 
-    Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+
+    Route::middleware([\App\Http\Middleware\UpdateUserPresence::class])->group(function () {
+        Route::get('/presence', function () {
+            if (!auth()->user()->can('presence.view')) abort(403);
+            return \Inertia\Inertia::render('Presence/Index');
+        })->name('presence.index');
+        Route::post('/presence/status', [\App\Http\Controllers\PresenceController::class, 'updateStatus'])->name('presence.update');
+        Route::get('/presence/active-users', [\App\Http\Controllers\PresenceController::class, 'getActiveUsers'])->name('presence.active-users');
+        Route::get('/presence/user-stats/{user}', [\App\Http\Controllers\PresenceController::class, 'getUserStats'])->name('presence.user-stats');
+    });
 
     // NSO Project Tracker
     Route::resource('projects', \App\Http\Controllers\ProjectController::class);

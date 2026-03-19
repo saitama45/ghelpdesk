@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     HomeIcon,
@@ -27,6 +27,8 @@ import {
     PresentationChartLineIcon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
+import { usePresence } from '@/Composables/usePresence.js';
+import UserStatus from '@/Components/UserStatus.vue';
 
 const props = defineProps({
     isCollapsed: {
@@ -40,6 +42,7 @@ const emit = defineEmits(['toggle']);
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const { hasPermission } = usePermission();
+const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
 
 // For Laravel ziggy route helper if not global
 const route = window.route;
@@ -76,7 +79,8 @@ const toggleSidebar = () => {
 
 // Auto-expand menus based on current route
 onMounted(() => {
-    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*')) {
+    initPresence();
+    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*')) {
         openMenus.value.operations = true;
     }
     if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*')) {
@@ -93,11 +97,16 @@ onMounted(() => {
     }
 });
 
+onUnmounted(() => {
+    destroyPresence();
+});
+
 const canSeeOperations = computed(() => {
     return hasPermission('attendance.view') || 
            hasPermission('attendance.logs') || 
            hasPermission('tickets.view') || 
-           hasPermission('schedules.view');
+           hasPermission('schedules.view') ||
+           hasPermission('presence.view');
 });
 
 const canSeeReferences = computed(() => {
@@ -201,7 +210,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('operations')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*')) && !openMenus.operations
+                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*') || route().current('presence.*')) && !openMenus.operations
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -255,6 +264,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Scheduling</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('presence.view')"
+                            :href="route('presence.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Presence</span>
                         </Link>
                     </div>
                 </div>
@@ -489,13 +508,16 @@ const canSeeSettings = computed(() => {
             <!-- User Section -->
             <div class="p-4 border-t border-gray-800 shrink-0">
                 <div class="flex items-center">
-                    <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
-                        <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
-                    </div>
-                    <div v-else class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-                        <span class="text-sm font-medium">
-                            {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
-                        </span>
+                    <div class="relative">
+                        <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
+                            <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
+                        </div>
+                        <div v-else class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                            <span class="text-sm font-medium">
+                                {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
+                            </span>
+                        </div>
+                        <UserStatus :status="currentStatus" size="lg" class="absolute -bottom-0.5 -right-0.5 border-2 border-gray-900" />
                     </div>
                     <div v-if="!isCollapsed" class="ml-3 flex-1 min-w-0">
                         <p class="text-sm font-medium truncate">{{ user.name || 'User' }}</p>
