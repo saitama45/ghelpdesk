@@ -6,7 +6,7 @@ export function usePresence() {
     const page = usePage();
     const user = page.props.auth.user;
     const idleTimer = ref(null);
-    const idleTimeout = 5 * 60 * 1000; // 5 minutes
+    const idleTimeout = 3 * 60 * 1000; // 3 minutes
     const heartbeatInterval = ref(null);
     const currentStatus = ref(user?.status || 'offline');
 
@@ -22,37 +22,48 @@ export function usePresence() {
     };
 
     const resetIdleTimer = () => {
+        // If we were idle, immediately mark as online upon movement
         if (currentStatus.value === 'idle') {
             updateStatus('online');
         }
         
-        clearTimeout(idleTimer.value);
+        // Reset the timer
+        if (idleTimer.value) clearTimeout(idleTimer.value);
+        
         idleTimer.value = setTimeout(() => {
-            updateStatus('idle');
+            // After 3 minutes of no activity, mark as idle
+            if (currentStatus.value === 'online') {
+                updateStatus('idle');
+            }
         }, idleTimeout);
     };
 
     const startHeartbeat = () => {
+        if (heartbeatInterval.value) clearInterval(heartbeatInterval.value);
+        
         heartbeatInterval.value = setInterval(() => {
-            // Send a ping to keep session alive and update last_activity_at
-            axios.post(route('presence.update'), { status: currentStatus.value })
-                .catch(e => console.debug('Presence ping failed', e));
-        }, 60 * 1000); // Every minute
+            // Heartbeat keeps last_activity_at fresh and sends current status
+            if (user) {
+                axios.post(route('presence.update'), { status: currentStatus.value })
+                    .catch(e => console.debug('Presence heartbeat failed', e));
+            }
+        }, 60 * 1000); // Every 1 minute
     };
 
     const init = () => {
         if (!user) return;
 
-        // Add event listeners for activity
+        // Mouse move resets the idle timer
         window.addEventListener('mousemove', resetIdleTimer);
         window.addEventListener('keydown', resetIdleTimer);
         window.addEventListener('scroll', resetIdleTimer);
         window.addEventListener('click', resetIdleTimer);
 
-        resetIdleTimer();
+        // Initial setup
         startHeartbeat();
+        resetIdleTimer();
         
-        // Mark as online when page loads
+        // If they are offline in the DB but the app is open, they are now online
         if (currentStatus.value === 'offline') {
             updateStatus('online');
         }
@@ -64,8 +75,8 @@ export function usePresence() {
         window.removeEventListener('scroll', resetIdleTimer);
         window.removeEventListener('click', resetIdleTimer);
         
-        clearTimeout(idleTimer.value);
-        clearInterval(heartbeatInterval.value);
+        if (idleTimer.value) clearTimeout(idleTimer.value);
+        if (heartbeatInterval.value) clearInterval(heartbeatInterval.value);
     };
 
     return {

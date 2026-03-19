@@ -8,7 +8,8 @@ import UserStatus from '@/Components/UserStatus.vue';
 const allUsers = ref([]);
 const statsData = ref({
     first_login_today: null,
-    current_idle_seconds: 0,
+    idle_base_seconds: 0,
+    current_idle_started_at: null,
     last_logout_at: null,
     status: 'offline'
 });
@@ -87,11 +88,22 @@ const formatTimeOnline = (firstLogin, lastLogout, status) => {
 };
 
 /**
- * Logic: Current Idle Session Duration (Resets when status is 'online')
+ * Logic: Sum of finished idle sessions + (Now - current idle start)
+ * Resets to 0s if status is 'online'.
  */
-const formatTimeIdle = (seconds, status) => {
+const formatTimeIdle = (stats, status) => {
     if (status === 'online') return '0s';
-    return convertSecondsToDetailed(seconds || 0);
+    
+    let totalSeconds = stats.idle_base_seconds || 0;
+    
+    if (stats.current_idle_started_at) {
+        const start = new Date(stats.current_idle_started_at);
+        const end = currentTime.value;
+        const currentSession = Math.floor((end - start) / 1000);
+        if (currentSession > 0) totalSeconds += currentSession;
+    }
+    
+    return convertSecondsToDetailed(totalSeconds);
 };
 
 /**
@@ -146,17 +158,12 @@ onMounted(() => {
     timerInterval.value = setInterval(() => {
         currentTime.value = new Date();
         
-        // Update list counters
+        // Update list counters for the directory sidebar
         allUsers.value.forEach(user => {
             if (user.status !== 'offline') {
                 user.duration_current_status = (user.duration_current_status || 0) + 1;
             }
         });
-
-        // Real-time increment for idle ONLY if status is 'idle'
-        if (selectedUser.value?.status === 'idle') {
-            statsData.value.current_idle_seconds++;
-        }
     }, 1000);
     pollingInterval.value = setInterval(fetchAllUsers, 15000);
 });
@@ -267,7 +274,7 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
                                             Time Idle
                                         </div>
                                         <div class="text-2xl font-black text-gray-800 tabular-nums mb-1">
-                                            {{ formatTimeIdle(statsData.current_idle_seconds, selectedUser.status) }}
+                                            {{ formatTimeIdle(statsData, selectedUser.status) }}
                                         </div>
                                         <div class="text-[9px] text-gray-400 font-bold uppercase italic">Since last online status</div>
                                     </div>
@@ -288,7 +295,7 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
                                         <div class="bg-blue-800 p-2 rounded-lg mr-4"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></div>
                                         <div class="text-xs leading-relaxed font-medium">
                                             <strong>Time Online:</strong> Span from first login today. Clock stops at logout.
-                                            <br><strong>Time Idle:</strong> Current idle duration. Resets when returning to Online.
+                                            <br><strong>Time Idle:</strong> Total idle duration since last Online status. Resets when returning to Online.
                                             <br><strong>Time Offline:</strong> Duration since last logout. Resets upon login.
                                         </div>
                                     </div>

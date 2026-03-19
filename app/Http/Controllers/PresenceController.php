@@ -70,21 +70,23 @@ class PresenceController extends Controller
             ->first();
 
         // 3. Calculate IDLE time since that last 'online' session
-        // This ensures it resets to 0 when they go online, but persists if they go offline.
         $query = UserPresenceLog::where('user_id', $user->id)
             ->where('status', 'idle');
         
         if ($lastOnlineLog) {
-            $query->where('started_at', '>', $lastOnlineLog->ended_at ?: $lastOnlineLog->started_at);
+            // Using >= to ensure we don't miss logs created in the same second
+            $query->where('started_at', '>=', $lastOnlineLog->ended_at ?: $lastOnlineLog->started_at);
         }
 
         $idleLogs = $query->get();
-        $idleSecondsSinceOnline = 0;
+        $idleBaseSeconds = 0;
+        $currentIdleStartedAt = null;
+
         foreach ($idleLogs as $log) {
-            $start = $log->started_at;
-            $end = $log->ended_at ?: now();
-            if ($end->isAfter($start)) {
-                $idleSecondsSinceOnline += (int) $end->diffInSeconds($start);
+            if ($log->ended_at) {
+                $idleBaseSeconds += (int) $log->duration_seconds;
+            } else {
+                $currentIdleStartedAt = $log->started_at->toIso8601String();
             }
         }
 
@@ -97,7 +99,8 @@ class PresenceController extends Controller
 
         return response()->json([
             'first_login_today' => $firstLogToday ? $firstLogToday->started_at->toIso8601String() : null,
-            'current_idle_seconds' => $idleSecondsSinceOnline,
+            'idle_base_seconds' => $idleBaseSeconds,
+            'current_idle_started_at' => $currentIdleStartedAt,
             'last_logout_at' => $lastLogoutLog ? $lastLogoutLog->ended_at->toIso8601String() : null,
             'status' => $user->status
         ]);
