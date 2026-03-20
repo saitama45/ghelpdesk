@@ -43,6 +43,16 @@ jobs:
           # Use rsync to copy everything except the build folder itself and unnecessary heavy folders
           rsync -ar . build_output/ --exclude build_output --exclude node_modules --exclude .git --exclude tests
           
+          # Ensure storage framework directories exist and contain a dummy file so FTP uploads them
+          mkdir -p build_output/storage/framework/cache/data
+          mkdir -p build_output/storage/framework/sessions
+          mkdir -p build_output/storage/framework/views
+          mkdir -p build_output/storage/logs
+          touch build_output/storage/framework/cache/data/index.html
+          touch build_output/storage/framework/sessions/index.html
+          touch build_output/storage/framework/views/index.html
+          touch build_output/storage/logs/index.html
+          
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
