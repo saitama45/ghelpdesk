@@ -126,8 +126,6 @@ watch(() => props.tickets, (newTickets) => {
 const createForm = useForm({
     company_id: '',
     store_id: '',
-    category_id: '',
-    sub_category_id: '',
     item_id: '',
     title: '',
     description: '',
@@ -139,55 +137,16 @@ const createForm = useForm({
     attachments: [],
 });
 
-const categories = ref([]);
-const subCategories = ref([]);
 const items = ref([]);
 
-const fetchCategories = async () => {
+const fetchItems = async () => {
     try {
-        const response = await axios.get(route('tickets.data.categories', undefined, false));
-        categories.value = response.data;
-    } catch (error) {
-        console.error('Error fetching categories:', error);
-    }
-};
-
-const fetchSubCategories = async (categoryId) => {
-    if (!categoryId) {
-        subCategories.value = [];
-        return;
-    }
-    try {
-        const response = await axios.get(`/tickets/data/subcategories?category_id=${categoryId}`);
-        subCategories.value = response.data;
-    } catch (error) {
-        console.error('Error fetching subcategories:', error);
-    }
-};
-
-const fetchItems = async (categoryId, subCategoryId) => {
-    if (!categoryId || !subCategoryId) {
-        items.value = [];
-        return;
-    }
-    try {
-        const response = await axios.get(`/tickets/data/items?category_id=${categoryId}&sub_category_id=${subCategoryId}`);
+        const response = await axios.get(route('tickets.data.items', undefined, false));
         items.value = response.data;
     } catch (error) {
         console.error('Error fetching items:', error);
     }
 };
-
-watch(() => createForm.category_id, (newVal) => {
-    createForm.sub_category_id = '';
-    createForm.item_id = '';
-    fetchSubCategories(newVal);
-});
-
-watch(() => createForm.sub_category_id, (newVal) => {
-    createForm.item_id = '';
-    fetchItems(createForm.category_id, newVal);
-});
 
 watch(() => createForm.item_id, (newVal) => {
     if (newVal) {
@@ -203,8 +162,8 @@ watch(() => showCreateModal.value, (isOpen) => {
     if (isOpen && !createForm.company_id) {
         createForm.company_id = defaultCompanyId.value;
     }
-    if (isOpen) {
-        fetchCategories();
+    if (isOpen && items.value.length === 0) {
+        fetchItems();
     }
 });
 
@@ -233,31 +192,14 @@ watch(() => [pagination.currentPage.value, pagination.search.value], () => {
 
 // ── Bulk Form ─────────────────────────────────────────────────────────────
 const bulkForm = reactive({
-    store_id: '', category_id: '', sub_category_id: '', item_id: '', assignee_id: ''
+    store_id: '', item_id: '', assignee_id: ''
 })
-const bulkCategories = ref([])
-const bulkSubCategories = ref([])
-const bulkItems = ref([])
 const isBulkSubmitting = ref(false)
 
 watch(() => selectedIds.value.length > 0, (visible) => {
-    if (visible && bulkCategories.value.length === 0) {
-        axios.get(route('tickets.data.categories', undefined, false))
-             .then(r => { bulkCategories.value = r.data })
+    if (visible && items.value.length === 0) {
+        fetchItems();
     }
-})
-
-watch(() => bulkForm.category_id, (val) => {
-    bulkForm.sub_category_id = ''; bulkForm.item_id = ''
-    bulkSubCategories.value = []; bulkItems.value = []
-    if (val) axios.get(`/tickets/data/subcategories?category_id=${val}`)
-                  .then(r => { bulkSubCategories.value = r.data })
-})
-
-watch(() => bulkForm.sub_category_id, (val) => {
-    bulkForm.item_id = ''; bulkItems.value = []
-    if (val) axios.get(`/tickets/data/items?category_id=${bulkForm.category_id}&sub_category_id=${val}`)
-                  .then(r => { bulkItems.value = r.data })
 })
 
 const submitBulk = () => {
@@ -265,8 +207,6 @@ const submitBulk = () => {
     isBulkSubmitting.value = true
     const payload = { ticket_ids: selectedIds.value }
     if (bulkForm.store_id)        payload.store_id        = bulkForm.store_id
-    if (bulkForm.category_id)     payload.category_id     = bulkForm.category_id
-    if (bulkForm.sub_category_id) payload.sub_category_id = bulkForm.sub_category_id
     if (bulkForm.item_id)         payload.item_id         = bulkForm.item_id
     if (bulkForm.assignee_id)     payload.assignee_id     = bulkForm.assignee_id
 
@@ -475,27 +415,11 @@ const getSlaRowClass = (ticket) => {
                                       label-key="name" value-key="id" placeholder="Unchanged..." />
                     </div>
 
-                    <!-- Category -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Category</label>
-                        <Autocomplete v-model="bulkForm.category_id" :options="bulkCategories"
-                                      label-key="name" value-key="id" placeholder="Unchanged..." />
-                    </div>
-
-                    <!-- Sub-Category -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Sub-Category</label>
-                        <Autocomplete v-model="bulkForm.sub_category_id" :options="bulkSubCategories"
-                                      label-key="name" value-key="id" placeholder="Unchanged..."
-                                      :disabled="!bulkForm.category_id" />
-                    </div>
-
                     <!-- Item -->
                     <div class="flex flex-col gap-1">
                         <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Item</label>
-                        <Autocomplete v-model="bulkForm.item_id" :options="bulkItems"
-                                      label-key="name" value-key="id" placeholder="Unchanged..."
-                                      :disabled="!bulkForm.sub_category_id" />
+                        <Autocomplete v-model="bulkForm.item_id" :options="items"
+                                      label-key="name" value-key="id" placeholder="Unchanged..." />
                     </div>
 
                     <!-- Assignee -->
@@ -751,30 +675,6 @@ const getSlaRowClass = (ticket) => {
                             />
                         </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
-                                <Autocomplete 
-                                    v-model="createForm.category_id"
-                                    :options="categories"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select category..."
-                                />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Category</label>
-                                <Autocomplete 
-                                    v-model="createForm.sub_category_id"
-                                    :options="subCategories"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select sub-category..."
-                                    :disabled="!createForm.category_id"
-                                />
-                            </div>
-                        </div>
-
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item</label>
                             <Autocomplete 
@@ -783,7 +683,6 @@ const getSlaRowClass = (ticket) => {
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Select item..."
-                                :disabled="!createForm.sub_category_id"
                             />
                         </div>
 

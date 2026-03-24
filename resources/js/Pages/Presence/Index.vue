@@ -82,7 +82,12 @@ const groupedUsers = computed(() => {
 const formatTimeOnline = (firstLogin, lastLogout, status) => {
     if (!firstLogin) return '0s';
     const start = new Date(firstLogin);
-    const end = (status === 'offline' && lastLogout) ? new Date(lastLogout) : currentTime.value;
+    let end;
+    if (status === 'offline') {
+        end = lastLogout ? new Date(lastLogout) : start; // if offline but no logout time, assume 0 duration or freeze at start
+    } else {
+        end = currentTime.value;
+    }
     let diff = Math.floor((end - start) / 1000);
     return convertSecondsToDetailed(diff > 0 ? diff : 0);
 };

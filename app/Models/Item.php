@@ -12,6 +12,7 @@ class Item extends Model
         'name',
         'description',
         'priority',
+        'concern_type',
         'is_active',
     ];
 

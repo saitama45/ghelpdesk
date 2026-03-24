@@ -164,11 +164,13 @@ class TicketController extends Controller
             $data['type'] = $data['type'] ?? 'task';
             $data['severity'] = $data['severity'] ?? 'minor';
 
-            // Set priority from item
+            // Set priority, category, and sub_category from item
             if (isset($data['item_id'])) {
                 $item = \App\Models\Item::find($data['item_id']);
                 if ($item) {
                     $data['priority'] = strtolower($item->priority);
+                    $data['category_id'] = $item->category_id;
+                    $data['sub_category_id'] = $item->sub_category_id;
                 }
             }
 
@@ -296,11 +298,13 @@ class TicketController extends Controller
     {
         $validated = $request->validated();
         
-        // Auto-update priority if item_id changed
+        // Auto-update priority, category, and sub_category if item_id changed
         if (isset($validated['item_id']) && $validated['item_id'] != $ticket->item_id) {
             $item = \App\Models\Item::find($validated['item_id']);
             if ($item) {
                 $validated['priority'] = strtolower($item->priority);
+                $validated['category_id'] = $item->category_id;
+                $validated['sub_category_id'] = $item->sub_category_id;
             }
         }
 
@@ -670,18 +674,21 @@ class TicketController extends Controller
     {
         $categoryId = $request->query('category_id') ?? $request->input('category_id');
         $subCategoryId = $request->query('sub_category_id') ?? $request->input('sub_category_id');
-        
-        if (!$categoryId || !$subCategoryId) return response()->json([]);
-        
-        $items = \App\Models\Item::where('category_id', $categoryId)
-            ->where('sub_category_id', $subCategoryId)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get();
+
+        $query = \App\Models\Item::where('is_active', true)->orderBy('name');
+
+        if ($categoryId) {
+            $query->where('category_id', $categoryId);
+        }
+
+        if ($subCategoryId) {
+            $query->where('sub_category_id', $subCategoryId);
+        }
+
+        $items = $query->get();
 
         return response()->json($items);
     }
-
     public function downloadAttachment(TicketAttachment $attachment)
     {
         if (!Storage::disk('public')->exists($attachment->file_storage_path)) abort(404, 'File not found.');
@@ -713,6 +720,14 @@ class TicketController extends Controller
             ->filter(fn($k) => $request->has($k))
             ->mapWithKeys(fn($k) => [$k => $validated[$k]])
             ->all();
+
+        if (isset($updates['item_id'])) {
+            $item = \App\Models\Item::find($updates['item_id']);
+            if ($item) {
+                $updates['category_id'] = $item->category_id;
+                $updates['sub_category_id'] = $item->sub_category_id;
+            }
+        }
 
         if (empty($updates)) {
             return redirect()->back()->withErrors(['bulk' => 'No fields selected for update.']);

@@ -64,6 +64,7 @@ class ItemController extends Controller implements HasMiddleware
             'name' => 'required|string|max:255|unique:items,name',
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
+            'concern_type' => 'required|in:Incident,Service Request',
             'is_active' => 'boolean',
         ]);
 
@@ -80,6 +81,7 @@ class ItemController extends Controller implements HasMiddleware
             'name' => 'required|string|max:255|unique:items,name,' . $item->id,
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
+            'concern_type' => 'required|in:Incident,Service Request',
             'is_active' => 'boolean',
         ]);
 
@@ -150,6 +152,7 @@ class ItemController extends Controller implements HasMiddleware
                 'name'            => $data['name'] ?? null,
                 'description'     => $data['description'] ?? null,
                 'priority'        => $data['priority'] ?? null,
+                'concern_type'    => $data['concern_type'] ?? 'Incident',
                 'category_id'     => $categoryId,
                 'sub_category_id' => $subCategoryId,
                 'is_active'       => $data['is_active'] ?? '1',
@@ -157,6 +160,7 @@ class ItemController extends Controller implements HasMiddleware
                 'name'            => 'required|string|max:255|unique:items,name',
                 'description'     => 'nullable|string',
                 'priority'        => 'required|in:Low,Medium,High,Urgent',
+                'concern_type'    => 'required|in:Incident,Service Request',
                 'category_id'     => 'nullable|exists:categories,id',
                 'sub_category_id' => 'nullable|exists:sub_categories,id',
                 'is_active'       => 'nullable|in:0,1',
@@ -171,6 +175,7 @@ class ItemController extends Controller implements HasMiddleware
                 'name'            => $data['name'],
                 'description'     => $data['description'] ?: null,
                 'priority'        => $data['priority'],
+                'concern_type'    => $data['concern_type'] ?? 'Incident',
                 'category_id'     => $categoryId,
                 'sub_category_id' => $subCategoryId,
                 'is_active'       => isset($data['is_active']) ? (bool) $data['is_active'] : true,
@@ -209,14 +214,20 @@ class ItemController extends Controller implements HasMiddleware
             $listsSheet->setCellValue('C' . ($i + 2), $p);
         }
 
+        $concernTypes = ['Incident', 'Service Request'];
+        $listsSheet->setCellValue('D1', 'Concern Type');
+        foreach ($concernTypes as $i => $ct) {
+            $listsSheet->setCellValue('D' . ($i + 2), $ct);
+        }
+
         // ── Import Template sheet ───────────────────────────────────────
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
         // Headers
-        $headers = ['name', 'description', 'priority', 'category', 'sub_category', 'is_active'];
+        $headers = ['name', 'description', 'priority', 'concern_type', 'category', 'sub_category', 'is_active'];
         foreach ($headers as $i => $h) {
-            $col = chr(65 + $i); // A–F
+            $col = chr(65 + $i); // A–G
             $sheet->setCellValue("{$col}1", $h);
         }
 
@@ -224,18 +235,19 @@ class ItemController extends Controller implements HasMiddleware
         $sheet->setCellValue('A2', 'Example Item');
         $sheet->setCellValue('B2', 'A short description');
         $sheet->setCellValue('C2', 'Medium');
-        $sheet->setCellValue('D2', $categories->first()?->name ?? '');
-        $sheet->setCellValue('E2', $subCategories->first()?->name ?? '');
-        $sheet->setCellValue('F2', '1');
+        $sheet->setCellValue('D2', 'Incident');
+        $sheet->setCellValue('E2', $categories->first()?->name ?? '');
+        $sheet->setCellValue('F2', $subCategories->first()?->name ?? '');
+        $sheet->setCellValue('G2', '1');
 
         // Header styling
-        $sheet->getStyle('A1:F1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:F1')->getFill()
+        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:G1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
-        // Auto-size columns A–F
-        foreach (range('A', 'F') as $col) {
+        // Auto-size columns A–G
+        foreach (range('A', 'G') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -252,26 +264,35 @@ class ItemController extends Controller implements HasMiddleware
             ->setFormula1('Lists!$C$2:$C$5')
             ->setSqref('C2:C1001');
 
-        // Category dropdown — D2:D1001
+        // Concern Type dropdown — D2:D1001
+        $concernTypeValidation = $sheet->getCell('D2')->getDataValidation();
+        $concernTypeValidation->setType(DataValidation::TYPE_LIST)
+            ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+            ->setAllowBlank(false)
+            ->setShowDropDown(false)
+            ->setFormula1('Lists!$D$2:$D$3')
+            ->setSqref('D2:D1001');
+
+        // Category dropdown — E2:E1001
         if ($catCount > 0) {
-            $catValidation = $sheet->getCell('D2')->getDataValidation();
+            $catValidation = $sheet->getCell('E2')->getDataValidation();
             $catValidation->setType(DataValidation::TYPE_LIST)
                 ->setErrorStyle(DataValidation::STYLE_INFORMATION)
                 ->setAllowBlank(true)
                 ->setShowDropDown(false)
                 ->setFormula1('Lists!$A$2:$A$' . ($catCount + 1))
-                ->setSqref('D2:D1001');
+                ->setSqref('E2:E1001');
         }
 
-        // Sub-Category dropdown — E2:E1001
+        // Sub-Category dropdown — F2:F1001
         if ($subCount > 0) {
-            $subValidation = $sheet->getCell('E2')->getDataValidation();
+            $subValidation = $sheet->getCell('F2')->getDataValidation();
             $subValidation->setType(DataValidation::TYPE_LIST)
                 ->setErrorStyle(DataValidation::STYLE_INFORMATION)
                 ->setAllowBlank(true)
                 ->setShowDropDown(false)
                 ->setFormula1('Lists!$B$2:$B$' . ($subCount + 1))
-                ->setSqref('E2:E1001');
+                ->setSqref('F2:F1001');
         }
 
         $spreadsheet->setActiveSheetIndex(0);

@@ -33,15 +33,21 @@ class PresenceController extends Controller
             ->select('id', 'name', 'status', 'last_activity_at', 'sub_unit')
             ->get()
             ->map(function($user) {
+                $status = $user->status;
+                // If the user's last activity was more than 3 minutes ago, consider them offline
+                if ($status !== 'offline' && $user->last_activity_at && $user->last_activity_at < now()->subMinutes(3)) {
+                    $status = 'offline';
+                }
+
                 $duration = 0;
-                if ($user->lastPresenceLog && !$user->lastPresenceLog->ended_at) {
+                if ($status !== 'offline' && $user->lastPresenceLog && !$user->lastPresenceLog->ended_at) {
                     $duration = (int) now()->diffInSeconds($user->lastPresenceLog->started_at);
                 }
                 
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
-                    'status' => $user->status,
+                    'status' => $status,
                     'sub_unit' => $user->sub_unit ?: 'Unassigned',
                     'last_activity_at' => $user->last_activity_at,
                     'duration_current_status' => $duration,
@@ -57,11 +63,24 @@ class PresenceController extends Controller
             abort(403);
         }
 
+        $status = $user->status;
+        if ($status !== 'offline' && $user->last_activity_at && $user->last_activity_at < now()->subMinutes(3)) {
+            $status = 'offline';
+        }
+
         // 1. First login of the day
         $firstLogToday = UserPresenceLog::where('user_id', $user->id)
             ->whereDate('started_at', today())
             ->orderBy('started_at', 'asc')
             ->first();
+            
+        // Fallback: If no login today, but the user is active, find the earliest un-ended log
+        if (!$firstLogToday && $status !== 'offline') {
+            $firstLogToday = UserPresenceLog::where('user_id', $user->id)
+                ->whereNull('ended_at')
+                ->orderBy('started_at', 'asc')
+                ->first();
+        }
 
         // 2. Find the start of the current "Active" cycle (the last time they were actually 'online')
         $lastOnlineLog = UserPresenceLog::where('user_id', $user->id)
@@ -97,12 +116,18 @@ class PresenceController extends Controller
             ->orderBy('ended_at', 'desc')
             ->first();
 
+        $lastLogoutAt = $lastLogoutLog ? $lastLogoutLog->ended_at->toIso8601String() : null;
+        
+        if ($status === 'offline' && $user->status !== 'offline') {
+            $lastLogoutAt = $user->last_activity_at ? $user->last_activity_at->toIso8601String() : null;
+        }
+
         return response()->json([
             'first_login_today' => $firstLogToday ? $firstLogToday->started_at->toIso8601String() : null,
             'idle_base_seconds' => $idleBaseSeconds,
-            'current_idle_started_at' => $currentIdleStartedAt,
-            'last_logout_at' => $lastLogoutLog ? $lastLogoutLog->ended_at->toIso8601String() : null,
-            'status' => $user->status
+            'current_idle_started_at' => ($status === 'idle') ? $currentIdleStartedAt : null,
+            'last_logout_at' => $lastLogoutAt,
+            'status' => $status
         ]);
     }
 }

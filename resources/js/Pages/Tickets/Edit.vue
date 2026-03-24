@@ -164,8 +164,6 @@ const getThumbnailUrl = (attachment) => {
 const editForm = useForm({
     company_id: props.ticket.company_id || '',
     store_id: props.ticket.store_id || '',
-    category_id: props.ticket.category_id || '',
-    sub_category_id: props.ticket.sub_category_id || '',
     item_id: props.ticket.item_id || '',
     title: props.ticket.title,
     description: props.ticket.description,
@@ -176,39 +174,11 @@ const editForm = useForm({
     assignee_id: props.ticket.assignee_id || '',
 });
 
-const categories = ref([]);
-const subCategories = ref([]);
 const items = ref([]);
 
-const fetchCategories = async () => {
+const fetchItems = async () => {
     try {
-        const response = await axios.get(route('tickets.data.categories', undefined, false));
-        categories.value = response.data;
-    } catch (error) {
-        console.error('Error fetching categories:', error);
-    }
-};
-
-const fetchSubCategories = async (categoryId) => {
-    if (!categoryId) {
-        subCategories.value = [];
-        return;
-    }
-    try {
-        const response = await axios.get(`/tickets/data/subcategories?category_id=${categoryId}`);
-        subCategories.value = response.data;
-    } catch (error) {
-        console.error('Error fetching subcategories:', error);
-    }
-};
-
-const fetchItems = async (categoryId, subCategoryId) => {
-    if (!categoryId || !subCategoryId) {
-        items.value = [];
-        return;
-    }
-    try {
-        const response = await axios.get(`/tickets/data/items?category_id=${categoryId}&sub_category_id=${subCategoryId}`);
+        const response = await axios.get(route('tickets.data.items', undefined, false));
         items.value = response.data;
     } catch (error) {
         console.error('Error fetching items:', error);
@@ -216,17 +186,13 @@ const fetchItems = async (categoryId, subCategoryId) => {
 };
 
 onMounted(async () => {
-    fetchCategories();
-    if (props.ticket.category_id) fetchSubCategories(props.ticket.category_id);
-    if (props.ticket.category_id && props.ticket.sub_category_id) {
-        await fetchItems(props.ticket.category_id, props.ticket.sub_category_id);
-        // Sync priority from the current item's latest value (in case it was changed in Items management)
-        if (props.ticket.item_id) {
-            const item = items.value.find(i => i.id == props.ticket.item_id);
-            if (item) {
-                editForm.priority = item.priority.toLowerCase();
-                editForm.defaults(editForm.data()); // reset dirty state so it doesn't auto-save on load
-            }
+    await fetchItems();
+    // Sync priority from the current item's latest value (in case it was changed in Items management)
+    if (props.ticket.item_id) {
+        const item = items.value.find(i => i.id == props.ticket.item_id);
+        if (item) {
+            editForm.priority = item.priority.toLowerCase();
+            editForm.defaults(editForm.data()); // reset dirty state so it doesn't auto-save on load
         }
     }
     window.addEventListener('keydown', handleKeydown);
@@ -417,8 +383,6 @@ watch(() => props.ticket, (newTicket) => {
     editForm.severity = newTicket.severity;
     editForm.type = newTicket.type;
     editForm.assignee_id = newTicket.assignee_id || '';
-    editForm.category_id = newTicket.category_id || '';
-    editForm.sub_category_id = newTicket.sub_category_id || '';
     editForm.item_id = newTicket.item_id || '';
     editForm.company_id = newTicket.company_id || '';
     editForm.store_id = newTicket.store_id || '';
@@ -438,27 +402,7 @@ watch(() => [
     debouncedUpdate();
 });
 
-// Watchers for cascading dropdowns
-watch(() => editForm.category_id, (newVal, oldVal) => {
-    if (newVal != oldVal) {
-        if (oldVal !== undefined) {
-            editForm.sub_category_id = '';
-            editForm.item_id = '';
-        }
-        if (newVal) fetchSubCategories(newVal);
-    }
-});
-
-watch(() => editForm.sub_category_id, (newVal, oldVal) => {
-    if (newVal != oldVal) {
-        if (oldVal !== undefined) {
-            editForm.item_id = '';
-        }
-        if (newVal) fetchItems(editForm.category_id, newVal);
-    }
-});
-
-// Classification Watcher: Only save when the full hierarchy (Category -> Sub -> Item) is complete
+// Classification Watcher
 watch(() => editForm.item_id, (newVal, oldVal) => {
     if (newVal && newVal != oldVal && oldVal !== undefined) {
         const item = items.value.find(i => i.id == newVal);
@@ -717,30 +661,6 @@ const linkify = (text) => {
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Category</label>
-                                    <Autocomplete 
-                                        v-model="editForm.category_id"
-                                        :options="categories"
-                                        label-key="name"
-                                        value-key="id"
-                                        placeholder="Select category..."
-                                        :disabled="!hasPermission('tickets.edit')"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Sub-Category</label>
-                                    <Autocomplete 
-                                        v-model="editForm.sub_category_id"
-                                        :options="subCategories"
-                                        label-key="name"
-                                        value-key="id"
-                                        placeholder="Select sub-category..."
-                                        :disabled="!hasPermission('tickets.edit') || !editForm.category_id"
-                                    />
-                                </div>
-
-                                <div>
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Item</label>
                                     <Autocomplete 
                                         v-model="editForm.item_id"
@@ -748,7 +668,7 @@ const linkify = (text) => {
                                         label-key="name"
                                         value-key="id"
                                         placeholder="Select item..."
-                                        :disabled="!hasPermission('tickets.edit') || !editForm.sub_category_id"
+                                        :disabled="!hasPermission('tickets.edit')"
                                     />
                                 </div>
                             </div>

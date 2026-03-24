@@ -44,6 +44,7 @@
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Links</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -65,6 +66,12 @@
                                         <div class="text-sm text-gray-500 max-w-xs truncate">{{ item.description || 'No description' }}</div>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 py-1 text-xs font-medium rounded-md" 
+                                      :class="item.concern_type === 'Incident' ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'">
+                                    {{ item.concern_type }}
+                                </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex flex-col space-y-1">
@@ -139,6 +146,7 @@
                         <p class="text-sm text-gray-600">
                             Import items in bulk using an Excel file. Columns: <span class="font-semibold">name</span>, <span class="font-semibold">description</span>,
                             <span class="font-semibold">priority</span> (dropdown: Low/Medium/High/Urgent),
+                            <span class="font-semibold">concern_type</span> (dropdown: Incident/Service Request),
                             <span class="font-semibold">category</span> (dropdown: select from existing),
                             <span class="font-semibold">sub_category</span> (dropdown: select from existing),
                             <span class="font-semibold">is_active</span> (1 or 0).
@@ -277,6 +285,16 @@
                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
                             <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Concern Type</label>
+                                <select v-model="form.concern_type" required
+                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    <option value="Incident">Incident</option>
+                                    <option value="Service Request">Service Request</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
                                 <select v-model="form.priority" required
                                         class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
@@ -397,6 +415,7 @@ const form = reactive({
     name: '',
     description: '',
     priority: 'Medium',
+    concern_type: 'Incident',
     is_active: true
 })
 
@@ -468,6 +487,7 @@ const openCreateModal = () => {
     form.name = ''
     form.description = ''
     form.priority = 'Medium'
+    form.concern_type = 'Incident'
     form.is_active = true
     showModal.value = true
 }
@@ -480,6 +500,7 @@ const editItem = (item) => {
     form.name = item.name
     form.description = item.description || ''
     form.priority = item.priority || 'Medium'
+    form.concern_type = item.concern_type || 'Incident'
     form.is_active = item.is_active
     showModal.value = true
 }
@@ -491,6 +512,7 @@ const closeModal = () => {
     form.name = ''
     form.description = ''
     form.priority = 'Medium'
+    form.concern_type = 'Incident'
     form.is_active = true
 }
 
