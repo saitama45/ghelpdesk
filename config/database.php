@@ -154,8 +154,9 @@ return [
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),
             'prefix' => env('REDIS_PREFIX', Str::slug((string) env('APP_NAME', 'laravel')).'-database-'),
+            'password' => env('REDIS_PASSWORD'),
             'context' => [
-                'ssl' => [
+                'stream' => [
                     'verify_peer' => false,
                     'verify_peer_name' => false,
                 ],
