@@ -100,6 +100,15 @@ const showTotalModal = ref(false);
 const showOpenModal = ref(false);
 const showNewModal = ref(false);
 const showClosedModal = ref(false);
+
+const exportToExcel = (type) => {
+    const params = new URLSearchParams({
+        type: type,
+        year: filterForm.year,
+        month: filterForm.month
+    });
+    window.open(route('dashboard.export') + '?' + params.toString(), '_blank');
+};
 </script>
 
 <template>
@@ -274,7 +283,10 @@ const showClosedModal = ref(false);
                                 <tr v-for="ticket in myTickets" :key="ticket.id" class="hover:bg-blue-50/30 transition-colors cursor-pointer" @click="router.visit(route('tickets.edit', ticket.id))">
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col">
-                                            <span class="text-sm font-bold text-blue-600">{{ ticket.key }}</span>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="text-sm font-bold text-blue-600">{{ ticket.key }}</span>
+                                                <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                            </div>
                                             <span class="text-sm text-gray-900 line-clamp-1">{{ ticket.title }}</span>
                                         </div>
                                     </td>
@@ -321,6 +333,7 @@ const showClosedModal = ref(false);
                                         <div class="flex flex-col">
                                             <div class="flex items-center space-x-2">
                                                 <span class="text-sm font-bold text-blue-600">{{ ticket.key }}</span>
+                                                <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                                 <span class="text-[10px] text-gray-400 font-bold uppercase">{{ ticket.company_name }}</span>
                                             </div>
                                             <span class="text-sm text-gray-900 font-medium line-clamp-1">{{ ticket.title }}</span>
@@ -414,9 +427,15 @@ const showClosedModal = ref(false);
                             {{ alarmedWaitingTickets.length }}
                         </span>
                     </h2>
-                    <button @click="showWaitingAlarmModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div class="flex items-center">
+                        <button v-if="alarmedWaitingTickets.length > 0" @click="exportToExcel('waiting_alarm')" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-xs font-black uppercase tracking-widest flex items-center mr-4">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export
+                        </button>
+                        <button @click="showWaitingAlarmModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
@@ -433,6 +452,11 @@ const showClosedModal = ref(false);
                                         </span>
                                     </div>
                                     <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
+                                        <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-[10px] font-black text-orange-600 uppercase tracking-widest">Aging</p>
@@ -471,9 +495,15 @@ const showClosedModal = ref(false);
                             {{ urgentTickets.length }}
                         </span>
                     </h2>
-                    <button @click="showUrgentModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div class="flex items-center">
+                        <button v-if="urgentTickets.length > 0" @click="exportToExcel('urgent')" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-xs font-black uppercase tracking-widest flex items-center mr-4">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export
+                        </button>
+                        <button @click="showUrgentModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
@@ -491,8 +521,12 @@ const showClosedModal = ref(false);
                                     </div>
                                     <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Fixed Priority: {{ ticket.priority }}</span>
-                                        <span v-if="ticket.item_priority" class="text-[9px] font-bold text-red-500 uppercase tracking-tighter">Current Item Priority: {{ ticket.item_priority }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
+                                        <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                    </div>
+                                    <div v-if="ticket.item_priority" class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-red-500 uppercase tracking-tighter">Item Priority: {{ ticket.item_priority }}</span>
                                     </div>
                                 </div>
                                 <div class="text-right">
@@ -532,9 +566,15 @@ const showClosedModal = ref(false);
                             {{ totalTicketsList?.length || 0 }}
                         </span>
                     </h2>
-                    <button @click="showTotalModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div class="flex items-center">
+                        <button v-if="totalTicketsList?.length > 0" @click="exportToExcel('total')" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-xs font-black uppercase tracking-widest flex items-center mr-4">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export
+                        </button>
+                        <button @click="showTotalModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                     <div v-if="totalTicketsList?.length > 0" class="space-y-3">
@@ -550,6 +590,11 @@ const showClosedModal = ref(false);
                                         </span>
                                     </div>
                                     <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
+                                        <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Created</p>
@@ -582,9 +627,15 @@ const showClosedModal = ref(false);
                             {{ newTicketsList?.length || 0 }}
                         </span>
                     </h2>
-                    <button @click="showNewModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div class="flex items-center">
+                        <button v-if="newTicketsList?.length > 0" @click="exportToExcel('new')" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-xs font-black uppercase tracking-widest flex items-center mr-4">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export
+                        </button>
+                        <button @click="showNewModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                     <div v-if="newTicketsList?.length > 0" class="space-y-3">
@@ -600,6 +651,11 @@ const showClosedModal = ref(false);
                                         </span>
                                     </div>
                                     <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
+                                        <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-[10px] font-black text-purple-600 uppercase tracking-widest">Created</p>
@@ -632,9 +688,15 @@ const showClosedModal = ref(false);
                             {{ openTicketsList?.length || 0 }}
                         </span>
                     </h2>
-                    <button @click="showOpenModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div class="flex items-center">
+                        <button v-if="openTicketsList?.length > 0" @click="exportToExcel('open')" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-xs font-black uppercase tracking-widest flex items-center mr-4">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export
+                        </button>
+                        <button @click="showOpenModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                     <div v-if="openTicketsList?.length > 0" class="space-y-3">
@@ -650,6 +712,11 @@ const showClosedModal = ref(false);
                                         </span>
                                     </div>
                                     <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
+                                        <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-[10px] font-black text-yellow-600 uppercase tracking-widest">Created</p>
@@ -682,9 +749,15 @@ const showClosedModal = ref(false);
                             {{ closedTicketsList?.length || 0 }}
                         </span>
                     </h2>
-                    <button @click="showClosedModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    <div class="flex items-center">
+                        <button v-if="closedTicketsList?.length > 0" @click="exportToExcel('closed')" class="px-3 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-xs font-black uppercase tracking-widest flex items-center mr-4">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export
+                        </button>
+                        <button @click="showClosedModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                     <div v-if="closedTicketsList?.length > 0" class="space-y-3">
@@ -700,6 +773,11 @@ const showClosedModal = ref(false);
                                         </span>
                                     </div>
                                     <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <div class="flex items-center space-x-2 mt-1">
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
+                                        <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-[10px] font-black text-green-600 uppercase tracking-widest">Created</p>

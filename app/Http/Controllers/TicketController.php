@@ -240,6 +240,14 @@ class TicketController extends Controller
     }
 
     /**
+     * Display the specified resource.
+     */
+    public function show(Ticket $ticket)
+    {
+        return $this->edit($ticket);
+    }
+
+    /**
      * Show the form for editing the specified resource.
      */
     public function edit(Ticket $ticket)

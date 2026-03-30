@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Head, Link, usePage, router } from '@inertiajs/vue3';
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Sidebar from '@/Components/Sidebar.vue';
+import GlobalSearch from '@/Components/GlobalSearch.vue';
 import Toast from '@/Components/Toast.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { useToast } from '@/Composables/useToast.js';
@@ -126,9 +127,11 @@ const isCurrentRoute = (routeName) => {
                     </div>
 
                     <!-- Right side -->
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 flex-1 justify-end">
+                        <GlobalSearch class="hidden sm:block" />
+                        
                         <!-- User Menu -->
-                        <div class="relative" ref="userMenuRef">
+                        <div class="relative ml-2" ref="userMenuRef">
                             <button
                                 @click="userMenuOpen = !userMenuOpen"
                                 class="flex items-center space-x-2 p-1 sm:p-2 text-sm rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"

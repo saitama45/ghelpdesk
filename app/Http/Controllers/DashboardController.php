@@ -10,6 +10,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class DashboardController extends Controller
 {
@@ -61,7 +63,8 @@ class DashboardController extends Controller
             ->where('updated_at', '<=', $alarmDate);
             
         $alarmedWaitingTickets = (clone $alarmedWaitingQuery)
-            ->select('id', 'ticket_key', 'title', 'status', 'updated_at')
+            ->with(['assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
+            ->select('id', 'ticket_key', 'title', 'status', 'updated_at', 'assignee_id', 'company_id', 'parent_id')
             ->get()
             ->map(function($ticket) {
                 $updatedAt = Carbon::parse($ticket->updated_at);
@@ -75,6 +78,10 @@ class DashboardController extends Controller
                     'title' => $ticket->title,
                     'status' => $ticket->status,
                     'aging_days' => $agingDays,
+                    'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
+                    'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
+                    'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
+                    'parent_key' => $ticket->parent?->ticket_key,
                 ];
             });
 
@@ -89,8 +96,8 @@ class DashboardController extends Controller
             ->where('status', '!=', 'closed');
             
         $urgentTickets = (clone $urgentTicketsQuery)
-            ->with(['item'])
-            ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'item_id', 'priority')
+            ->with(['item', 'assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
+            ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'item_id', 'priority', 'assignee_id', 'company_id', 'parent_id')
             ->get()
             ->map(function($ticket) {
                 return [
@@ -100,7 +107,10 @@ class DashboardController extends Controller
                     'status' => $ticket->status,
                     'priority' => $ticket->priority,
                     'item_priority' => $ticket->item?->priority,
-                    'created_at' => $ticket->created_at->diffForHumans(),
+                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                    'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
+                    'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
+                    'parent_key' => $ticket->parent?->ticket_key,
                 ];
             });
 
@@ -113,10 +123,31 @@ class DashboardController extends Controller
             ->whereNull('assignee_id');
 
         // Modal Lists (limited to 100 to prevent performance issues)
-        $totalTicketsList = (clone $filteredQuery)->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
-        $openTicketsList = (clone $filteredQuery)->where('status', 'open')->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
-        $newTicketsList = (clone $newTicketsQuery)->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
-        $closedTicketsList = (clone $filteredQuery)->where('status', 'closed')->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority')->latest()->take(100)->get()->map(function($t) { return ['id' => $t->id, 'key' => $t->ticket_key, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority, 'created_at' => $t->created_at->diffForHumans()]; });
+        $listWithDetails = function($q) {
+            return $q->with(['assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
+                ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'priority', 'assignee_id', 'company_id', 'parent_id')
+                ->latest()
+                ->take(100)
+                ->get()
+                ->map(function($t) { 
+                    return [
+                        'id' => $t->id, 
+                        'key' => $t->ticket_key, 
+                        'title' => $t->title, 
+                        'status' => $t->status, 
+                        'priority' => $t->priority, 
+                        'created_at' => $t->created_at->format('Y-m-d H:i:s'),
+                        'assignee' => $t->assignee ? $t->assignee->name : 'Unassigned',
+                        'company_name' => $t->company ? $t->company->name : 'N/A',
+                        'parent_key' => $t->parent?->ticket_key,
+                    ]; 
+                });
+        };
+
+        $totalTicketsList = $listWithDetails(clone $filteredQuery);
+        $openTicketsList = $listWithDetails((clone $filteredQuery)->where('status', 'open'));
+        $newTicketsList = $listWithDetails(clone $newTicketsQuery);
+        $closedTicketsList = $listWithDetails((clone $filteredQuery)->where('status', 'closed'));
 
         // Stats (Filtered)
         $stats = [
@@ -133,7 +164,7 @@ class DashboardController extends Controller
         
         // Recent/Filtered Tickets
         $recentTickets = (clone $filteredQuery)
-            ->with(['reporter:id,name', 'assignee:id,name', 'company:id,name'])
+            ->with(['reporter:id,name', 'assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
             ->latest()
             ->take(5)
             ->get()
@@ -153,6 +184,7 @@ class DashboardController extends Controller
                     'created_at' => $ticket->created_at->diffForHumans(),
                     'reporter' => $reporterName,
                     'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
+                    'parent_key' => $ticket->parent?->ticket_key,
                 ];
             });
 
@@ -160,7 +192,7 @@ class DashboardController extends Controller
         $myTickets = Ticket::query()
             ->where('assignee_id', $user->id)
             ->where('status', '!=', 'closed')
-            ->with(['company:id,name'])
+            ->with(['company:id,name', 'parent:id,ticket_key'])
             ->latest()
             ->take(5)
             ->get()
@@ -173,6 +205,7 @@ class DashboardController extends Controller
                     'priority' => $ticket->priority,
                     'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
                     'updated_at' => $ticket->updated_at->diffForHumans(),
+                    'parent_key' => $ticket->parent?->ticket_key,
                 ];
             });
 
@@ -259,6 +292,109 @@ class DashboardController extends Controller
             'years' => $years,
             'months' => $months,
         ]);
+    }
+
+    public function export(Request $request)
+    {
+        $type = $request->input('type', 'total');
+        $user = Auth::user();
+        $year = $request->input('year');
+        $month = $request->input('month');
+
+        // Reuse company filtering logic
+        $user->load('roles.companies');
+        $allowedCompanyIds = collect();
+        foreach ($user->roles as $role) {
+            if ($role->companies) {
+                $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
+            }
+        }
+        if ($user->company_id) $allowedCompanyIds->push($user->company_id);
+        $allowedCompanyIds = $allowedCompanyIds->unique();
+
+        $query = Ticket::query();
+        if ($user->hasRole('User')) $query->where('reporter_id', $user->id);
+        if ($allowedCompanyIds->isEmpty()) $query->whereRaw('1 = 0');
+        else $query->whereIn('company_id', $allowedCompanyIds);
+
+        // Apply filters
+        if ($year) $query->whereYear('created_at', $year);
+        if ($month) $query->whereMonth('created_at', $month);
+
+        switch ($type) {
+            case 'waiting_alarm':
+                $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
+                $alarmDate = Carbon::now('Asia/Manila')->subDays($agingDays);
+                $query->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+                      ->where('updated_at', '<=', $alarmDate);
+                $filename = "aged_waiting_tickets";
+                break;
+            case 'urgent':
+                $query->where(function($q) {
+                    $q->where('priority', 'urgent')
+                      ->orWhereHas('item', function($iq) {
+                          $iq->where('priority', 'Urgent');
+                      });
+                })->where('status', '!=', 'closed');
+                $filename = "urgent_tickets";
+                break;
+            case 'new':
+                $query->where('status', 'open')
+                      ->whereNull('category_id')
+                      ->whereNull('sub_category_id')
+                      ->whereNull('item_id')
+                      ->whereNull('assignee_id');
+                $filename = "new_tickets";
+                break;
+            case 'open':
+                $query->where('status', 'open');
+                $filename = "open_tickets";
+                break;
+            case 'closed':
+                $query->where('status', 'closed');
+                $filename = "closed_tickets";
+                break;
+            default:
+                $filename = "total_tickets";
+        }
+
+        $tickets = $query->with(['assignee:id,name', 'company:id,name', 'item', 'parent:id,ticket_key'])
+            ->latest()
+            ->take(500) // Increase limit for export
+            ->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Headers
+        $headers = ['Ticket ID', 'Title', 'Status', 'Item Priority', 'Company', 'Assignee', 'Parent Ticket', 'Created At'];
+        foreach ($headers as $index => $header) {
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue($colLetter . '1', $header);
+        }
+
+        // Data
+        foreach ($tickets as $rowIndex => $ticket) {
+            $rowNum = $rowIndex + 2;
+            $sheet->setCellValue('A' . $rowNum, $ticket->ticket_key);
+            $sheet->setCellValue('B' . $rowNum, $ticket->title);
+            $sheet->setCellValue('C' . $rowNum, str_replace('_', ' ', $ticket->status));
+            $sheet->setCellValue('D' . $rowNum, $ticket->item?->priority ?? 'N/A');
+            $sheet->setCellValue('E' . $rowNum, $ticket->company?->name ?? 'N/A');
+            $sheet->setCellValue('F' . $rowNum, $ticket->assignee?->name ?? 'Unassigned');
+            $sheet->setCellValue('G' . $rowNum, $ticket->parent?->ticket_key ?? '');
+            $sheet->setCellValue('H' . $rowNum, $ticket->created_at->format('Y-m-d H:i:s'));
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $fullFilename = $filename . '_' . date('Y-m-d_His') . '.xlsx';
+        
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="'. $fullFilename .'"');
+        header('Cache-Control: max-age=0');
+
+        $writer->save('php://output');
+        exit;
     }
     
     private function formatAction($history)
