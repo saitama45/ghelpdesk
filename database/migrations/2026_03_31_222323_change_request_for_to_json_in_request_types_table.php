@@ -12,12 +12,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // For SQL Server, we must drop the check constraint first.
-        // The error message told us the name: CK__request_t__reque__638F8109
-        try {
-            DB::statement('ALTER TABLE request_types DROP CONSTRAINT CK__request_t__reque__638F8109');
-        } catch (\Exception $e) {
-            // Constraint might have a different name in other environments or already be dropped
+        // Dynamically find and drop the CHECK constraint for 'request_for' column in SQL Server
+        if (DB::getDriverName() === 'sqlsrv') {
+            $constraint = DB::selectOne("
+                SELECT obj.name 
+                FROM sys.objects obj
+                INNER JOIN sys.check_constraints chk ON obj.object_id = chk.object_id
+                INNER JOIN sys.columns col ON chk.parent_object_id = col.object_id AND chk.parent_column_id = col.column_id
+                WHERE obj.type = 'C' 
+                AND OBJECT_NAME(chk.parent_object_id) = 'request_types'
+                AND col.name = 'request_for'
+            ");
+
+            if ($constraint) {
+                DB::statement("ALTER TABLE request_types DROP CONSTRAINT {$constraint->name}");
+            }
         }
 
         Schema::table('request_types', function (Blueprint $table) {

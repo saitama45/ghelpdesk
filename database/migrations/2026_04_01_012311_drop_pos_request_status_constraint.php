@@ -12,11 +12,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Drop the specific SQL Server check constraint that is blocking dynamic statuses
-        try {
-            DB::statement('ALTER TABLE pos_requests DROP CONSTRAINT CK__pos_reque__statu__788A9DEF');
-        } catch (\Exception $e) {
-            // Might already be dropped or have different name in other environments
+        // Dynamically find and drop the CHECK constraint for 'status' column in SQL Server
+        if (DB::getDriverName() === 'sqlsrv') {
+            $constraint = DB::selectOne("
+                SELECT obj.name 
+                FROM sys.objects obj
+                INNER JOIN sys.check_constraints chk ON obj.object_id = chk.object_id
+                INNER JOIN sys.columns col ON chk.parent_object_id = col.object_id AND chk.parent_column_id = col.column_id
+                WHERE obj.type = 'C' 
+                AND OBJECT_NAME(chk.parent_object_id) = 'pos_requests'
+                AND col.name = 'status'
+            ");
+
+            if ($constraint) {
+                DB::statement("ALTER TABLE pos_requests DROP CONSTRAINT {$constraint->name}");
+            }
         }
     }
 
@@ -25,6 +35,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Usually not safe to re-add with exact random name
+        //
     }
 };
