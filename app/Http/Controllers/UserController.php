@@ -30,10 +30,17 @@ class UserController extends Controller
         $roles = Role::select('id', 'name')->get();
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         
+        $departments = User::whereNotNull('department')->where('department', '!=', '')->distinct()->pluck('department');
+        $units = User::whereNotNull('unit')->where('unit', '!=', '')->distinct()->pluck('unit');
+        $subUnits = User::whereNotNull('sub_unit')->where('sub_unit', '!=', '')->distinct()->pluck('sub_unit');
+
         return Inertia::render('Users/Index', [
             'users' => $users,
             'roles' => $roles,
             'stores' => $stores,
+            'departments' => $departments,
+            'units' => $units,
+            'subUnits' => $subUnits,
         ]);
     }
 

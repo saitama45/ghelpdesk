@@ -153,6 +153,11 @@
     <div class="header">
         <h1>Store Health Report</h1>
         <p>As of {{ $asOfDate }}</p>
+        <div style="font-size: 8pt; color: #4a5568; margin-top: 5px;">
+            @if($filters['sub_unit'] !== 'all') Sub-Unit: {{ $filters['sub_unit'] }} | @endif
+            @if($filters['user_id'] !== 'all') User: {{ $reportData->first()->name ?? 'N/A' }} | @endif
+            @if($filters['store_id'] !== 'all') Store: {{ $filters['store_id'] }} @endif
+        </div>
     </div>
 
     <!-- Legend -->

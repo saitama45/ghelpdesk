@@ -10,12 +10,16 @@ const props = defineProps({
     reportData: Array,
     summary: Object,
     users: Array,
+    stores: Array,
+    subUnits: Array,
     thresholds: Object,
     filters: Object
 });
 
 const filterForm = ref({
     user_id: props.filters.user_id,
+    store_id: props.filters.store_id,
+    sub_unit: props.filters.sub_unit,
     as_of_date: props.filters.as_of_date
 });
 
@@ -112,26 +116,39 @@ const exportPDF = () => {
         <div class="space-y-6 print:space-y-0">
             <!-- Filters Card -->
             <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
-                <div class="flex flex-wrap items-end gap-4">
-                    <div class="flex-1 min-w-[200px]">
-                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Filter by User</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Sub-Unit</label>
+                        <select v-model="filterForm.sub_unit" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <option value="all">All Sub-Units</option>
+                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">User</label>
                         <select v-model="filterForm.user_id" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             <option value="all">All Users</option>
                             <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
                         </select>
                     </div>
-                    <div class="flex-1 min-w-[200px]">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Store</label>
+                        <select v-model="filterForm.store_id" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <option value="all">All Stores</option>
+                            <option v-for="store in stores" :key="store.id" :value="store.id">[{{ store.code }}] {{ store.name }}</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-xs font-bold text-gray-700 uppercase mb-1">As of Date</label>
                         <input type="date" v-model="filterForm.as_of_date" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                     </div>
                     <div class="flex space-x-2">
-                        <button @click="applyFilters" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors">
+                        <button @click="applyFilters" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center justify-center shadow-sm transition-colors">
                             <FunnelIcon class="w-4 h-4 mr-2" />
                             Generate
                         </button>
-                        <button @click="exportPDF" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200">
-                            <DocumentArrowDownIcon class="w-4 h-4 mr-2" />
-                            Export PDF
+                        <button @click="exportPDF" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200" title="Export PDF">
+                            <DocumentArrowDownIcon class="w-5 h-5" />
                         </button>
                     </div>
                 </div>

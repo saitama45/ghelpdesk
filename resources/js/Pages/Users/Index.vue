@@ -14,6 +14,9 @@ const props = defineProps({
     users: Object,
     roles: Array,
     stores: Array,
+    departments: Array,
+    units: Array,
+    subUnits: Array,
 });
 
 const showCreateModal = ref(false);
@@ -322,16 +325,25 @@ const updatePassword = () => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
-                            <input v-model="createForm.department" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <input v-model="createForm.department" type="text" list="departments-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <datalist id="departments-list">
+                                <option v-for="dept in departments" :key="dept" :value="dept" />
+                            </datalist>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
-                                <input v-model="createForm.unit" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <input v-model="createForm.unit" type="text" list="units-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <datalist id="units-list">
+                                    <option v-for="u in units" :key="u" :value="u" />
+                                </datalist>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                                <input v-model="createForm.sub_unit" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <input v-model="createForm.sub_unit" type="text" list="subunits-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <datalist id="subunits-list">
+                                    <option v-for="su in subUnits" :key="su" :value="su" />
+                                </datalist>
                             </div>
                         </div>
                         <div>
@@ -393,16 +405,25 @@ const updatePassword = () => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
-                            <input v-model="editForm.department" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <input v-model="editForm.department" type="text" list="edit-departments-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <datalist id="edit-departments-list">
+                                <option v-for="dept in departments" :key="dept" :value="dept" />
+                            </datalist>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
-                                <input v-model="editForm.unit" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <input v-model="editForm.unit" type="text" list="edit-units-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <datalist id="edit-units-list">
+                                    <option v-for="u in units" :key="u" :value="u" />
+                                </datalist>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                                <input v-model="editForm.sub_unit" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <input v-model="editForm.sub_unit" type="text" list="edit-subunits-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <datalist id="edit-subunits-list">
+                                    <option v-for="su in subUnits" :key="su" :value="su" />
+                                </datalist>
                             </div>
                         </div>
                         <div>

@@ -26,6 +26,8 @@ class StoreReportController extends Controller implements HasMiddleware
     public function index(Request $request)
     {
         $userId = $request->input('user_id');
+        $storeId = $request->input('store_id');
+        $subUnit = $request->input('sub_unit');
         $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
 
         // Query active tickets that have an assignee
@@ -34,6 +36,16 @@ class StoreReportController extends Controller implements HasMiddleware
 
         if ($asOfDate) {
             $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
+        }
+
+        if ($storeId && $storeId !== 'all') {
+            $ticketsQuery->where('store_id', $storeId);
+        }
+
+        if ($subUnit && $subUnit !== 'all') {
+            $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
+                $q->where('sub_unit', $subUnit);
+            });
         }
 
         // Apply user filter to report data
@@ -62,6 +74,7 @@ class StoreReportController extends Controller implements HasMiddleware
             return [
                 'id' => $assigneeId,
                 'name' => $assignee?->name ?? 'Unknown',
+                'sub_unit' => $assignee?->sub_unit,
                 'stores' => $stores,
             ];
         })->filter(function($u) {
@@ -72,7 +85,12 @@ class StoreReportController extends Controller implements HasMiddleware
             $q->where('is_assignable', true);
         })->select('id', 'name')->get();
 
-        $thresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        $allStores = Store::where('is_active', true)->orderBy('name')->get();
+        $subUnits = User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
+
+        // Thresholds logic
+        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
 
         // Calculate Summary for North/South Areas (Sectors 1-8)
         $summary = [
@@ -82,7 +100,6 @@ class StoreReportController extends Controller implements HasMiddleware
 
         // For summary, we need ALL active tickets regardless of user filter
         $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
-        $allStores = Store::where('is_active', true)->get();
 
         for ($i = 1; $i <= 8; $i++) {
             $sectorStores = $allStores->where('sector', $i);
@@ -119,17 +136,63 @@ class StoreReportController extends Controller implements HasMiddleware
             'reportData' => $usersData,
             'summary' => $summary,
             'users' => $allUsers,
+            'stores' => $allStores,
+            'subUnits' => $subUnits,
             'thresholds' => $thresholds,
             'filters' => [
                 'user_id' => $userId ?? 'all',
+                'store_id' => $storeId ?? 'all',
+                'sub_unit' => $subUnit ?? 'all',
                 'as_of_date' => $asOfDate,
             ]
         ]);
     }
 
+    private function getThresholdsForSubUnit($subUnit, $allThresholds)
+    {
+        $colors = ['green', 'yellow', 'orange', 'red'];
+        $suffixes = ['min', 'max', 'label'];
+        $thresholds = [];
+
+        $subUnitSlug = null;
+        if ($subUnit && $subUnit !== 'all') {
+            // Match Settings/Index.vue slugify function exactly
+            $subUnitSlug = strtolower((string)$subUnit);
+            $subUnitSlug = preg_replace('/\s+/', '_', $subUnitSlug);
+            $subUnitSlug = preg_replace('/[^\w-]+/', '', $subUnitSlug);
+            $subUnitSlug = preg_replace('/--+/', '_', $subUnitSlug);
+            $subUnitSlug = trim($subUnitSlug, '-');
+        }
+
+        foreach ($colors as $color) {
+            foreach ($suffixes as $suffix) {
+                if ($color === 'red' && $suffix === 'max') continue;
+                
+                $globalKey = "threshold_{$color}_{$suffix}";
+                $subUnitKey = $subUnitSlug ? "threshold_{$color}_{$suffix}_{$subUnitSlug}" : null;
+                
+                // Use sub-unit specific setting if it exists, otherwise fallback to global
+                $val = null;
+                if ($subUnitKey && isset($allThresholds[$subUnitKey])) {
+                    $val = $allThresholds[$subUnitKey];
+                }
+                
+                if ($val === null && isset($allThresholds[$globalKey])) {
+                    $val = $allThresholds[$globalKey];
+                }
+
+                $thresholds[$globalKey] = $val;
+            }
+        }
+
+        return $thresholds;
+    }
+
     public function pdf(Request $request)
     {
         $userId = $request->input('user_id');
+        $storeId = $request->input('store_id');
+        $subUnit = $request->input('sub_unit');
         $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
 
         // Query active tickets that have an assignee
@@ -138,6 +201,16 @@ class StoreReportController extends Controller implements HasMiddleware
 
         if ($asOfDate) {
             $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
+        }
+
+        if ($storeId && $storeId !== 'all') {
+            $ticketsQuery->where('store_id', $storeId);
+        }
+
+        if ($subUnit && $subUnit !== 'all') {
+            $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
+                $q->where('sub_unit', $subUnit);
+            });
         }
 
         // Apply user filter to report data
@@ -166,13 +239,15 @@ class StoreReportController extends Controller implements HasMiddleware
             return (object)[
                 'id' => $assigneeId,
                 'name' => $assignee?->name ?? 'Unknown',
+                'sub_unit' => $assignee?->sub_unit,
                 'stores' => $stores,
             ];
         })->filter(function($u) {
             return count($u->stores) > 0;
         })->values();
 
-        $thresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
 
         // Calculate Summary for North/South Areas (Sectors 1-8)
         $summary = [
@@ -219,7 +294,12 @@ class StoreReportController extends Controller implements HasMiddleware
             'reportData' => $usersData,
             'summary' => $summary,
             'thresholds' => $thresholds,
-            'asOfDate' => Carbon::parse($asOfDate)->format('F d, Y')
+            'asOfDate' => Carbon::parse($asOfDate)->format('F d, Y'),
+            'filters' => [
+                'user_id' => $userId ?? 'all',
+                'store_id' => $storeId ?? 'all',
+                'sub_unit' => $subUnit ?? 'all',
+            ]
         ]);
 
         return $pdf->setPaper('a4', 'portrait')->stream('store-health-report.pdf');
