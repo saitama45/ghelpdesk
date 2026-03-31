@@ -80,10 +80,10 @@ const toggleSidebar = () => {
 // Auto-expand menus based on current route
 onMounted(() => {
     initPresence();
-    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*')) {
+    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*') || route().current('pos-requests.*')) {
         openMenus.value.operations = true;
     }
-    if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*')) {
+    if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -105,17 +105,18 @@ const canSeeOperations = computed(() => {
     return hasPermission('attendance.view') || 
            hasPermission('attendance.logs') || 
            hasPermission('tickets.view') || 
-           hasPermission('schedules.view') ||
+           hasPermission('pos_requests.view') ||
+           hasPermission('schedules.view') || 
            hasPermission('presence.view');
 });
-
 const canSeeReferences = computed(() => {
     return hasPermission('companies.view') || 
            hasPermission('stores.view') || 
            hasPermission('activity_templates.view') || 
            hasPermission('categories.view') || 
            hasPermission('subcategories.view') || 
-           hasPermission('items.view');
+           hasPermission('items.view') ||
+           hasPermission('request_types.view');
 });
 
 const canSeeUserManagement = computed(() => {
@@ -210,7 +211,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('operations')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*') || route().current('presence.*')) && !openMenus.operations
+                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*') || route().current('presence.*') || route().current('pos-requests.*')) && !openMenus.operations
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -256,6 +257,16 @@ const canSeeSettings = computed(() => {
                             <span>Tickets</span>
                         </Link>
                         <Link
+                            v-if="hasPermission('pos_requests.view')"
+                            :href="route('pos-requests.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('pos-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>POS Requests</span>
+                        </Link>
+                        <Link
                             v-if="hasPermission('schedules.view')"
                             :href="route('schedules.index')"
                             :class="[
@@ -284,7 +295,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('references')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('companies.*') || route().current('stores.*') || route().current('categories.*')) && !openMenus.references
+                            (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('request-types.*')) && !openMenus.references
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -358,6 +369,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Items</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('request_types.view')"
+                            :href="route('request-types.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('request-types.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Request Types</span>
                         </Link>
                     </div>
                 </div>

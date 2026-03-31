@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Models\Ticket;
 use App\Models\TicketSlaMetric;
 use App\Services\SlaService;
+use App\Models\PosRequest;
 use Carbon\Carbon;
 
 class TicketObserver
@@ -73,22 +74,39 @@ class TicketObserver
                 if ($metric->response_target_at && !$metric->first_response_at) {
                     $data['response_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->response_target_at, 
-                        $pausedSeconds,
-                        null,
-                        $subUnit
+                        pausedSeconds: $pausedSeconds,
+                        holiday: null,
+                        subUnit: $subUnit
                     );
                 }
                 
                 if ($metric->resolution_target_at && !$metric->resolved_at) {
                     $data['resolution_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->resolution_target_at, 
-                        $pausedSeconds,
-                        null,
-                        $subUnit
+                        pausedSeconds: $pausedSeconds,
+                        holiday: null,
+                        subUnit: $subUnit
                     );
                 }
 
                 $metric->update($data);
+            }
+
+            // --- POS Request Status Sync ---
+            $posRequest = PosRequest::where('ticket_id', $ticket->id)->first();
+            if ($posRequest) {
+                $statusMap = [
+                    'open' => 'Approved',
+                    'in_progress' => 'In Progress',
+                    'resolved' => 'Resolved',
+                    'closed' => 'Resolved',
+                    'waiting_service_provider' => 'In Progress',
+                    'waiting_client_feedback' => 'In Progress',
+                ];
+
+                if (isset($statusMap[$newStatus])) {
+                    $posRequest->update(['status' => $statusMap[$newStatus]]);
+                }
             }
         }
 

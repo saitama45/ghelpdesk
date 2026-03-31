@@ -320,6 +320,7 @@ const landingPageOptions = [
             { label: 'DTR (Attendance)', value: 'attendance.index' },
             { label: 'Attendance Logs', value: 'attendance.logs' },
             { label: 'Tickets', value: 'tickets.index' },
+            { label: 'POS Requests', value: 'pos-requests.index' },
             { label: 'Scheduling', value: 'schedules.index' },
         ]
     },
@@ -337,6 +338,7 @@ const landingPageOptions = [
             { label: 'Categories', value: 'categories.index' },
             { label: 'Sub-Categories', value: 'sub-categories.index' },
             { label: 'Items', value: 'items.index' },
+            { label: 'Request Types', value: 'request-types.index' },
         ]
     },
     {

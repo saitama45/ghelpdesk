@@ -5,11 +5,6 @@ export function usePermission() {
     const userRoles = user.roles?.map(r => r.name) || [];
 
     const hasPermission = (name) => {
-        // Super Admin check
-        if (userRoles.some(role => ['Admin'].includes(role))) {
-            return true;
-        }
-
         const permissions = usePage().props.auth.permissions || [];
         return permissions.includes(name);
     };

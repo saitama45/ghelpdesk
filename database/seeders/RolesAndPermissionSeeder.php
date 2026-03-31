@@ -65,6 +65,19 @@ class RolesAndPermissionSeeder extends Seeder
             'items.create' => 'Create items',
             'items.edit' => 'Edit items',
 
+            // Request Types
+            'request_types.view' => 'View request types',
+            'request_types.create' => 'Create request types',
+            'request_types.edit' => 'Edit request types',
+            'request_types.delete' => 'Delete request types',
+
+            // POS Requests
+            'pos_requests.view' => 'View POS requests',
+            'pos_requests.create' => 'Create POS requests',
+            'pos_requests.edit' => 'Edit POS requests',
+            'pos_requests.delete' => 'Delete POS requests',
+            'pos_requests.approve' => 'Approve POS requests',
+
             // Stores
             'stores.view' => 'View stores',
             'stores.create' => 'Create stores',
@@ -130,6 +143,10 @@ class RolesAndPermissionSeeder extends Seeder
             'categories.view',
             'subcategories.view',
             'items.view',
+            'request_types.view',
+            'pos_requests.view',
+            'pos_requests.create',
+            'pos_requests.approve',
             'stores.view',
             'schedules.view',
             'canned_messages.view',
