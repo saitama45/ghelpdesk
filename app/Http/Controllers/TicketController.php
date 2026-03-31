@@ -531,7 +531,7 @@ class TicketController extends Controller
             'comment_text' => 'required|string|max:65535',
             'status' => 'nullable|string|in:open,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'attachments' => 'nullable|array',
-            'attachments.*' => 'file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx,txt',
+            'attachments.*' => 'file|max:51200',
         ]);
 
         $comment = TicketComment::create([

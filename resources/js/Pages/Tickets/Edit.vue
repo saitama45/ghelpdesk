@@ -481,17 +481,38 @@ const addComment = () => {
 
 const handleCommentFileSelect = (event) => {
     const files = Array.from(event.target.files);
-    const wrappedFiles = files.map(file => createFileObject(file));
-    commentForm.attachments = [...commentForm.attachments, ...wrappedFiles];
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    const validFiles = [];
+    const oversizedFiles = [];
+
+    files.forEach(file => {
+        if (file.size <= maxSize) {
+            validFiles.push(createFileObject(file));
+        } else {
+            oversizedFiles.push(file.name);
+        }
+    });
+
+    if (oversizedFiles.length > 0) {
+        showError(`The following files exceed the 50MB limit and were not added: ${oversizedFiles.join(', ')}`);
+    }
+
+    commentForm.attachments = [...commentForm.attachments, ...validFiles];
     event.target.value = ''; 
 };
 
 const handlePaste = (event) => {
     const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    const maxSize = 50 * 1024 * 1024; // 50MB
+
     for (const item of items) {
         if (item.type.indexOf('image') !== -1) {
             const blob = item.getAsFile();
             if (blob) {
+                if (blob.size > maxSize) {
+                    showError(`Pasted image exceeds the 50MB limit.`);
+                    continue;
+                }
                 const file = new File([blob], `screenshot-${Date.now()}.png`, { type: blob.type });
                 commentForm.attachments.push(createFileObject(file));
             }

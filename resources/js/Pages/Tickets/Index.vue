@@ -225,6 +225,16 @@ const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting_service_
 
 const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    const oversizedFiles = files.filter(file => file.size > maxSize);
+
+    if (oversizedFiles.length > 0) {
+        showError(`The following files exceed the 50MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`);
+        event.target.value = '';
+        createForm.attachments = [];
+        return;
+    }
+
     createForm.attachments = files;
 };
 
@@ -711,7 +721,7 @@ const getSlaRowClass = (ticket) => {
 
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Attachments</label>
-                            <input ref="fileInput" type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt" @change="handleFileSelect" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <input ref="fileInput" type="file" multiple @change="handleFileSelect" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             <div v-if="createForm.attachments.length > 0" class="mt-2 text-xs text-gray-600">
                                 <p class="font-medium mb-1">Selected files:</p>
                                 <div class="space-y-1">
