@@ -87,7 +87,10 @@ const getStatusClass = (status) => {
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Request Info</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Requested By</th>
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Company</th>
+                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Requested Date</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Launch Date</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Approval</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
@@ -106,12 +109,32 @@ const getStatusClass = (status) => {
                                     </div>
                                     <div class="ml-4">
                                         <div class="text-sm font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{{ request.request_type.name }}</div>
-                                        <div class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">By {{ request.user.name }}</div>
+                                        <div class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: #{{ request.id }}</div>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
+                                <div v-if="request.ticket">
+                                    <Link :href="route('tickets.edit', request.ticket.id)" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                        <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                        {{ request.ticket.ticket_key }}
+                                    </Link>
+                                </div>
+                                <span v-else class="text-[10px] font-black text-gray-300 uppercase italic">Pending</span>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap">
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-bold text-gray-900">{{ request.user ? request.user.name : (request.requester_name || 'Public Submission') }}</span>
+                                    <span v-if="!request.user && request.requester_email" class="text-[10px] text-gray-400 font-medium">{{ request.requester_email }}</span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap">
                                 <span class="text-sm font-bold text-gray-600">{{ request.company.name }}</span>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-center">
+                                <span class="text-xs font-bold text-gray-500">{{ new Date(request.created_at).toLocaleDateString() }}</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
                                 <span class="text-sm font-mono font-bold text-gray-900">{{ request.launch_date }}</span>

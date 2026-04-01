@@ -97,6 +97,8 @@ Route::middleware('auth')->group(function () {
 });
 
 // Public Routes (No Auth)
+Route::get('/public/pos-requests/create', [App\Http\Controllers\PublicPosRequestController::class, 'create'])->name('public.pos-requests.create');
+Route::post('/public/pos-requests', [App\Http\Controllers\PublicPosRequestController::class, 'store'])->name('public.pos-requests.store');
 Route::get('/public/tickets/{ticket}/close', [App\Http\Controllers\PublicTicketController::class, 'close'])->name('public.tickets.close');
 Route::get('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'showSurvey'])->name('public.survey');
 Route::post('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'submitSurvey'])->name('public.survey.submit');

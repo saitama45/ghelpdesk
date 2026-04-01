@@ -16,6 +16,7 @@ class EmailTicketService
 {
     public function fetchAndProcess()
     {
+        set_time_limit(180); // Increase to 3 minutes for IMAP sync
         // 1. Check if we should sync (Optional: throttle to 30 seconds to avoid IMAP overhead)
         $lastSync = Setting::get('last_email_sync_at');
         if ($lastSync && now()->parse($lastSync)->addSeconds(20)->isFuture()) {

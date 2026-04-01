@@ -14,6 +14,8 @@ class PosRequest extends Model
         'request_type_id',
         'ticket_id',
         'user_id',
+        'requester_name',
+        'requester_email',
         'launch_date',
         'effectivity_date',
         'stores_covered',

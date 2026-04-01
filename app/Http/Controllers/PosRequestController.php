@@ -9,6 +9,7 @@ use App\Models\RequestType;
 use App\Models\Company;
 use App\Models\Store;
 use App\Models\Ticket;
+use App\Services\PosRequestService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,13 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class PosRequestController extends Controller implements HasMiddleware
 {
+    protected PosRequestService $posRequestService;
+
+    public function __construct(PosRequestService $posRequestService)
+    {
+        $this->posRequestService = $posRequestService;
+    }
+
     public static function middleware(): array
     {
         return [
@@ -31,7 +39,7 @@ class PosRequestController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = PosRequest::with(['company', 'requestType', 'user']);
+        $query = PosRequest::with(['company', 'requestType', 'user', 'ticket']);
         
         if ($request->filled('search')) {
             $query->whereHas('requestType', function($q) use ($request) {
@@ -63,7 +71,9 @@ class PosRequestController extends Controller implements HasMiddleware
                 'Airport', 
                 'Casino & Highway (CBTL)', 
                 'Transfer'
-            ]
+            ],
+            'categories' => PosRequestDetail::distinct()->whereNotNull('category')->pluck('category'),
+            'sub_categories' => PosRequestDetail::distinct()->whereNotNull('sub_category')->pluck('sub_category'),
         ]);
     }
 
@@ -73,40 +83,26 @@ class PosRequestController extends Controller implements HasMiddleware
             'company_id' => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
             'launch_date' => 'required|date',
-            'effectivity_date' => 'required|date|after_or_equal:launch_date',
             'stores_covered' => 'required|array|min:1',
             'details' => 'required|array|min:1',
             'details.*.product_name' => 'required|string|max:255',
             'details.*.pos_name' => 'required|string|max:255',
             'details.*.price_type' => 'required|string',
             'details.*.price_amount' => 'nullable|numeric',
+            'details.*.category' => 'nullable|string|max:255',
+            'details.*.sub_category' => 'nullable|string|max:255',
+            'details.*.item_code' => 'nullable|string|max:255',
+            'details.*.sc' => 'nullable|string|max:255',
+            'details.*.local_tax' => 'nullable|string|max:255',
+            'details.*.mgr_meal' => 'nullable|boolean',
+            'details.*.printer' => 'nullable|string|max:255',
             'details.*.remarks_mechanics' => 'nullable|string',
+            'details.*.validity_date' => 'nullable|date',
         ]);
 
-        return DB::transaction(function () use ($request) {
-            $requestType = RequestType::findOrFail($request->request_type_id);
-            
-            $posRequest = PosRequest::create([
-                'company_id' => $request->company_id,
-                'request_type_id' => $request->request_type_id,
-                'user_id' => auth()->id(),
-                'launch_date' => $request->launch_date,
-                'effectivity_date' => $request->effectivity_date,
-                'stores_covered' => $request->stores_covered,
-                'status' => $requestType->approval_levels == 0 ? 'Approved' : 'Open',
-                'current_approval_level' => $requestType->approval_levels == 0 ? 0 : 1,
-            ]);
+        $this->posRequestService->createRequest($request->all(), auth()->id());
 
-            foreach ($request->details as $detail) {
-                $posRequest->details()->create($detail);
-            }
-
-            if ($posRequest->status === 'Approved') {
-                $this->processApprovedRequest($posRequest);
-            }
-
-            return redirect()->route('pos-requests.index')->with('success', 'POS Request created successfully');
-        });
+        return redirect()->route('pos-requests.index')->with('success', 'POS Request created successfully');
     }
 
     public function show(PosRequest $posRequest)
@@ -140,7 +136,9 @@ class PosRequestController extends Controller implements HasMiddleware
                 'Airport', 
                 'Casino & Highway (CBTL)', 
                 'Transfer'
-            ]
+            ],
+            'categories' => PosRequestDetail::distinct()->whereNotNull('category')->pluck('category'),
+            'sub_categories' => PosRequestDetail::distinct()->whereNotNull('sub_category')->pluck('sub_category'),
         ]);
     }
 
@@ -154,33 +152,26 @@ class PosRequestController extends Controller implements HasMiddleware
             'company_id' => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
             'launch_date' => 'required|date',
-            'effectivity_date' => 'required|date|after_or_equal:launch_date',
             'stores_covered' => 'required|array|min:1',
             'details' => 'required|array|min:1',
             'details.*.product_name' => 'required|string|max:255',
             'details.*.pos_name' => 'required|string|max:255',
             'details.*.price_type' => 'required|string',
             'details.*.price_amount' => 'nullable|numeric',
+            'details.*.category' => 'nullable|string|max:255',
+            'details.*.sub_category' => 'nullable|string|max:255',
+            'details.*.item_code' => 'nullable|string|max:255',
+            'details.*.sc' => 'nullable|string|max:255',
+            'details.*.local_tax' => 'nullable|string|max:255',
+            'details.*.mgr_meal' => 'nullable|boolean',
+            'details.*.printer' => 'nullable|string|max:255',
             'details.*.remarks_mechanics' => 'nullable|string',
+            'details.*.validity_date' => 'nullable|date',
         ]);
 
-        return DB::transaction(function () use ($request, $posRequest) {
-            $posRequest->update([
-                'company_id' => $request->company_id,
-                'request_type_id' => $request->request_type_id,
-                'launch_date' => $request->launch_date,
-                'effectivity_date' => $request->effectivity_date,
-                'stores_covered' => $request->stores_covered,
-            ]);
+        $this->posRequestService->updateRequest($posRequest, $request->all());
 
-            // Sync Details: simplest way is delete and recreate for this type of record
-            $posRequest->details()->delete();
-            foreach ($request->details as $detail) {
-                $posRequest->details()->create($detail);
-            }
-
-            return redirect()->route('pos-requests.index')->with('success', 'POS Request updated successfully');
-        });
+        return redirect()->route('pos-requests.index')->with('success', 'POS Request updated successfully');
     }
 
     public function approve(Request $request, PosRequest $posRequest)
@@ -205,7 +196,7 @@ class PosRequestController extends Controller implements HasMiddleware
                     'status' => 'Approved',
                     'current_approval_level' => 0,
                 ]);
-                $this->processApprovedRequest($posRequest);
+                $this->posRequestService->processApprovedRequest($posRequest);
             } else {
                 $posRequest->update([
                     'status' => 'Approved Level ' . $posRequest->current_approval_level,
@@ -219,78 +210,5 @@ class PosRequestController extends Controller implements HasMiddleware
         $posRequest->load(['approvals.user', 'requestType', 'company', 'user', 'details']);
 
         return redirect()->back()->with('success', 'Request approved successfully');
-    }
-
-    protected function processApprovedRequest(PosRequest $posRequest)
-    {
-        // 1. Generate Ticket Key (Format: COMPANYCODE-NUMBER)
-        $company = $posRequest->company;
-        $companyCode = $company->code;
-
-        $maxNumber = Ticket::withTrashed()
-            ->where('ticket_key', 'LIKE', "{$companyCode}-%")
-            ->get(['ticket_key'])
-            ->map(function ($t) {
-                if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                    return (int) $matches[1];
-                }
-                return 0;
-            })
-            ->max();
-
-        $nextNumber = ($maxNumber ?? 0) + 1;
-        $ticketKey = "{$companyCode}-{$nextNumber}";
-
-        // 2. Build Detailed Description from Line Items
-        $storeCodes = in_array('all', $posRequest->stores_covered) 
-            ? 'All Stores' 
-            : implode(', ', $posRequest->stores_covered);
-
-        $subject = "POS Request - {$posRequest->requestType->name} to {$storeCodes}";
-        
-        $detailsContent = "\n\n--- LINE ITEM DETAILS ---\n";
-        foreach ($posRequest->details as $index => $detail) {
-            $num = $index + 1;
-            $detailsContent .= "{$num}. Product: {$detail->product_name} | POS Alias: {$detail->pos_name}\n";
-            $detailsContent .= "   Price: {$detail->price_type} (₱" . number_format($detail->price_amount, 2) . ")\n";
-            $detailsContent .= "   Code: " . ($detail->item_code ?? 'N/A') . " | Cat: " . ($detail->category ?? 'N/A') . " | Printer: " . ($detail->printer ?? 'N/A') . "\n";
-            if ($detail->remarks_mechanics) {
-                $detailsContent .= "   Remarks: {$detail->remarks_mechanics}\n";
-            }
-            $detailsContent .= "   SC: {$detail->sc} | Tax: {$detail->local_tax} | Meal: {$detail->mgr_meal}\n\n";
-        }
-
-        $fullDescription = "POS Request ID: {$posRequest->id}\n" .
-                          "Launch Date: {$posRequest->launch_date->format('Y-m-d')}\n" .
-                          "Effectivity Date: {$posRequest->effectivity_date->format('Y-m-d')}\n" .
-                          "Stores: {$storeCodes}" .
-                          $detailsContent;
-
-        // 3. Create Ticket with Key and Full Details
-        $ticket = Ticket::create([
-            'ticket_key' => $ticketKey,
-            'title' => $subject,
-            'description' => $fullDescription,
-            'status' => 'open',
-            'priority' => 'medium',
-            'severity' => 'minor',
-            'reporter_id' => $posRequest->user_id,
-            'company_id' => $posRequest->company_id,
-            'type' => 'feature',
-            'created_at' => now('Asia/Manila'),
-        ]);
-
-        $posRequest->update(['ticket_id' => $ticket->id]);
-
-        // 4. Notify CC Emails
-        $ccEmails = $posRequest->requestType->cc_emails;
-        if ($ccEmails) {
-            $emails = array_map('trim', explode("\n", $ccEmails));
-            $emails = array_filter($emails, fn($e) => filter_var($e, FILTER_VALIDATE_EMAIL));
-            
-            if (!empty($emails)) {
-                // Logic to send email notifications would go here
-            }
-        }
     }
 }

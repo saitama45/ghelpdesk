@@ -89,14 +89,19 @@ const formatDateTime = (dateStr) => {
                                 {{ posRequest.request_type.name }}
                             </h1>
 
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-10">
+                            <div class="grid grid-cols-2 md:grid-cols-5 gap-10">
                                 <div>
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Company</label>
                                     <p class="text-lg font-bold text-gray-900">{{ posRequest.company.name }}</p>
                                 </div>
                                 <div>
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Requester</label>
-                                    <p class="text-lg font-bold text-gray-900">{{ posRequest.user.name }}</p>
+                                    <p class="text-lg font-bold text-gray-900">{{ posRequest.user ? posRequest.user.name : (posRequest.requester_name || 'Public Submission') }}</p>
+                                    <p v-if="!posRequest.user && posRequest.requester_email" class="text-[10px] text-gray-400 font-bold">{{ posRequest.requester_email }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Requested Date</label>
+                                    <p class="text-lg font-mono font-black text-gray-600">{{ formatDateTime(posRequest.created_at) }}</p>
                                 </div>
                                 <div>
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Launch Date</label>
