@@ -89,6 +89,76 @@
                     </ul>
                 </div>
 
+                <!-- POS Requests -->
+                <div v-if="results.pos_requests.length > 0">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                        POS Requests
+                    </div>
+                    <ul class="divide-y divide-gray-100">
+                        <li v-for="(req, index) in results.pos_requests" :key="'pos-' + index">
+                            <Link
+                                :href="route('pos-requests.show', req.id)"
+                                class="flex items-center px-4 py-3 hover:bg-blue-50 transition-colors group"
+                                :class="{ 'bg-blue-50': isSelected('pos_request', index) }"
+                                @click="closeSearch"
+                            >
+                                <div class="flex-shrink-0 w-8 h-8 bg-indigo-100 text-indigo-600 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                </div>
+                                <div class="ml-3 flex-1 min-w-0">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
+                                            <span class="text-indigo-600 font-bold">[POS #{{ req.id }}]</span> {{ req.request_type }}
+                                        </p>
+                                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :class="getStatusClass(req.status)">
+                                            {{ req.status }}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 truncate">
+                                        {{ req.company }} • {{ req.requester }}
+                                        <span v-if="req.ticket_key" class="ml-1 font-bold text-blue-600">• {{ req.ticket_key }}</span>
+                                    </p>
+                                </div>
+                            </Link>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- SAP Requests -->
+                <div v-if="results.sap_requests.length > 0">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                        SAP Requests
+                    </div>
+                    <ul class="divide-y divide-gray-100">
+                        <li v-for="(req, index) in results.sap_requests" :key="'sap-' + index">
+                            <Link
+                                :href="route('sap-requests.show', req.id)"
+                                class="flex items-center px-4 py-3 hover:bg-teal-50 transition-colors group"
+                                :class="{ 'bg-teal-50': isSelected('sap_request', index) }"
+                                @click="closeSearch"
+                            >
+                                <div class="flex-shrink-0 w-8 h-8 bg-teal-100 text-teal-600 rounded-md flex items-center justify-center">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                </div>
+                                <div class="ml-3 flex-1 min-w-0">
+                                    <div class="flex items-center justify-between">
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-teal-600">
+                                            <span class="text-teal-600 font-bold">[SAP #{{ req.id }}]</span> {{ req.request_type }}
+                                        </p>
+                                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :class="getStatusClass(req.status)">
+                                            {{ req.status }}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 truncate">
+                                        {{ req.company }} • {{ req.requester }}
+                                        <span v-if="req.ticket_key" class="ml-1 font-bold text-teal-600">• {{ req.ticket_key }}</span>
+                                    </p>
+                                </div>
+                            </Link>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Users -->
                 <div v-if="results.users.length > 0">
                     <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
@@ -120,7 +190,7 @@
                 </div>
 
                 <!-- No Results -->
-                <div v-if="!loading && query.length >= 2 && totalResults === 0" class="px-4 py-8 text-center">
+                <div v-if="!loading && query.length >= 2 && totalResults === 0" class="px-4 py-8 text-center" role="status">
                     <MagnifyingGlassIcon class="mx-auto h-12 w-12 text-gray-400" />
                     <h3 class="mt-2 text-sm font-medium text-gray-900">No results found</h3>
                     <p class="mt-1 text-sm text-gray-500">No matches found for "{{ query }}"</p>
@@ -156,7 +226,7 @@ import {
 import LoadingSpinner from '@/Components/LoadingSpinner.vue';
 
 const query = ref('');
-const results = ref({ menus: [], tickets: [], users: [] });
+const results = ref({ menus: [], tickets: [], pos_requests: [], sap_requests: [], users: [] });
 const loading = ref(false);
 const isFocused = ref(false);
 const searchInput = ref(null);
@@ -164,7 +234,9 @@ const selectedIndex = ref(-1);
 let debounceTimeout = null;
 
 const totalResults = computed(() => {
-    return results.value.menus.length + results.value.tickets.length + results.value.users.length;
+    return results.value.menus.length + results.value.tickets.length +
+           results.value.pos_requests.length + results.value.sap_requests.length +
+           results.value.users.length;
 });
 
 const showResults = computed(() => {
@@ -175,7 +247,7 @@ const handleInput = () => {
     if (debounceTimeout) clearTimeout(debounceTimeout);
     
     if (query.value.length < 2) {
-        results.value = { menus: [], tickets: [], users: [] };
+        results.value = { menus: [], tickets: [], pos_requests: [], sap_requests: [], users: [] };
         return;
     }
 
@@ -217,6 +289,8 @@ const allResults = computed(() => {
     const list = [];
     results.value.menus.forEach((item, index) => list.push({ type: 'menu', index, data: item }));
     results.value.tickets.forEach((item, index) => list.push({ type: 'ticket', index, data: item }));
+    results.value.pos_requests.forEach((item, index) => list.push({ type: 'pos_request', index, data: item }));
+    results.value.sap_requests.forEach((item, index) => list.push({ type: 'sap_request', index, data: item }));
     results.value.users.forEach((item, index) => list.push({ type: 'user', index, data: item }));
     return list;
 });
@@ -236,6 +310,8 @@ const selectCurrentResult = () => {
     if (item) {
         if (item.type === 'menu') router.visit(item.data.url);
         else if (item.type === 'ticket') router.visit(route('tickets.show', item.data.id));
+        else if (item.type === 'pos_request') router.visit(route('pos-requests.show', item.data.id));
+        else if (item.type === 'sap_request') router.visit(route('sap-requests.show', item.data.id));
         else if (item.type === 'user') router.visit(route('users.index', { search: item.data.email }));
         closeSearch();
     }

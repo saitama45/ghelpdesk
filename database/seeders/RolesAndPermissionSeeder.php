@@ -78,6 +78,13 @@ class RolesAndPermissionSeeder extends Seeder
             'pos_requests.delete' => 'Delete POS requests',
             'pos_requests.approve' => 'Approve POS requests',
 
+            // SAP Requests
+            'sap_requests.view' => 'View SAP requests',
+            'sap_requests.create' => 'Create SAP requests',
+            'sap_requests.edit' => 'Edit SAP requests',
+            'sap_requests.delete' => 'Delete SAP requests',
+            'sap_requests.approve' => 'Approve SAP requests',
+
             // Stores
             'stores.view' => 'View stores',
             'stores.create' => 'Create stores',
@@ -147,6 +154,9 @@ class RolesAndPermissionSeeder extends Seeder
             'pos_requests.view',
             'pos_requests.create',
             'pos_requests.approve',
+            'sap_requests.view',
+            'sap_requests.create',
+            'sap_requests.approve',
             'stores.view',
             'schedules.view',
             'canned_messages.view',

@@ -321,6 +321,7 @@ const landingPageOptions = [
             { label: 'Attendance Logs', value: 'attendance.logs' },
             { label: 'Tickets', value: 'tickets.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
+            { label: 'SAP Requests', value: 'sap-requests.index' },
             { label: 'Scheduling', value: 'schedules.index' },
         ]
     },

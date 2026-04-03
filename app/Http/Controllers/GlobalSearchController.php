@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Models\PosRequest;
+use App\Models\SapRequest;
 use Illuminate\Support\Facades\Auth;
 
 class GlobalSearchController extends Controller
@@ -19,9 +21,11 @@ class GlobalSearchController extends Controller
         }
 
         $results = [
-            'menus' => $this->searchMenus($query, $user),
-            'tickets' => $this->searchTickets($query, $user),
-            'users' => $this->searchUsers($query, $user),
+            'menus'        => $this->searchMenus($query, $user),
+            'tickets'      => $this->searchTickets($query, $user),
+            'pos_requests' => $this->searchPosRequests($query, $user),
+            'sap_requests' => $this->searchSapRequests($query, $user),
+            'users'        => $this->searchUsers($query, $user),
         ];
 
         return response()->json($results);
@@ -35,6 +39,8 @@ class GlobalSearchController extends Controller
             ['name' => 'DTR', 'url' => route('attendance.index', [], false), 'path' => 'Operations > DTR', 'permission' => 'attendance.view'],
             ['name' => 'Attendance Logs', 'url' => route('attendance.logs', [], false), 'path' => 'Operations > Attendance Logs', 'permission' => 'attendance.logs'],
             ['name' => 'Tickets', 'url' => route('tickets.index', [], false), 'path' => 'Operations > Tickets', 'permission' => 'tickets.view'],
+            ['name' => 'POS Requests', 'url' => route('pos-requests.index', [], false), 'path' => 'Operations > POS Requests', 'permission' => 'pos_requests.view'],
+            ['name' => 'SAP Requests', 'url' => route('sap-requests.index', [], false), 'path' => 'Operations > SAP Requests', 'permission' => 'sap_requests.view'],
             ['name' => 'Scheduling', 'url' => route('schedules.index', [], false), 'path' => 'Operations > Scheduling', 'permission' => 'schedules.view'],
             ['name' => 'Presence', 'url' => route('presence.index', [], false), 'path' => 'Operations > Presence', 'permission' => 'presence.view'],
             ['name' => 'Companies', 'url' => route('companies.index', [], false), 'path' => 'References > Companies', 'permission' => 'companies.view'],
@@ -120,6 +126,60 @@ class GlobalSearchController extends Controller
                     'assignee_name' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
                 ];
             });
+    }
+
+    private function searchPosRequests($query, $user)
+    {
+        if (!$user->can('pos_requests.view')) {
+            return [];
+        }
+
+        return PosRequest::with(['company:id,name', 'requestType:id,name', 'user:id,name,email', 'ticket:id,ticket_key'])
+            ->where(function ($q) use ($query) {
+                $q->where('requester_name', 'like', "%{$query}%")
+                  ->orWhere('requester_email', 'like', "%{$query}%")
+                  ->orWhereHas('requestType', fn($r) => $r->where('name', 'like', "%{$query}%"))
+                  ->orWhereHas('company', fn($r) => $r->where('name', 'like', "%{$query}%"))
+                  ->orWhereHas('ticket', fn($r) => $r->where('ticket_key', 'like', "%{$query}%"));
+            })
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(fn($r) => [
+                'id'           => $r->id,
+                'request_type' => $r->requestType?->name ?? 'N/A',
+                'company'      => $r->company?->name ?? 'N/A',
+                'requester'    => $r->user?->name ?? $r->requester_name ?? 'Public',
+                'status'       => $r->status,
+                'ticket_key'   => $r->ticket?->ticket_key,
+            ]);
+    }
+
+    private function searchSapRequests($query, $user)
+    {
+        if (!$user->can('sap_requests.view')) {
+            return [];
+        }
+
+        return SapRequest::with(['company:id,name', 'requestType:id,name', 'user:id,name,email', 'ticket:id,ticket_key'])
+            ->where(function ($q) use ($query) {
+                $q->where('requester_name', 'like', "%{$query}%")
+                  ->orWhere('requester_email', 'like', "%{$query}%")
+                  ->orWhereHas('requestType', fn($r) => $r->where('name', 'like', "%{$query}%"))
+                  ->orWhereHas('company', fn($r) => $r->where('name', 'like', "%{$query}%"))
+                  ->orWhereHas('ticket', fn($r) => $r->where('ticket_key', 'like', "%{$query}%"));
+            })
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(fn($r) => [
+                'id'           => $r->id,
+                'request_type' => $r->requestType?->name ?? 'N/A',
+                'company'      => $r->company?->name ?? 'N/A',
+                'requester'    => $r->user?->name ?? $r->requester_name ?? 'Public',
+                'status'       => $r->status,
+                'ticket_key'   => $r->ticket?->ticket_key,
+            ]);
     }
 
     private function searchUsers($query, $user)

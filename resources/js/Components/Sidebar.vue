@@ -80,7 +80,7 @@ const toggleSidebar = () => {
 // Auto-expand menus based on current route
 onMounted(() => {
     initPresence();
-    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*') || route().current('pos-requests.*')) {
+    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) {
         openMenus.value.operations = true;
     }
     if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
@@ -106,7 +106,8 @@ const canSeeOperations = computed(() => {
            hasPermission('attendance.logs') || 
            hasPermission('tickets.view') || 
            hasPermission('pos_requests.view') ||
-           hasPermission('schedules.view') || 
+           hasPermission('sap_requests.view') ||
+           hasPermission('schedules.view') ||
            hasPermission('presence.view');
 });
 const canSeeReferences = computed(() => {
@@ -211,7 +212,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('operations')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*') || route().current('presence.*') || route().current('pos-requests.*')) && !openMenus.operations
+                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*') || route().current('presence.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) && !openMenus.operations
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -265,6 +266,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>POS Requests</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('sap_requests.view')"
+                            :href="route('sap-requests.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>SAP Requests</span>
                         </Link>
                         <Link
                             v-if="hasPermission('schedules.view')"
