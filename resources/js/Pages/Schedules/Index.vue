@@ -131,19 +131,19 @@
                         </div>
 
                         <!-- Import Result -->
-                        <div v-if="importResult" class="rounded-lg p-4" :class="importResult.errors.length === 0 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'">
+                        <div v-if="importResult" class="rounded-lg p-4" :class="(importResult.errors?.length || 0) === 0 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'">
                             <div class="flex items-center space-x-2 mb-1">
-                                <svg v-if="importResult.errors.length === 0" class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg v-if="(importResult.errors?.length || 0) === 0" class="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                                 </svg>
                                 <svg v-else class="w-4 h-4 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                                <span class="text-sm font-semibold" :class="importResult.errors.length === 0 ? 'text-green-800' : 'text-yellow-800'">
+                                <span class="text-sm font-semibold" :class="(importResult.errors?.length || 0) === 0 ? 'text-green-800' : 'text-yellow-800'">
                                     {{ importResult.imported }} schedule{{ importResult.imported !== 1 ? 's' : '' }} imported
                                 </span>
                             </div>
-                            <ul v-if="importResult.errors.length > 0" class="space-y-0.5 max-h-28 overflow-y-auto mt-2">
+                            <ul v-if="importResult.errors?.length > 0" class="space-y-0.5 max-h-28 overflow-y-auto mt-2">
                                 <li v-for="(error, i) in importResult.errors" :key="i" class="text-xs text-red-700">{{ error }}</li>
                             </ul>
                         </div>
@@ -375,18 +375,24 @@ const submitImport = async () => {
 
     try {
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-        const response = await fetch('/schedules/import', {
+        const response = await fetch(route('schedules.import'), {
             method: 'POST',
             headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
             body: formData
         })
+        
         const result = await response.json()
-        importResult.value = result
-        if (result.imported > 0) {
-            showSuccess(`${result.imported} schedule${result.imported === 1 ? '' : 's'} imported successfully`)
-            router.reload({ only: ['schedules'] })
+        
+        if (response.ok) {
+            importResult.value = result
+            if (result.imported > 0) {
+                showSuccess(`${result.imported} schedule${result.imported === 1 ? '' : 's'} imported successfully`)
+                router.reload({ only: ['schedules'] })
+            }
+        } else {
+            showError(result.message || 'Import failed. Please check your session and try again.')
         }
-    } catch {
+    } catch (e) {
         showError('Import failed. Please try again.')
     } finally {
         isImporting.value = false

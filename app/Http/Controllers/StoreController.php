@@ -77,6 +77,8 @@ class StoreController extends Controller implements HasMiddleware
             'user_ids.*' => 'exists:users,id',
         ]);
 
+        $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
+
         $store = Store::create($validated);
 
         if ($request->has('user_ids')) {
@@ -104,6 +106,8 @@ class StoreController extends Controller implements HasMiddleware
             'user_ids' => 'nullable|array',
             'user_ids.*' => 'exists:users,id',
         ]);
+
+        $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
 
         $store->update($validated);
 
@@ -194,7 +198,7 @@ class StoreController extends Controller implements HasMiddleware
                 'cluster'       => $data['cluster'],
                 'latitude'      => $data['latitude'] !== '' ? $data['latitude'] : null,
                 'longitude'     => $data['longitude'] !== '' ? $data['longitude'] : null,
-                'radius_meters' => $data['radius_meters'] !== '' ? (int) $data['radius_meters'] : null,
+                'radius_meters' => !empty($data['radius_meters']) ? (int) $data['radius_meters'] : 150,
                 'is_active'     => isset($data['is_active']) ? (bool) $data['is_active'] : true,
             ]);
 
