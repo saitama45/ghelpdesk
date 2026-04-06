@@ -74,18 +74,18 @@ class TicketObserver
                 if ($metric->response_target_at && !$metric->first_response_at) {
                     $data['response_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->response_target_at, 
-                        pausedSeconds: $pausedSeconds,
-                        holiday: null,
-                        subUnit: $subUnit
+                        $pausedSeconds,
+                        null,
+                        $subUnit
                     );
                 }
                 
                 if ($metric->resolution_target_at && !$metric->resolved_at) {
                     $data['resolution_target_at'] = SlaService::addSecondsRespectingBusinessHours(
                         $metric->resolution_target_at, 
-                        pausedSeconds: $pausedSeconds,
-                        holiday: null,
-                        subUnit: $subUnit
+                        $pausedSeconds,
+                        null,
+                        $subUnit
                     );
                 }
 
