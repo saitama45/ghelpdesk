@@ -3,18 +3,39 @@ import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
+import { useConfirm } from '@/Composables/useConfirm'
 
 const props = defineProps({
     sapRequests: Object,
     filters: Object,
+    requestTypes: Array,
 })
 
 const { hasPermission } = usePermission()
+const { confirm } = useConfirm()
 const search = ref(props.filters?.search ?? '')
 const status = ref(props.filters?.status ?? '')
+const showCreateSection = ref(false)
+
+function startRequest(typeId) {
+    router.get(route('sap-requests.create'), { type_id: typeId })
+}
 
 function applyFilter() {
     router.get(route('sap-requests.index'), { search: search.value, status: status.value }, { preserveState: true, replace: true })
+}
+
+async function deleteRequest(id) {
+    const confirmed = await confirm({
+        title: 'Delete SAP Request',
+        message: 'Are you sure you want to delete this SAP request? This action cannot be undone.'
+    })
+
+    if (confirmed) {
+        router.delete(route('sap-requests.destroy', id), {
+            preserveScroll: true,
+        })
+    }
 }
 
 const STATUS_COLORS = {
@@ -42,11 +63,34 @@ function statusClass(s) {
                         <h1 class="text-3xl font-black text-gray-900 tracking-tight">SAP Requests</h1>
                         <p class="text-sm text-gray-500 font-medium mt-1">Manage and track all SAP data creation requests.</p>
                     </div>
-                    <Link v-if="hasPermission('sap_requests.create')" :href="route('sap-requests.create')"
-                        class="flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-2xl font-black text-sm shadow-lg shadow-teal-100 hover:bg-teal-700 transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-                        New SAP Request
-                    </Link>
+                    <button v-if="hasPermission('sap_requests.create')" @click="showCreateSection = !showCreateSection"
+                        :class="showCreateSection ? 'bg-gray-200 text-gray-700' : 'bg-teal-600 text-white shadow-lg shadow-teal-100 hover:bg-teal-700'"
+                        class="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all">
+                        <svg class="w-4 h-4 transition-transform" :class="showCreateSection ? 'rotate-45' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                        {{ showCreateSection ? 'Close' : 'New SAP Request' }}
+                    </button>
+                </div>
+
+                <!-- Create Section (Selection) -->
+                <div v-if="showCreateSection" class="mb-10 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="h-px flex-1 bg-gray-200"></div>
+                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Select Request Type to Start</h2>
+                        <div class="h-px flex-1 bg-gray-200"></div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Link v-for="rt in requestTypes" :key="rt.id" :href="route('sap-requests.create', { type_id: rt.id })"
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-teal-500 hover:shadow-teal-100/50 transition-all group">
+                            <div class="w-12 h-12 bg-teal-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-all">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            </div>
+                            <h4 class="text-sm font-black text-gray-900 mb-1">{{ rt.name }}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                {{ rt.approval_levels > 0 ? `${rt.approval_levels} Approval Steps` : 'No Approval Required' }}
+                            </p>
+                        </Link>
+                    </div>
                 </div>
 
                 <!-- Filters -->
@@ -110,11 +154,19 @@ function statusClass(s) {
                                         <span v-else class="text-xs text-gray-300 font-bold">—</span>
                                     </td>
                                     <td class="px-6 py-4 text-xs font-medium text-gray-400">{{ new Date(r.created_at).toLocaleDateString() }}</td>
-                                    <td class="px-6 py-4">
+                                    <td class="px-6 py-4 flex items-center justify-end gap-2">
                                         <Link :href="route('sap-requests.show', r.id)"
                                             class="text-xs font-black text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-all">
                                             View
                                         </Link>
+                                        <Link v-if="hasPermission('sap_requests.edit') && r.status === 'Open'" :href="route('sap-requests.edit', r.id)"
+                                            class="text-xs font-black text-amber-600 hover:text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-50 transition-all">
+                                            Edit
+                                        </Link>
+                                        <button v-if="hasPermission('sap_requests.delete')" @click="deleteRequest(r.id)"
+                                            class="text-xs font-black text-rose-600 hover:text-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-50 transition-all">
+                                            Delete
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>

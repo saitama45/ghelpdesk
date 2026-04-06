@@ -55,6 +55,9 @@ class SapRequestController extends Controller implements HasMiddleware
         return Inertia::render('SapRequests/Index', [
             'sapRequests' => $sapRequests,
             'filters' => $request->only(['search', 'status', 'per_page']),
+            'requestTypes' => RequestType::where('is_active', true)
+                ->whereJsonContains('request_for', 'SAP')
+                ->get(['id', 'name', 'approval_levels']),
         ]);
     }
 
@@ -75,7 +78,6 @@ class SapRequestController extends Controller implements HasMiddleware
             'request_type_id' => 'required|exists:request_types,id',
             'form_data'       => 'required|array',
             'items'           => 'nullable|array',
-            'items.*.item_data' => 'nullable|array',
         ]);
 
         $this->sapRequestService->createRequest($validated, auth()->id());

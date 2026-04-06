@@ -42,7 +42,12 @@ function fmt(d) {
     catch { return d }
 }
 
-const formData = computed(() => props.sapRequest.form_data ?? {})
+const formData = computed(() => {
+    const data = { ... (props.sapRequest.form_data ?? {}) }
+    // Remove "Common Sense" fields
+    delete data.sku_mode
+    return data
+})
 const items = computed(() => props.sapRequest.items ?? [])
 </script>
 
@@ -95,11 +100,18 @@ const items = computed(() => props.sapRequest.items ?? [])
                                         {{ sapRequest.ticket.ticket_key }}
                                     </Link>
                                 </div>
+                                <div v-if="hasPermission('sap_requests.edit') && sapRequest.status === 'Open'">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Actions</label>
+                                    <Link :href="route('sap-requests.edit', sapRequest.id)" class="inline-flex items-center text-xs font-black text-amber-600 hover:text-amber-800">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 Stein 2.5 0 113.536 3.536L12 14.036H3v-3.572L16.732 3.732z"/></svg>
+                                        Edit Request
+                                    </Link>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Form Data Card -->
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+                        <div v-if="Object.keys(formData).length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
                             <h3 class="text-xl font-black text-gray-900 mb-6">Request Details</h3>
                             <dl class="divide-y divide-gray-50">
                                 <div v-for="(value, key) in formData" :key="key" class="flex items-start justify-between py-4">

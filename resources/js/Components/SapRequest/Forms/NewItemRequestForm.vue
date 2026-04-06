@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 
 const props = defineProps({
     modelValue: { type: Object, default: () => ({}) },
@@ -17,6 +17,13 @@ const form = computed({
 const itemList = computed({
     get: () => props.items.length ? props.items : [defaultItem()],
     set: val => emit('update:items', val),
+})
+
+onMounted(() => {
+    // Only initialize if we are starting fresh (no items from props)
+    if (props.items && props.items.length === 0) {
+        emit('update:items', [defaultItem()])
+    }
 })
 
 const isGsi = computed(() => props.companyName?.toLowerCase().includes('gsi'))
@@ -64,19 +71,6 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
 
 <template>
     <div class="space-y-6">
-        <!-- SKU Mode -->
-        <div>
-            <label class="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2">Single or Multiple SKU? <span class="text-rose-500">*</span></label>
-            <div class="flex gap-3">
-                <button v-for="opt in ['Single', 'Multiple']" :key="opt" type="button"
-                    @click="updateField('sku_mode', opt)"
-                    :class="form.sku_mode === opt ? 'bg-teal-600 text-white shadow-lg shadow-teal-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-                    class="px-5 py-2 rounded-xl text-sm font-bold transition-all">
-                    {{ opt }}
-                </button>
-            </div>
-        </div>
-
         <!-- Items -->
         <div v-for="(item, i) in itemList" :key="i" class="bg-slate-50 rounded-2xl p-6 border border-slate-100 relative">
             <div class="flex items-center justify-between mb-4">
@@ -181,7 +175,7 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
             </div>
         </div>
 
-        <button v-if="form.sku_mode === 'Multiple'" type="button" @click="addItem"
+        <button type="button" @click="addItem"
             class="flex items-center gap-2 px-5 py-3 border-2 border-dashed border-teal-300 rounded-2xl text-teal-600 font-bold text-sm hover:bg-teal-50 transition-all">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
             Add Another SKU

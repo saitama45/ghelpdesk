@@ -29,8 +29,10 @@ class SapRequestService
             ]);
 
             // Store tabular items (New Item Request / New BOM)
+            Log::info('Processing items for SAP Request', ['items_count' => count($data['items'] ?? [])]);
             if (!empty($data['items'])) {
                 foreach ($data['items'] as $index => $itemData) {
+                    Log::info('Creating item', ['index' => $index, 'data' => $itemData]);
                     $sapRequest->items()->create([
                         'item_data'  => $itemData,
                         'sort_order' => $index,
@@ -58,8 +60,10 @@ class SapRequestService
             ]);
 
             $sapRequest->items()->delete();
+            Log::info('Updating items for SAP Request', ['items_count' => count($data['items'] ?? [])]);
             if (!empty($data['items'])) {
                 foreach ($data['items'] as $index => $itemData) {
+                    Log::info('Re-creating item', ['index' => $index, 'data' => $itemData]);
                     $sapRequest->items()->create([
                         'item_data'  => $itemData,
                         'sort_order' => $index,
