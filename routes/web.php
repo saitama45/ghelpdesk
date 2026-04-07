@@ -34,6 +34,7 @@ Route::middleware('auth')->group(function () {
     Route::post('sub-categories/import', [\App\Http\Controllers\SubCategoryController::class, 'import'])->name('sub-categories.import');
     Route::get('items/template', [\App\Http\Controllers\ItemController::class, 'template'])->name('items.template');
     Route::post('items/import', [\App\Http\Controllers\ItemController::class, 'import'])->name('items.import');
+    Route::get('items/export', [\App\Http\Controllers\ItemController::class, 'export'])->name('items.export');
     Route::resource('categories', \App\Http\Controllers\CategoryController::class)->except(['show', 'create', 'edit']);
     Route::resource('sub-categories', \App\Http\Controllers\SubCategoryController::class)->except(['show', 'create', 'edit']);
     Route::resource('items', \App\Http\Controllers\ItemController::class)->except(['show', 'create', 'edit']);

@@ -20,6 +20,16 @@
                 >
                     <template #actions>
                         <button
+                            v-if="hasPermission('items.view')"
+                            @click="exportToExcel"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>Export</span>
+                        </button>
+                        <button
                             v-if="hasPermission('items.create')"
                             @click="openImportModal"
                             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
@@ -484,6 +494,12 @@ const closeImportModal = () => {
     importResult.value = null
     if (importFileInput.value) importFileInput.value.value = ''
 }
+
+const exportToExcel = () => {
+    const search = pagination.search.value;
+    const url = route('items.export', { search });
+    window.location.href = url;
+};
 
 const openCreateModal = () => {
     isEditing.value = false

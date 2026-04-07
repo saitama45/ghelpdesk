@@ -22,7 +22,7 @@ class ItemController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:items.view', only: ['index']),
+            new Middleware('can:items.view', only: ['index', 'export']),
             new Middleware('can:items.create', only: ['store']),
             new Middleware('can:items.edit', only: ['update']),
             new Middleware('can:items.delete', only: ['destroy']),
@@ -34,14 +34,17 @@ class ItemController extends Controller implements HasMiddleware
         $query = Item::with(['category', 'subCategory']);
 
         if ($request->filled('search')) {
-            $query->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('description', 'like', "%{$request->search}%")
-                  ->orWhereHas('category', function($q) use ($request) {
-                      $q->where('name', 'like', "%{$request->search}%");
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhereHas('category', function($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%");
                   })
-                  ->orWhereHas('subCategory', function($q) use ($request) {
-                      $q->where('name', 'like', "%{$request->search}%");
+                  ->orWhereHas('subCategory', function($sq) use ($search) {
+                      $sq->where('name', 'like', "%{$search}%");
                   });
+            });
         }
 
         $items = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
@@ -55,6 +58,69 @@ class ItemController extends Controller implements HasMiddleware
             'subCategories' => $subCategories,
             'settings' => $settings,
         ]);
+    }
+
+    public function export(Request $request)
+    {
+        $query = Item::with(['category', 'subCategory']);
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhereHas('category', function($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('subCategory', function($sq) use ($search) {
+                      $sq->where('name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        $items = $query->latest()->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Items');
+
+        $headers = ['Name', 'Description', 'Concern Type', 'Category', 'Sub-Category', 'Priority', 'Status'];
+        foreach ($headers as $i => $h) {
+            $sheet->setCellValue(chr(65 + $i) . '1', $h);
+        }
+
+        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:G1')->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+
+        $row = 2;
+        foreach ($items as $item) {
+            $sheet->setCellValue('A' . $row, $item->name);
+            $sheet->setCellValue('B' . $row, $item->description);
+            $sheet->setCellValue('C' . $row, $item->concern_type);
+            $sheet->setCellValue('D' . $row, $item->category?->name);
+            $sheet->setCellValue('E' . $row, $item->subCategory?->name);
+            $sheet->setCellValue('F' . $row, $item->priority);
+            $sheet->setCellValue('G' . $row, $item->is_active ? 'Active' : 'Inactive');
+            $row++;
+        }
+
+        foreach (range('A', 'G') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'items-export-' . now()->format('Y-m-d-His') . '.xlsx';
+        $httpHeaders = [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'max-age=0',
+        ];
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, $httpHeaders);
     }
 
     public function store(Request $request)
