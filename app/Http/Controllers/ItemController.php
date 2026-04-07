@@ -6,6 +6,7 @@ use App\Models\Item;
 use App\Models\Category;
 use App\Models\SubCategory;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -61,7 +62,14 @@ class ItemController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'category_id' => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
-            'name' => 'required|string|max:255|unique:items,name',
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('items')->where(fn ($q) => $q
+                    ->where('category_id', $request->category_id)
+                    ->where('sub_category_id', $request->sub_category_id)
+                    ->where('concern_type', $request->concern_type)
+                ),
+            ],
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
             'concern_type' => 'required|in:Incident,Service Request',
@@ -78,7 +86,14 @@ class ItemController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'category_id' => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
-            'name' => 'required|string|max:255|unique:items,name,' . $item->id,
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('items')->ignore($item->id)->where(fn ($q) => $q
+                    ->where('category_id', $request->category_id)
+                    ->where('sub_category_id', $request->sub_category_id)
+                    ->where('concern_type', $request->concern_type)
+                ),
+            ],
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
             'concern_type' => 'required|in:Incident,Service Request',
@@ -157,7 +172,7 @@ class ItemController extends Controller implements HasMiddleware
                 'sub_category_id' => $subCategoryId,
                 'is_active'       => $data['is_active'] ?? '1',
             ], [
-                'name'            => 'required|string|max:255|unique:items,name',
+                'name'            => 'required|string|max:255',
                 'description'     => 'nullable|string',
                 'priority'        => 'required|in:Low,Medium,High,Urgent',
                 'concern_type'    => 'required|in:Incident,Service Request',
@@ -168,6 +183,18 @@ class ItemController extends Controller implements HasMiddleware
 
             if ($validator->fails()) {
                 $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
+                continue;
+            }
+
+            $concernType = $data['concern_type'] ?? 'Incident';
+            $duplicate = Item::where('name', $data['name'])
+                ->where('concern_type', $concernType)
+                ->where('category_id', $categoryId)
+                ->where('sub_category_id', $subCategoryId)
+                ->exists();
+
+            if ($duplicate) {
+                $errors[] = "Row {$rowNum}: item '{$data['name']}' already exists with the same category, sub-category, and concern type.";
                 continue;
             }
 
