@@ -13,7 +13,7 @@
                 <select
                     :value="perPage"
                     @change="$emit('changePerPage', parseInt($event.target.value))"
-                    class="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    class="border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                 >
                     <option value="10">10</option>
                     <option value="25">25</option>
@@ -24,7 +24,7 @@
             </div>
 
             <!-- Page navigation -->
-            <div class="flex items-center space-x-1 ml-4">
+            <div class="flex items-center space-x-1 ml-8">
                 <!-- Previous button -->
                 <button
                     @click="$emit('goToPage', currentPage - 1)"

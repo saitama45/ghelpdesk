@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Http\Services\RoleService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
@@ -106,6 +107,7 @@ class UserController extends Controller
         $user->save();
 
         $user->syncRoles([$request->role]);
+        Cache::forget('user_permissions_' . $user->id . '_' . ($user->updated_at?->timestamp ?? 0));
 
         // Update stores assignment
         if ($request->has('store_ids')) {

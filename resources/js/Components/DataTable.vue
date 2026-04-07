@@ -76,25 +76,25 @@
                 </div>
 
                 <!-- Pagination Controls -->
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-8">
                     <!-- Per Page Selector -->
                     <div class="flex items-center space-x-2 text-sm">
-                        <span class="text-gray-700">Show</span>
+                        <span class="text-gray-700 font-medium">Show</span>
                         <select
                             :value="perPage"
                             @change="changePerPage(parseInt($event.target.value))"
-                            class="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            class="border border-gray-300 rounded-lg pl-3 pr-10 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-all"
                         >
                             <option value="10">10</option>
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
                         </select>
-                        <span class="text-gray-700 whitespace-nowrap">per page</span>
+                        <span class="text-gray-700 font-medium whitespace-nowrap">per page</span>
                     </div>
 
                     <!-- Page Navigation -->
-                    <div class="flex items-center space-x-1 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-hide">
+                    <div class="flex items-center space-x-2 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-hide">
                         <!-- Previous button -->
                         <button
                             @click="goToPage(currentPage - 1)"

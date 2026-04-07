@@ -15,7 +15,7 @@ class RequestTypeController extends Controller implements HasMiddleware
         return [
             new Middleware('can:request_types.view', only: ['index']),
             new Middleware('can:request_types.create', only: ['store']),
-            new Middleware('can:request_types.edit', only: ['update']),
+            new Middleware('can:request_types.edit', only: ['update', 'updateSchema']),
             new Middleware('can:request_types.delete', only: ['destroy']),
         ];
     }
@@ -84,6 +84,17 @@ class RequestTypeController extends Controller implements HasMiddleware
         ]);
 
         return redirect()->back()->with('success', 'Request Type updated successfully');
+    }
+
+    public function updateSchema(Request $request, RequestType $requestType)
+    {
+        $request->validate([
+            'form_schema' => 'nullable|array',
+        ]);
+
+        $requestType->update(['form_schema' => $request->form_schema]);
+
+        return redirect()->back()->with('success', 'Form schema saved successfully');
     }
 
     public function destroy(RequestType $requestType)

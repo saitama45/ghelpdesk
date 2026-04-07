@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -38,10 +39,16 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $permissions = [];
-        
+
         if ($user) {
-            $user->loadMissing(['roles.permissions', 'permissions']);
-            $permissions = $user->getAllPermissions()->pluck('name')->unique()->values()->toArray();
+            // Cache per-user permission list for 1 hour.
+            // Key includes: user.updated_at (changes when role is reassigned on this user)
+            // and a global permissions_version counter (bumped whenever any role's permissions change).
+            $version = Cache::get('permissions_version', 0);
+            $cacheKey = 'user_permissions_' . $user->id . '_' . ($user->updated_at?->timestamp ?? 0) . '_v' . $version;
+            $permissions = Cache::remember($cacheKey, 3600, function () use ($user) {
+                return $user->getAllPermissions()->pluck('name')->unique()->values()->toArray();
+            });
         }
         
         return array_merge(parent::share($request), [

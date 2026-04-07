@@ -13,10 +13,12 @@ class RequestType extends Model
         'approval_levels',
         'cc_emails',
         'is_active',
+        'form_schema',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'request_for' => 'array',
+        'form_schema' => 'array',
     ];
 }

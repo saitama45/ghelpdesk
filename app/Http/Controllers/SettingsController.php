@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -53,6 +54,8 @@ class SettingsController extends Controller implements HasMiddleware
             
             Setting::set($key, $finalValue, $group);
         }
+
+        Cache::forget('app_mail_settings');
 
         return redirect()->back()->with('success', 'Settings updated successfully.');
     }

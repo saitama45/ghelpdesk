@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
+import FieldBuilderModal from '@/Components/RequestType/FieldBuilderModal.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -101,6 +102,15 @@ const deleteRequestType = async (type) => {
             }
         })
     }
+}
+
+// ── Field Builder ─────────────────────────────────────────────────────────────
+const showFieldBuilder = ref(false)
+const fieldBuilderTarget = ref(null)
+
+const openFieldBuilder = (type) => {
+    fieldBuilderTarget.value = type
+    showFieldBuilder.value = true
 }
 
 const getRequestForBadgeClass = (requestFor) => {
@@ -228,10 +238,24 @@ const toggleSystem = (system) => {
                                     </span>
                                 </td>
                                 <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                                    <div class="flex justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                                        <button 
+                                    <div class="flex justify-end items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                                        <!-- Schema badge -->
+                                        <span v-if="type.form_schema?.fields?.length" class="text-[10px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
+                                            {{ type.form_schema.fields.length }} fields
+                                        </span>
+                                        <button
                                             v-if="hasPermission('request_types.edit')"
-                                            @click="editRequestType(type)" 
+                                            @click="openFieldBuilder(type)"
+                                            class="p-2 text-teal-600 hover:text-white hover:bg-teal-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-teal-200"
+                                            title="Configure Fields"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            v-if="hasPermission('request_types.edit')"
+                                            @click="editRequestType(type)"
                                             class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-indigo-200"
                                             title="Edit"
                                         >
@@ -239,9 +263,9 @@ const toggleSystem = (system) => {
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                             </svg>
                                         </button>
-                                        <button 
+                                        <button
                                             v-if="hasPermission('request_types.delete')"
-                                            @click="deleteRequestType(type)" 
+                                            @click="deleteRequestType(type)"
                                             class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-rose-200"
                                             title="Delete"
                                         >
@@ -257,6 +281,14 @@ const toggleSystem = (system) => {
                 </DataTable>
             </div>
         </div>
+
+        <!-- Field Builder Modal -->
+        <FieldBuilderModal
+            v-if="fieldBuilderTarget"
+            :show="showFieldBuilder"
+            :request-type="fieldBuilderTarget"
+            @close="showFieldBuilder = false"
+        />
 
         <!-- Create/Edit Modal -->
         <transition

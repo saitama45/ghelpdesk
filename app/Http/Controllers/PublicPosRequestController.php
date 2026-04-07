@@ -24,7 +24,7 @@ class PublicPosRequestController extends Controller
             'companies' => Company::where('is_active', true)->get(['id', 'name']),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
-                ->get(['id', 'name', 'approval_levels']),
+                ->get(['id', 'name', 'approval_levels', 'form_schema']),
             'stores' => Store::where('is_active', true)->get(['id', 'code', 'name']),
             'priceTypes' => [
                 'In-Store', 

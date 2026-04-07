@@ -27,7 +27,7 @@ import { Link } from '@inertiajs/vue3';
                     </div>
 
                     <h1 class="text-5xl lg:text-6xl font-black mb-6 tracking-tight leading-[1.1] bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
-                        TGI Service Center
+                        TAS Service Center
                     </h1>
                     <p class="text-lg text-slate-300 leading-relaxed max-w-xl font-medium">
                         Your unified portal for all internal services. Whether it's IT Support, HR requests, Supply Chain Management, Marketing assets, Accounting needs, or Facilities operations—we streamline it all in one place.
@@ -66,7 +66,7 @@ import { Link } from '@inertiajs/vue3';
                     <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-200 mb-6">
                         <ApplicationLogo class="h-8 w-8 text-white" />
                     </div>
-                    <h1 class="text-3xl font-black text-slate-900 tracking-tight">TGI Service Center</h1>
+                    <h1 class="text-3xl font-black text-slate-900 tracking-tight">TAS Service Center</h1>
                 </div>
 
                 <!-- Form Container -->
@@ -77,7 +77,7 @@ import { Link } from '@inertiajs/vue3';
                 <!-- Footer -->
                 <div class="mt-10 text-center">
                     <p class="text-xs font-medium text-slate-500">
-                        &copy; {{ new Date().getFullYear() }} TGI Service Center. All rights reserved.
+                        &copy; {{ new Date().getFullYear() }} TAS Service Center. All rights reserved.
                     </p>
                 </div>
             </div>

@@ -137,25 +137,25 @@ const canSeeSettings = computed(() => {
     <aside
         :class="[
             'bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col h-full shrink-0',
-            isCollapsed ? 'w-20' : 'w-64'
+            isCollapsed ? 'w-20' : 'w-72'
         ]"
     >
         <!-- Sidebar Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
-            <div v-if="!isCollapsed" class="flex items-center space-x-3">
-                <div class="w-10 h-10 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
+        <div class="flex items-center justify-between px-4 border-b border-gray-800 shrink-0 h-16">
+            <div v-if="!isCollapsed" class="flex items-center space-x-3 min-w-0">
+                <div class="w-9 h-9 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
                     <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
                 </div>
-                <span class="text-xl font-semibold leading-none">Helpdesk</span>
+                <span class="text-lg font-bold leading-none whitespace-nowrap text-white">TAS Service Center</span>
             </div>
 
             <button
                 @click="toggleSidebar"
-                class="p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200"
+                class="p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
                 :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
             >
-                <Bars3Icon v-if="isCollapsed" class="w-5 h-5" />
-                <XMarkIcon v-else class="w-5 h-5" />
+                <Bars3Icon v-if="isCollapsed" class="w-5 h-5 text-gray-400 group-hover:text-white" />
+                <XMarkIcon v-else class="w-5 h-5 text-gray-400" />
             </button>
         </div>
 

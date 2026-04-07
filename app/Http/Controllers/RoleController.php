@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use App\Models\Role;
 use Spatie\Permission\Models\Permission;
@@ -86,6 +87,9 @@ class RoleController extends Controller
         $role->save();
         $role->syncPermissions($request->permissions ?? []);
         $role->companies()->sync($request->companies ?? []);
+
+        // Bump the global permissions version so all cached user permission arrays are invalidated
+        Cache::increment('permissions_version');
 
         return redirect()->back()->with('success', 'Role updated successfully');
     }

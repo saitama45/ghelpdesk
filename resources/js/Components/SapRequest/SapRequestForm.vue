@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, markRaw } from 'vue'
 import { useForm } from '@inertiajs/vue3'
+import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 import NewItemRequestForm from './Forms/NewItemRequestForm.vue'
 import NewVendorRequestForm from './Forms/NewVendorRequestForm.vue'
 import StoreCodeRequestForm from './Forms/StoreCodeRequestForm.vue'
@@ -86,9 +87,31 @@ function submit() {
     }
 }
 
-// Forms that use items table (tabular rows)
-const HAS_ITEMS = ['New Item Request', 'New BOM']
-const hasItems = computed(() => selectedRequestType.value && HAS_ITEMS.includes(selectedRequestType.value.name))
+// ── Schema-driven vs hard-coded fallback ──────────────────────────────────────
+const schemaFields = computed(() => selectedRequestType.value?.form_schema?.fields ?? [])
+const schemaItemsColumns = computed(() => selectedRequestType.value?.form_schema?.items_columns ?? [])
+const schemaItemLabel = computed(() => selectedRequestType.value?.form_schema?.item_label ?? 'Row')
+const schemaHasItems = computed(() => !!selectedRequestType.value?.form_schema?.has_items)
+const useSchema = computed(() => schemaFields.value.length > 0)
+
+// Ensure at least one blank row when switching to a schema-based items form
+watch(schemaHasItems, (val) => {
+    if (val && form.items.length === 0) {
+        const blank = {}
+        schemaItemsColumns.value.forEach(c => { blank[c.key] = '' })
+        form.items = [blank]
+    }
+})
+
+// Forms that use items table (tabular rows) — for hard-coded fallback
+const HAS_ITEMS = ['New Item Request', 'New BOM', 'New Item Creation']
+const hasItems = computed(() =>
+    schemaHasItems.value ||
+    (selectedRequestType.value && HAS_ITEMS.includes(selectedRequestType.value.name))
+)
+
+// Whether the form section is ready to show
+const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
 </script>
 
 <template>
@@ -185,13 +208,29 @@ const hasItems = computed(() => selectedRequestType.value && HAS_ITEMS.includes(
             </div>
 
             <!-- Dynamic Form Section -->
-            <div v-if="activeFormComponent" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100">
+            <div v-if="formReady" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100">
                 <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2">
                     <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">{{ isPublic ? '3' : '2' }}</span>
                     {{ selectedRequestType?.name }} Details
                 </h3>
 
+                <!-- Schema-driven renderer -->
+                <DynamicFormRenderer
+                    v-if="useSchema"
+                    :fields="schemaFields"
+                    v-model="form.form_data"
+                    :items="form.items"
+                    :items-columns="schemaItemsColumns"
+                    :item-label="schemaItemLabel"
+                    :has-items="schemaHasItems"
+                    :errors="form.errors"
+                    :context="{ companyName: selectedCompany?.name ?? '' }"
+                    @update:items="val => form.items = val"
+                />
+
+                <!-- Hard-coded fallback for request types without a schema -->
                 <component
+                    v-else-if="activeFormComponent"
                     :is="activeFormComponent"
                     v-model="form.form_data"
                     :items="form.items"
@@ -207,7 +246,7 @@ const hasItems = computed(() => selectedRequestType.value && HAS_ITEMS.includes(
             <!-- Submit -->
             <div class="flex items-center justify-between gap-4">
                 <p class="text-xs text-gray-400 font-medium">Fields marked with <span class="text-rose-500 font-black">*</span> are required.</p>
-                <button type="submit" :disabled="form.processing || !activeFormComponent"
+                <button type="submit" :disabled="form.processing || !formReady"
                     class="px-10 py-4 bg-teal-600 text-white rounded-2xl font-black text-sm uppercase tracking-[0.15em] shadow-2xl shadow-teal-100 hover:bg-teal-700 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-3">
                     <svg v-if="form.processing" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>

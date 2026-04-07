@@ -1,7 +1,8 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { router, useForm, Link } from '@inertiajs/vue3'
 import { useToast } from '@/Composables/useToast'
+import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
 const props = defineProps({
     companies: Array,
@@ -27,7 +28,8 @@ const form = useForm({
     company_id: props.posRequest?.company_id ?? '',
     request_type_id: props.posRequest?.request_type_id ?? '',
     launch_date: props.posRequest?.launch_date ?? '',
-    stores_covered: props.posRequest?.stores_covered ?? [], 
+    stores_covered: props.posRequest?.stores_covered ?? [],
+    form_data: props.posRequest?.form_data ?? {},
     details: props.posRequest?.details ? props.posRequest.details.map(d => ({
         product_name: d.product_name,
         pos_name: d.pos_name,
@@ -134,6 +136,37 @@ const removeRow = (index) => {
 }
 
 const getError = (key) => form.errors[key]
+
+// ── Schema-driven ────────────────────────────────────────────────────────────
+const selectedRequestType = computed(() =>
+    props.requestTypes?.find(rt => rt.id == form.request_type_id)
+)
+// Regular (non-tabular) fields defined in the schema
+const schemaFields = computed(() => selectedRequestType.value?.form_schema?.fields ?? [])
+// Tabular items section
+const schemaHasItems = computed(() => !!selectedRequestType.value?.form_schema?.has_items)
+const schemaItemsColumns = computed(() => selectedRequestType.value?.form_schema?.items_columns ?? [])
+const schemaItemLabel = computed(() => selectedRequestType.value?.form_schema?.item_label ?? 'Item')
+// True when ANY schema content exists for this request type
+const useSchema = computed(() => schemaFields.value.length > 0 || schemaHasItems.value)
+// True when the schema defines a tabular items section
+const useSchemaItems = computed(() => schemaHasItems.value && schemaItemsColumns.value.length > 0)
+
+// Re-initialize detail rows when switching to a schema-driven tabular type
+watch(useSchemaItems, (val) => {
+    if (val && form.details.length === 1) {
+        const blank = {}
+        schemaItemsColumns.value.forEach(c => { blank[c.key] = '' })
+        const existing = form.details[0]
+        const hasData = Object.values(existing).some(v => v !== '' && v !== false && v !== null)
+        if (!hasData) form.details = [blank]
+    }
+})
+
+// Reset form_data when request type changes
+watch(() => form.request_type_id, () => {
+    form.form_data = {}
+})
 
 const submit = () => {
     form.clearErrors()
@@ -288,8 +321,31 @@ const submit = () => {
             </div>
         </div>
 
-        <!-- Details Card -->
-        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+        <!-- Details Card — Schema-driven -->
+        <div v-if="useSchema" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+            <div class="flex items-center mb-8">
+                <span class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center mr-4 shadow-lg shadow-emerald-200">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                </span>
+                <div>
+                    <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ selectedRequestType?.name }} Details</h2>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Dynamic fields configured by admin</p>
+                </div>
+            </div>
+            <DynamicFormRenderer
+                :fields="schemaFields"
+                v-model="form.form_data"
+                :items="form.details"
+                :items-columns="schemaItemsColumns"
+                :item-label="schemaItemLabel"
+                :has-items="schemaHasItems"
+                :errors="form.errors"
+                @update:items="val => form.details = val"
+            />
+        </div>
+
+        <!-- Details Card — Hard-coded fallback (shown when no schema is defined) -->
+        <div v-else class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
             <div class="flex items-center justify-between mb-10">
                 <div class="flex items-center">
                     <span class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center mr-4 shadow-lg shadow-emerald-200">
@@ -460,7 +516,7 @@ const submit = () => {
                     Click to append another record
                 </button>
             </div>
-        </div>
+        </div><!-- end v-else hard-coded Details Card -->
 
         <!-- Actions -->
         <div class="flex justify-end items-center space-x-8 pb-12">

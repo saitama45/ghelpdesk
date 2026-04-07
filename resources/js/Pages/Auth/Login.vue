@@ -37,7 +37,7 @@ const submit = () => {
 
 <template>
     <GuestLayout>
-        <Head title="Login - TGI Service Center" />
+        <Head title="Login - TAS Service Center" />
 
         <!-- Status Message -->
         <div v-if="status" class="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center">
