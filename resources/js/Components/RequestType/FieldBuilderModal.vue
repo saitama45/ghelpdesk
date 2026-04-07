@@ -22,6 +22,11 @@ const schema = reactive({
     items_columns: [],
 })
 
+const editingField = ref(null)
+const editingIndex = ref(null)
+const editingItemCol = ref(null)
+const editingItemColIndex = ref(null)
+
 // Seed from existing schema when modal opens
 watch(() => props.show, (val) => {
     if (!val) return
@@ -33,7 +38,7 @@ watch(() => props.show, (val) => {
     editingField.value = null
     editingItemCol.value = null
     activeTab.value = 'fields'
-})
+}, { immediate: true })
 
 // ── Field editing ─────────────────────────────────────────────────────────────
 const FIELD_TYPES = [
@@ -65,9 +70,6 @@ const blankField = () => ({
     _conditionField: '',
     _conditionValue: '',
 })
-
-const editingField = ref(null)
-const editingIndex = ref(null)
 
 const openAddField = () => {
     editingField.value = blankField()
@@ -134,12 +136,9 @@ const addOption = () => editingField.value.options.push({ label: '', value: '' }
 const removeOption = (i) => editingField.value.options.splice(i, 1)
 
 // ── Items columns ─────────────────────────────────────────────────────────────
-const ITEM_COL_TYPES = ['text', 'number', 'email', 'date', 'select', 'toggle']
+const ITEM_COL_TYPES = FIELD_TYPES.map(t => t.value)
 
 const blankItemCol = () => ({ key: '', label: '', type: 'text', required: false, options: [] })
-const editingItemCol = ref(null)
-const editingItemColIndex = ref(null)
-
 const openAddItemCol = () => {
     editingItemCol.value = blankItemCol()
     editingItemColIndex.value = null
@@ -315,7 +314,7 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                                     <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">Options</label>
                                     <div class="space-y-1.5">
                                         <div v-for="(opt, oi) in editingField.options" :key="oi" class="flex gap-2 items-center">
-                                            <input v-model="opt.label" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
+                                            <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
                                             <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-indigo-500 focus:border-indigo-500" />
                                             <button @click="removeOption(oi)" class="text-rose-400 hover:text-rose-600 p-1">
                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -389,7 +388,7 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                                             <div class="flex-1 min-w-0">
                                                 <span class="text-sm font-bold text-gray-900">{{ col.label }}</span>
                                                 <span class="ml-2 text-[10px] font-mono bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{{ col.key }}</span>
-                                                <span class="ml-1 text-[10px] bg-teal-50 text-teal-700 font-bold rounded px-1.5 py-0.5 border border-teal-100">{{ col.type }}</span>
+                                                <span class="ml-1 text-[10px] bg-teal-50 text-teal-700 font-bold rounded px-1.5 py-0.5 border border-teal-100">{{ typeLabel(col.type) }}</span>
                                                 <span v-if="col.required" class="ml-1 text-[10px] bg-red-50 text-red-600 font-bold rounded px-1.5 py-0.5 border border-red-100">Required</span>
                                             </div>
                                             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -428,16 +427,16 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                                         <div class="flex flex-wrap gap-1.5">
                                             <button v-for="t in ITEM_COL_TYPES" :key="t" type="button" @click="editingItemCol.type = t"
                                                 :class="['px-3 py-1.5 rounded-xl text-xs font-bold transition-colors', editingItemCol.type === t ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-300']">
-                                                {{ t }}
+                                                {{ typeLabel(t) }}
                                             </button>
                                         </div>
                                     </div>
-                                    <!-- Options for select type -->
-                                    <div v-if="editingItemCol.type === 'select'">
+                                    <!-- Options for select, radio, or checkbox_group type -->
+                                    <div v-if="HAS_OPTIONS.includes(editingItemCol.type)">
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">Options</label>
                                         <div class="space-y-1.5">
                                             <div v-for="(opt, oi) in editingItemCol.options" :key="oi" class="flex gap-2 items-center">
-                                                <input v-model="opt.label" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white" />
+                                                <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white" />
                                                 <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white" />
                                                 <button @click="editingItemCol.options.splice(oi, 1)" class="text-rose-400 hover:text-rose-600 p-1">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>

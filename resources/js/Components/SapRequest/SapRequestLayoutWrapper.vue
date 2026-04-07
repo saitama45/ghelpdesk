@@ -7,6 +7,7 @@ const props = defineProps({
     isPublic: { type: Boolean, default: false },
     isEdit: { type: Boolean, default: false },
     sapRequestId: { type: [String, Number], default: null },
+    wide: { type: Boolean, default: true },
 })
 
 const page = usePage()
@@ -15,7 +16,7 @@ const flash = computed(() => page.props.flash ?? {})
 
 <template>
     <div :class="isPublic ? 'bg-gradient-to-br from-teal-50 via-white to-emerald-50' : 'bg-gray-50'" class="min-h-screen py-10 px-4 sm:px-6 lg:px-8">
-        <div class="max-w-4xl mx-auto">
+        <div :class="wide ? 'max-w-7xl' : 'max-w-4xl'" class="mx-auto">
             
             <!-- Private Header (with Back Link) -->
             <div v-if="!isPublic" class="flex items-center gap-4 mb-8">

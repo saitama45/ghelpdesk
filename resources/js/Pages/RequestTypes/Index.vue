@@ -287,7 +287,7 @@ const toggleSystem = (system) => {
             v-if="fieldBuilderTarget"
             :show="showFieldBuilder"
             :request-type="fieldBuilderTarget"
-            @close="showFieldBuilder = false"
+            @close="showFieldBuilder = false; fieldBuilderTarget = null"
         />
 
         <!-- Create/Edit Modal -->
