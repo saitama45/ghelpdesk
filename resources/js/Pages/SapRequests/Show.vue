@@ -1,25 +1,47 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, useForm, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
+import { useConfirm } from '@/Composables/useConfirm'
+import { useToast } from '@/Composables/useToast'
 
 const props = defineProps({ sapRequest: Object })
 
+const page = usePage()
 const { hasPermission } = usePermission()
+const { confirm } = useConfirm()
+const { showSuccess, showError } = useToast()
 const approvalForm = useForm({ remarks: '' })
 
-function submitApproval() {
-    approvalForm.post(route('sap-requests.approve', props.sapRequest.id), {
-        onSuccess: () => approvalForm.reset(),
+const authUserId = computed(() => page.props.auth.user.id)
+
+async function submitApproval() {
+    const confirmed = await confirm({
+        title: 'Confirm Approval',
+        message: `Are you sure you want to approve Stage ${props.sapRequest.current_approval_level} for this SAP request?`,
+        confirmLabel: 'Approve Request',
+        variant: 'success'
     })
+
+    if (confirmed) {
+        approvalForm.post(route('sap-requests.approve', props.sapRequest.id), {
+            onSuccess: () => {
+                approvalForm.reset()
+            },
+            onError: () => showError('Approval failed')
+        })
+    }
 }
 
 const canApprove = computed(() => {
     const s = props.sapRequest.status ?? ''
+    const alreadyApproved = (props.sapRequest.approvals ?? []).some(a => Number(a.user_id) === Number(authUserId.value))
+
     return (s === 'Open' || s.startsWith('Approved Level')) &&
         hasPermission('sap_requests.approve') &&
-        props.sapRequest.current_approval_level > 0
+        props.sapRequest.current_approval_level > 0 &&
+        !alreadyApproved
 })
 
 const totalLevels = computed(() => Number(props.sapRequest.request_type?.approval_levels ?? 0))

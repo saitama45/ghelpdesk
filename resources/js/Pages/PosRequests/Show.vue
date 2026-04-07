@@ -1,35 +1,52 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Link, useForm } from '@inertiajs/vue3'
+import { Link, useForm, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useToast } from '@/Composables/useToast'
 import { usePermission } from '@/Composables/usePermission'
+import { useConfirm } from '@/Composables/useConfirm'
 
 const props = defineProps({
     posRequest: Object
 })
 
+const page = usePage()
 const { showSuccess, showError } = useToast()
 const { hasPermission } = usePermission()
+const { confirm } = useConfirm()
+
+const authUserId = computed(() => page.props.auth.user.id)
 
 const approvalForm = useForm({
     remarks: ''
 })
 
-const submitApproval = () => {
-    approvalForm.post(route('pos-requests.approve', props.posRequest.id), {
-        onSuccess: () => {
-            approvalForm.reset()
-        },
-        onError: () => showError('Approval failed')
+const submitApproval = async () => {
+    const confirmed = await confirm({
+        title: 'Confirm Approval',
+        message: `Are you sure you want to approve Stage ${props.posRequest.current_approval_level} for this request?`,
+        confirmLabel: 'Approve Request',
+        variant: 'success'
     })
+
+    if (confirmed) {
+        approvalForm.post(route('pos-requests.approve', props.posRequest.id), {
+            onSuccess: () => {
+                approvalForm.reset()
+            },
+            onError: () => showError('Approval failed')
+        })
+    }
 }
 
 const canApprove = computed(() => {
     const status = props.posRequest.status || ''
+    const alreadyApproved = props.posRequest.approvals?.some(a => Number(a.user_id) === Number(authUserId.value))
+
     return (status === 'Open' || status.startsWith('Approved Level')) && 
            hasPermission('pos_requests.approve') &&
-           props.posRequest.current_approval_level > 0;
+           props.posRequest.current_approval_level > 0 &&
+           !alreadyApproved;
 })
 
 const getStatusBadgeClass = (status) => {
