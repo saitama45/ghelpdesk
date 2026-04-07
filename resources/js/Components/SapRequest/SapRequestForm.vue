@@ -92,7 +92,7 @@ const schemaFields = computed(() => selectedRequestType.value?.form_schema?.fiel
 const schemaItemsColumns = computed(() => selectedRequestType.value?.form_schema?.items_columns ?? [])
 const schemaItemLabel = computed(() => selectedRequestType.value?.form_schema?.item_label ?? 'Row')
 const schemaHasItems = computed(() => !!selectedRequestType.value?.form_schema?.has_items)
-const useSchema = computed(() => schemaFields.value.length > 0)
+const useSchema = computed(() => schemaFields.value.length > 0 || schemaHasItems.value)
 
 // Ensure at least one blank row when switching to a schema-based items form
 watch(schemaHasItems, (val) => {
@@ -110,7 +110,7 @@ const hasItems = computed(() =>
     (selectedRequestType.value && HAS_ITEMS.includes(selectedRequestType.value.name))
 )
 
-// Whether the form section is ready to show
+// Whether the form section is ready to show (schema takes priority; fallback to hard-coded map)
 const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
 </script>
 
