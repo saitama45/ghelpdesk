@@ -22,10 +22,27 @@ const approverFields = computed(() => props.posRequest.request_type?.form_schema
 
 const approvalForm = useForm({
     remarks: '',
-    approver_data: {}
+    approver_data: { ... (props.posRequest.approver_data ?? {}) }
 })
 
+const validateApproverFields = () => {
+    if (!approverFields.value.length) return true;
+    
+    for (const field of approverFields.value) {
+        if (field.required && field.type !== 'toggle') {
+            const val = approvalForm.approver_data[field.key];
+            if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                showError(`${field.label} is required.`);
+                return false;
+            }
+        }
+    }
+    return true;
+};
+
 const submitApproval = async () => {
+    if (!validateApproverFields()) return;
+
     const confirmed = await confirm({
         title: 'Confirm Approval',
         message: `Are you sure you want to approve Stage ${props.posRequest.current_approval_level} for this request?`,
