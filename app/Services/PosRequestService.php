@@ -124,7 +124,10 @@ class PosRequestService
             ? 'All Stores' 
             : implode(', ', $posRequest->stores_covered);
 
-        $subject = "POS Request - {$posRequest->requestType->name} to {$storeCodes}";
+        $requestType = $posRequest->requestType;
+        $schema = $requestType->form_schema;
+
+        $subject = "POS Request - {$requestType->name} to {$storeCodes}";
         $detailsContent = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
         $detailsContent .= "   📋 LINE ITEM DETAILS\n";
         $detailsContent .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
@@ -133,11 +136,14 @@ class PosRequestService
             $num = $index + 1;
             $mealStatus = ($detail->mgr_meal === 'Yes' || $detail->mgr_meal === true || $detail->mgr_meal == 1) ? 'YES' : 'NO';
 
+            $priceTypeLabel = $this->getLabelFromSchema($schema, 'price_type', $detail->price_type);
+            $categoryLabel = $this->getLabelFromSchema($schema, 'category', $detail->category);
+
             $detailsContent .= "【 PRODUCT #{$num} 】\n";
             $detailsContent .= " • Name: {$detail->product_name}\n";
             $detailsContent .= " • POS Alias: {$detail->pos_name}\n";
-            $detailsContent .= " • Pricing: {$detail->price_type} (₱" . number_format($detail->price_amount, 2) . ")\n";
-            $detailsContent .= " • Classification: " . ($detail->category ?? 'N/A') . " ➔ " . ($detail->sub_category ?? 'N/A') . "\n";
+            $detailsContent .= " • Pricing: {$priceTypeLabel} (₱" . number_format($detail->price_amount, 2) . ")\n";
+            $detailsContent .= " • Classification: {$categoryLabel} ➔ " . ($detail->sub_category ?? 'N/A') . "\n";
             $detailsContent .= " • SKU/Code: " . ($detail->item_code ?? 'N/A') . " | Printer: " . ($detail->printer ?? 'N/A') . "\n";
             $detailsContent .= " • Validity: " . ($detail->validity_date ? $detail->validity_date->format('Y-m-d') : 'ASAP') . "\n";
 
@@ -183,5 +189,25 @@ class PosRequestService
                 // Logic to send email notifications would go here
             }
         }
+    }
+
+    private function getLabelFromSchema($schema, $key, $value): string
+    {
+        if (!$schema) return (string)$value;
+
+        // For POS requests, details are in items_columns
+        $fields = $schema['items_columns'] ?? [];
+        $field = collect($fields)->firstWhere('key', $key);
+
+        if ($field && isset($field['options']) && !empty($field['options'])) {
+            $options = collect($field['options']);
+            if (is_array($value)) {
+                return $options->whereIn('value', $value)->pluck('label')->implode(', ');
+            }
+            $option = $options->firstWhere('value', $value);
+            return $option ? $option['label'] : (string)$value;
+        }
+
+        return is_array($value) ? implode(', ', $value) : (string)$value;
     }
 }

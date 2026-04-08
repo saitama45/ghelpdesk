@@ -71,6 +71,28 @@ const formData = computed(() => {
     return data
 })
 const items = computed(() => props.sapRequest.items ?? [])
+
+const getLabel = (key, value, isItem = false) => {
+    const schema = props.sapRequest.request_type?.form_schema;
+    if (!schema) return value;
+
+    const fields = isItem ? (schema.items_columns || []) : (schema.fields || []);
+    const field = fields.find(f => f.key === key);
+
+    if (field && field.options && field.options.length > 0) {
+        if (Array.isArray(value)) {
+            return value.map(v => {
+                const opt = field.options.find(o => String(o.value) === String(v));
+                return opt ? opt.label : v;
+            }).join(', ');
+        }
+        const opt = field.options.find(o => String(o.value) === String(value));
+        return opt ? opt.label : value;
+    }
+
+    if (Array.isArray(value)) return value.join(', ');
+    return value ?? '—';
+};
 </script>
 
 <template>
@@ -118,14 +140,14 @@ const items = computed(() => props.sapRequest.items ?? [])
                                 </div>
                                 <div v-if="sapRequest.ticket">
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Linked Ticket</label>
-                                    <Link :href="route('tickets.show', sapRequest.ticket.id)" class="text-sm font-black text-teal-600 hover:text-teal-800 font-mono">
+                                    <Link :href="route('tickets.edit', sapRequest.ticket.id)" class="text-sm font-black text-teal-600 hover:text-teal-800 font-mono">
                                         {{ sapRequest.ticket.ticket_key }}
                                     </Link>
                                 </div>
                                 <div v-if="hasPermission('sap_requests.edit') && sapRequest.status === 'Open'">
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Actions</label>
                                     <Link :href="route('sap-requests.edit', sapRequest.id)" class="inline-flex items-center text-xs font-black text-amber-600 hover:text-amber-800">
-                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 Stein 2.5 0 113.536 3.536L12 14.036H3v-3.572L16.732 3.732z"/></svg>
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2.5 0 113.536 3.536L12 14.036H3v-3.572L16.732 3.732z"/></svg>
                                         Edit Request
                                     </Link>
                                 </div>
@@ -141,8 +163,7 @@ const items = computed(() => props.sapRequest.items ?? [])
                                         {{ String(key).replace(/_/g, ' ') }}
                                     </dt>
                                     <dd class="text-sm font-semibold text-gray-900 text-right w-2/3">
-                                        <template v-if="Array.isArray(value)">{{ value.join(', ') }}</template>
-                                        <template v-else>{{ value ?? '—' }}</template>
+                                        {{ getLabel(key, value) }}
                                     </dd>
                                 </div>
                             </dl>
@@ -158,8 +179,7 @@ const items = computed(() => props.sapRequest.items ?? [])
                                         <div v-for="(val, k) in item.item_data" :key="k">
                                             <dt class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{{ String(k).replace(/_/g, ' ') }}</dt>
                                             <dd class="text-sm font-semibold text-gray-900">
-                                                <template v-if="Array.isArray(val)">{{ val.join(', ') }}</template>
-                                                <template v-else>{{ val ?? '—' }}</template>
+                                                {{ getLabel(k, val, true) }}
                                             </dd>
                                         </div>
                                     </dl>

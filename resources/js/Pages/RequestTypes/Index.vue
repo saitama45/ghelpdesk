@@ -240,9 +240,14 @@ const toggleSystem = (system) => {
                                 <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
                                     <div class="flex justify-end items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
                                         <!-- Schema badge -->
-                                        <span v-if="type.form_schema?.fields?.length" class="text-[10px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">
-                                            {{ type.form_schema.fields.length }} fields
-                                        </span>
+                                        <div class="flex flex-col items-end space-y-1">
+                                            <span v-if="type.form_schema?.fields?.length" class="text-[9px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                                {{ type.form_schema.fields.length }} fields
+                                            </span>
+                                            <span v-if="type.form_schema?.has_items && type.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                                {{ type.form_schema.items_columns.length }} line item cols
+                                            </span>
+                                        </div>
                                         <button
                                             v-if="hasPermission('request_types.edit')"
                                             @click="openFieldBuilder(type)"

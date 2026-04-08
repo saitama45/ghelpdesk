@@ -113,10 +113,13 @@ class SapRequestService
         $nextNumber = ($maxNumber ?? 0) + 1;
         $ticketKey  = "{$companyCode}-{$nextNumber}";
 
-        $requestTypeName = $sapRequest->requestType->name;
+        $requestType = $sapRequest->requestType;
+        $requestTypeName = $requestType->name;
         $subject = "SAP Request - {$requestTypeName}";
 
         $formData = $sapRequest->form_data ?? [];
+        $schema = $requestType->form_schema;
+
         $description = "🆔 SAP Request: #{$sapRequest->id}\n" .
             "📋 Type: {$requestTypeName}\n" .
             "👤 Requester: " . ($sapRequest->user ? $sapRequest->user->name : ($sapRequest->requester_name ?? 'N/A')) .
@@ -127,11 +130,9 @@ class SapRequestService
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
 
         foreach ($formData as $key => $value) {
-            if (is_array($value)) {
-                $value = implode(', ', $value);
-            }
             $label = ucwords(str_replace('_', ' ', $key));
-            $description .= " • {$label}: {$value}\n";
+            $displayValue = $this->getLabelFromSchema($schema, $key, $value, false);
+            $description .= " • {$label}: {$displayValue}\n";
         }
 
         if ($sapRequest->items->isNotEmpty()) {
@@ -141,11 +142,9 @@ class SapRequestService
             foreach ($sapRequest->items as $index => $item) {
                 $description .= "【 ITEM #" . ($index + 1) . " 】\n";
                 foreach ($item->item_data as $key => $value) {
-                    if (is_array($value)) {
-                        $value = implode(', ', $value);
-                    }
                     $label = ucwords(str_replace('_', ' ', $key));
-                    $description .= " • {$label}: {$value}\n";
+                    $displayValue = $this->getLabelFromSchema($schema, $key, $value, true);
+                    $description .= " • {$label}: {$displayValue}\n";
                 }
                 $description .= "────────────────────────────────────────\n";
             }
@@ -167,5 +166,24 @@ class SapRequestService
         ]);
 
         $sapRequest->update(['ticket_id' => $ticket->id]);
+    }
+
+    private function getLabelFromSchema($schema, $key, $value, $isItem = false): string
+    {
+        if (!$schema) return is_array($value) ? implode(', ', $value) : (string)$value;
+
+        $fields = $isItem ? ($schema['items_columns'] ?? []) : ($schema['fields'] ?? []);
+        $field = collect($fields)->firstWhere('key', $key);
+
+        if ($field && isset($field['options']) && !empty($field['options'])) {
+            $options = collect($field['options']);
+            if (is_array($value)) {
+                return $options->whereIn('value', $value)->pluck('label')->implode(', ');
+            }
+            $option = $options->firstWhere('value', $value);
+            return $option ? $option['label'] : (string)$value;
+        }
+
+        return is_array($value) ? implode(', ', $value) : (string)$value;
     }
 }

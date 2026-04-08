@@ -28,11 +28,25 @@ class DashboardController extends Controller
         $user = Auth::user();
         $year = $request->input('year');
         $month = $request->input('month');
+        $subUnitFilter = $request->input('sub_unit', 'all');
+        $userIdFilter = $request->input('user_id', 'all');
+        $storeIdFilter = $request->input('store_id', 'all');
 
-        // Store Health Data (Current)
+        // Store Health Data
         $storeHealth = $this->reportService->getStoreHealthData([
-            'as_of_date' => Carbon::now()->format('Y-m-d')
+            'as_of_date' => Carbon::now()->format('Y-m-d'),
+            'sub_unit' => $subUnitFilter,
+            'user_id' => $userIdFilter,
+            'store_id' => $storeIdFilter,
         ]);
+
+        // Dropdown Data for Filters
+        $allUsers = \App\Models\User::active()->whereHas('roles', function($q) {
+            $q->where('is_assignable', true);
+        })->select('id', 'name')->get();
+
+        $allStores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
+        $subUnits = \App\Models\User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
         
         // Define base query based on role
         $query = Ticket::query();
@@ -299,9 +313,15 @@ class DashboardController extends Controller
             'newTicketsList' => $newTicketsList,
             'closedTicketsList' => $closedTicketsList,
             'recentActivity' => $activities,
+            'users' => $allUsers,
+            'stores' => $allStores,
+            'subUnits' => $subUnits,
             'filters' => [
                 'year' => (int)$year ?: null,
                 'month' => (int)$month ?: null,
+                'sub_unit' => $subUnitFilter,
+                'user_id' => $userIdFilter,
+                'store_id' => $storeIdFilter,
             ],
             'years' => $years,
             'months' => $months,

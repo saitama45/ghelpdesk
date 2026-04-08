@@ -68,6 +68,32 @@ const getApprovalForLevel = (lvl) => {
     return props.posRequest.approvals.find(a => Number(a.level) === Number(lvl))
 }
 
+const getLabel = (key, value) => {
+    const schema = props.posRequest.request_type?.form_schema;
+    if (!schema) return value;
+
+    // For POS requests, details are in items_columns
+    const field = (schema.items_columns || []).find(f => f.key === key);
+
+    if (field && field.options && field.options.length > 0) {
+        if (Array.isArray(value)) {
+            return value.map(v => {
+                const opt = field.options.find(o => String(o.value) === String(v));
+                return opt ? opt.label : v;
+            }).join(', ');
+        }
+        const opt = field.options.find(o => String(o.value) === String(value));
+        return opt ? opt.label : value;
+    }
+
+    if (key === 'mgr_meal') {
+        return (value === 'Yes' || value === true || value == 1) ? 'Yes' : 'No';
+    }
+
+    if (Array.isArray(value)) return value.join(', ');
+    return value ?? '—';
+};
+
 const formatDateTime = (dateStr) => {
     if (!dateStr) return ''
     try {
@@ -172,12 +198,14 @@ const formatDateTime = (dateStr) => {
                                             </td>
                                             <td class="px-6 py-5 font-bold text-gray-700">{{ item.pos_name }}</td>
                                             <td class="px-6 py-5 text-center">
-                                                <span class="px-3 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black uppercase text-gray-600 shadow-sm">{{ item.price_type }}</span>
+                                                <span class="px-3 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black uppercase text-gray-600 shadow-sm">
+                                                    {{ getLabel('price_type', item.price_type) }}
+                                                </span>
                                             </td>
                                             <td class="px-6 py-5 text-center font-black text-indigo-600">
                                                 {{ item.price_amount ? Number(item.price_amount).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-' }}
                                             </td>
-                                            <td class="px-6 py-5 font-bold text-gray-700">{{ item.category }}</td>
+                                            <td class="px-6 py-5 font-bold text-gray-700">{{ getLabel('category', item.category) }}</td>
                                             <td class="px-6 py-5 font-mono text-xs font-black bg-white/50 rounded-lg">{{ item.item_code }}</td>
                                             <td class="px-6 py-5">
                                                 <div class="text-[11px] text-gray-600 font-medium max-w-[200px] truncate" :title="item.remarks_mechanics">
@@ -186,7 +214,7 @@ const formatDateTime = (dateStr) => {
                                             </td>
                                             <td class="px-6 py-5 text-center font-bold text-gray-600">{{ item.sc || '-' }}</td>
                                             <td class="px-6 py-5 text-center font-bold text-gray-600">{{ item.local_tax || '-' }}</td>
-                                            <td class="px-6 py-5 text-center font-bold text-gray-600">{{ item.mgr_meal || '-' }}</td>
+                                            <td class="px-6 py-5 text-center font-bold text-gray-600">{{ getLabel('mgr_meal', item.mgr_meal) }}</td>
                                             <td class="px-6 py-5 text-center rounded-r-2xl font-bold text-gray-500">{{ item.printer }}</td>
                                         </tr>
                                     </tbody>

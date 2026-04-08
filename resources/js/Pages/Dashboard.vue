@@ -22,6 +22,9 @@ const props = defineProps({
     filters: Object,
     years: Array,
     months: Array,
+    users: Array,
+    stores: Array,
+    subUnits: Array,
 });
 
 const { hasPermission } = usePermission();
@@ -39,12 +42,18 @@ const user = computed(() => page.props.auth?.user || {});
 const filterForm = reactive({
     year: props.filters.year || '',
     month: props.filters.month || '',
+    sub_unit: props.filters.sub_unit || 'all',
+    user_id: props.filters.user_id || 'all',
+    store_id: props.filters.store_id || 'all',
 });
 
 const applyFilters = () => {
     router.get(route('dashboard'), {
         year: filterForm.year,
         month: filterForm.month,
+        sub_unit: filterForm.sub_unit,
+        user_id: filterForm.user_id,
+        store_id: filterForm.store_id,
     }, {
         preserveState: true,
         preserveScroll: true,
@@ -55,10 +64,13 @@ const applyFilters = () => {
 const clearFilters = () => {
     filterForm.year = '';
     filterForm.month = '';
+    filterForm.sub_unit = 'all';
+    filterForm.user_id = 'all';
+    filterForm.store_id = 'all';
     applyFilters();
 };
 
-watch(() => [filterForm.year, filterForm.month], () => {
+watch(() => [filterForm.year, filterForm.month, filterForm.sub_unit, filterForm.user_id, filterForm.store_id], () => {
     applyFilters();
 });
 
@@ -139,18 +151,47 @@ const exportToExcel = (type) => {
 
         <!-- Store Health Section -->
         <div v-if="hasPermission('reports.store_health')" class="mb-8">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                     Live Store Health
                 </h3>
                 <Link :href="route('reports.store-health')" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider">Full Report &rarr;</Link>
             </div>
+
+            <!-- Health Filters -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
+                        <select v-model="filterForm.sub_unit" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                            <option value="all">All Sub-Units</option>
+                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">User</label>
+                        <select v-model="filterForm.user_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                            <option value="all">All Users</option>
+                            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                        <select v-model="filterForm.store_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                            <option value="all">All Stores</option>
+                            <option v-for="s in stores" :key="s.id" :value="s.id">[{{ s.code }}] {{ s.name }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             <StoreHealthReport 
                 :report-data="storeHealth.reportData"
                 :summary="storeHealth.summary"
                 :thresholds="storeHealth.thresholds"
                 :show-filters="false"
+                :filters="filters"
             />
         </div>
 
