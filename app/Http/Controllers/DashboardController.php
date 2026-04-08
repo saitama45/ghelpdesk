@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\StoreReportService;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHistory;
@@ -15,11 +16,23 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class DashboardController extends Controller
 {
+    protected $reportService;
+
+    public function __construct(StoreReportService $reportService)
+    {
+        $this->reportService = $reportService;
+    }
+
     public function index(Request $request)
     {
         $user = Auth::user();
         $year = $request->input('year');
         $month = $request->input('month');
+
+        // Store Health Data (Current)
+        $storeHealth = $this->reportService->getStoreHealthData([
+            'as_of_date' => Carbon::now()->format('Y-m-d')
+        ]);
         
         // Define base query based on role
         $query = Ticket::query();
@@ -275,6 +288,7 @@ class DashboardController extends Controller
         ];
 
         return Inertia::render('Dashboard', [
+            'storeHealth' => $storeHealth,
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'myTickets' => $myTickets,

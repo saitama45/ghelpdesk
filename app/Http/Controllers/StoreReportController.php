@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\StoreReportService;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Setting;
@@ -16,6 +17,13 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class StoreReportController extends Controller implements HasMiddleware
 {
+    protected $reportService;
+
+    public function __construct(StoreReportService $reportService)
+    {
+        $this->reportService = $reportService;
+    }
+
     public static function middleware(): array
     {
         return [
@@ -25,61 +33,14 @@ class StoreReportController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $userId = $request->input('user_id');
-        $storeId = $request->input('store_id');
-        $subUnit = $request->input('sub_unit');
-        $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
+        $filters = [
+            'user_id' => $request->input('user_id'),
+            'store_id' => $request->input('store_id'),
+            'sub_unit' => $request->input('sub_unit'),
+            'as_of_date' => $request->input('as_of_date', Carbon::now()->format('Y-m-d')),
+        ];
 
-        // Query active tickets that have an assignee
-        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
-            ->whereNotNull('assignee_id');
-
-        if ($asOfDate) {
-            $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
-        }
-
-        if ($storeId && $storeId !== 'all') {
-            $ticketsQuery->where('store_id', $storeId);
-        }
-
-        if ($subUnit && $subUnit !== 'all') {
-            $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
-                $q->where('sub_unit', $subUnit);
-            });
-        }
-
-        // Apply user filter to report data
-        $displayTicketsQuery = clone $ticketsQuery;
-        if ($userId && $userId !== 'all') {
-            $displayTicketsQuery->where('assignee_id', $userId);
-        }
-
-        $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])->get();
-
-        $usersData = $activeTickets->groupBy('assignee_id')->map(function ($tickets, $assigneeId) {
-            $assignee = $tickets->first()->assignee;
-            $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
-                $store = $storeTickets->first()->store;
-                if (!$store) return null;
-                return [
-                    'id' => $store->id,
-                    'code' => $store->code,
-                    'name' => $store->name,
-                    'sector' => $store->sector,
-                    'area' => $store->area,
-                    'ticket_count' => $storeTickets->count(),
-                ];
-            })->filter()->values();
-
-            return [
-                'id' => $assigneeId,
-                'name' => $assignee?->name ?? 'Unknown',
-                'sub_unit' => $assignee?->sub_unit,
-                'stores' => $stores,
-            ];
-        })->filter(function($u) {
-            return count($u['stores']) > 0;
-        })->values();
+        $data = $this->reportService->getStoreHealthData($filters);
 
         $allUsers = User::active()->whereHas('roles', function($q) {
             $q->where('is_assignable', true);
@@ -88,217 +49,53 @@ class StoreReportController extends Controller implements HasMiddleware
         $allStores = Store::where('is_active', true)->orderBy('name')->get();
         $subUnits = User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
 
-        // Thresholds logic
-        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
-        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
-
-        // Calculate Summary for North/South Areas (Sectors 1-8)
-        $summary = [
-            'north' => [],
-            'south' => []
-        ];
-
-        // For summary, we need ALL active tickets regardless of user filter
-        $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
-
-        for ($i = 1; $i <= 8; $i++) {
-            $sectorStores = $allStores->where('sector', $i);
-            $maxTickets = 0;
-            $sectorUserNames = [];
-
-            foreach ($sectorStores as $store) {
-                $storeTickets = $summaryTickets->where('store_id', $store->id);
-                $count = $storeTickets->count();
-                $maxTickets = max($maxTickets, $count);
-                
-                if ($count > 0) {
-                    $assigneeNames = $storeTickets->pluck('assignee.name')->filter()->unique()->toArray();
-                    foreach ($assigneeNames as $name) {
-                        $sectorUserNames[] = $name;
-                    }
-                }
-            }
-
-            $sectorData = [
-                'sector' => $i,
-                'user' => empty($sectorUserNames) ? 'Unassigned' : implode(', ', array_unique($sectorUserNames)),
-                'max_tickets' => $maxTickets
-            ];
-
-            if ($i <= 4) {
-                $summary['north'][] = $sectorData;
-            } else {
-                $summary['south'][] = $sectorData;
-            }
-        }
-
         return Inertia::render('Reports/StoreHealth', [
-            'reportData' => $usersData,
-            'summary' => $summary,
+            'reportData' => $data['reportData'],
+            'summary' => $data['summary'],
             'users' => $allUsers,
             'stores' => $allStores,
             'subUnits' => $subUnits,
-            'thresholds' => $thresholds,
+            'thresholds' => $data['thresholds'],
             'filters' => [
-                'user_id' => $userId ?? 'all',
-                'store_id' => $storeId ?? 'all',
-                'sub_unit' => $subUnit ?? 'all',
-                'as_of_date' => $asOfDate,
+                'user_id' => $filters['user_id'] ?? 'all',
+                'store_id' => $filters['store_id'] ?? 'all',
+                'sub_unit' => $filters['sub_unit'] ?? 'all',
+                'as_of_date' => $filters['as_of_date'],
             ]
         ]);
     }
 
-    private function getThresholdsForSubUnit($subUnit, $allThresholds)
-    {
-        $colors = ['green', 'yellow', 'orange', 'red'];
-        $suffixes = ['min', 'max', 'label'];
-        $thresholds = [];
-
-        $subUnitSlug = null;
-        if ($subUnit && $subUnit !== 'all') {
-            // Match Settings/Index.vue slugify function exactly
-            $subUnitSlug = strtolower((string)$subUnit);
-            $subUnitSlug = preg_replace('/\s+/', '_', $subUnitSlug);
-            $subUnitSlug = preg_replace('/[^\w-]+/', '', $subUnitSlug);
-            $subUnitSlug = preg_replace('/--+/', '_', $subUnitSlug);
-            $subUnitSlug = trim($subUnitSlug, '-');
-        }
-
-        foreach ($colors as $color) {
-            foreach ($suffixes as $suffix) {
-                if ($color === 'red' && $suffix === 'max') continue;
-                
-                $globalKey = "threshold_{$color}_{$suffix}";
-                $subUnitKey = $subUnitSlug ? "threshold_{$color}_{$suffix}_{$subUnitSlug}" : null;
-                
-                // Use sub-unit specific setting if it exists, otherwise fallback to global
-                $val = null;
-                if ($subUnitKey && isset($allThresholds[$subUnitKey])) {
-                    $val = $allThresholds[$subUnitKey];
-                }
-                
-                if ($val === null && isset($allThresholds[$globalKey])) {
-                    $val = $allThresholds[$globalKey];
-                }
-
-                $thresholds[$globalKey] = $val;
-            }
-        }
-
-        return $thresholds;
-    }
-
     public function pdf(Request $request)
     {
-        $userId = $request->input('user_id');
-        $storeId = $request->input('store_id');
-        $subUnit = $request->input('sub_unit');
-        $asOfDate = $request->input('as_of_date', Carbon::now()->format('Y-m-d'));
-
-        // Query active tickets that have an assignee
-        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
-            ->whereNotNull('assignee_id');
-
-        if ($asOfDate) {
-            $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
-        }
-
-        if ($storeId && $storeId !== 'all') {
-            $ticketsQuery->where('store_id', $storeId);
-        }
-
-        if ($subUnit && $subUnit !== 'all') {
-            $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
-                $q->where('sub_unit', $subUnit);
-            });
-        }
-
-        // Apply user filter to report data
-        $displayTicketsQuery = clone $ticketsQuery;
-        if ($userId && $userId !== 'all') {
-            $displayTicketsQuery->where('assignee_id', $userId);
-        }
-
-        $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])->get();
-
-        $usersData = $activeTickets->groupBy('assignee_id')->map(function ($tickets, $assigneeId) {
-            $assignee = $tickets->first()->assignee;
-            $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
-                $store = $storeTickets->first()->store;
-                if (!$store) return null;
-                return (object)[
-                    'id' => $store->id,
-                    'code' => $store->code,
-                    'name' => $store->name,
-                    'sector' => $store->sector,
-                    'area' => $store->area,
-                    'ticket_count' => $storeTickets->count(),
-                ];
-            })->filter()->values();
-
-            return (object)[
-                'id' => $assigneeId,
-                'name' => $assignee?->name ?? 'Unknown',
-                'sub_unit' => $assignee?->sub_unit,
-                'stores' => $stores,
-            ];
-        })->filter(function($u) {
-            return count($u->stores) > 0;
-        })->values();
-
-        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
-        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
-
-        // Calculate Summary for North/South Areas (Sectors 1-8)
-        $summary = [
-            'north' => [],
-            'south' => []
+        $filters = [
+            'user_id' => $request->input('user_id'),
+            'store_id' => $request->input('store_id'),
+            'sub_unit' => $request->input('sub_unit'),
+            'as_of_date' => $request->input('as_of_date', Carbon::now()->format('Y-m-d')),
         ];
 
-        // For summary, we need ALL active tickets regardless of user filter
-        $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
-        $allStores = Store::where('is_active', true)->get();
+        $data = $this->reportService->getStoreHealthData($filters);
 
-        for ($i = 1; $i <= 8; $i++) {
-            $sectorStores = $allStores->where('sector', $i);
-            $maxTickets = 0;
-            $sectorUserNames = [];
+        // Convert array data to objects for PDF compatibility
+        $reportDataObjects = collect($data['reportData'])->map(function($u) {
+            $u['stores'] = collect($u['stores'])->map(fn($s) => (object)$s);
+            return (object)$u;
+        });
 
-            foreach ($sectorStores as $store) {
-                $storeTickets = $summaryTickets->where('store_id', $store->id);
-                $count = $storeTickets->count();
-                $maxTickets = max($maxTickets, $count);
-                
-                if ($count > 0) {
-                    $assigneeNames = $storeTickets->pluck('assignee.name')->filter()->unique()->toArray();
-                    foreach ($assigneeNames as $name) {
-                        $sectorUserNames[] = $name;
-                    }
-                }
-            }
-
-            $sectorData = (object)[
-                'sector' => $i,
-                'user' => empty($sectorUserNames) ? 'Unassigned' : implode(', ', array_unique($sectorUserNames)),
-                'max_tickets' => $maxTickets
-            ];
-
-            if ($i <= 4) {
-                $summary['north'][] = $sectorData;
-            } else {
-                $summary['south'][] = $sectorData;
-            }
-        }
+        $summaryObjects = [
+            'north' => collect($data['summary']['north'])->map(fn($s) => (object)$s),
+            'south' => collect($data['summary']['south'])->map(fn($s) => (object)$s),
+        ];
 
         $pdf = Pdf::loadView('pdf.store-health', [
-            'reportData' => $usersData,
-            'summary' => $summary,
-            'thresholds' => $thresholds,
-            'asOfDate' => Carbon::parse($asOfDate)->format('F d, Y'),
+            'reportData' => $reportDataObjects,
+            'summary' => $summaryObjects,
+            'thresholds' => $data['thresholds'],
+            'asOfDate' => Carbon::parse($filters['as_of_date'])->format('F d, Y'),
             'filters' => [
-                'user_id' => $userId ?? 'all',
-                'store_id' => $storeId ?? 'all',
-                'sub_unit' => $subUnit ?? 'all',
+                'user_id' => $filters['user_id'] ?? 'all',
+                'store_id' => $filters['store_id'] ?? 'all',
+                'sub_unit' => $filters['sub_unit'] ?? 'all',
             ]
         ]);
 

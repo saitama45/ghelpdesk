@@ -3,10 +3,12 @@ import { Head, usePage, Link, router } from '@inertiajs/vue3';
 import { ref, computed, reactive, watch, onMounted } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
+import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import axios from 'axios';
 import { usePermission } from '@/Composables/usePermission.js';
 
 const props = defineProps({
+    storeHealth: Object,
     stats: Object,
     recentActivity: Array,
     myTickets: Array,
@@ -133,6 +135,23 @@ const exportToExcel = (type) => {
                     <p class="text-blue-100 mt-1 text-sm sm:text-base">You have <span class="font-bold text-white underline decoration-blue-400">{{ stats.open + stats.in_progress }}</span> active tickets needing attention.</p>
                 </div>
             </div>
+        </div>
+
+        <!-- Store Health Section -->
+        <div v-if="hasPermission('reports.store_health')" class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                    Live Store Health
+                </h3>
+                <Link :href="route('reports.store-health')" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider">Full Report &rarr;</Link>
+            </div>
+            <StoreHealthReport 
+                :report-data="storeHealth.reportData"
+                :summary="storeHealth.summary"
+                :thresholds="storeHealth.thresholds"
+                :show-filters="false"
+            />
         </div>
 
         <!-- Filters Section -->
