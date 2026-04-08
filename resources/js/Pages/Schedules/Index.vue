@@ -1,14 +1,47 @@
 <template>
     <AppLayout title="Scheduling">
         <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                <Calendar 
-                    :events="schedules" 
-                    @date-click="handleDateClick"
-                    @event-click="handleEventClick"
-                >
-                    <template #actions>
-                        <div class="w-48 md:w-64">
+            <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
+                
+                <!-- View Toggle & Actions Header -->
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div class="flex bg-gray-100 p-1 rounded-lg">
+                        <button 
+                            @click="currentView = 'calendar'" 
+                            :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                        >
+                            Calendar View
+                        </button>
+                        <button 
+                            @click="currentView = 'report'" 
+                            :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'report' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                        >
+                            Report View
+                        </button>
+                    </div>
+
+                    <div class="flex items-center space-x-3 mt-4 md:mt-0">
+                        <!-- Year Multi-select for Report View -->
+                        <div v-if="currentView === 'report'" class="flex items-center space-x-2">
+                            <span class="text-xs font-black text-gray-400 uppercase tracking-widest">Compare Years:</span>
+                            <div class="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
+                                <button 
+                                    v-for="year in availableYears" 
+                                    :key="year"
+                                    @click="toggleYear(year)"
+                                    :class="[
+                                        'px-3 py-1 text-[10px] font-black rounded-md transition-all border',
+                                        selectedReportYears.includes(year)
+                                            ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+                                            : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                    ]"
+                                >
+                                    {{ year }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="w-48 md:w-64" v-if="currentView === 'calendar'">
                             <Autocomplete 
                                 v-model="filterUser"
                                 :options="userFilterOptions"
@@ -19,6 +52,7 @@
                             />
                         </div>
                         <button 
+                            v-if="currentView === 'calendar'"
                             @click="exportPdf"
                             class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm"
                         >
@@ -47,8 +81,67 @@
                             </svg>
                             <span>Create Schedule</span>
                         </button>
-                    </template>
-                </Calendar>
+                    </div>
+                </div>
+
+                <!-- Calendar View -->
+                <div v-if="currentView === 'calendar'">
+                    <Calendar 
+                        :events="schedules" 
+                        @date-click="handleDateClick"
+                        @event-click="handleEventClick"
+                    />
+                </div>
+
+                <!-- Pivot Report View -->
+                <div v-else-if="currentView === 'report'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900">3-Year Schedule Comparison</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Live Report</span>
+                    </div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full divide-y divide-gray-200 border-b border-gray-200">
+                            <thead class="bg-gray-100">
+                                <!-- Year Headers -->
+                                <tr>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-0 min-w-[100px]">Unit</th>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[100px] min-w-[150px]">Name</th>
+                                    <th v-for="year in pivotYears" :key="'header-' + year" :colspan="pivotStatuses.length" class="px-4 py-2 text-center text-xs font-black text-white bg-slate-700 uppercase tracking-widest border-r border-slate-600 last:border-r-0">
+                                        {{ year }}
+                                    </th>
+                                </tr>
+                                <!-- Status Headers -->
+                                <tr>
+                                    <template v-for="year in pivotYears" :key="'status-' + year">
+                                        <th v-for="status in pivotStatuses" :key="year + '-' + status" class="px-2 py-2 text-center text-[9px] font-black text-gray-500 uppercase tracking-tighter border-r border-gray-200 border-t last:border-r-0" :class="status === 'Holiday' ? 'bg-red-50/50' : (status === 'Restday' ? 'bg-gray-50/50' : 'bg-white')">
+                                            {{ status === 'On-site' ? 'On-site' : (status === 'Off-site' ? 'Off-site' : (status === 'Restday' ? 'RD' : status)) }}
+                                        </th>
+                                    </template>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr v-for="row in pivotData" :key="row.name + row.unit" class="hover:bg-blue-50/50 transition-colors">
+                                    <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10">{{ row.unit || '-' }}</td>
+                                    <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10">{{ row.name }}</td>
+                                    
+                                    <template v-for="year in pivotYears" :key="'data-' + year">
+                                        <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0" :class="[
+                                            (row.years[year] && row.years[year][status] > 0) ? 'font-black text-blue-700' : 'font-medium text-gray-300',
+                                            status === 'Holiday' ? 'bg-red-50/30' : (status === 'Restday' ? 'bg-gray-50/30' : '')
+                                        ]">
+                                            {{ (row.years[year] && row.years[year][status] > 0) ? row.years[year][status] : '-' }}
+                                        </td>
+                                    </template>
+                                </tr>
+                                <tr v-if="!pivotData || pivotData.length === 0">
+                                    <td :colspan="2 + (pivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        No schedule data found for the reporting period.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -278,7 +371,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
@@ -292,11 +385,17 @@ const props = defineProps({
     schedules: Array,
     users: Array,
     stores: Array,
+    pivotData: Array,
+    pivotYears: Array,
+    availableYears: Array,
+    pivotStatuses: Array,
     filters: Object
 })
 
 const page = usePage()
 const filterUser = ref(props.filters?.user_id || '')
+const selectedReportYears = ref(props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears])
+const currentView = ref('calendar') // 'calendar' or 'report'
 
 const userFilterOptions = computed(() => {
     const currentUserId = page.props.auth.user.id
@@ -316,11 +415,32 @@ const userFilterOptions = computed(() => {
 
 const applyFilter = () => {
     router.get(route('schedules.index'), {
-        user_id: filterUser.value
+        user_id: filterUser.value,
+        report_years: selectedReportYears.value
     }, {
         preserveState: true,
         preserveScroll: true
     })
+}
+
+// Watch for year selection changes to auto-apply filter in report view
+watch(selectedReportYears, () => {
+    if (currentView.value === 'report') {
+        applyFilter()
+    }
+}, { deep: true })
+
+const toggleYear = (year) => {
+    const index = selectedReportYears.value.indexOf(year)
+    if (index === -1) {
+        selectedReportYears.value.push(year)
+    } else {
+        if (selectedReportYears.value.length > 1) {
+            selectedReportYears.value.splice(index, 1)
+        } else {
+            showError('At least one year must be selected.')
+        }
+    }
 }
 
 const { showSuccess, showError } = useToast()

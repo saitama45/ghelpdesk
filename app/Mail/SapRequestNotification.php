@@ -15,12 +15,18 @@ class SapRequestNotification extends Mailable
 
     public function __construct(
         public SapRequest $sapRequest,
-        public string $action = 'created'
+        public string $action = 'created',
+        public bool $isRequester = false
     ) {}
 
     public function envelope(): Envelope
     {
-        $subject = $this->action === 'created' ? 'New SAP Request Submitted' : 'SAP Request Updated';
+        if ($this->isRequester) {
+            $subject = 'Confirmation: Your SAP Request has been received';
+        } else {
+            $subject = $this->action === 'created' ? 'New SAP Request Submitted' : 'SAP Request Updated';
+        }
+
         return new Envelope(
             subject: "[SAP Request #{$this->sapRequest->id}] {$subject}: {$this->sapRequest->requestType->name}",
         );

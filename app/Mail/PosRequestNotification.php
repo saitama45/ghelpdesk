@@ -18,7 +18,8 @@ class PosRequestNotification extends Mailable
      */
     public function __construct(
         public PosRequest $posRequest,
-        public string $action = 'created'
+        public string $action = 'created',
+        public bool $isRequester = false
     ) {}
 
     /**
@@ -26,7 +27,12 @@ class PosRequestNotification extends Mailable
      */
     public function envelope(): Envelope
     {
-        $subject = $this->action === 'created' ? 'New POS Request Submitted' : 'POS Request Updated';
+        if ($this->isRequester) {
+            $subject = 'Confirmation: Your POS Request has been received';
+        } else {
+            $subject = $this->action === 'created' ? 'New POS Request Submitted' : 'POS Request Updated';
+        }
+        
         return new Envelope(
             subject: "[POS Request #{$this->posRequest->id}] {$subject}: {$this->posRequest->requestType->name}",
         );

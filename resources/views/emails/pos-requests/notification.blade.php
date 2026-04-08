@@ -71,8 +71,13 @@
         </div>
 
         <div class="content">
-            <p class="greeting">Hello Team,</p>
-            <p class="intro-text">A POS System request has been <strong>{{ $action }}</strong> and is now pending your attention in the help desk portal.</p>
+            @if($isRequester)
+                <p class="greeting">Hello {{ $posRequest->user ? $posRequest->user->name : $posRequest->requester_name }},</p>
+                <p class="intro-text">Thank you! Your POS System request has been successfully submitted and is now pending review.</p>
+            @else
+                <p class="greeting">Hello Team,</p>
+                <p class="intro-text">A POS System request has been <strong>{{ $action }}</strong> and is now pending your attention in the help desk portal.</p>
+            @endif
 
             <div class="summary-card">
                 <span class="summary-title">Request Summary</span>

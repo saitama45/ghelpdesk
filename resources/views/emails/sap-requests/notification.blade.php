@@ -46,10 +46,17 @@
         </div>
 
         <div class="content">
-            <p class="greeting">Hello Team,</p>
-            <p class="intro-text">
-                An SAP data request has been <strong>{{ $action }}</strong> and requires attention.
-            </p>
+            @if($isRequester)
+                <p class="greeting">Hello {{ $sapRequest->user ? $sapRequest->user->name : $sapRequest->requester_name }},</p>
+                <p class="intro-text">
+                    Thank you! Your SAP data request has been successfully submitted and is now pending review.
+                </p>
+            @else
+                <p class="greeting">Hello Team,</p>
+                <p class="intro-text">
+                    An SAP data request has been <strong>{{ $action }}</strong> and requires attention.
+                </p>
+            @endif
 
             <div class="summary-card">
                 <span class="summary-title">Request Summary</span>

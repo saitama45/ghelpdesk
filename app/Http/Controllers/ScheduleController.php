@@ -72,11 +72,76 @@ class ScheduleController extends Controller implements HasMiddleware
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
+        // ── Generate Pivot Report Data ──
+        // Get all unique years available in the database
+        $dbYears = Schedule::selectRaw('YEAR(start_time) as year')
+            ->distinct()
+            ->pluck('year')
+            ->map(fn($y) => (int)$y)
+            ->toArray();
+
+        // Always include current year and its neighbors for the UI filter
+        $currentYear = (int)date('Y');
+        $defaultRange = [$currentYear - 1, $currentYear, $currentYear + 1];
+        
+        // Merge DB years with default range, ensure unique integers, and sort descending
+        $availableYears = collect($dbYears)
+            ->merge($defaultRange)
+            ->map(fn($y) => (int)$y)
+            ->unique()
+            ->sortDesc()
+            ->values()
+            ->toArray();
+
+        // Determine which years to display in the table
+        $selectedYearsInput = $request->input('report_years');
+        if (!$selectedYearsInput) {
+            // Default to the standard 3-year view: 2024, 2025, 2026
+            $selectedYears = [2024, 2025, 2026];
+        } else {
+            $selectedYears = collect((array)$selectedYearsInput)
+                ->map(fn($y) => (int)$y)
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray();
+        }
+
+        $pivotUsers = User::with(['schedules' => function ($q) use ($selectedYears) {
+            $q->whereIn(\DB::raw('YEAR(start_time)'), $selectedYears);
+        }])->whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name')->get();
+
+        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $pivotData = [];
+
+        foreach ($pivotUsers as $u) {
+            $rowData = [
+                'unit' => $u->sub_unit,
+                'name' => $u->name,
+                'years' => []
+            ];
+
+            foreach ($selectedYears as $y) {
+                $yearCounts = [];
+                $yearSchedules = $u->schedules->filter(fn($sched) => $sched->start_time->year === $y);
+
+                foreach ($pivotStatuses as $s) {
+                    $yearCounts[$s] = $yearSchedules->where('status', $s)->count();
+                }
+                $rowData['years'][$y] = $yearCounts;
+            }
+            $pivotData[] = $rowData;
+        }
+
         return Inertia::render('Schedules/Index', [
             'schedules' => $schedules,
             'users' => $users,
             'stores' => $stores,
-            'filters' => $request->only(['user_id']),
+            'pivotData' => $pivotData,
+            'pivotYears' => $selectedYears,
+            'availableYears' => $availableYears,
+            'pivotStatuses' => $pivotStatuses,
+            'filters' => $request->only(['user_id', 'report_years']),
         ]);
     }
 

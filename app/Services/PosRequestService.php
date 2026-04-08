@@ -45,6 +45,9 @@ class PosRequestService
 
             // Send notification to CC emails
             $this->notifyCcEmails($posRequest, 'created');
+            
+            // Send confirmation to requester
+            $this->notifyRequester($posRequest, 'created');
 
             return $posRequest;
         });
@@ -74,6 +77,22 @@ class PosRequestService
 
             return $posRequest;
         });
+    }
+
+    /**
+     * Notify requester about POS Request action.
+     */
+    protected function notifyRequester(PosRequest $posRequest, string $action)
+    {
+        $requesterEmail = $posRequest->user ? $posRequest->user->email : $posRequest->requester_email;
+        
+        if (!$requesterEmail || !filter_var($requesterEmail, FILTER_VALIDATE_EMAIL)) return;
+
+        try {
+            Mail::to($requesterEmail)->send(new PosRequestNotification($posRequest, $action, true));
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to send POS Request confirmation to requester: " . $e->getMessage());
+        }
     }
 
     /**

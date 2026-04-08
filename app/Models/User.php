@@ -117,4 +117,9 @@ class User extends Authenticatable
     {
         return $this->belongsToMany(Store::class)->withTimestamps();
     }
+
+    public function schedules()
+    {
+        return $this->hasMany(Schedule::class);
+    }
 }

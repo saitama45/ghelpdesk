@@ -45,6 +45,9 @@ class SapRequestService
             }
 
             $this->notifyCcEmails($sapRequest, 'created');
+            
+            // Send confirmation to requester
+            $this->notifyRequester($sapRequest, 'created');
 
             return $sapRequest;
         });
@@ -75,6 +78,22 @@ class SapRequestService
 
             return $sapRequest;
         });
+    }
+
+    /**
+     * Notify requester about SAP Request action.
+     */
+    protected function notifyRequester(SapRequest $sapRequest, string $action): void
+    {
+        $requesterEmail = $sapRequest->user ? $sapRequest->user->email : $sapRequest->requester_email;
+        
+        if (!$requesterEmail || !filter_var($requesterEmail, FILTER_VALIDATE_EMAIL)) return;
+
+        try {
+            Mail::to($requesterEmail)->send(new SapRequestNotification($sapRequest, $action, true));
+        } catch (\Exception $e) {
+            Log::error('Failed to send SAP Request confirmation to requester: ' . $e->getMessage());
+        }
     }
 
     protected function notifyCcEmails(SapRequest $sapRequest, string $action): void
