@@ -178,25 +178,32 @@ class PosRequestController extends Controller implements HasMiddleware
     {
         $request->validate([
             'remarks' => 'nullable|string|max:1000',
+            'approver_data' => 'nullable|array',
         ]);
 
         DB::transaction(function () use ($request, $posRequest) {
             $requestType = $posRequest->requestType;
-            
-            // Log approval
+
             PosRequestApproval::create([
                 'pos_request_id' => $posRequest->id,
                 'user_id' => auth()->id(),
                 'level' => $posRequest->current_approval_level,
+                'status' => 'approved',
                 'remarks' => $request->remarks,
             ]);
+
+            if ($request->has('approver_data') && is_array($request->approver_data)) {
+                $posRequest->update([
+                    'approver_data' => array_merge($posRequest->approver_data ?? [], $request->approver_data)
+                ]);
+            }
 
             if ($posRequest->current_approval_level >= $requestType->approval_levels) {
                 $posRequest->update([
                     'status' => 'Approved',
                     'current_approval_level' => 0,
                 ]);
-                $this->posRequestService->processApprovedRequest($posRequest);
+                $this->posRequestService->processApprovedRequest($posRequest->fresh());
             } else {
                 $posRequest->update([
                     'status' => 'Approved Level ' . $posRequest->current_approval_level,

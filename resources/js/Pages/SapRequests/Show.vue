@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useToast } from '@/Composables/useToast'
+import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
 const props = defineProps({ sapRequest: Object })
 
@@ -12,9 +13,11 @@ const page = usePage()
 const { hasPermission } = usePermission()
 const { confirm } = useConfirm()
 const { showSuccess, showError } = useToast()
-const approvalForm = useForm({ remarks: '' })
+const approvalForm = useForm({ remarks: '', approver_data: {} })
 
 const authUserId = computed(() => page.props.auth.user.id)
+
+const approverFields = computed(() => props.sapRequest.request_type?.form_schema?.approver_fields ?? [])
 
 async function submitApproval() {
     const confirmed = await confirm({
@@ -254,6 +257,20 @@ const getLabel = (key, value, isItem = false) => {
                             <!-- Approve Action -->
                             <div v-if="canApprove" class="mt-10 pt-8 border-t border-gray-100 relative">
                                 <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-teal-500 uppercase tracking-[0.3em]">Your Decision</div>
+                                
+                                <!-- Approver Fields -->
+                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-teal-100 rounded-[2rem] p-6 shadow-sm">
+                                    <h4 class="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
+                                    <DynamicFormRenderer
+                                        :fields="approverFields"
+                                        v-model="approvalForm.approver_data"
+                                        :errors="approvalForm.errors"
+                                        grid-columns="1"
+                                        gap="4"
+                                        dense
+                                    />
+                                </div>
+
                                 <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add approval remarks (optional)..."
                                     class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-4 text-sm font-medium focus:bg-white focus:border-teal-500 focus:ring-0 transition-all mb-4"></textarea>
                                 <button @click="submitApproval" :disabled="approvalForm.processing"

@@ -17,6 +17,7 @@ const isSaving = ref(false)
 
 const schema = reactive({
     fields: [],
+    approver_fields: [],
     has_items: false,
     item_label: 'Row',
     items_columns: [],
@@ -32,6 +33,7 @@ watch(() => props.show, (val) => {
     if (!val) return
     const src = props.requestType.form_schema || {}
     schema.fields = (src.fields || []).map(f => ({ ...f, options: f.options ? f.options.map(o => ({ ...o })) : [] }))
+    schema.approver_fields = (src.approver_fields || []).map(f => ({ ...f, options: f.options ? f.options.map(o => ({ ...o })) : [] }))
     schema.has_items = src.has_items ?? false
     schema.item_label = src.item_label ?? 'Row'
     schema.items_columns = (src.items_columns || []).map(c => ({ ...c }))
@@ -57,6 +59,10 @@ const FIELD_TYPES = [
 
 const HAS_OPTIONS = ['select', 'radio', 'checkbox_group']
 
+const activeFields = computed(() => {
+    return activeTab.value === 'approver' ? schema.approver_fields : schema.fields
+})
+
 const blankField = () => ({
     key: '',
     label: '',
@@ -77,7 +83,7 @@ const openAddField = () => {
 }
 
 const openEditField = (idx) => {
-    const f = schema.fields[idx]
+    const f = activeFields.value[idx]
     editingField.value = {
         ...f,
         options: (f.options || []).map(o => ({ ...o })),
@@ -113,22 +119,22 @@ const saveField = () => {
     delete f._conditionValue
 
     if (editingIndex.value === null) {
-        f.sort_order = schema.fields.length + 1
-        schema.fields.push(f)
+        f.sort_order = activeFields.value.length + 1
+        activeFields.value.push(f)
     } else {
-        schema.fields.splice(editingIndex.value, 1, f)
+        activeFields.value.splice(editingIndex.value, 1, f)
     }
     editingField.value = null
 }
 
-const removeField = (idx) => schema.fields.splice(idx, 1)
+const removeField = (idx) => activeFields.value.splice(idx, 1)
 
 const moveField = (idx, dir) => {
     const target = idx + dir
-    if (target < 0 || target >= schema.fields.length) return
-    const tmp = schema.fields[idx]
-    schema.fields.splice(idx, 1)
-    schema.fields.splice(target, 0, tmp)
+    if (target < 0 || target >= activeFields.value.length) return
+    const tmp = activeFields.value[idx]
+    activeFields.value.splice(idx, 1)
+    activeFields.value.splice(target, 0, tmp)
 }
 
 // Option rows
@@ -167,6 +173,7 @@ const saveSchema = () => {
     const payload = {
         form_schema: {
             fields: schema.fields.map((f, i) => ({ ...f, sort_order: i + 1 })),
+            approver_fields: schema.approver_fields.map((f, i) => ({ ...f, sort_order: i + 1 })),
             has_items: schema.has_items,
             item_label: schema.item_label,
             items_columns: schema.items_columns,
@@ -182,7 +189,7 @@ const saveSchema = () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const typeLabel = (t) => FIELD_TYPES.find(x => x.value === t)?.label ?? t
-const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
+const fieldKeys = computed(() => activeFields.value.map(f => f.key).filter(Boolean))
 </script>
 
 <template>
@@ -213,7 +220,7 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                     <!-- Tabs -->
                     <div class="flex border-b border-gray-100 px-7 shrink-0">
                         <button
-                            v-for="tab in [{ key: 'fields', label: 'Form Fields' }, { key: 'items', label: 'Line Items' }]"
+                            v-for="tab in [{ key: 'fields', label: 'Form Fields' }, { key: 'approver', label: 'Approver Fields' }, { key: 'items', label: 'Line Items' }]"
                             :key="tab.key"
                             @click="activeTab = tab.key"
                             :class="[
@@ -223,6 +230,7 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                         >
                             {{ tab.label }}
                             <span v-if="tab.key === 'fields' && schema.fields.length" class="ml-1.5 text-[10px] bg-indigo-100 text-indigo-700 rounded-full px-1.5 py-0.5 font-black">{{ schema.fields.length }}</span>
+                            <span v-if="tab.key === 'approver' && schema.approver_fields.length" class="ml-1.5 text-[10px] bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5 font-black">{{ schema.approver_fields.length }}</span>
                             <span v-if="tab.key === 'items' && schema.has_items" class="ml-1.5 w-2 h-2 rounded-full bg-teal-500 inline-block align-middle"></span>
                         </button>
                     </div>
@@ -230,12 +238,12 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                     <!-- Body -->
                     <div class="flex-1 overflow-y-auto p-7 space-y-4">
 
-                        <!-- ── FIELDS TAB ── -->
-                        <template v-if="activeTab === 'fields'">
+                        <!-- ── FIELDS & APPROVER TAB ── -->
+                        <template v-if="activeTab === 'fields' || activeTab === 'approver'">
                             <!-- Field list -->
-                            <div v-if="schema.fields.length" class="space-y-2">
+                            <div v-if="activeFields.length" class="space-y-2">
                                 <div
-                                    v-for="(field, idx) in schema.fields"
+                                    v-for="(field, idx) in activeFields"
                                     :key="idx"
                                     class="flex items-center gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50 group"
                                 >
@@ -244,7 +252,7 @@ const fieldKeys = computed(() => schema.fields.map(f => f.key).filter(Boolean))
                                         <button @click="moveField(idx, -1)" :disabled="idx === 0" class="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"/></svg>
                                         </button>
-                                        <button @click="moveField(idx, 1)" :disabled="idx === schema.fields.length - 1" class="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
+                                        <button @click="moveField(idx, 1)" :disabled="idx === activeFields.length - 1" class="p-0.5 text-gray-300 hover:text-gray-600 disabled:opacity-20 transition-colors">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"/></svg>
                                         </button>
                                     </div>

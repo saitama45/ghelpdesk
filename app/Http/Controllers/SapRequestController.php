@@ -139,6 +139,7 @@ class SapRequestController extends Controller implements HasMiddleware
     {
         $request->validate([
             'remarks' => 'nullable|string|max:1000',
+            'approver_data' => 'nullable|array',
         ]);
 
         DB::transaction(function () use ($request, $sapRequest) {
@@ -151,6 +152,12 @@ class SapRequestController extends Controller implements HasMiddleware
                 'status'         => 'approved',
                 'remarks'        => $request->remarks,
             ]);
+
+            if ($request->has('approver_data') && is_array($request->approver_data)) {
+                $sapRequest->update([
+                    'form_data' => array_merge($sapRequest->form_data ?? [], $request->approver_data)
+                ]);
+            }
 
             if ($sapRequest->current_approval_level >= $requestType->approval_levels) {
                 $sapRequest->update([

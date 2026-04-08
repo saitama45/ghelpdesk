@@ -158,8 +158,22 @@ class PosRequestService
         $fullDescription = "🆔 POS Request: #{$posRequest->id}\n" .
                           "👤 Requester: " . ($posRequest->user ? $posRequest->user->name : ($posRequest->requester_name ?? 'N/A')) . " (" . ($posRequest->user ? $posRequest->user->email : ($posRequest->requester_email ?? 'N/A')) . ")\n" .
                           "📅 Launch Date: {$posRequest->launch_date->format('Y-m-d')}\n" .
-                          "🏪 Stores: {$storeCodes}" .
-                          $detailsContent;
+                          "🏪 Stores: {$storeCodes}";
+
+        // Add Approver Data to description
+        $approverData = $posRequest->approver_data ?? [];
+        if (!empty($approverData)) {
+            $fullDescription .= "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+            $fullDescription .= "   ✅ APPROVER DETAILS\n";
+            $fullDescription .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+            foreach ($approverData as $key => $value) {
+                $label = ucwords(str_replace('_', ' ', $key));
+                $displayValue = $this->getLabelFromSchema($schema, $key, $value);
+                $fullDescription .= " • {$label}: {$displayValue}\n";
+            }
+        }
+
+        $fullDescription .= $detailsContent;
 
         // 3. Create Ticket with Key and Full Details
         $ticket = Ticket::create([

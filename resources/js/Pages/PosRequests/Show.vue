@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import { useToast } from '@/Composables/useToast'
 import { usePermission } from '@/Composables/usePermission'
 import { useConfirm } from '@/Composables/useConfirm'
+import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
 const props = defineProps({
     posRequest: Object
@@ -17,8 +18,11 @@ const { confirm } = useConfirm()
 
 const authUserId = computed(() => page.props.auth.user.id)
 
+const approverFields = computed(() => props.posRequest.request_type?.form_schema?.approver_fields ?? [])
+
 const approvalForm = useForm({
-    remarks: ''
+    remarks: '',
+    approver_data: {}
 })
 
 const submitApproval = async () => {
@@ -298,6 +302,20 @@ const formatDateTime = (dateStr) => {
                             <!-- Action Area -->
                             <div v-if="canApprove" class="mt-12 pt-10 border-t border-gray-100 relative">
                                 <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">Your Decision</div>
+                                
+                                <!-- Approver Fields -->
+                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">
+                                    <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
+                                    <DynamicFormRenderer
+                                        :fields="approverFields"
+                                        v-model="approvalForm.approver_data"
+                                        :errors="approvalForm.errors"
+                                        grid-columns="1"
+                                        gap="4"
+                                        dense
+                                    />
+                                </div>
+
                                 <div class="mb-6">
                                     <label class="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3 ml-1">Approval Remarks (Optional)</label>
                                     <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add comments for this level..." 

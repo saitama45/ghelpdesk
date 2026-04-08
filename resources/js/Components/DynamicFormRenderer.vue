@@ -26,9 +26,49 @@ const props = defineProps({
     errors: { type: Object, default: () => ({}) },
     context: { type: Object, default: () => ({}) },
     hasItems: { type: Boolean, default: false },
+    gridColumns: { type: [Number, String], default: 4 },
+    gap: { type: [Number, String], default: 6 },
+    space: { type: [Number, String], default: 8 },
+    dense: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:modelValue', 'update:items'])
+
+const gridClass = computed(() => {
+    const cols = Number(props.gridColumns)
+    if (cols === 1) return 'grid-cols-1'
+    if (cols === 2) return 'grid-cols-1 sm:grid-cols-2'
+    if (cols === 3) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
+})
+
+const gapClass = computed(() => `gap-${props.gap}`)
+const spaceClass = computed(() => props.hasItems ? `space-y-${props.space}` : (props.dense ? 'space-y-4' : 'space-y-6'))
+
+const inputClass = computed(() => {
+    if (props.dense) {
+        return 'block w-full bg-white border-2 border-gray-100 rounded-xl px-3 py-2 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none'
+    }
+    return 'block w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none'
+})
+
+const textareaClass = computed(() => {
+    if (props.dense) {
+        return 'block w-full bg-white border-2 border-gray-100 rounded-xl px-3 py-2 text-sm font-medium focus:border-indigo-500 focus:ring-0 transition-all outline-none'
+    }
+    return 'block w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-medium focus:border-indigo-500 focus:ring-0 transition-all outline-none'
+})
+
+const colSpanClass = (field) => {
+    const cols = Number(props.gridColumns)
+    if (cols === 1) return 'col-span-1'
+    
+    if (field.type === 'textarea') return `sm:col-span-${cols}`
+    if ((field.key.includes('name') || field.key.includes('description')) && field.type !== 'textarea') {
+        return cols > 2 ? 'sm:col-span-2' : 'col-span-1'
+    }
+    return 'col-span-1'
+}
 
 // ── Sorted visible fields ─────────────────────────────────────────────────────
 const sortedFields = computed(() =>
@@ -101,14 +141,11 @@ const buildBlankRow = () => {
 </script>
 
 <template>
-    <div class="space-y-8">
+    <div :class="spaceClass">
         <!-- ── Field list ── -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="grid" :class="[gridClass, gapClass]">
             <template v-for="field in visibleFields" :key="field.key">
-                <div :class="[
-                    field.type === 'textarea' ? 'lg:col-span-4' : 'lg:col-span-1',
-                    (field.key.includes('name') || field.key.includes('description')) && field.type !== 'textarea' ? 'lg:col-span-2' : ''
-                ]">
+                <div :class="colSpanClass(field)">
                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                         {{ field.label }}
                         <span v-if="field.required" class="text-red-500 ml-0.5">*</span>
@@ -122,7 +159,7 @@ const buildBlankRow = () => {
                         @input="setValue(field.key, $event.target.value)"
                         :required="field.required"
                         :step="field.type === 'number' ? '0.01' : undefined"
-                        class="block w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                        :class="inputClass"
                     />
 
                     <!-- textarea -->
@@ -132,7 +169,7 @@ const buildBlankRow = () => {
                         @input="setValue(field.key, $event.target.value)"
                         :required="field.required"
                         rows="3"
-                        class="block w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-medium focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                        :class="textareaClass"
                     />
 
                     <!-- select -->
@@ -141,7 +178,7 @@ const buildBlankRow = () => {
                         :value="getValue(field.key)"
                         @change="setValue(field.key, $event.target.value)"
                         :required="field.required"
-                        class="block w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                        :class="inputClass"
                     >
                         <option value="">-- select --</option>
                         <option v-for="opt in (field.options || [])" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
@@ -237,13 +274,10 @@ const buildBlankRow = () => {
                         </button>
                     </div>
 
-                    <!-- 4-Column Grid for Item Fields -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Grid for Item Fields -->
+                    <div class="grid gap-6" :class="gridClass">
                         <div v-for="col in itemsColumns" :key="col.key"
-                            :class="[
-                                col.type === 'textarea' ? 'lg:col-span-4' : 'lg:col-span-1',
-                                (col.key.includes('name') || col.key.includes('description')) && col.type !== 'textarea' ? 'lg:col-span-2' : ''
-                            ]">
+                            :class="colSpanClass(col)">
                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                                 {{ col.label }}
                                 <span v-if="col.required" class="text-red-500 ml-0.5">*</span>
@@ -253,7 +287,7 @@ const buildBlankRow = () => {
                             <select v-if="col.type === 'select'"
                                 :value="row[col.key] ?? ''"
                                 @change="setItemCell(rowIdx, col.key, $event.target.value)"
-                                class="w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none">
+                                :class="inputClass">
                                 <option value="">-- select --</option>
                                 <option v-for="opt in (col.options || [])" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
@@ -263,7 +297,7 @@ const buildBlankRow = () => {
                                 :value="row[col.key] ?? ''"
                                 @input="setItemCell(rowIdx, col.key, $event.target.value)"
                                 rows="3"
-                                class="w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-medium focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                                :class="textareaClass"
                             />
 
                             <!-- radio -->
@@ -317,7 +351,7 @@ const buildBlankRow = () => {
                                 :value="row[col.key] ?? ''"
                                 @input="setItemCell(rowIdx, col.key, $event.target.value)"
                                 :step="col.type === 'number' ? '0.01' : undefined"
-                                class="w-full bg-white border-2 border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                                :class="inputClass"
                             />
                         </div>
                     </div>
