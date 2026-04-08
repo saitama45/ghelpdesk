@@ -207,7 +207,10 @@ class PosRequestService
 
     private function getLabelFromSchema($schema, $key, $value): string
     {
-        if (!$schema) return (string)$value;
+        if ($value === null) return '—';
+        if (is_bool($value)) return $value ? 'Yes' : 'No';
+
+        if (!$schema) return is_array($value) ? implode(', ', $value) : (string)$value;
 
         // For POS requests, details are in items_columns
         $fields = $schema['items_columns'] ?? [];
@@ -222,6 +225,10 @@ class PosRequestService
             return $option ? $option['label'] : (string)$value;
         }
 
-        return is_array($value) ? implode(', ', $value) : (string)$value;
+        if (is_array($value)) {
+            return implode(', ', array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $value));
+        }
+
+        return (string)$value;
     }
 }

@@ -170,7 +170,12 @@ class SapRequestService
 
     private function getLabelFromSchema($schema, $key, $value, $isItem = false): string
     {
-        if (!$schema) return is_array($value) ? implode(', ', $value) : (string)$value;
+        if ($value === null) return '—';
+        if (is_bool($value)) return $value ? 'Yes' : 'No';
+
+        if (!$schema) {
+            return is_array($value) ? implode(', ', $value) : (string)$value;
+        }
 
         $fields = $isItem ? ($schema['items_columns'] ?? []) : ($schema['fields'] ?? []);
         $field = collect($fields)->firstWhere('key', $key);
@@ -184,6 +189,10 @@ class SapRequestService
             return $option ? $option['label'] : (string)$value;
         }
 
-        return is_array($value) ? implode(', ', $value) : (string)$value;
+        if (is_array($value)) {
+            return implode(', ', array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $value));
+        }
+
+        return (string)$value;
     }
 }
