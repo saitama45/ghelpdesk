@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
+use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -25,13 +26,27 @@ class AttendanceController extends Controller implements HasMiddleware
     public function index()
     {
         $user = auth()->user();
-        return Inertia::render('Attendance/Index', [
-            'lastLog' => $user->lastAttendanceLog,
-            'assignedStores' => $user->stores()
-                ->whereNotNull('latitude')
+        
+        $assignedStores = $user->stores()
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('is_active', true)
+            ->get();
+
+        $totalAssignedCount = $user->stores()->count();
+
+        // If no stores are assigned (or none have GPS), and user is Admin/Dev, show all active stores with GPS
+        if ($assignedStores->isEmpty() && $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
+            $assignedStores = Store::whereNotNull('latitude')
                 ->whereNotNull('longitude')
                 ->where('is_active', true)
-                ->get()
+                ->get();
+        }
+
+        return Inertia::render('Attendance/Index', [
+            'lastLog' => $user->lastAttendanceLog,
+            'assignedStores' => $assignedStores,
+            'totalAssignedCount' => $totalAssignedCount
         ]);
     }
 
@@ -64,11 +79,20 @@ class AttendanceController extends Controller implements HasMiddleware
         // GEOFENCING VALIDATION
         $userLat = $request->latitude;
         $userLng = $request->longitude;
+
         $assignedStores = $user->stores()
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->where('is_active', true)
             ->get();
+
+        // Fallback for Admins/Devs
+        if ($assignedStores->isEmpty() && $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
+            $assignedStores = Store::whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->where('is_active', true)
+                ->get();
+        }
 
         if ($assignedStores->isEmpty()) {
             return back()->with('error', 'No active work site assigned to your account. Please contact HR.');

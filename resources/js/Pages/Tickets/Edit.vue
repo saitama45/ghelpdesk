@@ -686,10 +686,11 @@ const linkify = (text) => {
                                     <Autocomplete 
                                         v-model="editForm.item_id"
                                         :options="items"
-                                        label-key="name"
+                                        label-key="display_name"
                                         value-key="id"
                                         placeholder="Select item..."
                                         :disabled="!hasPermission('tickets.edit')"
+                                        size="sm"
                                     />
                                 </div>
                             </div>

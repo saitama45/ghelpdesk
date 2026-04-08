@@ -23,6 +23,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    size: {
+        type: String,
+        default: 'md', // md, sm
+    }
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -125,11 +129,14 @@ watch(selectedOption, (newVal) => {
     <div ref="containerRef" class="relative w-full">
         <div
             @click="openDropdown"
-            class="w-full bg-white border border-gray-300 rounded-lg shadow-sm pl-3 pr-10 py-2.5 text-left cursor-text focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 sm:text-sm transition-all duration-200"
-            :class="{ 'bg-gray-50 text-gray-400 cursor-not-allowed': disabled, 'hover:border-blue-400': !disabled }"
+            class="w-full bg-white border border-gray-300 rounded-lg shadow-sm pl-3 pr-10 py-2.5 text-left cursor-text focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all duration-200"
+            :class="[
+                disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'hover:border-blue-400',
+                size === 'sm' ? 'text-xs' : 'sm:text-sm'
+            ]"
         >
-            <div v-if="!isOpen" class="truncate">
-                <span v-if="selectedOption" class="text-gray-900">
+            <div v-if="!isOpen">
+                <span v-if="selectedOption" class="text-gray-900 break-words line-clamp-2">
                     {{ typeof selectedOption === 'object' ? selectedOption[labelKey] : selectedOption }}
                 </span>
                 <span v-else class="text-gray-400">{{ placeholder }}</span>
@@ -140,7 +147,8 @@ watch(selectedOption, (newVal) => {
                 ref="inputRef"
                 v-model="searchQuery"
                 type="text"
-                class="w-full p-0 border-none focus:ring-0 text-sm bg-transparent"
+                class="w-full p-0 border-none focus:ring-0 bg-transparent"
+                :class="size === 'sm' ? 'text-xs' : 'text-sm'"
                 :placeholder="selectedOption ? (typeof selectedOption === 'object' ? selectedOption[labelKey] : selectedOption) : placeholder"
                 @keydown.esc="closeDropdown"
             />
@@ -166,10 +174,11 @@ watch(selectedOption, (newVal) => {
                         <li
                             v-for="(option, index) in filteredOptions"
                             :key="index"
-                            class="text-gray-900 cursor-pointer select-none relative py-2.5 pl-3 pr-9 hover:bg-blue-50 transition-colors text-sm"
+                            class="text-gray-900 cursor-pointer select-none relative py-2.5 pl-3 pr-9 hover:bg-blue-50 transition-colors"
+                            :class="size === 'sm' ? 'text-xs' : 'text-sm'"
                             @click="select(option)"
                         >
-                            <span class="block truncate" :class="{ 'font-bold text-blue-700': (typeof option === 'object' ? option[valueKey] : option) == modelValue }">
+                            <span class="block break-words" :class="{ 'font-bold text-blue-700': (typeof option === 'object' ? option[valueKey] : option) == modelValue }">
                                 {{ typeof option === 'object' ? option[labelKey] : option }}
                             </span>
 

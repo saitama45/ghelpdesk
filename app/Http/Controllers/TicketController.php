@@ -683,7 +683,7 @@ class TicketController extends Controller
         $categoryId = $request->query('category_id') ?? $request->input('category_id');
         $subCategoryId = $request->query('sub_category_id') ?? $request->input('sub_category_id');
 
-        $query = \App\Models\Item::where('is_active', true)->orderBy('name');
+        $query = \App\Models\Item::with(['category', 'subCategory'])->where('is_active', true)->orderBy('name');
 
         if ($categoryId) {
             $query->where('category_id', $categoryId);
@@ -693,7 +693,12 @@ class TicketController extends Controller
             $query->where('sub_category_id', $subCategoryId);
         }
 
-        $items = $query->get();
+        $items = $query->get()->map(function($item) {
+            $cat = $item->category->name ?? 'N/A';
+            $sub = $item->subCategory->name ?? 'N/A';
+            $item->display_name = "{$cat} | {$sub} | {$item->name}";
+            return $item;
+        });
 
         return response()->json($items);
     }

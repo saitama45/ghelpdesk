@@ -60,12 +60,11 @@ class EmailTicketService
                 return ['status' => 'error', 'message' => 'Inbox not found. Available: ' . $client->getFolders()->map(fn($f) => $f->name)->implode(', ')];
             }
 
-            // Diagnostic: Count all messages vs unseen
-            $allMessagesCount = $inbox->messages()->all()->get()->count();
+            // Diagnostic: Count unseen messages only
             $messages = $inbox->messages()->unseen()->get();
             $unseenCount = count($messages);
 
-            Log::info("EmailTicketService: Inbox stats - Total: {$allMessagesCount}, Unseen: {$unseenCount}");
+            Log::info("EmailTicketService: Inbox stats - Unseen: {$unseenCount}");
 
             $count = 0;
             $errors = [];

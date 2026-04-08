@@ -429,7 +429,7 @@ const getSlaRowClass = (ticket) => {
                     <div class="flex flex-col gap-1">
                         <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Item</label>
                         <Autocomplete v-model="bulkForm.item_id" :options="items"
-                                      label-key="name" value-key="id" placeholder="Unchanged..." />
+                                      label-key="display_name" value-key="id" placeholder="Unchanged..." size="sm" />
                     </div>
 
                     <!-- Assignee -->
@@ -690,9 +690,10 @@ const getSlaRowClass = (ticket) => {
                             <Autocomplete 
                                 v-model="createForm.item_id"
                                 :options="items"
-                                label-key="name"
+                                label-key="display_name"
                                 value-key="id"
                                 placeholder="Select item..."
+                                size="sm"
                             />
                         </div>
 

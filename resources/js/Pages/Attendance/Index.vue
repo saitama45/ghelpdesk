@@ -8,7 +8,8 @@ import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCirc
 
 const props = defineProps({
     lastLog: Object,
-    assignedStores: Array
+    assignedStores: Array,
+    totalAssignedCount: Number,
 });
 
 // Component state
@@ -416,7 +417,12 @@ const statusMessage = computed(() => {
             <div v-if="assignedStores.length === 0" class="p-8 text-center bg-red-50">
                 <ExclamationCircleIcon class="w-12 h-12 text-red-500 mx-auto mb-4" />
                 <h3 class="text-lg font-bold text-red-900">Geofencing Restricted</h3>
-                <p class="text-red-700 max-w-md mx-auto">No active work sites are assigned to your account. You must be assigned to a specific office or store to use the DTR module.</p>
+                <p v-if="totalAssignedCount > 0" class="text-red-700 max-w-md mx-auto">
+                    You have {{ totalAssignedCount }} work site(s) assigned, but they are missing GPS coordinates or are inactive. Please contact HR to configure your work site's location.
+                </p>
+                <p v-else class="text-red-700 max-w-md mx-auto">
+                    No active work sites are assigned to your account. You must be assigned to a specific office or store to use the DTR module.
+                </p>
             </div>
 
             <div v-else class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
