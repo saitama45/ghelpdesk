@@ -98,7 +98,7 @@ function statusClass(s) {
                     <input v-model="search" @keyup.enter="applyFilter" type="text" placeholder="Search by request type, company, or requester..."
                         class="flex-1 min-w-[220px] border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
                     <select v-model="status" @change="applyFilter"
-                        class="border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                        class="border-2 border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
                         <option value="">All Statuses</option>
                         <option>Open</option>
                         <option>Approved</option>
@@ -142,7 +142,7 @@ function statusClass(s) {
                                         <div class="text-xs text-gray-400 font-medium">{{ r.user?.email ?? r.requester_email }}</div>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <span :class="statusClass(r.status)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide">
+                                        <span :class="statusClass(r.status)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
                                             {{ r.status }}
                                         </span>
                                     </td>
@@ -154,19 +154,31 @@ function statusClass(s) {
                                         <span v-else class="text-xs text-gray-300 font-bold">—</span>
                                     </td>
                                     <td class="px-6 py-4 text-xs font-medium text-gray-400">{{ new Date(r.created_at).toLocaleDateString() }}</td>
-                                    <td class="px-6 py-4 flex items-center justify-end gap-2">
-                                        <Link :href="route('sap-requests.show', r.id)"
-                                            class="text-xs font-black text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-all">
-                                            View
-                                        </Link>
-                                        <Link v-if="hasPermission('sap_requests.edit') && r.status === 'Open'" :href="route('sap-requests.edit', r.id)"
-                                            class="text-xs font-black text-amber-600 hover:text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-50 transition-all">
-                                            Edit
-                                        </Link>
-                                        <button v-if="hasPermission('sap_requests.delete')" @click="deleteRequest(r.id)"
-                                            class="text-xs font-black text-rose-600 hover:text-rose-800 px-3 py-1.5 rounded-lg hover:bg-rose-50 transition-all">
-                                            Delete
-                                        </button>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                                        <div class="flex justify-end space-x-2">
+                                            <Link :href="route('sap-requests.show', r.id)"
+                                                class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+                                                title="View Details">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                            </Link>
+                                            <Link v-if="hasPermission('sap_requests.edit') && r.status === 'Open'" :href="route('sap-requests.edit', r.id)"
+                                                class="p-2 text-amber-600 hover:text-white hover:bg-amber-600 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+                                                title="Edit Request">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </Link>
+                                            <button v-if="hasPermission('sap_requests.delete')" @click="deleteRequest(r.id)"
+                                                class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+                                                title="Delete Request">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>

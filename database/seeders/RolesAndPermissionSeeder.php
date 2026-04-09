@@ -44,6 +44,7 @@ class RolesAndPermissionSeeder extends Seeder
             'reports.export' => 'Export reports',
             'reports.store_health' => 'View store health report',
             'reports.sla_performance' => 'View SLA performance report',
+            'reports.assignee_performance' => 'View assignee performance report',
 
             // Companies
             'companies.view' => 'View companies',
@@ -145,7 +146,7 @@ class RolesAndPermissionSeeder extends Seeder
             'attendance.view', 'attendance.logs', 'attendance.create',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close',
             'users.view',
-            'reports.view', 'reports.store_health', 'reports.sla_performance',
+            'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance',
             'companies.view',
             'categories.view',
             'subcategories.view',
@@ -186,7 +187,7 @@ class RolesAndPermissionSeeder extends Seeder
         );
         $adminUser->assignRole('Admin');
 
-        $techUser = User::firstOrCreate(
+        $techSupportUser = User::firstOrCreate(
             ['email' => 'support@gmail.com'],
             [
                 'name' => 'Tech Support',
@@ -196,7 +197,7 @@ class RolesAndPermissionSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
-        $techUser->assignRole('Tech Support');
+        $techSupportUser->assignRole('Tech Support');
 
         $regularUser = User::firstOrCreate(
             ['email' => 'user@gmail.com'],

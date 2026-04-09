@@ -92,7 +92,7 @@ onMounted(() => {
     if (route().current('profile.*') || route().current('settings.*') || route().current('canned-messages.*')) {
         openMenus.value.settings = true;
     }
-    if (route().current('reports.*')) {
+    if (route().current('reports.*') || route().current('reports.assignee-performance')) {
         openMenus.value.reports = true;
     }
 });
@@ -125,7 +125,7 @@ const canSeeUserManagement = computed(() => {
 });
 
 const canSeeReports = computed(() => {
-    return hasPermission('reports.view') && (hasPermission('reports.store_health') || hasPermission('reports.sla_performance'));
+    return hasPermission('reports.view') && (hasPermission('reports.store_health') || hasPermission('reports.sla_performance') || hasPermission('reports.assignee_performance'));
 });
 
 const canSeeSettings = computed(() => {
@@ -395,7 +395,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- Reports Section -->
-                <div v-if="hasPermission('reports.view')" class="space-y-1 pt-1">
+                <div v-if="canSeeReports" class="space-y-1 pt-1">
                     <button
                         @click="toggleMenu('reports')"
                         :class="[
@@ -434,6 +434,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>SLA Performance Report</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('reports.assignee_performance')"
+                            :href="route('reports.assignee-performance')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('reports.assignee-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Assignee Performance</span>
                         </Link>
                     </div>
                 </div>
