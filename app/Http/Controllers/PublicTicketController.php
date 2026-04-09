@@ -4,9 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ticket;
 use App\Models\TicketSurvey;
-use App\Mail\TicketSurveyRequest;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -21,8 +19,6 @@ class PublicTicketController extends Controller
             abort(403, 'Invalid or expired closure link.');
         }
 
-        $shouldSendSurvey = false;
-
         if ($ticket->status !== 'closed') {
             $ticket->update([
                 'status' => 'closed',
@@ -32,33 +28,23 @@ class PublicTicketController extends Controller
             // Add history log for closure
             \App\Models\TicketHistory::create([
                 'ticket_id' => $ticket->id,
-                'user_id' => $ticket->reporter_id, // Use reporter_id if available
+                'user_id' => $ticket->reporter_id,
                 'column_changed' => 'status',
                 'old_value' => 'resolved',
                 'new_value' => 'closed',
                 'changed_at' => now('Asia/Manila'),
             ]);
-
-            $shouldSendSurvey = true;
         } elseif (!$ticket->survey_token) {
-            // If already closed but no token (e.g. from previous failed attempt), generate one
             $ticket->update(['survey_token' => Str::random(32)]);
-            $shouldSendSurvey = true;
         }
 
-        if ($shouldSendSurvey) {
-            // Send Survey Email
-            $recipientEmail = $ticket->reporter ? $ticket->reporter->email : $ticket->sender_email;
-            $recipientName = $ticket->reporter ? $ticket->reporter->name : ($ticket->sender_name ?? 'Customer');
-
-            if ($recipientEmail) {
-                Mail::to($recipientEmail)->send(new TicketSurveyRequest($ticket, $recipientName));
-            }
+        // If already surveyed, show completed page
+        if (TicketSurvey::where('ticket_id', $ticket->id)->exists()) {
+            return Inertia::render('Public/SurveyCompleted');
         }
 
-        return Inertia::render('Public/TicketClosed', [
-            'ticket' => $ticket,
-        ]);
+        // Redirect directly to survey — no survey email needed
+        return redirect()->route('public.survey', $ticket->survey_token);
     }
 
     /**

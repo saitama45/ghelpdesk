@@ -419,7 +419,7 @@ watch(() => props.ticket, (newTicket) => {
     editForm.defaults(editForm.data()); // Reset dirty state
 }, { deep: true });
 
-// Watchers for other fields
+// Watchers for select/toggle fields (save immediately on change)
 watch(() => [
     editForm.company_id,
     editForm.store_id,
@@ -429,11 +429,15 @@ watch(() => [
     editForm.type,
     editForm.assignee_id,
     editForm.is_self_requester,
-    editForm.sender_name,
-    editForm.sender_email
 ], () => {
     updateTicket({ preserveScroll: true });
 });
+
+// Watchers for free-text fields (debounced to avoid saving on every keystroke)
+const debouncedUpdateSenderName = debounce(() => updateTicket(), 800);
+const debouncedUpdateSenderEmail = debounce(() => updateTicket(), 800);
+watch(() => editForm.sender_name, () => { debouncedUpdateSenderName(); });
+watch(() => editForm.sender_email, () => { debouncedUpdateSenderEmail(); });
 
 // Classification Watcher
 watch(() => editForm.item_id, (newVal, oldVal) => {
