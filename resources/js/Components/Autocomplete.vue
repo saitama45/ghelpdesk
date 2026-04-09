@@ -89,7 +89,7 @@ const openDropdown = async () => {
     isOpen.value = true;
     await nextTick();
     updatePosition();
-    inputRef.value?.focus();
+    inputRef.value?.focus({ preventScroll: true });
 };
 
 const closeDropdown = () => {

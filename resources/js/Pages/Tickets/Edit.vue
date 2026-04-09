@@ -172,6 +172,12 @@ const editForm = useForm({
     status: props.ticket.status,
     severity: props.ticket.severity,
     assignee_id: props.ticket.assignee_id || '',
+    
+    // New fields for requester info and notification
+    is_self_requester: !!props.ticket.reporter_id,
+    sender_name: props.ticket.sender_name || '',
+    sender_email: props.ticket.sender_email || '',
+    notify_requester: true,
 });
 
 const items = ref([]);
@@ -340,6 +346,10 @@ const debounce = (fn, delay) => {
     };
 };
 
+const isClassificationComplete = computed(() => {
+    return !!editForm.company_id && !!editForm.store_id && !!editForm.item_id;
+});
+
 const updateTicket = (options = {}) => {
     if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
         showError('You do not have permission to update tickets.');
@@ -358,10 +368,29 @@ const updateTicket = (options = {}) => {
         return;
     }
 
+    // Capture scroll position before request
+    const savedScrollTop = (() => {
+        const el = document.querySelector('[scroll-region]');
+        return el ? el.scrollTop : window.scrollY;
+    })();
+
+    const restoreScroll = () => {
+        const el = document.querySelector('[scroll-region]');
+        if (el) el.scrollTop = savedScrollTop;
+        else window.scrollTo(0, savedScrollTop);
+    };
+
     put(route('tickets.update', props.ticket.id), editForm.data(), {
-        preserveScroll: true, // Keep scroll position during autosave
+        preserveScroll: true,
+        preserveState: true,
+        only: ['ticket', 'flash'], // Only refresh ticket data, ignore static lists
         onSuccess: () => {
             editForm.defaults(editForm.data()); // Update defaults to new state
+            // Restore immediately after Vue re-renders, then again after any late Inertia scroll resets
+            nextTick(() => {
+                restoreScroll();
+                setTimeout(restoreScroll, 50);
+            });
             if (options.onSuccess) options.onSuccess();
         },
         onError: (errors) => {
@@ -386,6 +415,9 @@ watch(() => props.ticket, (newTicket) => {
     editForm.item_id = newTicket.item_id || '';
     editForm.company_id = newTicket.company_id || '';
     editForm.store_id = newTicket.store_id || '';
+    editForm.is_self_requester = !!newTicket.reporter_id;
+    editForm.sender_name = newTicket.sender_name || '';
+    editForm.sender_email = newTicket.sender_email || '';
     editForm.defaults(editForm.data()); // Reset dirty state
 }, { deep: true });
 
@@ -397,9 +429,12 @@ watch(() => [
     editForm.priority,
     editForm.severity,
     editForm.type,
-    editForm.assignee_id
+    editForm.assignee_id,
+    editForm.is_self_requester,
+    editForm.sender_name,
+    editForm.sender_email
 ], () => {
-    debouncedUpdate();
+    updateTicket({ preserveScroll: true });
 });
 
 // Classification Watcher
@@ -409,7 +444,7 @@ watch(() => editForm.item_id, (newVal, oldVal) => {
         if (item) {
             editForm.priority = item.priority.toLowerCase();
         }
-        debouncedUpdate();
+        updateTicket({ preserveScroll: true });
     }
 });
 
@@ -638,6 +673,41 @@ const linkify = (text) => {
                 <div class="lg:col-span-1 space-y-6 order-1 lg:order-2">
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-6 lg:sticky lg:top-6">
                         <div class="space-y-4 sm:space-y-6">
+                            
+                            <!-- Requester Configuration -->
+                            <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <div class="relative">
+                                        <input type="checkbox" v-model="editForm.is_self_requester" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                    <span class="text-xs font-bold text-gray-700">I am the requester</span>
+                                </label>
+
+                                <div v-if="!editForm.is_self_requester" class="space-y-3 pt-2 border-t border-gray-200">
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
+                                        <input v-model="editForm.sender_name" type="text" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
+                                        <input v-model="editForm.sender_email" type="email" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                    </div>
+                                </div>
+
+                                <div class="pt-2">
+                                    <label class="flex items-center space-x-3 cursor-pointer">
+                                        <div class="relative">
+                                            <input type="checkbox" v-model="editForm.notify_requester" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
+                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </div>
+                                        <span class="text-[10px] font-bold text-gray-500 uppercase">Notify Requester</span>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Company</label>
                                 <CustomSelect
@@ -761,12 +831,17 @@ const linkify = (text) => {
 
                         <div v-if="hasPermission('tickets.assign')">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Assignee</label>
+                            <p v-if="!isClassificationComplete" class="text-[9px] text-amber-600 font-black uppercase mb-2 bg-amber-50 p-1.5 rounded border border-amber-100 flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                Set Company, Store, & Item first
+                            </p>
                             <CustomSelect
                                 v-model="editForm.assignee_id"
                                 :options="staff"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Unassigned"
+                                :disabled="!isClassificationComplete"
                             >
                                 <template #option="{ option }">
                                     <div class="flex items-center">

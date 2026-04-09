@@ -22,6 +22,10 @@ class UpdateTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'is_self_requester' => 'nullable|boolean',
+            'sender_name' => 'nullable|string|max:255',
+            'sender_email' => 'nullable|email|max:255',
+            'notify_requester' => 'nullable|boolean',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:65535',
             'type' => 'nullable|in:bug,feature,task,spike',

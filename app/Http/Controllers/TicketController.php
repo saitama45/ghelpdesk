@@ -34,7 +34,9 @@ class TicketController extends Controller
             'assignee:id,name,profile_photo', 
             'company:id,name',
             'store:id,name', 
-            'item:id,name,priority',
+            'item:id,name,priority,category_id,sub_category_id',
+            'item.category:id,name',
+            'item.subCategory:id,name',
             'slaMetric', 
             'children' => function($q) {
                 $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'status')
@@ -156,7 +158,18 @@ class TicketController extends Controller
             $nextNumber = ($maxNumber ?? 0) + 1;
             
             $data['ticket_key'] = "{$companyCode}-{$nextNumber}";
-            $data['reporter_id'] = auth()->id();
+            
+            // Handle requester options
+            $isSelfRequester = $request->boolean('is_self_requester', true);
+            if ($isSelfRequester) {
+                $data['reporter_id'] = auth()->id();
+                $data['sender_name'] = null;
+                $data['sender_email'] = null;
+            } else {
+                $data['reporter_id'] = null;
+                // sender_name and sender_email are already in $data
+            }
+            
             // Ensure Manila Time
             $data['created_at'] = now('Asia/Manila');
 
@@ -196,12 +209,15 @@ class TicketController extends Controller
         $ticket->load(['reporter', 'assignee']);
         $sentTo = [];
 
-        if ($ticket->reporter && $ticket->reporter->email) {
-            Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
-            $sentTo[] = $ticket->reporter->email;
-        } elseif ($ticket->sender_email) {
-            Mail::to($ticket->sender_email)->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
-            $sentTo[] = $ticket->sender_email;
+        // Notify requester conditionally
+        if ($request->boolean('notify_requester', true)) {
+            if ($ticket->reporter && $ticket->reporter->email) {
+                Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
+                $sentTo[] = $ticket->reporter->email;
+            } elseif ($ticket->sender_email) {
+                Mail::to($ticket->sender_email)->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
+                $sentTo[] = $ticket->sender_email;
+            }
         }
 
         if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
@@ -306,6 +322,19 @@ class TicketController extends Controller
     {
         $validated = $request->validated();
         
+        // Handle requester options
+        if ($request->has('is_self_requester')) {
+            $isSelf = $request->boolean('is_self_requester');
+            if ($isSelf) {
+                $validated['reporter_id'] = auth()->id();
+                $validated['sender_name'] = null;
+                $validated['sender_email'] = null;
+            } else {
+                $validated['reporter_id'] = null;
+                // sender_name and sender_email are already in $validated from request
+            }
+        }
+
         // Auto-update priority, category, and sub_category if item_id changed
         if (isset($validated['item_id']) && $validated['item_id'] != $ticket->item_id) {
             $item = \App\Models\Item::find($validated['item_id']);
@@ -370,25 +399,28 @@ class TicketController extends Controller
 
             $alreadyNotified = [];
 
-            if ($assigneeChanged && $ticket->assignee_id) {
-                $ticket->load('assignee');
-                if ($ticket->assignee && $ticket->assignee->email) {
-                    if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
-                        Mail::to($ticket->assignee->email)->send(new TicketAssigned($ticket, $ticket->assignee->name));
-                        $alreadyNotified[] = $ticket->assignee->email;
+            // Skip notifications if specifically requested
+            if ($request->boolean('notify_requester', true)) {
+                if ($assigneeChanged && $ticket->assignee_id) {
+                    $ticket->load('assignee');
+                    if ($ticket->assignee && $ticket->assignee->email) {
+                        if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
+                            Mail::to($ticket->assignee->email)->send(new TicketAssigned($ticket, $ticket->assignee->name));
+                            $alreadyNotified[] = $ticket->assignee->email;
+                        }
                     }
                 }
-            }
 
-            if (strtolower($ticket->priority) === 'urgent') {
-                $urgentWatchers = User::whereHas('roles', function ($q) {
-                    $q->where('notify_on_urgent_ticket', true);
-                })->get();
+                if (strtolower($ticket->priority) === 'urgent') {
+                    $urgentWatchers = User::whereHas('roles', function ($q) {
+                        $q->where('notify_on_urgent_ticket', true);
+                    })->get();
 
-                foreach ($urgentWatchers as $watcher) {
-                    if ($watcher->email && !in_array($watcher->email, $alreadyNotified)) {
-                        Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
-                        $alreadyNotified[] = $watcher->email;
+                    foreach ($urgentWatchers as $watcher) {
+                        if ($watcher->email && !in_array($watcher->email, $alreadyNotified)) {
+                            Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
+                            $alreadyNotified[] = $watcher->email;
+                        }
                     }
                 }
             }

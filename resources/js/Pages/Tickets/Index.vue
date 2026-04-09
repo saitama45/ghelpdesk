@@ -22,6 +22,8 @@ const props = defineProps({
 
 const page = usePage();
 const showCreateModal = ref(false);
+const showAcceptModal = ref(false);
+const acceptingTicket = ref(null);
 const fileInput = ref(null);
 const isSubmitting = ref(false);
 const { confirm } = useConfirm();
@@ -123,6 +125,11 @@ watch(() => props.tickets, (newTickets) => {
     pagination.updateData(newTickets);
 }, { deep: true });
 
+const acceptForm = useForm({
+    store_id: '',
+    item_id: '',
+});
+
 const createForm = useForm({
     company_id: '',
     store_id: '',
@@ -135,6 +142,10 @@ const createForm = useForm({
     severity: 'minor',
     assignee_id: '',
     attachments: [],
+    is_self_requester: true,
+    sender_name: '',
+    sender_email: '',
+    notify_requester: true,
 });
 
 const items = ref([]);
@@ -162,6 +173,12 @@ watch(() => showCreateModal.value, (isOpen) => {
     if (isOpen && !createForm.company_id) {
         createForm.company_id = defaultCompanyId.value;
     }
+    if (isOpen && items.value.length === 0) {
+        fetchItems();
+    }
+});
+
+watch(() => showAcceptModal.value, (isOpen) => {
     if (isOpen && items.value.length === 0) {
         fetchItems();
     }
@@ -249,7 +266,11 @@ const createTicket = () => {
                 formData.append(`attachments[${index}]`, file);
             });
         } else {
-            formData.append(key, createForm[key]);
+            let value = createForm[key];
+            if (typeof value === 'boolean') {
+                value = value ? 1 : 0;
+            }
+            formData.append(key, value);
         }
     });
     
@@ -286,31 +307,45 @@ const editTicket = (ticket) => {
 };
 
 const acceptTicket = (ticket) => {
-    if (!hasPermission('tickets.assign')) { // Or tickets.edit? Assuming 'assign' permission is needed to take ownership
-         showError('You do not have permission to accept tickets.');
-         return;
+    if (!hasPermission('tickets.assign')) {
+        showError('You do not have permission to accept tickets.');
+        return;
     }
+    acceptingTicket.value = ticket;
+    acceptForm.store_id = ticket.store_id || '';
+    acceptForm.item_id = ticket.item_id || '';
+    showAcceptModal.value = true;
+};
 
-    const acceptForm = useForm({
+const submitAcceptTicket = () => {
+    if (!acceptingTicket.value) return;
+    const ticket = acceptingTicket.value;
+
+    const item = items.value.find(i => i.id == acceptForm.item_id);
+    const priority = item ? item.priority.toLowerCase() : (ticket.priority || 'medium');
+
+    put(route('tickets.update', ticket.id), {
         company_id: ticket.company_id,
-        store_id: ticket.store_id,
+        store_id: acceptForm.store_id,
         category_id: ticket.category_id,
         sub_category_id: ticket.sub_category_id,
-        item_id: ticket.item_id,
+        item_id: acceptForm.item_id,
         title: ticket.title,
         description: ticket.description,
         type: ticket.type,
-        priority: ticket.priority,
+        priority: priority,
         status: ticket.status,
         severity: ticket.severity,
-        assignee_id: page.props.auth.user.id
-    });
-    
-    put(route('tickets.update', ticket.id), acceptForm.data(), {
-        onSuccess: () => {},
+        assignee_id: page.props.auth.user.id,
+    }, {
+        onSuccess: () => {
+            showAcceptModal.value = false;
+            acceptingTicket.value = null;
+            acceptForm.reset();
+        },
         onError: (errors) => {
-            const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot accept ticket'
-            showError(errorMessage)
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot accept ticket';
+            showError(errorMessage);
         }
     });
 };
@@ -390,6 +425,13 @@ const getSlaRowClass = (ticket) => {
     else if (priority === 'low') bgClass = '!bg-green-50 hover:!bg-green-100/50';
 
     return getPriorityBorder(priority) + ' ' + bgClass;
+};
+
+const formatItemName = (item) => {
+    if (!item) return '-';
+    const cat = item.category?.name ?? 'N/A';
+    const sub = item.sub_category?.name ?? 'N/A';
+    return `${cat} | ${sub} | ${item.name}`;
 };
 </script>
 
@@ -508,6 +550,7 @@ const getSlaRowClass = (ticket) => {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA</th>
@@ -551,6 +594,9 @@ const getSlaRowClass = (ticket) => {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {{ ticket.store ? ticket.store.name : '-' }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-600 font-medium">
+                            {{ formatItemName(ticket.item) }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
@@ -666,6 +712,39 @@ const getSlaRowClass = (ticket) => {
                     </div>
 
                     <form @submit.prevent="createTicket" class="space-y-5">
+                        
+                        <!-- Requester Configuration -->
+                        <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                            <label class="flex items-center space-x-3 cursor-pointer">
+                                <div class="relative">
+                                    <input type="checkbox" v-model="createForm.is_self_requester" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                </div>
+                                <span class="text-sm font-bold text-gray-700">I am the requester</span>
+                            </label>
+
+                            <div v-if="!createForm.is_self_requester" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-200">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
+                                    <input v-model="createForm.sender_name" type="text" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
+                                    <input v-model="createForm.sender_email" type="email" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                            </div>
+
+                            <div class="pt-2">
+                                <label class="flex items-center space-x-3 cursor-pointer">
+                                    <div class="relative">
+                                        <input type="checkbox" v-model="createForm.notify_requester" class="sr-only peer">
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                    <span class="text-xs font-medium text-gray-600">Send email notification to requester</span>
+                                </label>
+                            </div>
+                        </div>
+
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Company</label>
                             <select v-model="createForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
@@ -741,6 +820,63 @@ const getSlaRowClass = (ticket) => {
             </div>
         </div>
 
+        <!-- Accept Ticket Modal -->
+        <div v-if="showAcceptModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showAcceptModal = false"></div>
+                <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 relative border border-gray-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold text-gray-900">Accept Ticket</h3>
+                        <button @click="showAcceptModal = false" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <p v-if="acceptingTicket" class="text-xs text-gray-500 mb-5 bg-gray-50 rounded-lg p-3 border border-gray-100 truncate">
+                        <span class="font-black text-gray-700">{{ acceptingTicket.ticket_key }}</span>
+                        — {{ acceptingTicket.title }}
+                    </p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store <span class="text-red-500">*</span></label>
+                            <Autocomplete
+                                v-model="acceptForm.store_id"
+                                :options="stores"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select store..."
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item <span class="text-red-500">*</span></label>
+                            <Autocomplete
+                                v-model="acceptForm.item_id"
+                                :options="items"
+                                label-key="display_name"
+                                value-key="id"
+                                placeholder="Select item..."
+                                size="sm"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end space-x-3 pt-5 border-t mt-5">
+                        <button type="button" @click="showAcceptModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                        <button
+                            type="button"
+                            @click="submitAcceptTicket"
+                            :disabled="!acceptForm.store_id || !acceptForm.item_id"
+                            class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all"
+                        >
+                            Accept Ticket
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     </AppLayout>
 </template>
