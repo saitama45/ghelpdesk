@@ -173,11 +173,9 @@ const editForm = useForm({
     severity: props.ticket.severity,
     assignee_id: props.ticket.assignee_id || '',
     
-    // New fields for requester info and notification
     is_self_requester: !!props.ticket.reporter_id,
     sender_name: props.ticket.sender_name || '',
     sender_email: props.ticket.sender_email || '',
-    notify_requester: true,
 });
 
 const items = ref([]);
@@ -697,15 +695,6 @@ const linkify = (text) => {
                                     </div>
                                 </div>
 
-                                <div class="pt-2">
-                                    <label class="flex items-center space-x-3 cursor-pointer">
-                                        <div class="relative">
-                                            <input type="checkbox" v-model="editForm.notify_requester" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
-                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                        </div>
-                                        <span class="text-[10px] font-bold text-gray-500 uppercase">Notify Requester</span>
-                                    </label>
-                                </div>
                             </div>
 
                             <div>
