@@ -588,8 +588,8 @@ const handleEventClick = (event) => {
 
     const user = page.props.auth.user;
     const isAdmin = user.roles?.some(r => r.name === 'Admin');
-    const isOwner = event.user_id === user.id;
-    const canEdit = hasPermission('schedules.edit') && (isOwner || isAdmin);
+    const isOwner = Number(event.user_id) === Number(user.id);
+    const canEdit = isOwner || isAdmin;
 
     isEditing.value = canEdit;
     isViewingOnly.value = !canEdit;

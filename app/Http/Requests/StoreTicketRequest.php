@@ -25,6 +25,7 @@ class StoreTicketRequest extends FormRequest
             'is_self_requester' => 'boolean',
             'sender_name' => 'nullable|required_if:is_self_requester,false|string|max:255',
             'sender_email' => 'nullable|required_if:is_self_requester,false|email|max:255',
+            'department' => 'nullable|string|max:255',
             'notify_requester' => 'boolean',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:65535',

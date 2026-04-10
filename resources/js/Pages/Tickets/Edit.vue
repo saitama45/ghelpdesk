@@ -217,6 +217,7 @@ const editForm = useForm({
     is_self_requester: !!props.ticket.reporter_id,
     sender_name: props.ticket.sender_name || '',
     sender_email: props.ticket.sender_email || '',
+    department: props.ticket.department || '',
 });
 
 const items = ref([]);
@@ -388,8 +389,12 @@ const debounce = (fn, delay) => {
     };
 };
 
+const departments = computed(() =>
+    [...new Set(props.users.map(u => u.department).filter(Boolean))].sort()
+);
+
 const isClassificationComplete = computed(() => {
-    return !!editForm.company_id && !!editForm.store_id && !!editForm.item_id;
+    return !!editForm.company_id && !!editForm.store_id && !!editForm.item_id && !!editForm.department;
 });
 
 const updateTicket = (options = {}) => {
@@ -460,6 +465,7 @@ watch(() => props.ticket, (newTicket) => {
     editForm.is_self_requester = !!newTicket.reporter_id;
     editForm.sender_name = newTicket.sender_name || '';
     editForm.sender_email = newTicket.sender_email || '';
+    editForm.department = newTicket.department || '';
     editForm.defaults(editForm.data()); // Reset dirty state
 }, { deep: true });
 
@@ -472,16 +478,23 @@ watch(() => [
     editForm.severity,
     editForm.type,
     editForm.assignee_id,
-    editForm.is_self_requester,
 ], () => {
+    updateTicket({ preserveScroll: true });
+});
+
+// Watcher for is_self_requester — also updates department before saving
+watch(() => editForm.is_self_requester, (isSelf) => {
+    editForm.department = isSelf ? (page.props.auth.user?.department || '') : '';
     updateTicket({ preserveScroll: true });
 });
 
 // Watchers for free-text fields (debounced to avoid saving on every keystroke)
 const debouncedUpdateSenderName = debounce(() => updateTicket(), 800);
 const debouncedUpdateSenderEmail = debounce(() => updateTicket(), 800);
+const debouncedUpdateDepartment = debounce(() => updateTicket(), 800);
 watch(() => editForm.sender_name, () => { debouncedUpdateSenderName(); });
 watch(() => editForm.sender_email, () => { debouncedUpdateSenderEmail(); });
+watch(() => editForm.department, () => { debouncedUpdateDepartment(); });
 
 // Classification Watcher
 watch(() => editForm.item_id, (newVal, oldVal) => {
@@ -743,6 +756,24 @@ const linkify = (text) => {
                                     </div>
                                 </div>
 
+                                <div class="pt-2 border-t border-gray-200">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Department</label>
+                                    <input
+                                        v-model="editForm.department"
+                                        type="text"
+                                        list="edit-ticket-departments-list"
+                                        maxlength="255"
+                                        :readonly="editForm.is_self_requester || !hasPermission('tickets.edit')"
+                                        :disabled="!hasPermission('tickets.edit')"
+                                        :class="(editForm.is_self_requester || !hasPermission('tickets.edit')) ? 'bg-gray-100 cursor-not-allowed' : ''"
+                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                        placeholder="Department"
+                                    >
+                                    <datalist id="edit-ticket-departments-list">
+                                        <option v-for="dept in departments" :key="dept" :value="dept" />
+                                    </datalist>
+                                </div>
+
                             </div>
 
                             <div v-if="availableCompanies.length > 0">
@@ -870,7 +901,7 @@ const linkify = (text) => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Assignee</label>
                             <p v-if="!isClassificationComplete" class="text-[9px] text-amber-600 font-black uppercase mb-2 bg-amber-50 p-1.5 rounded border border-amber-100 flex items-center">
                                 <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                Set Company, Store, & Item first
+                                Set Company, Store, Item & Department first
                             </p>
                             <CustomSelect
                                 v-model="editForm.assignee_id"

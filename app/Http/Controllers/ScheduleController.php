@@ -23,7 +23,7 @@ class ScheduleController extends Controller implements HasMiddleware
         return [
             new Middleware('can:schedules.view', only: ['index']),
             new Middleware('can:schedules.create', only: ['store', 'import']),
-            new Middleware('can:schedules.edit', only: ['update']),
+            // schedules.edit is checked inside update() to also allow the schedule owner
         ];
     }
 
@@ -185,6 +185,14 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function update(Request $request, Schedule $schedule)
     {
+        $user = auth()->user();
+        $isOwner = $schedule->user_id === $user->id;
+        $isAdmin = $user->roles()->where('name', 'Admin')->exists();
+
+        if (!$isOwner && !$isAdmin) {
+            abort(403, 'You are not authorized to edit this schedule.');
+        }
+
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
             'store_id' => 'nullable|exists:stores,id',

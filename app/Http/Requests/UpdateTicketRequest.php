@@ -25,6 +25,7 @@ class UpdateTicketRequest extends FormRequest
             'is_self_requester' => 'nullable|boolean',
             'sender_name' => 'nullable|string|max:255',
             'sender_email' => 'nullable|email|max:255',
+            'department' => 'nullable|string|max:255',
             'notify_requester' => 'nullable|boolean',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:65535',

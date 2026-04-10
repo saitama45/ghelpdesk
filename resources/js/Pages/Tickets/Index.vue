@@ -18,6 +18,7 @@ const props = defineProps({
     companies: Array,
     stores: Array,
     filters: Object,
+    departments: Array,
 });
 
 const page = usePage();
@@ -151,6 +152,7 @@ const createForm = useForm({
     is_self_requester: true,
     sender_name: '',
     sender_email: '',
+    department: page.props.auth.user?.department || '',
     notify_requester: true,
 });
 
@@ -188,6 +190,11 @@ watch(() => showAcceptModal.value, (isOpen) => {
     if (isOpen && items.value.length === 0) {
         fetchItems();
     }
+});
+
+// Auto-populate department from auth user when "I am the requester" is toggled
+watch(() => createForm.is_self_requester, (isSelf) => {
+    createForm.department = isSelf ? (page.props.auth.user?.department || '') : '';
 });
 
 // Also watch defaultCompanyId in case it loads later
@@ -344,6 +351,7 @@ const submitAcceptTicket = () => {
         status: ticket.status,
         severity: ticket.severity,
         assignee_id: page.props.auth.user.id,
+        department: ticket.department || '',
     }, {
         onSuccess: () => {
             showAcceptModal.value = false;
@@ -739,6 +747,23 @@ const formatItemName = (item) => {
                                     <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
                                     <input v-model="createForm.sender_email" type="email" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                 </div>
+                            </div>
+
+                            <div class="pt-2 border-t border-gray-200">
+                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Department</label>
+                                <input
+                                    v-model="createForm.department"
+                                    type="text"
+                                    list="ticket-departments-list"
+                                    maxlength="255"
+                                    :readonly="createForm.is_self_requester"
+                                    :class="createForm.is_self_requester ? 'bg-gray-100 cursor-not-allowed' : ''"
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                    placeholder="Department"
+                                >
+                                <datalist id="ticket-departments-list">
+                                    <option v-for="dept in departments" :key="dept" :value="dept" />
+                                </datalist>
                             </div>
 
                             <div class="pt-2">

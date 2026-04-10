@@ -30,6 +30,7 @@ class Ticket extends Model
         'parent_id',
         'sender_email',
         'sender_name',
+        'department',
         'message_id',
         'survey_token',
     ];

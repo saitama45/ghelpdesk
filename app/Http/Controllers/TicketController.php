@@ -120,12 +120,14 @@ class TicketController extends Controller
         })->select('id', 'name')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
         return Inertia::render('Tickets/Index', [
             'tickets' => $tickets,
             'staff' => $staff,
             'companies' => $companies,
             'stores' => $stores,
+            'departments' => $departments,
             'filters' => [
                 'status' => $statusFilter,
                 'search' => $request->search
@@ -147,11 +149,12 @@ class TicketController extends Controller
                 $data['reporter_id'] = auth()->id();
                 $data['sender_name'] = null;
                 $data['sender_email'] = null;
+                $data['department'] = auth()->user()->department;
             } else {
                 $data['reporter_id'] = null;
-                // sender_name and sender_email are already in $data
+                // sender_name, sender_email, and department are already in $data
             }
-            
+
             // Ensure Manila Time
             $data['created_at'] = now('Asia/Manila');
 
@@ -311,10 +314,13 @@ class TicketController extends Controller
                 $validated['reporter_id'] = auth()->id();
                 $validated['sender_name'] = null;
                 $validated['sender_email'] = null;
+                $validated['department'] = auth()->user()->department;
             } else {
                 $validated['reporter_id'] = null;
-                // sender_name and sender_email are already in $validated from request
+                // sender_name, sender_email, and department are already in $validated from request
             }
+        } elseif ($request->has('department')) {
+            $validated['department'] = $request->input('department');
         }
 
         // Auto-update priority, category, and sub_category if item_id changed
