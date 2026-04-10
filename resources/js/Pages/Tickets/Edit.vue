@@ -92,6 +92,20 @@ const formatDateForInput = (date) => {
     return d.toISOString().slice(0, 16);
 };
 
+const formatTime = (timeStr) => {
+    if (!timeStr) return '';
+    try {
+        const [hours, minutes] = timeStr.split(':');
+        if (!hours || !minutes) return timeStr;
+        let h = parseInt(hours, 10);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12 || 12;
+        return `${h}:${minutes} ${ampm}`;
+    } catch (e) {
+        return timeStr;
+    }
+};
+
 const openChildModal = () => {
     childForm.reset();
     
@@ -338,6 +352,9 @@ const activities = computed(() => {
         sender_name: props.ticket.sender_name,
         sender_email: props.ticket.sender_email,
         text: props.ticket.description,
+        // Include schedule for child context
+        schedule: props.ticket.schedule,
+        assignee: props.ticket.assignee,
         // Attachments that are not linked to any comment (created with ticket)
         attachments: (props.ticket.attachments || []).filter(a => !a.comment_id)
     };
@@ -967,6 +984,55 @@ const linkify = (text) => {
                                 
                                 <!-- Description Item (Inline Editable) -->
                                 <template v-if="activity.activity_type === 'description'">
+                                    <!-- Parent Context Card (for Child Tickets) -->
+                                    <div v-if="ticket.parent_id && ticket.parent" class="mb-6 bg-purple-50 border border-purple-100 rounded-xl overflow-hidden shadow-sm">
+                                        <div class="px-4 py-3 bg-white border-b border-purple-100 flex items-center justify-between">
+                                            <div class="flex flex-col">
+                                                <span class="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Originating Parent Ticket</span>
+                                                <h4 class="text-sm font-bold text-gray-900 leading-tight">{{ ticket.parent.title }}</h4>
+                                            </div>
+                                            <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-purple-100 text-purple-700 border border-purple-200">
+                                                {{ ticket.parent.ticket_key }}
+                                            </span>
+                                        </div>
+                                        <div class="p-4">
+                                            <div class="text-sm text-gray-600 leading-relaxed line-clamp-3 italic whitespace-pre-wrap" v-html="linkify(ticket.parent.description)"></div>
+                                            <div class="mt-3 flex justify-end">
+                                                <Link :href="route('tickets.edit', ticket.parent_id)" class="text-[10px] font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center group">
+                                                    View Parent Details
+                                                    <svg class="w-3 h-3 ml-1 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Child Schedule Context (for Child Tickets) -->
+                                    <div v-if="ticket.parent_id && activity.schedule" class="mb-6 bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
+                                        <div class="flex items-center justify-between border-b border-blue-100 pb-2 mb-2">
+                                            <span class="text-[10px] font-black text-blue-400 uppercase tracking-widest">Schedule Assignment</span>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200">{{ activity.schedule.status }}</span>
+                                        </div>
+                                        
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div class="flex flex-col">
+                                                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Scheduled Time</span>
+                                                <span class="text-xs font-bold text-gray-700">{{ formatDate(activity.schedule.start_time) }} – {{ formatDate(activity.schedule.end_time) }}</span>
+                                            </div>
+                                            <div v-if="activity.schedule.store" class="flex flex-col">
+                                                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Store Branch</span>
+                                                <span class="text-xs font-bold text-gray-700">{{ activity.schedule.store.name }}</span>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="activity.schedule.pickup_start || activity.schedule.backlogs_start" class="flex flex-col gap-2 pt-2 border-t border-blue-50">
+                                            <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Operational Windows</span>
+                                            <div class="flex flex-wrap gap-2">
+                                                <span v-if="activity.schedule.pickup_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Pickup: {{ formatTime(activity.schedule.pickup_start) }}–{{ formatTime(activity.schedule.pickup_end) }}</span>
+                                                <span v-if="activity.schedule.backlogs_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Backlogs: {{ formatTime(activity.schedule.backlogs_start) }}–{{ formatTime(activity.schedule.backlogs_end) }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <!-- Dot (Avatar) -->
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
@@ -1127,9 +1193,9 @@ const linkify = (text) => {
                                         <div v-if="activity.schedule && (activity.schedule.pickup_start || activity.schedule.backlogs_start)" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Add'l Times</span>
                                             <span class="text-gray-600 text-[11px]">
-                                                <span v-if="activity.schedule.pickup_start">Pickup: {{ activity.schedule.pickup_start }}–{{ activity.schedule.pickup_end }}</span>
+                                                <span v-if="activity.schedule.pickup_start">Pickup: {{ formatTime(activity.schedule.pickup_start) }}–{{ formatTime(activity.schedule.pickup_end) }}</span>
                                                 <span v-if="activity.schedule.pickup_start && activity.schedule.backlogs_start"> &nbsp;|&nbsp; </span>
-                                                <span v-if="activity.schedule.backlogs_start">Backlogs: {{ activity.schedule.backlogs_start }}–{{ activity.schedule.backlogs_end }}</span>
+                                                <span v-if="activity.schedule.backlogs_start">Backlogs: {{ formatTime(activity.schedule.backlogs_start) }}–{{ formatTime(activity.schedule.backlogs_end) }}</span>
                                             </span>
                                         </div>
                                         <div v-if="activity.schedule && activity.schedule.store" class="flex items-center gap-2">

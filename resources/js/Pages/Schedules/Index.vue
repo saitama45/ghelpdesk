@@ -266,7 +266,7 @@
                 <div class="mt-3">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-bold text-gray-900">
-                            {{ isEditing ? 'Edit Schedule' : 'New Schedule' }}
+                            {{ isViewingOnly ? 'View Schedule' : (isEditing ? 'Edit Schedule' : 'New Schedule') }}
                         </h3>
                         <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -285,11 +285,12 @@
                                     label-key="name"
                                     value-key="id"
                                     placeholder="Select user..."
+                                    :disabled="isViewingOnly"
                                 />
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                                <select v-model="form.status" required
+                                <select v-model="form.status" required :disabled="isViewingOnly"
                                         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                                     <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
                                 </select>
@@ -305,11 +306,12 @@
                                     label-key="name"
                                     value-key="id"
                                     placeholder="Select store..."
+                                    :disabled="isViewingOnly"
                                 />
                             </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Off-site Remarks / Other Activities</label>
-                            <textarea v-model="form.remarks" rows="3"
+                            <textarea v-model="form.remarks" rows="3" :disabled="isViewingOnly"
                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                                       placeholder="Provide details about the off-site activity or other remarks..."></textarea>
                         </div>
@@ -318,12 +320,12 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
-                                <input v-model="form.start_time" type="datetime-local" required
+                                <input v-model="form.start_time" type="datetime-local" required :disabled="isViewingOnly"
                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
-                                <input v-model="form.end_time" type="datetime-local" required
+                                <input v-model="form.end_time" type="datetime-local" required :disabled="isViewingOnly"
                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                             </div>
                         </div>
@@ -335,17 +337,17 @@
                                 <div class="space-y-2">
                                     <label class="block text-xs font-medium text-gray-600">Pickup Time (From - To)</label>
                                     <div class="flex items-center space-x-2">
-                                        <input v-model="form.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                        <input v-model="form.pickup_start" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                                         <span class="text-gray-400">-</span>
-                                        <input v-model="form.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                        <input v-model="form.pickup_end" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                                     </div>
                                 </div>
                                 <div class="space-y-2">
                                     <label class="block text-xs font-medium text-gray-600">Backlogs Time (From - To)</label>
                                     <div class="flex items-center space-x-2">
-                                        <input v-model="form.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                        <input v-model="form.backlogs_start" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                                         <span class="text-gray-400">-</span>
-                                        <input v-model="form.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                        <input v-model="form.backlogs_end" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
                                     </div>
                                 </div>
                             </div>
@@ -355,9 +357,9 @@
                             <div class="flex space-x-3">
                                 <button type="button" @click="closeModal" 
                                         class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
-                                    Cancel
+                                    {{ isViewingOnly ? 'Close' : 'Cancel' }}
                                 </button>
-                                <button type="submit" 
+                                <button v-if="!isViewingOnly" type="submit" 
                                         class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md">
                                     {{ isEditing ? 'Save Changes' : 'Create Schedule' }}
                                 </button>
@@ -522,6 +524,7 @@ const submitImport = async () => {
 // ── Create / Edit ────────────────────────────────────────────────────────
 const showModal = ref(false)
 const isEditing = ref(false)
+const isViewingOnly = ref(false)
 const currentScheduleId = ref(null)
 
 const statuses = [
@@ -549,6 +552,7 @@ const formatDateForInput = (date) => {
 
 const openCreateModal = () => {
     isEditing.value = false
+    isViewingOnly.value = false
     currentScheduleId.value = null
     Object.keys(form).forEach(key => {
         if (key === 'status') form[key] = 'On-site'
@@ -580,9 +584,15 @@ const handleDateClick = (date) => {
 }
 
 const handleEventClick = (event) => {
-    if (!hasPermission('schedules.edit')) return
-    
-    isEditing.value = true
+    if (!hasPermission('schedules.view') && !hasPermission('schedules.edit')) return;
+
+    const user = page.props.auth.user;
+    const isAdmin = user.roles?.some(r => r.name === 'Admin');
+    const isOwner = event.user_id === user.id;
+    const canEdit = hasPermission('schedules.edit') && (isOwner || isAdmin);
+
+    isEditing.value = canEdit;
+    isViewingOnly.value = !canEdit;
     currentScheduleId.value = event.id
     
     form.user_id = event.user_id
@@ -600,7 +610,8 @@ const handleEventClick = (event) => {
 }
 
 const closeModal = () => {
-    showModal.value = false
+    showModal.value = false;
+    isViewingOnly.value = false;
 }
 
 const submitForm = () => {
