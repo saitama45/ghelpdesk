@@ -187,7 +187,7 @@ const stopDrag = () => {
                             <ArrowTopRightOnSquareIcon class="w-3 h-3" />
                         </a>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-400 max-w-xs truncate">
+                    <td class="px-6 py-4 text-xs text-gray-400 min-w-[220px]">
                         {{ log.device_info || 'Unknown Device' }}
                     </td>
                 </tr>

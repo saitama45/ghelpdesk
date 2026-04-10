@@ -10,6 +10,7 @@ const props = defineProps({
     lastLog: Object,
     assignedStores: Array,
     totalAssignedCount: Number,
+    todaySchedule: Object,
 });
 
 // Component state
@@ -48,6 +49,7 @@ const form = useForm({
 });
 
 const nextAction = computed(() => {
+    if (!props.todaySchedule) return null;
     return (!props.lastLog || props.lastLog.type === 'time_out') ? 'Time In' : 'Time Out';
 });
 
@@ -388,13 +390,15 @@ const submit = async () => {
 };
 
 const canSave = computed(() => {
-    return !!capturedImage.value && 
-           isLocationStable.value === true && 
-           isWithinStoreVicinity.value === true && 
+    return !!props.todaySchedule &&
+           !!capturedImage.value &&
+           isLocationStable.value === true &&
+           isWithinStoreVicinity.value === true &&
            !form.processing;
 });
 
 const statusMessage = computed(() => {
+    if (!props.todaySchedule) return 'No active On-site/Off-site schedule for your current time.';
     if (props.assignedStores.length === 0) return 'No assigned work sites found.';
     if (!capturedImage.value) return 'Please take a selfie first.';
     if (!latitude.value) return 'Acquiring GPS...';
@@ -425,8 +429,42 @@ const statusMessage = computed(() => {
                 </p>
             </div>
 
-            <div v-else class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-                
+            <div v-else class="p-6 space-y-6">
+
+                <!-- Schedule Status Banner -->
+                <div v-if="todaySchedule" class="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                    <div class="flex-shrink-0 w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-black text-blue-500 uppercase tracking-widest">Active Schedule</p>
+                        <p class="text-sm font-bold text-blue-900">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-black mr-2"
+                                :class="todaySchedule.status === 'On-site' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'">
+                                {{ todaySchedule.status }}
+                            </span>
+                            {{ todaySchedule.store?.name ?? 'Unknown Store' }}
+                            &nbsp;·&nbsp;
+                            {{ new Date(todaySchedule.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' }) }}
+                            –
+                            {{ new Date(todaySchedule.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' }) }}
+                        </p>
+                    </div>
+                </div>
+                <div v-else class="flex items-center gap-3 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3">
+                    <div class="flex-shrink-0 w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center">
+                        <ExclamationCircleIcon class="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div>
+                        <p class="text-xs font-black text-amber-600 uppercase tracking-widest">No Active Schedule</p>
+                        <p class="text-sm font-bold text-amber-900">No On-site or Off-site schedule found for your current time. Attendance logging is disabled. Please contact your supervisor.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
                 <!-- Camera Section -->
                 <div class="space-y-4">
                     <div class="flex items-center justify-between">
@@ -563,6 +601,7 @@ const statusMessage = computed(() => {
                         </div>
                     </div>
                 </div>
+                </div><!-- end grid -->
             </div>
         </div>
         <canvas ref="canvas" style="display:none;"></canvas>

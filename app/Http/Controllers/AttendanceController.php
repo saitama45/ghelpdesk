@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
+use App\Models\Schedule;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -43,10 +44,35 @@ class AttendanceController extends Controller implements HasMiddleware
                 ->get();
         }
 
+        // Find the user's active On-site/Off-site schedule for the current time
+        $todaySchedule = Schedule::where('user_id', $user->id)
+            ->whereIn('status', ['On-site', 'Off-site'])
+            ->where('start_time', '<=', now('Asia/Manila'))
+            ->where('end_time', '>=', now('Asia/Manila'))
+            ->with('store')
+            ->first();
+
+        // Scope lastLog to this schedule so a forgotten yesterday Time Out doesn't bleed into today
+        $lastLog = $todaySchedule
+            ? AttendanceLog::where('user_id', $user->id)
+                ->where('schedule_id', $todaySchedule->id)
+                ->latest('log_time')
+                ->first()
+            : null;
+
         return Inertia::render('Attendance/Index', [
-            'lastLog' => $user->lastAttendanceLog,
+            'lastLog' => $lastLog,
             'assignedStores' => $assignedStores,
-            'totalAssignedCount' => $totalAssignedCount
+            'totalAssignedCount' => $totalAssignedCount,
+            'todaySchedule' => $todaySchedule ? [
+                'id'         => $todaySchedule->id,
+                'status'     => $todaySchedule->status,
+                'start_time' => $todaySchedule->start_time->toIso8601String(),
+                'end_time'   => $todaySchedule->end_time->toIso8601String(),
+                'store'      => $todaySchedule->store
+                    ? ['id' => $todaySchedule->store->id, 'name' => $todaySchedule->store->name]
+                    : null,
+            ] : null,
         ]);
     }
 
@@ -121,13 +147,28 @@ class AttendanceController extends Controller implements HasMiddleware
             return back()->with('error', 'Too many attempts. Please try again in ' . RateLimiter::availableIn($throttleKey) . ' seconds.');
         }
 
-        // Determine type (Toggle logic: if last was time_in, this is time_out)
-        $lastLog = $user->lastAttendanceLog;
+        // Find the active On-site/Off-site schedule for this user right now
+        $schedule = Schedule::where('user_id', $user->id)
+            ->whereIn('status', ['On-site', 'Off-site'])
+            ->where('start_time', '<=', now('Asia/Manila'))
+            ->where('end_time', '>=', now('Asia/Manila'))
+            ->first();
+
+        if (!$schedule) {
+            return back()->with('error', 'No active On-site or Off-site schedule found for your current time. Please contact your supervisor.');
+        }
+
+        // Determine type per-schedule (prevents yesterday's forgotten Time Out bleeding into today)
+        $lastLog = AttendanceLog::where('user_id', $user->id)
+            ->where('schedule_id', $schedule->id)
+            ->latest('log_time')
+            ->first();
+
         $type = (!$lastLog || $lastLog->type === 'time_out') ? 'time_in' : 'time_out';
 
-        // Optional: Prevent duplicate logs within a short window (e.g., 5 minutes)
+        // Prevent duplicate logs within a short window (5 minutes)
         if ($lastLog && $lastLog->created_at->addMinutes(5)->isFuture()) {
-             return back()->with('warning', 'A log was already recorded recently. Please wait a few minutes.');
+            return back()->with('warning', 'A log was already recorded recently. Please wait a few minutes.');
         }
 
         // Handle Base64 Photo
@@ -153,6 +194,7 @@ class AttendanceController extends Controller implements HasMiddleware
 
         AttendanceLog::create([
             'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
             'type' => $type,
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,

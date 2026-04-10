@@ -203,10 +203,10 @@ class ScheduleController extends Controller implements HasMiddleware
     public function update(Request $request, Schedule $schedule)
     {
         $user = auth()->user();
-        $isOwner = $schedule->user_id === $user->id;
-        $isAdmin = $user->roles()->where('name', 'Admin')->exists();
+        $isOwner = (int) $schedule->user_id === (int) $user->id;
+        $hasEditPermission = $user->can('schedules.edit');
 
-        if (!$isOwner && !$isAdmin) {
+        if (!$isOwner && !$hasEditPermission) {
             abort(403, 'You are not authorized to edit this schedule.');
         }
 
