@@ -74,6 +74,11 @@ const availableCompanies = computed(() => {
         return ids;
     }, new Set());
 
+    // Also include direct company assignment
+    if (user.company_id) {
+        allowedCompanyIds.add(user.company_id);
+    }
+
     // Filter available companies
     return props.companies.filter(company => allowedCompanyIds.has(company.id));
 });
@@ -126,6 +131,7 @@ watch(() => props.tickets, (newTickets) => {
 }, { deep: true });
 
 const acceptForm = useForm({
+    company_id: '',
     store_id: '',
     item_id: '',
 });
@@ -312,6 +318,7 @@ const acceptTicket = (ticket) => {
         return;
     }
     acceptingTicket.value = ticket;
+    acceptForm.company_id = ticket.company_id || '';
     acceptForm.store_id = ticket.store_id || '';
     acceptForm.item_id = ticket.item_id || '';
     showAcceptModal.value = true;
@@ -325,7 +332,7 @@ const submitAcceptTicket = () => {
     const priority = item ? item.priority.toLowerCase() : (ticket.priority || 'medium');
 
     put(route('tickets.update', ticket.id), {
-        company_id: ticket.company_id,
+        company_id: acceptForm.company_id,
         store_id: acceptForm.store_id,
         category_id: ticket.category_id,
         sub_category_id: ticket.sub_category_id,
@@ -745,7 +752,7 @@ const formatItemName = (item) => {
                             </div>
                         </div>
 
-                        <div>
+                        <div v-if="availableCompanies.length > 0">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Company</label>
                             <select v-model="createForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                 <option value="">Select Company</option>
@@ -840,6 +847,13 @@ const formatItemName = (item) => {
                     </p>
 
                     <div class="space-y-4">
+                        <div v-if="availableCompanies.length > 0">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Company <span class="text-red-500">*</span></label>
+                            <select v-model="acceptForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <option value="">Select Company</option>
+                                <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
+                            </select>
+                        </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store <span class="text-red-500">*</span></label>
                             <Autocomplete
@@ -868,7 +882,7 @@ const formatItemName = (item) => {
                         <button
                             type="button"
                             @click="submitAcceptTicket"
-                            :disabled="!acceptForm.store_id || !acceptForm.item_id"
+                            :disabled="!acceptForm.company_id || !acceptForm.store_id || !acceptForm.item_id"
                             class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all"
                         >
                             Accept Ticket

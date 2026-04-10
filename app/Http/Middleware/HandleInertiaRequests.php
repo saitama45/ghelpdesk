@@ -41,6 +41,9 @@ class HandleInertiaRequests extends Middleware
         $permissions = [];
 
         if ($user) {
+            // Load roles and companies for company-based filtering
+            $user->loadMissing('roles.companies');
+
             // Cache per-user permission list for 1 hour.
             // Key includes: user.updated_at (changes when role is reassigned on this user)
             // and a global permissions_version counter (bumped whenever any role's permissions change).

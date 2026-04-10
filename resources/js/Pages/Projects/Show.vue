@@ -11,6 +11,7 @@ import InputError from '@/Components/InputError.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { useConfirm } from '@/Composables/useConfirm.js';
+import { usePermission } from '@/Composables/usePermission.js';
 import { 
     ChevronLeftIcon,
     CalendarIcon,
@@ -20,13 +21,43 @@ import {
     InformationCircleIcon,
     PlusIcon,
     TrashIcon,
-    XMarkIcon
+    XMarkIcon,
+    PencilIcon
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     project: Object,
-    users: Array
+    users: Array,
+    stores: Array
 });
+
+const formatDate = (dateString) => {
+    if (!dateString) return 'TBD';
+    return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+    });
+};
+
+const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return '';
+        
+        // Use local date components to avoid timezone shifting
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}`;
+    } catch (e) {
+        return '';
+    }
+};
+
+const { hasPermission } = usePermission();
 
 // Initialize activeTab from URL query parameter if present
 const urlParams = new URLSearchParams(window.location.search);
@@ -47,6 +78,43 @@ const teamForm = useForm({
 const teamMembers = computed(() => {
     return props.project.team_members || props.project.teamMembers || [];
 });
+
+const showEditProjectModal = ref(false);
+const editForm = useForm({
+    name: props.project.name,
+    store_id: props.project.store_id,
+    status: props.project.status,
+    turn_over_date: formatDateForInput(props.project.turn_over_date),
+    training_date: formatDateForInput(props.project.training_date),
+    testing_date: formatDateForInput(props.project.testing_date),
+    mock_service_date: formatDateForInput(props.project.mock_service_date),
+    turn_over_to_franchisee_date: formatDateForInput(props.project.turn_over_to_franchisee_date),
+    target_go_live: formatDateForInput(props.project.target_go_live),
+    remarks: props.project.remarks,
+});
+
+const openEditModal = () => {
+    editForm.name = props.project.name;
+    editForm.store_id = props.project.store_id;
+    editForm.status = props.project.status;
+    editForm.turn_over_date = formatDateForInput(props.project.turn_over_date);
+    editForm.training_date = formatDateForInput(props.project.training_date);
+    editForm.testing_date = formatDateForInput(props.project.testing_date);
+    editForm.mock_service_date = formatDateForInput(props.project.mock_service_date);
+    editForm.turn_over_to_franchisee_date = formatDateForInput(props.project.turn_over_to_franchisee_date);
+    editForm.target_go_live = formatDateForInput(props.project.target_go_live);
+    editForm.remarks = props.project.remarks;
+    showEditProjectModal.value = true;
+};
+
+const updateProject = () => {
+    editForm.put(route('projects.update', props.project.id), {
+        onSuccess: () => {
+            showEditProjectModal.value = false;
+        },
+        preserveScroll: true
+    });
+};
 
 const addTeamMember = () => {
     teamForm.clearErrors();
@@ -87,15 +155,6 @@ const projectProgress = computed(() => {
     return Math.round(totalProgress / tasks.length);
 });
 
-const formatDate = (dateString) => {
-    if (!dateString) return 'TBD';
-    return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric'
-    });
-};
-
 const getStatusColor = (status) => {
     switch (status.toLowerCase()) {
         case 'completed': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
@@ -113,6 +172,132 @@ const getStatusColor = (status) => {
         <template #header>
             Project Detail
         </template>
+
+        <!-- Edit Project Modal -->
+        <Modal :show="showEditProjectModal" @close="showEditProjectModal = false" maxWidth="4xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold text-gray-900">Edit Project Details</h2>
+                    <button @click="showEditProjectModal = false" class="text-gray-400 hover:text-gray-500">
+                        <XMarkIcon class="w-6 h-6" />
+                    </button>
+                </div>
+
+                <form @submit.prevent="updateProject" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Basic Info -->
+                        <div class="space-y-4">
+                            <div>
+                                <InputLabel for="edit_name" value="Project Name" />
+                                <TextInput 
+                                    id="edit_name" 
+                                    type="text" 
+                                    v-model="editForm.name" 
+                                    class="w-full" 
+                                    required 
+                                />
+                                <InputError :message="editForm.errors.name" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="edit_store_id" value="Store Branch" />
+                                <select 
+                                    id="edit_store_id"
+                                    v-model="editForm.store_id"
+                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                    required
+                                >
+                                    <option v-for="store in stores" :key="store.id" :value="store.id">
+                                        {{ store.name }}
+                                    </option>
+                                </select>
+                                <InputError :message="editForm.errors.store_id" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="edit_status" value="Status" />
+                                <select 
+                                    id="edit_status"
+                                    v-model="editForm.status"
+                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                    required
+                                >
+                                    <option value="Pending">Pending</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Delayed">Delayed</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                </select>
+                                <InputError :message="editForm.errors.status" />
+                            </div>
+                        </div>
+
+                        <!-- Dates -->
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel for="edit_target_go_live" value="Target Go-Live" />
+                                    <TextInput id="edit_target_go_live" type="date" v-model="editForm.target_go_live" class="w-full" />
+                                    <InputError :message="editForm.errors.target_go_live" />
+                                </div>
+                                <div>
+                                    <InputLabel for="edit_turn_over_date" value="Store Turn-over" />
+                                    <TextInput id="edit_turn_over_date" type="date" v-model="editForm.turn_over_date" class="w-full" />
+                                    <InputError :message="editForm.errors.turn_over_date" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel for="edit_training_date" value="Training Date" />
+                                    <TextInput id="edit_training_date" type="date" v-model="editForm.training_date" class="w-full" />
+                                    <InputError :message="editForm.errors.training_date" />
+                                </div>
+                                <div>
+                                    <InputLabel for="edit_testing_date" value="Testing Date" />
+                                    <TextInput id="edit_testing_date" type="date" v-model="editForm.testing_date" class="w-full" />
+                                    <InputError :message="editForm.errors.testing_date" />
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel for="edit_mock_service_date" value="Mock Service" />
+                                    <TextInput id="edit_mock_service_date" type="date" v-model="editForm.mock_service_date" class="w-full" />
+                                    <InputError :message="editForm.errors.mock_service_date" />
+                                </div>
+                                <div>
+                                    <InputLabel for="edit_turn_over_to_franchisee_date" value="Franchisee T.O." />
+                                    <TextInput id="edit_turn_over_to_franchisee_date" type="date" v-model="editForm.turn_over_to_franchisee_date" class="w-full" />
+                                    <InputError :message="editForm.errors.turn_over_to_franchisee_date" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <InputLabel for="edit_remarks" value="Remarks" />
+                        <textarea 
+                            id="edit_remarks" 
+                            v-model="editForm.remarks" 
+                            class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm min-h-[100px]"
+                            placeholder="Add project remarks or updates..."
+                        ></textarea>
+                        <InputError :message="editForm.errors.remarks" />
+                    </div>
+
+                    <div class="flex justify-end gap-3 pt-6 border-t border-gray-100">
+                        <SecondaryButton @click="showEditProjectModal = false" :disabled="editForm.processing">
+                            Cancel
+                        </SecondaryButton>
+                        <PrimaryButton :disabled="editForm.processing">
+                            <span v-if="editForm.processing">Saving...</span>
+                            <span v-else>Save Changes</span>
+                        </PrimaryButton>
+                    </div>
+                </form>
+            </div>
+        </Modal>
 
         <!-- Manage Team Modal -->
         <Modal :show="showManageTeamModal" @close="showManageTeamModal = false" maxWidth="4xl">
@@ -264,7 +449,17 @@ const getStatusColor = (status) => {
                                     {{ project.status }}
                                 </span>
                             </div>
-                            <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ project.name }}</h1>
+                            <div class="flex items-center gap-4">
+                                <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ project.name }}</h1>
+                                <button 
+                                    v-if="hasPermission('projects.edit')" 
+                                    @click="openEditModal"
+                                    class="p-2 rounded-lg bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-gray-100"
+                                    title="Edit Project Details"
+                                >
+                                    <PencilIcon class="h-5 w-5" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div class="flex items-center gap-8 px-8 border-l border-gray-100 hidden lg:flex">

@@ -141,24 +141,6 @@ class TicketController extends Controller
         $data = $request->validated();
         
         $ticket = DB::transaction(function () use ($data, $request) {
-            $company = Company::where('id', $data['company_id'])->lockForUpdate()->first();
-            $companyCode = $company->code;
-
-            $maxNumber = Ticket::withTrashed()
-                ->where('ticket_key', 'LIKE', "{$companyCode}-%")
-                ->get(['ticket_key'])
-                ->map(function ($ticket) {
-                    if (preg_match('/-(\d+)$/', $ticket->ticket_key, $matches)) {
-                        return (int) $matches[1];
-                    }
-                    return 0;
-                })
-                ->max();
-
-            $nextNumber = ($maxNumber ?? 0) + 1;
-            
-            $data['ticket_key'] = "{$companyCode}-{$nextNumber}";
-            
             // Handle requester options
             $isSelfRequester = $request->boolean('is_self_requester', true);
             if ($isSelfRequester) {

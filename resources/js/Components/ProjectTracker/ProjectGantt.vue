@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { router, useForm } from '@inertiajs/vue3';
 import { 
     PlusIcon, 
     TrashIcon, 
@@ -42,13 +42,13 @@ const form = useForm({
     category: '',
     assigned_to: '',
     status: 'Pending',
-    progress: 0,
+    task_progress: 0,
     start_date: '',
     end_date: '',
 });
 
 // Sync status with progress in the form
-watch(() => form.progress, (newProgress) => {
+watch(() => form.task_progress, (newProgress) => {
     if (newProgress >= 100) {
         form.status = 'Done';
     } else if (newProgress > 0) {
@@ -116,7 +116,10 @@ const applyActivityTemplates = async () => {
 
 const saveTask = () => {
     if (isEditing.value) {
-        form.put(route('projects-tasks.update', { 'projects_task': editingTaskId.value, tab: 'gantt' }), {
+        form.transform((data) => ({
+            ...data,
+            progress: data.task_progress,
+        })).put(route('projects-tasks.update', { 'projects_task': editingTaskId.value, tab: 'gantt' }), {
             preserveScroll: true,
             onSuccess: () => {
                 isAddingTask.value = false;
@@ -128,7 +131,10 @@ const saveTask = () => {
 
         });
     } else {
-        form.post(route('projects-tasks.store', { tab: 'gantt' }), {
+        form.transform((data) => ({
+            ...data,
+            progress: data.task_progress,
+        })).post(route('projects-tasks.store', { tab: 'gantt' }), {
             preserveScroll: true,
             onSuccess: () => {
                 isAddingTask.value = false;
@@ -151,7 +157,7 @@ const editTask = (task) => {
     form.category = task.category;
     form.assigned_to = task.assigned_to;
     form.status = task.status;
-    form.progress = task.progress;
+    form.task_progress = task.progress;
     form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
 };
@@ -169,9 +175,8 @@ const updateTaskField = (task, field, value) => {
         else data.status = 'Pending';
     }
 
-    const updateForm = useForm(data);
-
-    updateForm.put(route('projects-tasks.update', { 'projects_task': task.id, tab: 'gantt' }), {
+    // Use router directly instead of useForm to avoid property conflicts
+    router.put(route('projects-tasks.update', { 'projects_task': task.id, tab: 'gantt' }), data, {
         preserveScroll: true
     });
 };
@@ -405,7 +410,7 @@ const isWeekend = (date) => {
                     </div>
                     <div class="md:col-span-1">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Progress</label>
-                        <input v-model="form.progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                        <input v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
                         <div v-if="form.errors.progress" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.progress }}</div>
                     </div>
                     <div class="md:col-span-3">
@@ -434,16 +439,16 @@ const isWeekend = (date) => {
             <div :style="{ width: (480 + timelineDays.length * 48) + 'px' }" class="relative min-h-full">
                 
                 <!-- STICKY HEADER ROW -->
-                <div class="sticky top-0 z-40 flex h-14 bg-white border-b border-slate-200">
+                <div class="sticky top-0 z-50 flex h-14 bg-white border-b border-slate-200">
                     <!-- Left Header -->
-                    <div class="sticky left-0 z-50 w-[480px] h-full flex items-center bg-slate-50/95 backdrop-blur-sm px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
+                    <div class="sticky left-0 z-50 w-[480px] h-full flex items-center bg-slate-50 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
                         <div class="w-1/2">Task Name</div>
                         <div class="w-1/4 px-2 text-center">Owner</div>
                         <div class="w-1/4 pl-2 pr-6 text-right">Status</div>
                     </div>
                     <!-- Right Header (Timeline) -->
-                    <div class="flex-1 flex flex-col">
-                        <div class="h-7 flex items-center px-4 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest relative bg-white/80 backdrop-blur-md">
+                    <div class="flex-1 flex flex-col z-0">
+                        <div class="h-7 flex items-center px-4 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest relative bg-white">
                             <template v-for="(day, idx) in timelineDays" :key="'m'+idx">
                                 <div v-if="day.getDate() === 1 || idx === 0" 
                                      class="absolute flex items-center space-x-2"
@@ -453,7 +458,7 @@ const isWeekend = (date) => {
                                 </div>
                             </template>
                         </div>
-                        <div class="h-7 flex text-[10px] font-bold text-slate-500 bg-white/80 backdrop-blur-md">
+                        <div class="h-7 flex text-[10px] font-bold text-slate-500 bg-white">
                             <div v-for="(day, idx) in timelineDays" :key="idx" 
                                  class="flex-shrink-0 w-12 flex items-center justify-center border-r border-slate-100"
                                  :class="[
@@ -482,7 +487,7 @@ const isWeekend = (date) => {
 
                     <!-- Today Indicator Line -->
                     <div v-for="(day, idx) in timelineDays" :key="'line'+idx">
-                         <div v-if="isToday(day)" class="absolute h-full w-[2px] bg-indigo-500/50 z-10 pointer-events-none" :style="{ left: (480 + idx * 48 + 23) + 'px' }">
+                         <div v-if="isToday(day)" class="absolute h-full w-[2px] bg-indigo-500/50 z-0 pointer-events-none" :style="{ left: (480 + idx * 48 + 23) + 'px' }">
                             <div class="bg-indigo-600 text-[8px] text-white px-1 rounded-sm absolute -top-0 transform -translate-x-1/2 font-bold shadow-sm uppercase tracking-tighter">Today</div>
                          </div>
                     </div>
@@ -491,7 +496,7 @@ const isWeekend = (date) => {
                     <template v-for="(tasks, category) in groupedTasks" :key="category">
                         <!-- Category Row -->
                         <div class="flex sticky top-14 z-30">
-                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100/80 backdrop-blur-md flex items-center px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
+                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
                                 <div class="flex items-center space-x-2">
                                     <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90" />
                                     <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider">{{ category }}</span>
@@ -506,7 +511,7 @@ const isWeekend = (date) => {
                              class="flex min-h-[3.5rem] border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10">
                             
                             <!-- Left Task Info (Sticky) -->
-                            <div class="sticky left-0 z-20 w-[480px] bg-white group-hover:bg-transparent flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
+                            <div class="sticky left-0 z-30 w-[480px] bg-white group-hover:bg-slate-50 flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
                                 <div class="w-1/2 px-4 flex items-center space-x-3 py-2">
                                     <div class="relative flex-shrink-0" @click.stop>
                                         <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"

@@ -64,6 +64,7 @@ class ProjectController extends Controller
         return Inertia::render('Projects/Show', [
             'project' => $project,
             'users' => User::all(['id', 'name']),
+            'stores' => Store::all(['id', 'name']),
         ]);
     }
 

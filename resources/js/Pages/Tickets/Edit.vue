@@ -29,6 +29,33 @@ const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
 const { formatDate, parseDate } = useDateFormatter();
 
+// Computed property for available companies based on user roles
+const availableCompanies = computed(() => {
+    const user = page.props.auth.user;
+    if (!user || !user.roles) return [];
+
+    // If Admin, show all companies
+    if (user.roles.some(role => role.name === 'Admin')) {
+        return props.companies;
+    }
+
+    // Get all company IDs from user's roles
+    const allowedCompanyIds = user.roles.reduce((ids, role) => {
+        if (role.companies) {
+            role.companies.forEach(company => ids.add(company.id));
+        }
+        return ids;
+    }, new Set());
+
+    // Also include direct company assignment
+    if (user.company_id) {
+        allowedCompanyIds.add(user.company_id);
+    }
+
+    // Filter available companies
+    return props.companies.filter(company => allowedCompanyIds.has(company.id));
+});
+
 // Canned Messages State
 const showCannedMessages = ref(false);
 
@@ -701,11 +728,11 @@ const linkify = (text) => {
 
                             </div>
 
-                            <div>
+                            <div v-if="availableCompanies.length > 0">
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Company</label>
                                 <CustomSelect
                                     v-model="editForm.company_id"
-                                    :options="companies"
+                                    :options="availableCompanies"
                                     label-key="name"
                                     value-key="id"
                                     placeholder="Select Company"

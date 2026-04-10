@@ -76,6 +76,16 @@
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
                                     <button 
+                                        v-if="hasPermission('roles.create')"
+                                        @click="copyRole(role)" 
+                                        class="p-2 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-full transition-colors"
+                                        title="Copy Role"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                        </svg>
+                                    </button>
+                                    <button 
                                         v-if="hasPermission('roles.edit')"
                                         @click="editRole(role)" 
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
@@ -411,7 +421,7 @@ const openCreateModal = () => {
 }
 
 const editRole = (role) => {
-    isEditing.value = true
+    isEditing.value = true;
     currentRole.value = role
     form.name = role.name
     form.landing_page = role.landing_page || 'dashboard'
@@ -423,6 +433,20 @@ const editRole = (role) => {
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket
     showModal.value = true
 }
+
+const copyRole = (role) => {
+    isEditing.value = false;
+    currentRole.value = null;
+    form.name = `${role.name} - Copy`;
+    form.landing_page = role.landing_page || 'dashboard';
+    form.permissions = role.permissions.map(p => p.name);
+    form.companies = role.companies ? role.companies.map(c => c.id) : [];
+    form.is_assignable = !!role.is_assignable;
+    form.notify_on_ticket_create = !!role.notify_on_ticket_create;
+    form.notify_on_ticket_assign = !!role.notify_on_ticket_assign;
+    form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket;
+    showModal.value = true;
+};
 
 const closeModal = () => {
     showModal.value = false

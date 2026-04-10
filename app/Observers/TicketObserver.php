@@ -4,12 +4,67 @@ namespace App\Observers;
 
 use App\Models\Ticket;
 use App\Models\TicketSlaMetric;
+use App\Models\Company;
 use App\Services\SlaService;
 use App\Models\PosRequest;
 use Carbon\Carbon;
 
 class TicketObserver
 {
+    /**
+     * Handle the Ticket "creating" event.
+     */
+    public function creating(Ticket $ticket): void
+    {
+        if (!$ticket->ticket_key) {
+            $company = Company::find($ticket->company_id);
+            if ($company) {
+                $prefix = $company->code;
+                $maxNumber = Ticket::withTrashed()
+                    ->where('ticket_key', 'LIKE', "{$prefix}-%")
+                    ->get(['ticket_key'])
+                    ->map(function ($t) {
+                        if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
+                            return (int) $matches[1];
+                        }
+                        return 0;
+                    })
+                    ->max();
+
+                $nextNumber = ($maxNumber ?? 0) + 1;
+                $ticket->ticket_key = "{$prefix}-{$nextNumber}";
+            }
+        }
+    }
+
+    /**
+     * Handle the Ticket "updating" event.
+     */
+    public function updating(Ticket $ticket): void
+    {
+        if ($ticket->isDirty('company_id')) {
+            $company = Company::find($ticket->company_id);
+            if ($company) {
+                $prefix = $company->code;
+                
+                // Get the maximum ticket number for the NEW company
+                $maxNumber = Ticket::withTrashed()
+                    ->where('ticket_key', 'LIKE', "{$prefix}-%")
+                    ->get(['ticket_key'])
+                    ->map(function ($t) {
+                        if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
+                            return (int) $matches[1];
+                        }
+                        return 0;
+                    })
+                    ->max();
+
+                $nextNumber = ($maxNumber ?? 0) + 1;
+                $ticket->ticket_key = "{$prefix}-{$nextNumber}";
+            }
+        }
+    }
+
     /**
      * Handle the Ticket "created" event.
      */
