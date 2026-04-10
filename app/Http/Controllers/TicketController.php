@@ -535,6 +535,37 @@ class TicketController extends Controller
     }
 
     /**
+     * Duplicate a ticket, copying all fields into a new open ticket.
+     */
+    public function duplicate(Ticket $ticket)
+    {
+        $newTicket = DB::transaction(function () use ($ticket) {
+            return Ticket::create([
+                'title'           => 'Copy of ' . $ticket->title,
+                'description'     => $ticket->description,
+                'type'            => $ticket->type,
+                'status'          => 'open',
+                'priority'        => $ticket->priority,
+                'severity'        => $ticket->severity,
+                'company_id'      => $ticket->company_id,
+                'store_id'        => $ticket->store_id,
+                'category_id'     => $ticket->category_id,
+                'sub_category_id' => $ticket->sub_category_id,
+                'item_id'         => $ticket->item_id,
+                'assignee_id'     => $ticket->assignee_id,
+                'reporter_id'     => $ticket->reporter_id,
+                'sender_name'     => $ticket->sender_name,
+                'sender_email'    => $ticket->sender_email,
+                'department'      => $ticket->department,
+                'created_at'      => now('Asia/Manila'),
+            ]);
+        });
+
+        return redirect()->route('tickets.edit', $newTicket->id)
+            ->with('success', "Ticket duplicated successfully as {$newTicket->ticket_key}.");
+    }
+
+    /**
      * Store a new comment for the ticket.
      */
     public function storeComment(Request $request, Ticket $ticket)

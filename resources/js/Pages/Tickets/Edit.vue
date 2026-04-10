@@ -11,7 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, DocumentDuplicateIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -620,6 +620,22 @@ const removeCommentAttachment = (index) => {
     commentForm.attachments.splice(index, 1);
 };
 
+const duplicateTicket = async () => {
+    const confirmed = await confirm({
+        title: 'Duplicate Ticket',
+        message: `Duplicate ticket ${props.ticket.ticket_key}? All fields will be copied into a new open ticket.`
+    });
+
+    if (confirmed) {
+        post(route('tickets.duplicate', props.ticket.id), {}, {
+            onError: (errors) => {
+                const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to duplicate ticket';
+                showError(errorMessage);
+            }
+        });
+    }
+};
+
 const deleteTicket = async () => {
     if (!hasPermission('tickets.delete')) return;
 
@@ -734,7 +750,16 @@ const linkify = (text) => {
                         <div class="space-y-4 sm:space-y-6">
                             
                             <!-- Requester Configuration -->
-                            <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                            <div class="relative bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                                <button
+                                    v-if="hasPermission('tickets.edit') && (ticket.status === 'resolved' || ticket.status === 'closed')"
+                                    type="button"
+                                    @click="duplicateTicket"
+                                    title="Duplicate Ticket"
+                                    class="absolute top-2 right-2 p-1.5 text-white bg-indigo-500 hover:bg-indigo-600 rounded-md shadow-sm transition-colors"
+                                >
+                                    <DocumentDuplicateIcon class="w-4 h-4" />
+                                </button>
                                 <label class="flex items-center space-x-3 cursor-pointer">
                                     <div class="relative">
                                         <input type="checkbox" v-model="editForm.is_self_requester" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
