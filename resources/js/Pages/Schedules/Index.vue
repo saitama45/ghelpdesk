@@ -4,29 +4,104 @@
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
                 
                 <!-- View Toggle & Actions Header -->
-                <div class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                    <div class="flex bg-gray-100 p-1 rounded-lg">
-                        <button 
-                            @click="currentView = 'calendar'" 
-                            :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
-                        >
-                            Calendar View
-                        </button>
-                        <button 
-                            @click="currentView = 'report'" 
-                            :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'report' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
-                        >
-                            Report View
-                        </button>
+                <div class="mb-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <!-- Row 1: View toggle + Action buttons -->
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <!-- View Toggle -->
+                        <div class="flex bg-gray-100 p-1 rounded-lg">
+                            <button
+                                @click="currentView = 'calendar'"
+                                :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                            >
+                                Calendar View
+                            </button>
+                            <button
+                                @click="currentView = 'report'"
+                                :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'report' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                            >
+                                Report View
+                            </button>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center space-x-2">
+                            <button
+                                v-if="currentView === 'calendar'"
+                                @click="exportPdf"
+                                class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm"
+                            >
+                                <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                                <span>Export PDF</span>
+                            </button>
+                            <button
+                                v-if="hasPermission('schedules.create')"
+                                @click="openImportModal"
+                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                                <span>Import</span>
+                            </button>
+                            <button
+                                v-if="hasPermission('schedules.create')"
+                                @click="openCreateModal"
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                <span>Create Schedule</span>
+                            </button>
+                        </div>
                     </div>
 
-                    <div class="flex items-center space-x-3 mt-4 md:mt-0">
-                        <!-- Year Multi-select for Report View -->
+                    <!-- Row 2: Filters -->
+                    <div class="flex items-center gap-3 px-4 py-3">
+                        <!-- Sub-Unit filter (both views) -->
+                        <div class="w-56" v-if="subUnitOptions.length > 1">
+                            <Autocomplete
+                                v-model="filterSubUnit"
+                                :options="subUnitOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Filter by sub-unit..."
+                                @update:modelValue="applyFilter"
+                            />
+                        </div>
+
+                        <!-- Store filter (both views) -->
+                        <div class="w-56">
+                            <Autocomplete
+                                v-model="filterStore"
+                                :options="storeOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Filter by store..."
+                                @update:modelValue="applyFilter"
+                            />
+                        </div>
+
+                        <!-- User filter (calendar only) -->
+                        <div class="w-56" v-if="currentView === 'calendar'">
+                            <Autocomplete
+                                v-model="filterUser"
+                                :options="userFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Filter by user..."
+                                @update:modelValue="applyFilter"
+                            />
+                        </div>
+
+                        <!-- Year compare (report only) -->
                         <div v-if="currentView === 'report'" class="flex items-center space-x-2">
-                            <span class="text-xs font-black text-gray-400 uppercase tracking-widest">Compare Years:</span>
-                            <div class="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
-                                <button 
-                                    v-for="year in availableYears" 
+                            <span class="text-xs font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">Compare Years:</span>
+                            <div class="flex gap-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
+                                <button
+                                    v-for="year in availableYears"
                                     :key="year"
                                     @click="toggleYear(year)"
                                     :class="[
@@ -40,47 +115,6 @@
                                 </button>
                             </div>
                         </div>
-
-                        <div class="w-48 md:w-64" v-if="currentView === 'calendar'">
-                            <Autocomplete 
-                                v-model="filterUser"
-                                :options="userFilterOptions"
-                                label-key="name"
-                                value-key="id"
-                                placeholder="Filter by user..."
-                                @update:modelValue="applyFilter"
-                            />
-                        </div>
-                        <button 
-                            v-if="currentView === 'calendar'"
-                            @click="exportPdf"
-                            class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm"
-                        >
-                            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                            <span>Export PDF</span>
-                        </button>
-                        <button
-                            v-if="hasPermission('schedules.create')"
-                            @click="openImportModal"
-                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                            </svg>
-                            <span>Import</span>
-                        </button>
-                        <button
-                            v-if="hasPermission('schedules.create')"
-                            @click="openCreateModal"
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2"
-                        >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <span>Create Schedule</span>
-                        </button>
                     </div>
                 </div>
 
@@ -396,8 +430,28 @@ const props = defineProps({
 
 const page = usePage()
 const filterUser = ref(props.filters?.user_id || '')
+const filterSubUnit = ref(props.filters?.sub_unit || '')
+const filterStore = ref(props.filters?.store_id || '')
 const selectedReportYears = ref(props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears])
 const currentView = ref('calendar') // 'calendar' or 'report'
+
+const storeOptions = computed(() => {
+    return [
+        { id: '', name: 'All Stores' },
+        ...(props.stores ?? []).map(s => ({ id: s.id, name: s.name }))
+    ]
+})
+
+const subUnitOptions = computed(() => {
+    const units = props.users
+        .map(u => u.sub_unit)
+        .filter(u => u && u.trim() !== '')
+    const unique = [...new Set(units)].sort()
+    return [
+        { id: '', name: 'All Sub-Units' },
+        ...unique.map(u => ({ id: u, name: u }))
+    ]
+})
 
 const userFilterOptions = computed(() => {
     const currentUserId = page.props.auth.user.id
@@ -418,6 +472,8 @@ const userFilterOptions = computed(() => {
 const applyFilter = () => {
     router.get(route('schedules.index'), {
         user_id: filterUser.value,
+        sub_unit: filterSubUnit.value,
+        store_id: filterStore.value,
         report_years: selectedReportYears.value
     }, {
         preserveState: true,

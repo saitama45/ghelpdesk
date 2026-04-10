@@ -43,6 +43,14 @@ class ScheduleController extends Controller implements HasMiddleware
             }
         }
 
+        if ($request->filled('sub_unit')) {
+            $query->whereHas('user', fn($q) => $q->where('sub_unit', $request->sub_unit));
+        }
+
+        if ($request->filled('store_id')) {
+            $query->where('store_id', $request->store_id);
+        }
+
         $schedules = $query->get()->map(function($schedule) {
             return [
                 'id' => $schedule->id,
@@ -107,9 +115,18 @@ class ScheduleController extends Controller implements HasMiddleware
                 ->toArray();
         }
 
-        $pivotUsers = User::with(['schedules' => function ($q) use ($selectedYears) {
+        $pivotUsersQuery = User::with(['schedules' => function ($q) use ($selectedYears, $request) {
             $q->whereIn(\DB::raw('YEAR(start_time)'), $selectedYears);
-        }])->whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name')->get();
+            if ($request->filled('store_id')) {
+                $q->where('store_id', $request->store_id);
+            }
+        }])->whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name');
+
+        if ($request->filled('sub_unit')) {
+            $pivotUsersQuery->where('sub_unit', $request->sub_unit);
+        }
+
+        $pivotUsers = $pivotUsersQuery->get();
 
         $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
         $pivotData = [];
@@ -141,7 +158,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'pivotYears' => $selectedYears,
             'availableYears' => $availableYears,
             'pivotStatuses' => $pivotStatuses,
-            'filters' => $request->only(['user_id', 'report_years']),
+            'filters' => $request->only(['user_id', 'report_years', 'sub_unit', 'store_id']),
         ]);
     }
 

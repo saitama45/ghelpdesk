@@ -125,6 +125,7 @@ const submitChildTicket = () => {
             showChildModal.value = false;
         },
         onError: (errors) => {
+            showChildModal.value = false;
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
             showError(errorMessage);
         }

@@ -477,6 +477,24 @@ class TicketController extends Controller
             'remarks' => 'nullable|string',
         ]);
 
+        // Check for an overlapping schedule for the same user + store
+        $newStart = \Carbon\Carbon::parse($validated['start_time']);
+        $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
+
+        $conflict = Schedule::where('user_id', $validated['user_id'])
+            ->where('store_id', $ticket->store_id)
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->first();
+
+        if ($conflict) {
+            $from = $conflict->start_time->format('M d, Y h:i A');
+            $to   = $conflict->end_time->format('M d, Y h:i A');
+            return redirect()->back()->withErrors([
+                'schedule_conflict' => "A schedule already exists for this user at this store from {$from} to {$to}. Please choose a different date/time.",
+            ]);
+        }
+
         $childTicket = DB::transaction(function () use ($validated, $ticket) {
             $company = $ticket->company;
             $companyCode = $company->code;
