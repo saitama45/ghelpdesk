@@ -57,6 +57,11 @@ const isNearlyDue = (targetAt) => {
     return diff > 0 && diff < 3600000;
 };
 
+const isUserRole = computed(() => {
+    const user = page.props.auth.user;
+    return user?.roles?.some(role => role.name === 'User') ?? false;
+});
+
 // Computed property for available companies based on user roles
 const availableCompanies = computed(() => {
     const user = page.props.auth.user;
@@ -98,7 +103,7 @@ const defaultCompanyId = computed(() => {
     return availableCompanies.value.length > 0 ? availableCompanies.value[0].id : '';
 });
 
-const filterStatus = ref(props.filters?.status || 'open');
+const filterStatus = ref(props.filters?.status || (isUserRole.value ? 'all' : 'open'));
 const pagination = usePagination(props.tickets, 'tickets.index', () => ({ status: filterStatus.value }));
 
 const filterOptions = [
@@ -119,13 +124,12 @@ const applyFilter = () => {
         search: pagination.search.value
     }, {
         preserveState: true,
-        preserveScroll: true
+        preserveScroll: true,
+        onSuccess: () => {
+            pagination.updateData(page.props.tickets);
+        }
     });
 };
-
-onMounted(() => {
-    pagination.updateData(props.tickets);
-});
 
 watch(() => props.tickets, (newTickets) => {
     pagination.updateData(newTickets);
@@ -732,7 +736,7 @@ const formatItemName = (item) => {
                         
                         <!-- Requester Configuration -->
                         <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
-                            <label class="flex items-center space-x-3 cursor-pointer">
+                            <label v-if="!isUserRole" class="flex items-center space-x-3 cursor-pointer">
                                 <div class="relative">
                                     <input type="checkbox" v-model="createForm.is_self_requester" class="sr-only peer">
                                     <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
@@ -768,7 +772,7 @@ const formatItemName = (item) => {
                                 </datalist>
                             </div>
 
-                            <div class="pt-2">
+                            <div v-if="!isUserRole" class="pt-2">
                                 <label class="flex items-center space-x-3 cursor-pointer">
                                     <div class="relative">
                                         <input type="checkbox" v-model="createForm.notify_requester" class="sr-only peer">

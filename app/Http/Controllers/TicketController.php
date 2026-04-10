@@ -45,37 +45,37 @@ class TicketController extends Controller
         ])
             ->whereNull('parent_id'); // Only show top-level tickets
 
-        // If user has 'User' role, only show tickets they reported
+        // If user has 'User' role, only show their own reported tickets — no company gate needed
         if ($user->hasRole('User')) {
             $query->where('reporter_id', $user->id);
-        }
+        } else {
+            // Filter by user's company access for all other roles
+            $user->load('roles.companies');
+            $allowedCompanyIds = collect();
 
-        // Filter by user's company access
-        $user->load('roles.companies');
-        $allowedCompanyIds = collect();
-        
-        foreach ($user->roles as $role) {
-            if ($role->companies) {
-                $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
+            foreach ($user->roles as $role) {
+                if ($role->companies) {
+                    $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
+                }
+            }
+
+            // Also include direct company assignment
+            if ($user->company_id) {
+                $allowedCompanyIds->push($user->company_id);
+            }
+
+            $allowedCompanyIds = $allowedCompanyIds->unique();
+
+            if ($allowedCompanyIds->isEmpty()) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('company_id', $allowedCompanyIds);
             }
         }
-        
-        // Also include direct company assignment
-        if ($user->company_id) {
-            $allowedCompanyIds->push($user->company_id);
-        }
-        
-        $allowedCompanyIds = $allowedCompanyIds->unique();
-        
-        // If no companies are allowed, show no tickets
-        if ($allowedCompanyIds->isEmpty()) {
-            $query->whereRaw('1 = 0'); // This will return no results
-        } else {
-            $query->whereIn('company_id', $allowedCompanyIds);
-        }
 
-        // Apply status filters - default to 'open' if not provided
-        $statusFilter = $request->get('status', 'open');
+        // Apply status filters — User role defaults to 'all' so they see all their own tickets
+        $defaultStatus = $user->hasRole('User') ? 'all' : 'open';
+        $statusFilter = $request->get('status', $defaultStatus);
         
         if ($statusFilter !== 'all') {
             switch ($statusFilter) {
@@ -483,14 +483,11 @@ class TicketController extends Controller
 
             $maxNumber = Ticket::withTrashed()
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
-                ->get(['ticket_key'])
-                ->map(function ($t) {
-                    if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                        return (int) $matches[1];
-                    }
-                    return 0;
-                })
-                ->max();
+                ->selectRaw(
+                    'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
+                    [$companyCode]
+                )
+                ->value('max_num');
 
             $nextNumber = ($maxNumber ?? 0) + 1;
             

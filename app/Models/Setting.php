@@ -13,8 +13,12 @@ class Setting extends Model
      */
     public static function get($key, $default = null)
     {
-        $setting = self::where('key', $key)->first();
-        return $setting ? $setting->value : $default;
+        static $cache = [];
+        if (!array_key_exists($key, $cache)) {
+            $setting = self::where('key', $key)->first();
+            $cache[$key] = $setting ? $setting->value : null;
+        }
+        return $cache[$key] ?? $default;
     }
 
     /**

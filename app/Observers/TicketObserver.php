@@ -22,14 +22,11 @@ class TicketObserver
                 $prefix = $company->code;
                 $maxNumber = Ticket::withTrashed()
                     ->where('ticket_key', 'LIKE', "{$prefix}-%")
-                    ->get(['ticket_key'])
-                    ->map(function ($t) {
-                        if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                            return (int) $matches[1];
-                        }
-                        return 0;
-                    })
-                    ->max();
+                    ->selectRaw(
+                        'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
+                        [$prefix]
+                    )
+                    ->value('max_num');
 
                 $nextNumber = ($maxNumber ?? 0) + 1;
                 $ticket->ticket_key = "{$prefix}-{$nextNumber}";
@@ -50,14 +47,11 @@ class TicketObserver
                 // Get the maximum ticket number for the NEW company
                 $maxNumber = Ticket::withTrashed()
                     ->where('ticket_key', 'LIKE', "{$prefix}-%")
-                    ->get(['ticket_key'])
-                    ->map(function ($t) {
-                        if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                            return (int) $matches[1];
-                        }
-                        return 0;
-                    })
-                    ->max();
+                    ->selectRaw(
+                        'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
+                        [$prefix]
+                    )
+                    ->value('max_num');
 
                 $nextNumber = ($maxNumber ?? 0) + 1;
                 $ticket->ticket_key = "{$prefix}-{$nextNumber}";
