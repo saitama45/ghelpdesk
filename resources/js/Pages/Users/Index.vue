@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
@@ -30,6 +30,14 @@ const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
 const { showError } = useToast();
 const { hasPermission } = usePermission();
+
+const allStoreIds = computed(() => props.stores.map(s => s.id));
+
+const isAllStoresSelected = (storeIds) => allStoreIds.value.length > 0 && allStoreIds.value.every(id => storeIds.includes(id));
+
+const toggleAllStores = (form) => {
+    form.store_ids = isAllStoresSelected(form.store_ids) ? [] : [...allStoreIds.value];
+};
 
 const pagination = usePagination(props.users, 'users.index');
 
@@ -351,8 +359,22 @@ const updatePassword = () => {
                             <input v-model="createForm.position" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned Stores</label>
-                            <MultiAutocomplete 
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Stores</label>
+                                <button
+                                    type="button"
+                                    @click="toggleAllStores(createForm)"
+                                    class="flex items-center gap-1.5 text-xs font-bold transition-colors"
+                                    :class="isAllStoresSelected(createForm.store_ids) ? 'text-red-500 hover:text-red-700' : 'text-blue-600 hover:text-blue-800'"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path v-if="isAllStoresSelected(createForm.store_ids)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {{ isAllStoresSelected(createForm.store_ids) ? 'Clear All' : 'Select All' }}
+                                </button>
+                            </div>
+                            <MultiAutocomplete
                                 v-model="createForm.store_ids"
                                 :options="stores"
                                 label-key="name"
@@ -431,8 +453,22 @@ const updatePassword = () => {
                             <input v-model="editForm.position" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned Stores</label>
-                            <MultiAutocomplete 
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Stores</label>
+                                <button
+                                    type="button"
+                                    @click="toggleAllStores(editForm)"
+                                    class="flex items-center gap-1.5 text-xs font-bold transition-colors"
+                                    :class="isAllStoresSelected(editForm.store_ids) ? 'text-red-500 hover:text-red-700' : 'text-blue-600 hover:text-blue-800'"
+                                >
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path v-if="isAllStoresSelected(editForm.store_ids)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {{ isAllStoresSelected(editForm.store_ids) ? 'Clear All' : 'Select All' }}
+                                </button>
+                            </div>
+                            <MultiAutocomplete
                                 v-model="editForm.store_ids"
                                 :options="stores"
                                 label-key="name"
