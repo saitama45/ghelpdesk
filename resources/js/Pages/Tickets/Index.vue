@@ -135,6 +135,7 @@ const acceptForm = useForm({
     company_id: '',
     store_id: '',
     item_id: '',
+    department: '',
 });
 
 const createForm = useForm({
@@ -328,6 +329,7 @@ const acceptTicket = (ticket) => {
     acceptForm.company_id = ticket.company_id || '';
     acceptForm.store_id = ticket.store_id || '';
     acceptForm.item_id = ticket.item_id || '';
+    acceptForm.department = ticket.department || '';
     showAcceptModal.value = true;
 };
 
@@ -351,7 +353,7 @@ const submitAcceptTicket = () => {
         status: ticket.status,
         severity: ticket.severity,
         assignee_id: page.props.auth.user.id,
-        department: ticket.department || '',
+        department: acceptForm.department,
     }, {
         onSuccess: () => {
             showAcceptModal.value = false;
@@ -899,6 +901,20 @@ const formatItemName = (item) => {
                                 placeholder="Select item..."
                                 size="sm"
                             />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
+                            <input
+                                v-model="acceptForm.department"
+                                type="text"
+                                list="accept-ticket-departments-list"
+                                maxlength="255"
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                placeholder="Department"
+                            >
+                            <datalist id="accept-ticket-departments-list">
+                                <option v-for="dept in departments" :key="dept" :value="dept" />
+                            </datalist>
                         </div>
                     </div>
 
