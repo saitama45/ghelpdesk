@@ -47,49 +47,60 @@ class ScheduleExportController extends Controller
 
         $schedules = $query->get();
 
-        // Batch-load attendance logs for all matched schedules (one query, no N+1)
+        // Batch-load attendance logs for all matched schedules
         $attendanceLogs = AttendanceLog::whereIn('schedule_id', $schedules->pluck('id'))
             ->orderBy('log_time')
-            ->get()
-            ->groupBy('schedule_id');
+            ->get();
+        
+        $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
+        $logsBySegment  = $attendanceLogs->whereNotNull('schedule_store_id')->groupBy('schedule_store_id');
 
         // Flatten to one row per store visit
         $rows = [];
         foreach ($schedules as $schedule) {
-            $logs    = $attendanceLogs->get($schedule->id, collect());
-            $timeIn  = $logs->firstWhere('type', 'time_in');
-            $timeOut = $logs->where('type', 'time_out')->last();
-
-            $base = [
-                'user'           => $schedule->user->name,
-                'status'         => $schedule->status,
-                'pickup_start'   => $schedule->pickup_start,
-                'pickup_end'     => $schedule->pickup_end,
-                'backlogs_start' => $schedule->backlogs_start,
-                'backlogs_end'   => $schedule->backlogs_end,
-                'remarks'        => $schedule->remarks,
-                'actual_time_in' => $timeIn?->log_time,
-                'actual_time_out'=> $timeOut?->log_time,
-            ];
-
             if ($schedule->scheduleStores->isNotEmpty()) {
                 foreach ($schedule->scheduleStores as $ss) {
-                    $rows[] = array_merge($base, [
-                        'date'       => $ss->start_time->format('Y-m-d'),
-                        'store'      => $ss->store->name ?? '-',
-                        'start_time' => $ss->start_time,
-                        'end_time'   => $ss->end_time,
-                        'remarks'    => $ss->remarks,
-                    ]);
+                    $segLogs = $logsBySegment->get($ss->id, collect());
+                    $timeIn  = $segLogs->firstWhere('type', 'time_in');
+                    $timeOut = $segLogs->filter(fn($l) => $l->type === 'time_out')->last();
+
+                    $rows[] = [
+                        'user'           => $schedule->user->name,
+                        'status'         => $schedule->status,
+                        'pickup_start'   => $schedule->pickup_start,
+                        'pickup_end'     => $schedule->pickup_end,
+                        'backlogs_start' => $schedule->backlogs_start,
+                        'backlogs_end'   => $schedule->backlogs_end,
+                        'remarks'        => $ss->remarks,
+                        'actual_time_in' => $timeIn?->log_time,
+                        'actual_time_out'=> $timeOut?->log_time,
+                        'date'           => $ss->start_time->format('Y-m-d'),
+                        'store'          => $ss->store->name ?? '-',
+                        'start_time'     => $ss->start_time,
+                        'end_time'       => $ss->end_time,
+                    ];
                 }
             } else {
                 // Legacy fallback: schedule has no schedule_stores entries
-                $rows[] = array_merge($base, [
-                    'date'       => $schedule->start_time->format('Y-m-d'),
-                    'store'      => $schedule->store->name ?? '-',
-                    'start_time' => $schedule->start_time,
-                    'end_time'   => $schedule->end_time,
-                ]);
+                $logs    = $logsBySchedule->get($schedule->id, collect());
+                $timeIn  = $logs->firstWhere('type', 'time_in');
+                $timeOut = $logs->filter(fn($l) => $l->type === 'time_out')->last();
+
+                $rows[] = [
+                    'user'           => $schedule->user->name,
+                    'status'         => $schedule->status,
+                    'pickup_start'   => $schedule->pickup_start,
+                    'pickup_end'     => $schedule->pickup_end,
+                    'backlogs_start' => $schedule->backlogs_start,
+                    'backlogs_end'   => $schedule->backlogs_end,
+                    'remarks'        => $schedule->remarks,
+                    'actual_time_in' => $timeIn?->log_time,
+                    'actual_time_out'=> $timeOut?->log_time,
+                    'date'           => $schedule->start_time->format('Y-m-d'),
+                    'store'          => $schedule->store->name ?? '-',
+                    'start_time'     => $schedule->start_time,
+                    'end_time'       => $schedule->end_time,
+                ];
             }
         }
 

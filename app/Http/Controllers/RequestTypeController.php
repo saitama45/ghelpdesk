@@ -48,6 +48,7 @@ class RequestTypeController extends Controller implements HasMiddleware
             'request_for.*' => 'in:SAP,POS',
             'approval_levels' => 'required|integer|min:0',
             'cc_emails' => 'nullable|string',
+            'form_schema' => 'nullable|array',
         ]);
 
         RequestType::create([
@@ -56,6 +57,7 @@ class RequestTypeController extends Controller implements HasMiddleware
             'request_for' => $request->request_for,
             'approval_levels' => $request->approval_levels,
             'cc_emails' => $request->cc_emails,
+            'form_schema' => $request->form_schema,
             'is_active' => true,
         ]);
 

@@ -53,15 +53,23 @@ class AttendanceController extends Controller implements HasMiddleware
             ->whereIn('status', ['On-site', 'Off-site'])
             ->where('start_time', '<=', $now->copy()->addMinutes(480))
             ->where('end_time', '>=', $now)
-            ->with(['store', 'scheduleStores'])
+            ->with(['store', 'scheduleStores.store'])
             ->get()
             ->first(function ($s) use ($now) {
-                // Active if any store entry's window (with its grace) covers now
                 return $s->scheduleStores->some(
-                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes($ss->grace_period_minutes ?? 30))
+                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
                               && $ss->end_time->gte($now)
-                ) || $s->scheduleStores->isEmpty(); // fallback for legacy schedules with no store entries
+                ) || $s->scheduleStores->isEmpty();
             });
+
+        // Find the specific active store entry within the schedule
+        $activeStoreEntry = null;
+        if ($todaySchedule) {
+            $activeStoreEntry = $todaySchedule->scheduleStores->first(function ($ss) use ($now) {
+                return $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
+                    && $ss->end_time->gte($now);
+            });
+        }
 
         // Scope lastLog to this schedule so a forgotten yesterday Time Out doesn't bleed into today
         $lastLog = $todaySchedule
@@ -71,8 +79,6 @@ class AttendanceController extends Controller implements HasMiddleware
                 ->first()
             : null;
 
-        $users = User::active()->orderBy('name')->get(['id', 'name', 'sub_unit']);
-
         return Inertia::render('Attendance/Index', [
             'lastLog' => $lastLog,
             'assignedStores' => $assignedStores,
@@ -80,14 +86,14 @@ class AttendanceController extends Controller implements HasMiddleware
             'todaySchedule' => $todaySchedule ? [
                 'id'         => $todaySchedule->id,
                 'status'     => $todaySchedule->status,
-                'start_time' => $todaySchedule->start_time->toIso8601String(),
-                'end_time'   => $todaySchedule->end_time->toIso8601String(),
-                'store'      => $todaySchedule->store
-                    ? ['id' => $todaySchedule->store->id, 'name' => $todaySchedule->store->name]
-                    : null,
+                'start_time' => ($activeStoreEntry ? $activeStoreEntry->start_time : $todaySchedule->start_time)->toIso8601String(),
+                'end_time'   => ($activeStoreEntry ? $activeStoreEntry->end_time : $todaySchedule->end_time)->toIso8601String(),
+                'store'      => ($activeStoreEntry && $activeStoreEntry->store)
+                    ? ['id' => $activeStoreEntry->store->id, 'name' => $activeStoreEntry->store->name]
+                    : ($todaySchedule->store 
+                        ? ['id' => $todaySchedule->store->id, 'name' => $todaySchedule->store->name]
+                        : null),
             ] : null,
-            'users' => $users,
-            'filters' => $request->only(['sub_unit', 'date_from', 'date_to']),
         ]);
     }
 
@@ -95,20 +101,26 @@ class AttendanceController extends Controller implements HasMiddleware
     {
         $user = auth()->user();
         
-        // Base query
-        $query = AttendanceLog::with('user')->latest('log_time');
+        // Base query - load relationships for both segment-based and legacy logs
+        $query = AttendanceLog::with(['user', 'scheduleStore.store', 'schedule.store'])->latest('log_time');
 
-        // Privacy Logic: Show only own logs + subordinates, unless Admin/Dev
-        if (!$user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
-            $subordinateIds = $user->subordinates()->pluck('users.id')->toArray();
-            $allowedUserIds = array_merge([$user->id], $subordinateIds);
-            $query->whereIn('user_id', $allowedUserIds);
+        // Privacy Logic: Show only own logs if not Admin/Dev/Manager
+        if (!$user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) && !$user->is_manager) {
+            $query->where('user_id', $user->id);
         }
 
         // Filter by Sub-Unit
         if ($request->filled('sub_unit')) {
             $query->whereHas('user', function($q) use ($request) {
                 $q->where('sub_unit', $request->sub_unit);
+            });
+        }
+
+        // Filter by Store
+        if ($request->filled('store_id')) {
+            $query->where(function($q) use ($request) {
+                $q->whereHas('scheduleStore', fn($sq) => $sq->where('store_id', $request->store_id))
+                  ->orWhereHas('schedule', fn($sq) => $sq->where('store_id', $request->store_id));
             });
         }
 
@@ -129,14 +141,18 @@ class AttendanceController extends Controller implements HasMiddleware
 
         $logs = $query->paginate($request->get('perPage', 10))->withQueryString();
         $users = User::active()->orderBy('name')->get(['id', 'name', 'sub_unit']);
+        $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
         return Inertia::render('Attendance/Logs', [
             'logs' => $logs,
             'users' => $users,
+            'stores' => $stores,
             'filters' => [
                 'sub_unit' => $request->sub_unit,
+                'store_id' => $request->store_id,
                 'date_from' => $dateFrom,
                 'date_to' => $dateTo,
+                'search' => $request->search,
             ],
         ]);
     }
@@ -212,7 +228,7 @@ class AttendanceController extends Controller implements HasMiddleware
             ->get()
             ->first(function ($s) use ($now) {
                 return $s->scheduleStores->some(
-                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes($ss->grace_period_minutes ?? 30))
+                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
                               && $ss->end_time->gte($now)
                 ) || $s->scheduleStores->isEmpty(); // fallback for legacy schedules
             });
@@ -221,11 +237,21 @@ class AttendanceController extends Controller implements HasMiddleware
             return back()->with('error', 'No active On-site or Off-site schedule found for your current time. Please contact your supervisor.');
         }
 
-        // Determine type per-schedule (prevents yesterday's forgotten Time Out bleeding into today)
-        $lastLog = AttendanceLog::where('user_id', $user->id)
-            ->where('schedule_id', $schedule->id)
-            ->latest('log_time')
-            ->first();
+        // Find the specific active store entry
+        $activeStoreEntry = $schedule->scheduleStores->first(function ($ss) use ($now) {
+            return $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
+                && $ss->end_time->gte($now);
+        });
+
+        // Determine type per-segment if possible, otherwise per-schedule
+        $lastLogQuery = AttendanceLog::where('user_id', $user->id)
+            ->where('schedule_id', $schedule->id);
+        
+        if ($activeStoreEntry) {
+            $lastLogQuery->where('schedule_store_id', $activeStoreEntry->id);
+        }
+
+        $lastLog = $lastLogQuery->latest('log_time')->first();
 
         $type = (!$lastLog || $lastLog->type === 'time_out') ? 'time_in' : 'time_out';
 
@@ -258,6 +284,7 @@ class AttendanceController extends Controller implements HasMiddleware
         AttendanceLog::create([
             'user_id' => $user->id,
             'schedule_id' => $schedule->id,
+            'schedule_store_id' => $activeStoreEntry?->id,
             'type' => $type,
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,

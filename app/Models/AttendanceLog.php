@@ -13,6 +13,7 @@ class AttendanceLog extends Model
     protected $fillable = [
         'user_id',
         'schedule_id',
+        'schedule_store_id',
         'type',
         'latitude',
         'longitude',
@@ -34,5 +35,10 @@ class AttendanceLog extends Model
     public function schedule(): BelongsTo
     {
         return $this->belongsTo(\App\Models\Schedule::class);
+    }
+
+    public function scheduleStore(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\ScheduleStore::class);
     }
 }

@@ -19,6 +19,7 @@ class ScheduleStore extends Model
     protected $casts = [
         'start_time' => 'datetime',
         'end_time'   => 'datetime',
+        'grace_period_minutes' => 'integer',
     ];
 
     public function schedule(): BelongsTo

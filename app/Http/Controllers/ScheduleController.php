@@ -62,13 +62,15 @@ class ScheduleController extends Controller implements HasMiddleware
         $scheduleIds = $rawSchedules->pluck('id')->toArray();
         $attendanceLogs = \App\Models\AttendanceLog::whereIn('schedule_id', $scheduleIds)
             ->orderBy('log_time')
-            ->get(['schedule_id', 'type', 'log_time'])
-            ->groupBy('schedule_id');
+            ->get(['schedule_id', 'schedule_store_id', 'type', 'log_time']);
+        
+        $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
+        $logsBySegment  = $attendanceLogs->whereNotNull('schedule_store_id')->groupBy('schedule_store_id');
 
-        $schedules = $rawSchedules->map(function($schedule) use ($attendanceLogs) {
-            $logs          = $attendanceLogs->get($schedule->id, collect());
-            $actualTimeIn  = $logs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
-            $actualTimeOut = $logs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
+        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $logsBySegment) {
+            $schedLogs     = $logsBySchedule->get($schedule->id, collect());
+            $actualTimeIn  = $schedLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
+            $actualTimeOut = $schedLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
 
             return [
                 'id'              => $schedule->id,
@@ -87,15 +89,20 @@ class ScheduleController extends Controller implements HasMiddleware
                 'actual_time_out' => $actualTimeOut,
                 'user'            => $schedule->user,
                 'store'           => $schedule->store,
-                'schedule_stores' => $schedule->scheduleStores->map(fn ($ss) => [
-                    'id'                   => $ss->id,
-                    'store_id'             => $ss->store_id,
-                    'start_time'           => $ss->start_time->toIso8601String(),
-                    'end_time'             => $ss->end_time->toIso8601String(),
-                    'grace_period_minutes' => $ss->grace_period_minutes ?? 30,
-                    'remarks'              => $ss->remarks,
-                    'store'                => $ss->store ? ['id' => $ss->store->id, 'name' => $ss->store->name] : null,
-                ]),
+                'schedule_stores' => $schedule->scheduleStores->map(function ($ss) use ($logsBySegment) {
+                    $segLogs = $logsBySegment->get($ss->id, collect());
+                    return [
+                        'id'                   => $ss->id,
+                        'store_id'             => $ss->store_id,
+                        'start_time'           => $ss->start_time->toIso8601String(),
+                        'end_time'             => $ss->end_time->toIso8601String(),
+                        'grace_period_minutes' => $ss->grace_period_minutes ?? 30,
+                        'remarks'              => $ss->remarks,
+                        'store'                => $ss->store ? ['id' => $ss->store->id, 'name' => $ss->store->name] : null,
+                        'actual_time_in'       => $segLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String(),
+                        'actual_time_out'      => $segLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String(),
+                    ];
+                }),
                 'ticket' => $schedule->ticket ? [
                     'id'         => $schedule->ticket->id,
                     'ticket_key' => $schedule->ticket->ticket_key,

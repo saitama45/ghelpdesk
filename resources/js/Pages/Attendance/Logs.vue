@@ -12,6 +12,7 @@ import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIc
 const props = defineProps({
     logs: Object,
     users: Array,
+    stores: Array,
     filters: Object,
 });
 
@@ -21,6 +22,7 @@ const isLoading = ref(false);
 
 // Filters
 const filterSubUnit = ref(props.filters?.sub_unit || '');
+const filterStore = ref(props.filters?.store_id || '');
 const filterDateFrom = ref(props.filters?.date_from || '');
 const filterDateTo = ref(props.filters?.date_to || '');
 
@@ -36,11 +38,19 @@ const subUnitOptions = computed(() => {
     ]
 })
 
+const storeOptions = computed(() => {
+    return [
+        { id: '', name: 'All Stores' },
+        ...(props.stores || []).map(s => ({ id: s.id, name: s.name }))
+    ]
+})
+
 const applyFilters = () => {
     isLoading.value = true;
     router.get(route('attendance.logs'), { 
         search: search.value,
         sub_unit: filterSubUnit.value,
+        store_id: filterStore.value,
         date_from: filterDateFrom.value,
         date_to: filterDateTo.value,
     }, {
@@ -53,13 +63,14 @@ const applyFilters = () => {
 const clearFilters = () => {
     search.value = '';
     filterSubUnit.value = '';
+    filterStore.value = '';
     filterDateFrom.value = '';
     filterDateTo.value = '';
     applyFilters();
 };
 
 // Trigger filter on change
-watch([filterSubUnit, filterDateFrom, filterDateTo], () => {
+watch([filterSubUnit, filterStore, filterDateFrom, filterDateTo], () => {
     applyFilters();
 });
 
@@ -69,6 +80,7 @@ const goToPage = (page) => {
         page, 
         search: search.value,
         sub_unit: filterSubUnit.value,
+        store_id: filterStore.value,
         date_from: filterDateFrom.value,
         date_to: filterDateTo.value,
     }, {
@@ -84,6 +96,7 @@ const changePerPage = (perPage) => {
         perPage, 
         search: search.value,
         sub_unit: filterSubUnit.value,
+        store_id: filterStore.value,
         date_from: filterDateFrom.value,
         date_to: filterDateTo.value,
     }, {
@@ -98,6 +111,7 @@ watch(search, (value) => {
     router.get(route('attendance.logs'), { 
         search: value,
         sub_unit: filterSubUnit.value,
+        store_id: filterStore.value,
         date_from: filterDateFrom.value,
         date_to: filterDateTo.value,
     }, {
@@ -183,7 +197,7 @@ const stopDrag = () => {
                             <span class="uppercase tracking-widest text-xs">Filters</span>
                         </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
                             <!-- Sub-Unit -->
                             <div>
                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Sub-Unit</label>
@@ -193,6 +207,18 @@ const stopDrag = () => {
                                     label-key="name"
                                     value-key="id"
                                     placeholder="All Sub-Units"
+                                />
+                            </div>
+
+                            <!-- Store -->
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Store</label>
+                                <Autocomplete
+                                    v-model="filterStore"
+                                    :options="storeOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="All Stores"
                                 />
                             </div>
 
@@ -253,6 +279,7 @@ const stopDrag = () => {
                     <tr class="bg-gray-50">
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selfie</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Log Time</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
@@ -277,6 +304,9 @@ const stopDrag = () => {
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="text-sm font-semibold text-gray-900">{{ log.user?.name }}</div>
                             <div class="text-xs text-gray-500">{{ log.user?.email }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-bold text-blue-600">{{ log.schedule_store?.store?.name || log.schedule?.store?.name || '-' }}</div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex flex-col">

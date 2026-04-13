@@ -322,7 +322,7 @@ const submit = () => {
         </div>
 
         <!-- Details Card — Schema-driven -->
-        <div v-if="useSchema" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+        <div v-if="form.request_type_id && useSchema" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
             <div class="flex items-center mb-8">
                 <span class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center mr-4 shadow-lg shadow-emerald-200">
                     <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
@@ -345,7 +345,7 @@ const submit = () => {
         </div>
 
         <!-- Details Card — Hard-coded fallback (shown when no schema is defined) -->
-        <div v-else class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+        <div v-else-if="form.request_type_id" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
             <div class="flex items-center justify-between mb-10">
                 <div class="flex items-center">
                     <span class="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center mr-4 shadow-lg shadow-emerald-200">

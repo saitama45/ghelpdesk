@@ -394,14 +394,16 @@
                                     </div>
                                 </div>
 
-                                <!-- Actual Time In / Out (read-only, schedule-level) -->
-                                <div v-if="isEditing && (currentActualTimeIn || currentActualTimeOut)"
-                                     class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-semibold">
-                                    <span class="text-emerald-600">
-                                        Actual In: {{ currentActualTimeIn ? formatTime(currentActualTimeIn) : '—' }}
+                                <!-- Actual Time In / Out (per segment) -->
+                                <div v-if="isEditing && (entry.actual_time_in || entry.actual_time_out)"
+                                     class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold bg-white/50 p-2 rounded-md border border-gray-100 shadow-sm">
+                                    <span v-if="entry.actual_time_in" class="text-emerald-600 flex items-center gap-1">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                                        Actual In: {{ formatTime(entry.actual_time_in) }}
                                     </span>
-                                    <span class="text-orange-500">
-                                        Actual Out: {{ currentActualTimeOut ? formatTime(currentActualTimeOut) : '—' }}
+                                    <span v-if="entry.actual_time_out" class="text-orange-500 flex items-center gap-1">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                                        Actual Out: {{ formatTime(entry.actual_time_out) }}
                                     </span>
                                 </div>
 
@@ -756,6 +758,8 @@ const handleEventClick = (event) => {
             end_time: formatDateForInput(new Date(ss.end_time)),
             grace_period_minutes: ss.grace_period_minutes ?? 30,
             remarks: ss.remarks || '',
+            actual_time_in: ss.actual_time_in,
+            actual_time_out: ss.actual_time_out,
         }))
     } else {
         form.stores = [{
@@ -764,6 +768,8 @@ const handleEventClick = (event) => {
             end_time: formatDateForInput(new Date(event.end_time)),
             grace_period_minutes: 30,
             remarks: event.remarks || '',
+            actual_time_in: event.actual_time_in,
+            actual_time_out: event.actual_time_out,
         }]
     }
 
