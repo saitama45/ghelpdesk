@@ -57,7 +57,7 @@ const getGoogleMapsUrl = (lat, lng) => {
 
 // Preview Functions
 const openPreview = (photoPath) => {
-    previewImage.value = '/storage/' + photoPath;
+    previewImage.value = '/serve-storage/' + photoPath;
     zoom.value = 1;
     position.x = 0;
     position.y = 0;
@@ -147,7 +147,7 @@ const stopDrag = () => {
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex-shrink-0 h-12 w-12 cursor-pointer group relative" @click="openPreview(log.photo_path)">
                             <img 
-                                :src="'/storage/' + log.photo_path" 
+                                :src="'/serve-storage/' + log.photo_path" 
                                 class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105"
                                 alt="Selfie"
                             />

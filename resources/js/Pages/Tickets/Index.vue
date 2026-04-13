@@ -661,7 +661,7 @@ const formatItemName = (item) => {
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <div v-if="ticket.reporter" class="flex items-center space-x-2">
                                 <div v-if="ticket.reporter.profile_photo" class="h-6 w-6 rounded-full overflow-hidden border border-gray-200">
-                                    <img :src="'/storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
+                                    <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
                                 </div>
                                 <div v-else class="h-6 w-6 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 border border-blue-100">
                                     {{ ticket.reporter.name.charAt(0) }}
@@ -677,7 +677,7 @@ const formatItemName = (item) => {
                          <td class="px-6 py-4 whitespace-nowrap text-sm" @click.stop>
                             <div v-if="ticket.assignee" class="flex items-center space-x-2">
                                 <div v-if="ticket.assignee.profile_photo" class="h-6 w-6 rounded-full overflow-hidden border border-gray-200">
-                                    <img :src="'/storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
+                                    <img :src="'/serve-storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
                                 </div>
                                 <div v-else class="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
                                     {{ ticket.assignee.name.charAt(0) }}
@@ -695,7 +695,7 @@ const formatItemName = (item) => {
                             <div v-for="child in ticket.children" :key="child.id" class="mt-2 ml-4">
                                 <div v-if="child.assignee" class="flex items-center space-x-2">
                                     <div v-if="child.assignee.profile_photo" class="h-4 w-4 rounded-full overflow-hidden border border-gray-200">
-                                        <img :src="'/storage/' + child.assignee.profile_photo" class="h-full w-full object-cover" :alt="child.assignee.name">
+                                        <img :src="'/serve-storage/' + child.assignee.profile_photo" class="h-full w-full object-cover" :alt="child.assignee.name">
                                     </div>
                                     <div v-else class="h-4 w-4 rounded-full bg-blue-50 flex items-center justify-center text-[8px] font-bold text-blue-600">
                                         {{ child.assignee.name.charAt(0) }}

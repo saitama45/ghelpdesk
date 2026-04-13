@@ -188,19 +188,22 @@ const getThumbnailUrl = (attachment) => {
     if (attachment.preview) return attachment.preview;
     if (!attachment.file_storage_path) return '';
     
-    // Check if path already starts with /storage (not expected but safe)
-    if (attachment.file_storage_path.startsWith('/storage')) {
-        return attachment.file_storage_path;
+    // Normalize backslashes to forward slashes (common on Windows local dev)
+    const normalizedPath = attachment.file_storage_path.replace(/\\/g, '/');
+    
+    // Check if path already starts with /serve-storage (not expected but safe)
+    if (normalizedPath.startsWith('/serve-storage')) {
+        return normalizedPath;
     }
 
-    // Legacy: if path starts with public/, remove it and prepend /storage/
-    if (attachment.file_storage_path.startsWith('public/')) {
-        return '/storage/' + attachment.file_storage_path.replace('public/', '');
+    // Legacy: if path starts with public/, remove it and prepend /serve-storage/
+    if (normalizedPath.startsWith('public/')) {
+        return '/serve-storage/' + normalizedPath.replace('public/', '');
     }
 
     // New standard: path is relative to public disk root (ticket-attachments/filename)
-    // Map to /storage/ticket-attachments/filename
-    return '/storage/' + attachment.file_storage_path;
+    // Map to /serve-storage/ticket-attachments/filename
+    return '/serve-storage/' + normalizedPath;
 };
 
 const editForm = useForm({
@@ -1092,7 +1095,7 @@ const linkify = (text) => {
 
                                     <!-- Dot (Avatar) -->
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
-                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
                                             {{ activity.user ? activity.user.name.charAt(0) : '?' }}
                                         </div>
@@ -1158,7 +1161,7 @@ const linkify = (text) => {
                                 <template v-else-if="activity.activity_type === 'comment'">
                                     <!-- Dot (Avatar) -->
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
-                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">
                                             {{ activity.user ? activity.user.name.charAt(0) : (activity.sender_name ? activity.sender_name.charAt(0) : '?') }}
                                         </div>
@@ -1196,7 +1199,7 @@ const linkify = (text) => {
                                 <template v-else-if="activity.activity_type === 'history'">
                                     <!-- Dot (Avatar) -->
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
-                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
+                                        <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-gray-400 flex items-center justify-center text-[10px] font-bold text-white">
                                             {{ activity.user ? activity.user.name.charAt(0) : '?' }}
                                         </div>
@@ -1274,7 +1277,7 @@ const linkify = (text) => {
                             <div class="flex space-x-3 sm:space-x-4">
                                 <div class="flex-shrink-0 hidden xs:block">
                                     <div v-if="$page.props.auth.user.profile_photo" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
-                                        <img :src="'/storage/' + $page.props.auth.user.profile_photo" class="h-full w-full object-cover" :alt="$page.props.auth.user.name">
+                                        <img :src="'/serve-storage/' + $page.props.auth.user.profile_photo" class="h-full w-full object-cover" :alt="$page.props.auth.user.name">
                                     </div>
                                     <div v-else class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-sm">
                                         {{ $page.props.auth.user.name.charAt(0) }}

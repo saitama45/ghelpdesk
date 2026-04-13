@@ -46,7 +46,7 @@ class ProfileController extends Controller
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_photo);
             }
 
-            $path = $request->file('photo')->store('profile-photos', 'public');
+            $path = str_replace('\\', '/', $request->file('photo')->store('profile-photos', 'public'));
             $data['profile_photo'] = $path;
         }
 

@@ -107,7 +107,7 @@ const updatePassword = () => {
                             <img :src="photoPreview" class="h-full w-full object-cover">
                         </div>
                         <div v-else-if="user.profile_photo" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200">
-                            <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover">
+                            <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover">
                         </div>
                         <div v-else class="h-20 w-20 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                             <span class="text-2xl font-bold text-white">{{ user.name.charAt(0) }}</span>

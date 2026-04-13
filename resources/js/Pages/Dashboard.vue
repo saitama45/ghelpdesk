@@ -137,7 +137,7 @@ const exportToExcel = (type) => {
         <div class="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl shadow-lg p-4 sm:p-6 mb-6 text-white">
             <div class="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4">
                 <div v-if="user.profile_photo" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 border-white/30 overflow-hidden shadow-inner flex-shrink-0">
-                    <img :src="'/storage/' + user.profile_photo" class="w-full h-full object-cover" :alt="user.name">
+                    <img :src="'/serve-storage/' + user.profile_photo" class="w-full h-full object-cover" :alt="user.name">
                 </div>
                 <div v-else class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold border-4 border-white/30 flex-shrink-0">
                     {{ user.name.charAt(0) }}
@@ -436,7 +436,7 @@ const exportToExcel = (type) => {
                                     <div class="relative flex items-start space-x-3">
                                         <div class="relative">
                                             <div v-if="activity.user_photo" class="h-10 w-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-gray-100">
-                                                <img :src="'/storage/' + activity.user_photo" class="h-full w-full object-cover" :alt="activity.user">
+                                                <img :src="'/serve-storage/' + activity.user_photo" class="h-full w-full object-cover" :alt="activity.user">
                                             </div>
                                             <div v-else class="h-10 w-10 rounded-full bg-blue-100 border-2 border-white shadow-sm flex items-center justify-center text-blue-600 font-bold text-sm">
                                                 {{ activity.user.charAt(0) }}

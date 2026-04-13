@@ -138,7 +138,7 @@ const isCurrentRoute = (routeName) => {
                             >
                                 <div class="relative">
                                     <div v-if="user.profile_photo" class="h-8 w-8 rounded-full overflow-hidden border border-gray-200">
-                                        <img :src="'/storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
+                                        <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
                                     </div>
                                     <div v-else class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
                                         <span class="text-sm font-medium text-white">{{ user.name?.charAt(0) || 'U' }}</span>

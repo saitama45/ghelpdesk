@@ -173,7 +173,7 @@
                                 @click="closeSearch"
                             >
                                 <div v-if="user.profile_photo" class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden">
-                                    <img :src="'/storage/' + user.profile_photo" class="w-full h-full object-cover">
+                                    <img :src="'/serve-storage/' + user.profile_photo" class="w-full h-full object-cover">
                                 </div>
                                 <div v-else class="flex-shrink-0 w-8 h-8 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center">
                                     <UserIcon class="w-4 h-4" />

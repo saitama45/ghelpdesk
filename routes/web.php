@@ -9,6 +9,24 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 
+// Serve storage files directly (bypassing the need for symlinks)
+Route::get('/serve-storage/{path}', function (string $path) {
+    // Normalize path for physical file lookup
+    $cleanPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+    $filePath = storage_path('app' . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . $cleanPath);
+    
+    if (!file_exists($filePath) || !is_file($filePath)) {
+        abort(404);
+    }
+    
+    $mimeType = \Illuminate\Support\Facades\File::mimeType($filePath);
+    
+    return response()->file($filePath, [
+        'Content-Type' => $mimeType,
+        'Cache-Control' => 'public, max-age=86400'
+    ]);
+})->where('path', '.*')->name('storage.file');
+
 Route::get('/', function () {
     return redirect()->route('login');
 });

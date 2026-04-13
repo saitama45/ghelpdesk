@@ -177,7 +177,7 @@ class TicketController extends Controller
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     $fileName = time() . '_' . $file->getClientOriginalName();
-                    $filePath = $file->storeAs('ticket-attachments', $fileName, 'public');
+                    $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
                     
                     TicketAttachment::create([
                         'ticket_id' => $ticket->id,
@@ -705,7 +705,7 @@ class TicketController extends Controller
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
                 $fileName = time() . '_' . $file->getClientOriginalName();
-                $filePath = $file->storeAs('ticket-attachments', $fileName, 'public');
+                $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
                 
                 TicketAttachment::create([
                     'ticket_id' => $ticket->id,
