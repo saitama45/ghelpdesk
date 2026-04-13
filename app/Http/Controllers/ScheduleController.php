@@ -77,7 +77,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ];
         });
         
-        $users = User::active()->orderBy('name')->get();
+        $users = User::active()->with('managers:id')->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
         // ── Generate Pivot Report Data ──
@@ -203,11 +203,16 @@ class ScheduleController extends Controller implements HasMiddleware
     public function update(Request $request, Schedule $schedule)
     {
         $user = auth()->user();
+        
+        // Authorization Logic
         $isOwner = (int) $schedule->user_id === (int) $user->id;
-        $hasEditPermission = $user->can('schedules.edit');
-
-        if (!$isOwner && !$hasEditPermission) {
-            abort(403, 'You are not authorized to edit this schedule.');
+        $isAdmin = $user->hasRole('Admin');
+        
+        // Check if the current user is a manager of the user who owns the schedule
+        $isDirectManager = $schedule->user->managers()->where('manager_id', $user->id)->exists();
+        
+        if (!$isOwner && !$isAdmin && !$isDirectManager) {
+            abort(403, 'You are not authorized to edit this schedule. Only the owner or their assigned manager can edit.');
         }
 
         $validated = $request->validate([

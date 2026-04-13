@@ -645,7 +645,12 @@ const handleEventClick = (event) => {
     const user = page.props.auth.user;
     const isAdmin = user.roles?.some(r => r.name === 'Admin');
     const isOwner = Number(event.user_id) === Number(user.id);
-    const canEdit = isOwner || isAdmin;
+    
+    // Check if the current user is a manager of the user who owns this schedule
+    const scheduleUser = props.users.find(u => Number(u.id) === Number(event.user_id));
+    const isDirectManager = scheduleUser?.managers?.some(m => Number(m.id) === Number(user.id));
+    
+    const canEdit = isOwner || isAdmin || isDirectManager;
 
     isEditing.value = canEdit;
     isViewingOnly.value = !canEdit;

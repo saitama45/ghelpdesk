@@ -24,12 +24,23 @@ class User extends Authenticatable
         'sub_unit',
         'position',
         'is_active',
+        'is_manager',
         'last_login',
         'status',
         'last_activity_at',
         'profile_photo',
         'company_id',
     ];
+
+    public function managers()
+    {
+        return $this->belongsToMany(User::class, 'manager_user', 'user_id', 'manager_id');
+    }
+
+    public function subordinates()
+    {
+        return $this->belongsToMany(User::class, 'manager_user', 'manager_id', 'user_id');
+    }
 
     protected $hidden = [
         'password',
@@ -95,6 +106,7 @@ class User extends Authenticatable
             'last_login' => 'datetime',
             'last_activity_at' => 'datetime',
             'is_active' => 'boolean',
+            'is_manager' => 'boolean',
         ];
     }
 

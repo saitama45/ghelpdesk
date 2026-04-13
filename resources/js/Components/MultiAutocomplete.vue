@@ -26,11 +26,16 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    limit: {
+        type: Number,
+        default: null,
+    },
 });
 
 const emit = defineEmits(['update:modelValue']);
 
 const isOpen = ref(false);
+const isExpanded = ref(false);
 const searchQuery = ref('');
 const containerRef = ref(null);
 const inputRef = ref(null);
@@ -48,6 +53,17 @@ const selectedOptions = computed(() => {
         const val = typeof opt === 'object' ? opt[props.valueKey] : opt;
         return props.modelValue.includes(val);
     });
+});
+
+const displayedSelectedOptions = computed(() => {
+    if (!props.limit || isExpanded.value || selectedOptions.value.length <= props.limit) {
+        return selectedOptions.value;
+    }
+    return selectedOptions.value.slice(0, props.limit);
+});
+
+const remainingCount = computed(() => {
+    return selectedOptions.value.length - displayedSelectedOptions.value.length;
 });
 
 const filteredOptions = computed(() => {
@@ -151,7 +167,7 @@ onUnmounted(() => {
         >
             <div class="flex flex-wrap gap-1">
                 <span 
-                    v-for="opt in selectedOptions" 
+                    v-for="opt in displayedSelectedOptions" 
                     :key="typeof opt === 'object' ? opt[valueKey] : opt"
                     class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-bold border border-blue-200"
                 >
@@ -165,6 +181,24 @@ onUnmounted(() => {
                         </svg>
                     </button>
                 </span>
+
+                <!-- View All / More Badge -->
+                <button
+                    v-if="limit && !isExpanded && selectedOptions.length > limit"
+                    @click.stop="isExpanded = true"
+                    class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200 hover:bg-gray-200 transition-colors uppercase tracking-tighter"
+                >
+                    +{{ remainingCount }} more
+                </button>
+
+                <!-- Collapse Button -->
+                <button
+                    v-if="limit && isExpanded"
+                    @click.stop="isExpanded = false"
+                    class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200 hover:bg-gray-200 transition-colors uppercase tracking-tighter"
+                >
+                    Show Less
+                </button>
                 
                 <input
                     ref="inputRef"

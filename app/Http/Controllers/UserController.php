@@ -14,7 +14,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['roles:id,name', 'stores:id,name,code']);
+        $query = User::with(['roles:id,name', 'stores:id,name,code', 'managers:id,name']);
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
@@ -30,6 +30,7 @@ class UserController extends Controller
         $users = $query->paginate($request->get('per_page', 10))->withQueryString();
         $roles = Role::select('id', 'name')->get();
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $managers = User::where('is_manager', true)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
         
         $departments = User::whereNotNull('department')->where('department', '!=', '')->distinct()->pluck('department');
         $units = User::whereNotNull('unit')->where('unit', '!=', '')->distinct()->pluck('unit');
@@ -39,6 +40,7 @@ class UserController extends Controller
             'users' => $users,
             'roles' => $roles,
             'stores' => $stores,
+            'managers' => $managers,
             'departments' => $departments,
             'units' => $units,
             'subUnits' => $subUnits,
@@ -57,8 +59,11 @@ class UserController extends Controller
             'sub_unit' => 'nullable|string|max:255',
             'position' => 'nullable|string|max:255',
             'is_active' => 'boolean',
+            'is_manager' => 'boolean',
             'store_ids' => 'nullable|array',
             'store_ids.*' => 'exists:stores,id',
+            'manager_ids' => 'nullable|array',
+            'manager_ids.*' => 'exists:users,id',
         ]);
 
         $user = User::create([
@@ -70,6 +75,7 @@ class UserController extends Controller
             'sub_unit' => $request->sub_unit,
             'position' => $request->position,
             'is_active' => $request->input('is_active', true),
+            'is_manager' => $request->input('is_manager', false),
             'email_verified_at' => now(),
         ]);
 
@@ -77,6 +83,10 @@ class UserController extends Controller
 
         if ($request->has('store_ids')) {
             $user->stores()->sync($request->store_ids);
+        }
+
+        if ($request->has('manager_ids')) {
+            $user->managers()->sync($request->manager_ids);
         }
 
         return redirect()->back()->with('success', 'User created successfully.');
@@ -93,8 +103,11 @@ class UserController extends Controller
             'sub_unit' => 'nullable|string|max:255',
             'position' => 'nullable|string|max:255',
             'is_active' => 'boolean',
+            'is_manager' => 'boolean',
             'store_ids' => 'nullable|array',
             'store_ids.*' => 'exists:stores,id',
+            'manager_ids' => 'nullable|array',
+            'manager_ids.*' => 'exists:users,id',
         ]);
 
         $user->name = $request->name;
@@ -104,6 +117,7 @@ class UserController extends Controller
         $user->sub_unit = $request->sub_unit;
         $user->position = $request->position;
         $user->is_active = $request->boolean('is_active');
+        $user->is_manager = $request->boolean('is_manager');
         $user->save();
 
         $user->syncRoles([$request->role]);
@@ -114,6 +128,13 @@ class UserController extends Controller
             $user->stores()->sync($request->store_ids);
         } else {
             $user->stores()->detach();
+        }
+
+        // Update managers assignment
+        if ($request->has('manager_ids')) {
+            $user->managers()->sync($request->manager_ids);
+        } else {
+            $user->managers()->detach();
         }
 
         return redirect()->back()->with('success', 'User updated successfully.');

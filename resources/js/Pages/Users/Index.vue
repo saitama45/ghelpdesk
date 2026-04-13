@@ -14,6 +14,7 @@ const props = defineProps({
     users: Object,
     roles: Array,
     stores: Array,
+    managers: Array,
     departments: Array,
     units: Array,
     subUnits: Array,
@@ -59,7 +60,9 @@ const createForm = useForm({
     sub_unit: '',
     position: '',
     is_active: true,
+    is_manager: false,
     store_ids: [],
+    manager_ids: [],
 });
 
 const editForm = useForm({
@@ -71,7 +74,9 @@ const editForm = useForm({
     sub_unit: '',
     position: '',
     is_active: true,
+    is_manager: false,
     store_ids: [],
+    manager_ids: [],
 });
 
 const passwordForm = useForm({
@@ -100,8 +105,10 @@ const editUser = (user) => {
     editForm.unit = user.unit || '';
     editForm.sub_unit = user.sub_unit || '';
     editForm.position = user.position || '';
-    editForm.is_active = user.is_active;
+    editForm.is_active = !!user.is_active;
+    editForm.is_manager = !!user.is_manager;
     editForm.store_ids = user.stores?.map(s => s.id) || [];
+    editForm.manager_ids = user.managers?.map(m => m.id) || [];
     showEditModal.value = true;
 };
 
@@ -206,6 +213,7 @@ const updatePassword = () => {
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reports To</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub-Unit</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Stores</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -233,6 +241,16 @@ const updatePassword = () => {
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {{ user.department || '-' }}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div v-if="user.managers?.length > 0" class="flex flex-wrap gap-1 max-w-[200px]">
+                                <span v-for="manager in user.managers" :key="manager.id" 
+                                      class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100"
+                                >
+                                    {{ manager.name }}
+                                </span>
+                            </div>
+                            <span v-else class="text-xs text-gray-400 italic">No Manager</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                             {{ user.sub_unit || '-' }}
@@ -380,11 +398,29 @@ const updatePassword = () => {
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Assign stores..."
+                                :limit="5"
                             />
                         </div>
-                        <div class="flex items-center">
-                            <input v-model="createForm.is_active" type="checkbox" id="is_active_create" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
-                            <label for="is_active_create" class="ml-2 text-sm font-bold text-gray-700">Active Account</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex items-center">
+                                <input v-model="createForm.is_active" type="checkbox" id="is_active_create" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                                <label for="is_active_create" class="ml-2 text-sm font-bold text-gray-700">Active Account</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input v-model="createForm.is_manager" type="checkbox" id="is_manager_create" class="rounded border-gray-300 text-purple-600 shadow-sm focus:ring-purple-500">
+                                <label for="is_manager_create" class="ml-2 text-sm font-bold text-gray-700">Is Manager</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reports To</label>
+                            <MultiAutocomplete
+                                v-model="createForm.manager_ids"
+                                :options="managers"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select managers..."
+                                :limit="5"
+                            />
                         </div>
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
@@ -474,11 +510,29 @@ const updatePassword = () => {
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Assign stores..."
+                                :limit="5"
                             />
                         </div>
-                        <div class="flex items-center">
-                            <input v-model="editForm.is_active" type="checkbox" id="is_active_edit" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
-                            <label for="is_active_edit" class="ml-2 text-sm font-bold text-gray-700">Active Account</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex items-center">
+                                <input v-model="editForm.is_active" type="checkbox" id="is_active_edit" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                                <label for="is_active_edit" class="ml-2 text-sm font-bold text-gray-700">Active Account</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input v-model="editForm.is_manager" type="checkbox" id="is_manager_edit" class="rounded border-gray-300 text-purple-600 shadow-sm focus:ring-purple-500">
+                                <label for="is_manager_edit" class="ml-2 text-sm font-bold text-gray-700">Is Manager</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reports To</label>
+                            <MultiAutocomplete
+                                v-model="editForm.manager_ids"
+                                :options="managers"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select managers..."
+                                :limit="5"
+                            />
                         </div>
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="showEditModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
