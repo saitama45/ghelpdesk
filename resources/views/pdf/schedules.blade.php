@@ -52,13 +52,14 @@
             white-space: nowrap;
         }
         /* Column Widths (Total 100%) */
-        .col-tech { width: 13%; }
-        .col-store { width: 13%; }
-        .col-status { width: 9%; }
-        .col-time { width: 16%; }
-        .col-pickup { width: 13%; }
-        .col-backlogs { width: 13%; }
-        .col-remarks { width: 23%; }
+        .col-tech      { width: 11%; }
+        .col-store     { width: 11%; }
+        .col-status    { width: 8%; }
+        .col-time      { width: 13%; }
+        .col-pickup    { width: 11%; }
+        .col-backlogs  { width: 11%; }
+        .col-remarks   { width: 17%; }
+        .col-actual    { width: 9%; }
     </style>
 </head>
 <body>
@@ -73,42 +74,50 @@
                 <th class="col-tech">Assigned Tech</th>
                 <th class="col-store">Store</th>
                 <th class="col-status">Status</th>
-                <th class="col-time">Time</th>
+                <th class="col-time">Sched. Time</th>
                 <th class="col-pickup">Pickup</th>
                 <th class="col-backlogs">Backlogs</th>
                 <th class="col-remarks">Off-site Remarks</th>
+                <th class="col-actual">Actual In</th>
+                <th class="col-actual">Actual Out</th>
             </tr>
         </thead>
         <tbody>
-            @foreach($groupedSchedules as $date => $daySchedules)
+            @foreach($groupedRows as $date => $dayRows)
                 <tr>
-                    <td colspan="7" class="date-row">
+                    <td colspan="9" class="date-row">
                         {{ \Carbon\Carbon::parse($date)->format('l, F d, Y') }}
                     </td>
                 </tr>
-                @foreach($daySchedules as $schedule)
+                @foreach($dayRows as $row)
                     <tr>
-                        <td>{{ $schedule->user->name }}</td>
-                        <td>{{ $schedule->store->name ?? '-' }}</td>
-                        <td>{{ $schedule->status }}</td>
+                        <td>{{ $row['user'] }}</td>
+                        <td>{{ $row['store'] }}</td>
+                        <td>{{ $row['status'] }}</td>
                         <td class="nowrap">
-                            {{ \Carbon\Carbon::parse($schedule->start_time)->format('h:i A') }} - {{ \Carbon\Carbon::parse($schedule->end_time)->format('h:i A') }}
+                            {{ \Carbon\Carbon::parse($row['start_time'])->format('h:i A') }} - {{ \Carbon\Carbon::parse($row['end_time'])->format('h:i A') }}
                         </td>
                         <td class="nowrap">
-                            @if($schedule->pickup_start)
-                                {{ \Carbon\Carbon::parse($schedule->pickup_start)->format('h:i A') }} - {{ \Carbon\Carbon::parse($schedule->pickup_end)->format('h:i A') }}
+                            @if($row['pickup_start'])
+                                {{ \Carbon\Carbon::parse($row['pickup_start'])->format('h:i A') }} - {{ \Carbon\Carbon::parse($row['pickup_end'])->format('h:i A') }}
                             @else
                                 -
                             @endif
                         </td>
                         <td class="nowrap">
-                            @if($schedule->backlogs_start)
-                                {{ \Carbon\Carbon::parse($schedule->backlogs_start)->format('h:i A') }} - {{ \Carbon\Carbon::parse($schedule->backlogs_end)->format('h:i A') }}
+                            @if($row['backlogs_start'])
+                                {{ \Carbon\Carbon::parse($row['backlogs_start'])->format('h:i A') }} - {{ \Carbon\Carbon::parse($row['backlogs_end'])->format('h:i A') }}
                             @else
                                 -
                             @endif
                         </td>
-                        <td>{{ $schedule->remarks ?? '-' }}</td>
+                        <td>{{ $row['remarks'] ?? '-' }}</td>
+                        <td class="nowrap">
+                            {{ $row['actual_time_in'] ? \Carbon\Carbon::parse($row['actual_time_in'])->format('h:i A') : '-' }}
+                        </td>
+                        <td class="nowrap">
+                            {{ $row['actual_time_out'] ? \Carbon\Carbon::parse($row['actual_time_out'])->format('h:i A') : '-' }}
+                        </td>
                     </tr>
                 @endforeach
             @endforeach

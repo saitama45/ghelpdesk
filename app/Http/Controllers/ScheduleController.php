@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Schedule;
+use App\Models\ScheduleStore;
 use App\Models\User;
 use App\Models\Store;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -29,7 +31,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Schedule::with(['user', 'store', 'ticket.item']);
+        $query = Schedule::with(['user', 'store', 'ticket.item', 'scheduleStores.store']);
 
         if ($request->filled('start') && $request->filled('end')) {
             $query->whereBetween('start_time', [$request->start, $request->end]);
@@ -48,7 +50,10 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         if ($request->filled('store_id')) {
-            $query->where('store_id', $request->store_id);
+            $query->where(function ($q) use ($request) {
+                $q->where('store_id', $request->store_id)
+                  ->orWhereHas('scheduleStores', fn ($sq) => $sq->where('store_id', $request->store_id));
+            });
         }
 
         $schedules = $query->get()->map(function($schedule) {
@@ -67,6 +72,15 @@ class ScheduleController extends Controller implements HasMiddleware
                 'remarks' => $schedule->remarks,
                 'user' => $schedule->user,
                 'store' => $schedule->store,
+                'schedule_stores' => $schedule->scheduleStores->map(fn ($ss) => [
+                    'id'                   => $ss->id,
+                    'store_id'             => $ss->store_id,
+                    'start_time'           => $ss->start_time->toIso8601String(),
+                    'end_time'             => $ss->end_time->toIso8601String(),
+                    'grace_period_minutes' => $ss->grace_period_minutes ?? 30,
+                    'remarks'              => $ss->remarks,
+                    'store'                => $ss->store ? ['id' => $ss->store->id, 'name' => $ss->store->name] : null,
+                ]),
                 'ticket' => $schedule->ticket ? [
                     'id'         => $schedule->ticket->id,
                     'ticket_key' => $schedule->ticket->ticket_key,
@@ -164,23 +178,26 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'store_id' => 'nullable|exists:stores,id',
-            'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
-            'start_time' => 'required|date',
-            'end_time' => 'required|date|after_or_equal:start_time',
-            'pickup_start' => 'nullable|string',
-            'pickup_end' => 'nullable|string',
-            'backlogs_start' => 'nullable|string',
-            'backlogs_end' => 'nullable|string',
-            'remarks' => 'nullable|string',
+        $request->validate([
+            'user_id'                          => 'required|exists:users,id',
+            'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'stores'                           => 'required|array|min:1',
+            'stores.*.store_id'                => 'nullable|exists:stores,id',
+            'stores.*.start_time'              => 'required|date',
+            'stores.*.end_time'                => 'required|date',
+            'stores.*.grace_period_minutes'    => 'nullable|integer|min:0|max:480',
+            'stores.*.remarks'                 => 'nullable|string|max:1000',
+            'pickup_start'                     => 'nullable|string',
+            'pickup_end'                       => 'nullable|string',
+            'backlogs_start'                   => 'nullable|string',
+            'backlogs_end'                     => 'nullable|string',
         ]);
 
-        $startTime = \Illuminate\Support\Carbon::parse($request->start_time);
-        $endTime = \Illuminate\Support\Carbon::parse($request->end_time);
+        $storeEntries = $request->input('stores');
+        $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
+        $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
-        // Check for overlaps
+        // Check for overlaps using overall shift window
         $overlap = Schedule::where('user_id', $request->user_id)
             ->where(function($query) use ($startTime, $endTime) {
                 $query->whereBetween('start_time', [$startTime, $endTime])
@@ -192,10 +209,30 @@ class ScheduleController extends Controller implements HasMiddleware
             })->exists();
 
         if ($overlap) {
-            return redirect()->back()->withErrors(['start_time' => 'This user already has a schedule that overlaps with the selected time range.']);
+            return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
 
-        Schedule::create($validated);
+        $schedule = Schedule::create([
+            'user_id'      => $request->user_id,
+            'status'       => $request->status,
+            'start_time'   => $startTime,
+            'end_time'     => $endTime,
+            'store_id'     => null,
+            'pickup_start' => $request->pickup_start,
+            'pickup_end'   => $request->pickup_end,
+            'backlogs_start' => $request->backlogs_start,
+            'backlogs_end'   => $request->backlogs_end,
+        ]);
+
+        foreach ($storeEntries as $entry) {
+            $schedule->scheduleStores()->create([
+                'store_id'             => $entry['store_id'] ?? null,
+                'start_time'           => Carbon::parse($entry['start_time']),
+                'end_time'             => Carbon::parse($entry['end_time']),
+                'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
+                'remarks'              => $entry['remarks'] ?? null,
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Schedule created successfully');
     }
@@ -215,23 +252,26 @@ class ScheduleController extends Controller implements HasMiddleware
             abort(403, 'You are not authorized to edit this schedule. Only the owner or their assigned manager can edit.');
         }
 
-        $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'store_id' => 'nullable|exists:stores,id',
-            'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
-            'start_time' => 'required|date',
-            'end_time' => 'required|date|after_or_equal:start_time',
-            'pickup_start' => 'nullable|string',
-            'pickup_end' => 'nullable|string',
-            'backlogs_start' => 'nullable|string',
-            'backlogs_end' => 'nullable|string',
-            'remarks' => 'nullable|string',
+        $request->validate([
+            'user_id'                          => 'required|exists:users,id',
+            'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'stores'                           => 'required|array|min:1',
+            'stores.*.store_id'                => 'nullable|exists:stores,id',
+            'stores.*.start_time'              => 'required|date',
+            'stores.*.end_time'                => 'required|date',
+            'stores.*.grace_period_minutes'    => 'nullable|integer|min:0|max:480',
+            'stores.*.remarks'                 => 'nullable|string|max:1000',
+            'pickup_start'                     => 'nullable|string',
+            'pickup_end'                       => 'nullable|string',
+            'backlogs_start'                   => 'nullable|string',
+            'backlogs_end'                     => 'nullable|string',
         ]);
 
-        $startTime = \Illuminate\Support\Carbon::parse($request->start_time);
-        $endTime = \Illuminate\Support\Carbon::parse($request->end_time);
+        $storeEntries = $request->input('stores');
+        $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
+        $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
-        // Check for overlaps
+        // Check for overlaps excluding current schedule
         $overlap = Schedule::where('user_id', $request->user_id)
             ->where('id', '!=', $schedule->id)
             ->where(function($query) use ($startTime, $endTime) {
@@ -244,10 +284,32 @@ class ScheduleController extends Controller implements HasMiddleware
             })->exists();
 
         if ($overlap) {
-            return redirect()->back()->withErrors(['start_time' => 'This user already has a schedule that overlaps with the selected time range.']);
+            return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
 
-        $schedule->update($validated);
+        $schedule->update([
+            'user_id'        => $request->user_id,
+            'status'         => $request->status,
+            'start_time'     => $startTime,
+            'end_time'       => $endTime,
+            'store_id'       => null,
+            'pickup_start'   => $request->pickup_start,
+            'pickup_end'     => $request->pickup_end,
+            'backlogs_start' => $request->backlogs_start,
+            'backlogs_end'   => $request->backlogs_end,
+        ]);
+
+        // Rebuild store entries
+        $schedule->scheduleStores()->delete();
+        foreach ($storeEntries as $entry) {
+            $schedule->scheduleStores()->create([
+                'store_id'             => $entry['store_id'] ?? null,
+                'start_time'           => Carbon::parse($entry['start_time']),
+                'end_time'             => Carbon::parse($entry['end_time']),
+                'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
+                'remarks'              => $entry['remarks'] ?? null,
+            ]);
+        }
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
     }

@@ -85,7 +85,10 @@
                             @change="changePerPage(parseInt($event.target.value))"
                             class="border border-gray-300 rounded-lg pl-3 pr-10 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-all"
                         >
+                            <option v-if="![10, 15, 20, 25, 50, 100].includes(perPage)" :value="perPage">{{ perPage }}</option>
                             <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>

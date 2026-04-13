@@ -302,25 +302,44 @@
                         <h3 class="text-lg font-bold text-gray-900">
                             {{ isViewingOnly ? 'View Schedule' : (isEditing ? 'Edit Schedule' : 'New Schedule') }}
                         </h3>
-                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div class="flex items-center space-x-2">
+                            <!-- Edit Button (Pencil) -->
+                            <button 
+                                v-if="isViewingOnly && canEditSchedule"
+                                @click="isViewingOnly = false"
+                                class="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                                title="Edit Schedule"
+                            >
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </button>
+                            
+                            <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <form @submit.prevent="submitForm" class="space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">User</label>
-                                <Autocomplete 
-                                    v-model="form.user_id"
-                                    :options="users"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select user..."
-                                    :disabled="isViewingOnly"
-                                />
+                                <template v-if="isManager">
+                                    <Autocomplete
+                                        v-model="form.user_id"
+                                        :options="subordinateUsers"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select user..."
+                                        :disabled="isViewingOnly"
+                                    />
+                                </template>
+                                <template v-else>
+                                    <p class="px-3 py-2 text-sm text-gray-800 bg-gray-100 rounded-lg border border-gray-200">{{ authUser.name }}</p>
+                                </template>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -331,36 +350,65 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Store (Optional)</label>
-                                <Autocomplete 
-                                    v-model="form.store_id"
-                                    :options="stores"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select store..."
-                                    :disabled="isViewingOnly"
-                                />
+                        <!-- Store Entries Repeater -->
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-sm font-medium text-gray-700">Store Visits</label>
+                                <button v-if="!isViewingOnly" type="button" @click="addStore"
+                                        class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                    Add Store
+                                </button>
                             </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Off-site Remarks / Other Activities</label>
-                            <textarea v-model="form.remarks" rows="3" :disabled="isViewingOnly"
-                                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                      placeholder="Provide details about the off-site activity or other remarks..."></textarea>
-                        </div>
-                        </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Start Date & Time</label>
-                                <input v-model="form.start_time" type="datetime-local" required :disabled="isViewingOnly"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">End Date & Time</label>
-                                <input v-model="form.end_time" type="datetime-local" required :disabled="isViewingOnly"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                            <div v-for="(entry, index) in form.stores" :key="index"
+                                 class="relative p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-3">
+                                <!-- Remove button -->
+                                <button v-if="!isViewingOnly && form.stores.length > 1" type="button" @click="removeStore(index)"
+                                        class="absolute top-2 right-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Remove">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+
+                                <!-- Row 1: Store | Start | End -->
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Store (Optional)</label>
+                                        <Autocomplete
+                                            v-model="entry.store_id"
+                                            :options="storeSelectOptions"
+                                            label-key="name"
+                                            value-key="id"
+                                            placeholder="Select store..."
+                                            :disabled="isViewingOnly"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Start Date & Time</label>
+                                        <input v-model="entry.start_time" type="datetime-local" required :disabled="isViewingOnly"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">End Date & Time</label>
+                                        <input v-model="entry.end_time" type="datetime-local" required :disabled="isViewingOnly"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                                    </div>
+                                </div>
+
+                                <!-- Row 2: Grace | Remarks -->
+                                <div class="grid grid-cols-1 md:grid-cols-[120px_1fr] gap-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Grace (min)</label>
+                                        <input v-model.number="entry.grace_period_minutes" type="number" min="0" max="480" :disabled="isViewingOnly"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                               placeholder="30">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Off-site Remarks / Other Activities</label>
+                                        <textarea v-model="entry.remarks" rows="2" :disabled="isViewingOnly"
+                                                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                                  placeholder="Remarks for this store visit..."></textarea>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -435,11 +483,24 @@ const filterStore = ref(props.filters?.store_id || '')
 const selectedReportYears = ref(props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears])
 const currentView = ref('calendar') // 'calendar' or 'report'
 
+const authUser = computed(() => page.props.auth.user)
+const isManager = computed(() => !!authUser.value?.is_manager)
+
+// Only show users who report directly to the logged-in manager
+const subordinateUsers = computed(() =>
+    (props.users ?? []).filter(u => u.managers?.some(m => m.id === authUser.value?.id))
+)
+
 const storeOptions = computed(() => {
     return [
         { id: '', name: 'All Stores' },
         ...(props.stores ?? []).map(s => ({ id: s.id, name: s.name }))
     ]
+})
+
+// For the store repeater inside the form (no "All Stores" entry)
+const storeSelectOptions = computed(() => {
+    return (props.stores ?? []).map(s => ({ id: s.id, name: s.name }))
 })
 
 const subUnitOptions = computed(() => {
@@ -507,13 +568,16 @@ const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
 
 const exportPdf = () => {
-    // Get first and last day of current visible month from the calendar state if possible, 
-    // or just default to current month for now.
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-    
-    window.open(route('schedules.export.pdf', { start, end }), '_blank');
+    const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const params = { start, end };
+    if (filterUser.value)    params.user_id  = filterUser.value;
+    if (filterSubUnit.value) params.sub_unit = filterSubUnit.value;
+    if (filterStore.value)   params.store_id = filterStore.value;
+
+    window.open(route('schedules.export.pdf', params), '_blank');
 };
 
 // ── Import ──────────────────────────────────────────────────────────────
@@ -581,6 +645,7 @@ const submitImport = async () => {
 const showModal = ref(false)
 const isEditing = ref(false)
 const isViewingOnly = ref(false)
+const canEditSchedule = ref(false)
 const currentScheduleId = ref(null)
 
 const statuses = [
@@ -589,15 +654,12 @@ const statuses = [
 
 const form = reactive({
     user_id: null,
-    store_id: null,
     status: 'On-site',
-    start_time: '',
-    end_time: '',
+    stores: [{ store_id: null, start_time: '', end_time: '', grace_period_minutes: 30, remarks: '' }],
     pickup_start: '',
     pickup_end: '',
     backlogs_start: '',
     backlogs_end: '',
-    remarks: ''
 })
 
 const formatDateForInput = (date) => {
@@ -610,33 +672,33 @@ const openCreateModal = () => {
     isEditing.value = false
     isViewingOnly.value = false
     currentScheduleId.value = null
-    Object.keys(form).forEach(key => {
-        if (key === 'status') form[key] = 'On-site'
-        else if (key === 'user_id' || key === 'store_id') form[key] = null
-        else form[key] = ''
-    })
-    
-    // Set default times
-    const now = new Date();
-    form.start_time = formatDateForInput(now);
-    const end = new Date();
-    end.setHours(end.getHours() + 8);
-    form.end_time = formatDateForInput(end);
-    
+
+    form.user_id = isManager.value ? null : authUser.value.id
+    form.status = 'On-site'
+    form.pickup_start = ''
+    form.pickup_end = ''
+    form.backlogs_start = ''
+    form.backlogs_end = ''
+
+    const now = new Date()
+    const start = new Date(now)
+    start.setHours(8, 0, 0, 0)
+    const end = new Date(now)
+    end.setHours(17, 0, 0, 0)
+    form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
+
     showModal.value = true
 }
 
 const handleDateClick = (date) => {
     if (!hasPermission('schedules.create')) return
-    
+
     openCreateModal()
     const start = new Date(date)
-    start.setHours(8, 0, 0)
-    form.start_time = formatDateForInput(start)
-    
+    start.setHours(8, 0, 0, 0)
     const end = new Date(date)
-    end.setHours(17, 0, 0)
-    form.end_time = formatDateForInput(end)
+    end.setHours(17, 0, 0, 0)
+    form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30 }]
 }
 
 const handleEventClick = (event) => {
@@ -652,27 +714,59 @@ const handleEventClick = (event) => {
     
     const canEdit = isOwner || isAdmin || isDirectManager;
 
-    isEditing.value = canEdit;
-    isViewingOnly.value = !canEdit;
+    isEditing.value = true; // Signifies we are interacting with an existing record
+    isViewingOnly.value = true; // Always start in View mode
+    canEditSchedule.value = canEdit; // Store permission for the Pencil icon
     currentScheduleId.value = event.id
-    
+
     form.user_id = event.user_id
-    form.store_id = event.store_id
     form.status = event.status
-    form.start_time = formatDateForInput(new Date(event.start_time))
-    form.end_time = formatDateForInput(new Date(event.end_time))
     form.pickup_start = event.pickup_start || ''
     form.pickup_end = event.pickup_end || ''
     form.backlogs_start = event.backlogs_start || ''
     form.backlogs_end = event.backlogs_end || ''
-    form.remarks = event.remarks || ''
-    
+
+    // Populate store entries from schedule_stores; fall back to legacy single store+time
+    if (event.schedule_stores && event.schedule_stores.length > 0) {
+        form.stores = event.schedule_stores.map(ss => ({
+            store_id: ss.store_id,
+            start_time: formatDateForInput(new Date(ss.start_time)),
+            end_time: formatDateForInput(new Date(ss.end_time)),
+            grace_period_minutes: ss.grace_period_minutes ?? 30,
+            remarks: ss.remarks || '',
+        }))
+    } else {
+        form.stores = [{
+            store_id: event.store_id || null,
+            start_time: formatDateForInput(new Date(event.start_time)),
+            end_time: formatDateForInput(new Date(event.end_time)),
+            grace_period_minutes: 30,
+            remarks: event.remarks || '',
+        }]
+    }
+
     showModal.value = true
 }
 
 const closeModal = () => {
     showModal.value = false;
     isViewingOnly.value = false;
+}
+
+const addStore = () => {
+    const last = form.stores[form.stores.length - 1]
+    const first = form.stores[0]
+    form.stores.push({
+        store_id: null,
+        start_time: last?.end_time || '',
+        end_time: first?.end_time || '',
+        grace_period_minutes: 30,
+        remarks: '',
+    })
+}
+
+const removeStore = (index) => {
+    form.stores.splice(index, 1)
 }
 
 const submitForm = () => {

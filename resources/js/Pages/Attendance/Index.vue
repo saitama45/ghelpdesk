@@ -1,9 +1,10 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { Head, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCircleIcon, GlobeAsiaAustraliaIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -11,6 +12,39 @@ const props = defineProps({
     assignedStores: Array,
     totalAssignedCount: Number,
     todaySchedule: Object,
+    users: Array,
+    filters: Object,
+});
+
+const filterSubUnit = ref(props.filters?.sub_unit || '');
+const filterDateFrom = ref(props.filters?.date_from || new Date().toISOString().split('T')[0]);
+const filterDateTo = ref(props.filters?.date_to || new Date().toISOString().split('T')[0]);
+
+const subUnitOptions = computed(() => {
+    if (!props.users) return [{ id: '', name: 'All Sub-Units' }];
+    const units = props.users
+        .map(u => u.sub_unit)
+        .filter(u => u && u.trim() !== '')
+    const unique = [...new Set(units)].sort()
+    return [
+        { id: '', name: 'All Sub-Units' },
+        ...unique.map(u => ({ id: u, name: u }))
+    ]
+})
+
+const applyFilters = () => {
+    router.get(route('attendance.index'), {
+        sub_unit: filterSubUnit.value,
+        date_from: filterDateFrom.value,
+        date_to: filterDateTo.value,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+    });
+};
+
+watch([filterSubUnit, filterDateFrom, filterDateTo], () => {
+    applyFilters();
 });
 
 // Component state

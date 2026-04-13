@@ -1,32 +1,77 @@
 <script setup>
-import { ref, watch, reactive } from 'vue';
+import { ref, watch, reactive, computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Modal from '@/Components/Modal.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon, FunnelIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
-    logs: Object
+    logs: Object,
+    users: Array,
+    filters: Object,
 });
 
 const { formatDate } = useDateFormatter();
-const search = ref('');
+const search = ref(props.filters?.search || '');
 const isLoading = ref(false);
 
-// Preview Modal State
-const isPreviewOpen = ref(false);
-const previewImage = ref(null);
-const zoom = ref(1);
-const position = reactive({ x: 0, y: 0 });
-const isDragging = ref(false);
-const startPos = reactive({ x: 0, y: 0 });
+// Filters
+const filterSubUnit = ref(props.filters?.sub_unit || '');
+const filterDateFrom = ref(props.filters?.date_from || '');
+const filterDateTo = ref(props.filters?.date_to || '');
+
+const subUnitOptions = computed(() => {
+    if (!props.users) return [{ id: '', name: 'All Sub-Units' }];
+    const units = props.users
+        .map(u => u.sub_unit)
+        .filter(u => u && u.trim() !== '')
+    const unique = [...new Set(units)].sort()
+    return [
+        { id: '', name: 'All Sub-Units' },
+        ...unique.map(u => ({ id: u, name: u }))
+    ]
+})
+
+const applyFilters = () => {
+    isLoading.value = true;
+    router.get(route('attendance.logs'), { 
+        search: search.value,
+        sub_unit: filterSubUnit.value,
+        date_from: filterDateFrom.value,
+        date_to: filterDateTo.value,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        onFinish: () => isLoading.value = false
+    });
+};
+
+const clearFilters = () => {
+    search.value = '';
+    filterSubUnit.value = '';
+    filterDateFrom.value = '';
+    filterDateTo.value = '';
+    applyFilters();
+};
+
+// Trigger filter on change
+watch([filterSubUnit, filterDateFrom, filterDateTo], () => {
+    applyFilters();
+});
 
 const goToPage = (page) => {
     isLoading.value = true;
-    router.get(route('attendance.logs'), { page, search: search.value }, {
+    router.get(route('attendance.logs'), { 
+        page, 
+        search: search.value,
+        sub_unit: filterSubUnit.value,
+        date_from: filterDateFrom.value,
+        date_to: filterDateTo.value,
+    }, {
         preserveState: true,
         preserveScroll: true,
         onFinish: () => isLoading.value = false
@@ -35,7 +80,13 @@ const goToPage = (page) => {
 
 const changePerPage = (perPage) => {
     isLoading.value = true;
-    router.get(route('attendance.logs'), { perPage, search: search.value }, {
+    router.get(route('attendance.logs'), { 
+        perPage, 
+        search: search.value,
+        sub_unit: filterSubUnit.value,
+        date_from: filterDateFrom.value,
+        date_to: filterDateTo.value,
+    }, {
         preserveState: true,
         preserveScroll: true,
         onFinish: () => isLoading.value = false
@@ -44,7 +95,12 @@ const changePerPage = (perPage) => {
 
 watch(search, (value) => {
     isLoading.value = true;
-    router.get(route('attendance.logs'), { search: value }, {
+    router.get(route('attendance.logs'), { 
+        search: value,
+        sub_unit: filterSubUnit.value,
+        date_from: filterDateFrom.value,
+        date_to: filterDateTo.value,
+    }, {
         preserveState: true,
         preserveScroll: true,
         onFinish: () => isLoading.value = false
@@ -54,6 +110,14 @@ watch(search, (value) => {
 const getGoogleMapsUrl = (lat, lng) => {
     return `https://www.google.com/maps?q=${lat},${lng}`;
 };
+
+// Preview Modal State
+const isPreviewOpen = ref(false);
+const previewImage = ref(null);
+const zoom = ref(1);
+const position = reactive({ x: 0, y: 0 });
+const isDragging = ref(false);
+const startPos = reactive({ x: 0, y: 0 });
 
 // Preview Functions
 const openPreview = (photoPath) => {
@@ -109,90 +173,145 @@ const stopDrag = () => {
             Attendance History
         </template>
 
-        <DataTable
-            title="Logs"
-            subtitle="View your time-in and time-out history"
-            v-model:search="search"
-            :data="logs.data"
-            :currentPage="logs.current_page"
-            :lastPage="logs.last_page"
-            :perPage="logs.per_page"
-            :showingText="`Showing ${logs.from} to ${logs.to} of ${logs.total} results`"
-            :isLoading="isLoading"
-            @goToPage="goToPage"
-            @changePerPage="changePerPage"
-        >
-            <template #actions>
-                <Link
-                    :href="route('attendance.index')"
-                    class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 active:bg-blue-900 focus:outline-none focus:border-blue-900 focus:ring ring-blue-300 disabled:opacity-25 transition ease-in-out duration-150"
-                >
-                    Log New Attendance
-                </Link>
-            </template>
+        <div class="space-y-6">
+            <!-- Filter Bar (Prominent) -->
+            <div class="bg-blue-600 rounded-xl shadow-lg p-1">
+                <div class="bg-white rounded-lg p-4">
+                    <div class="flex flex-col lg:flex-row lg:items-center gap-6">
+                        <div class="flex items-center gap-2 text-blue-600 font-bold shrink-0">
+                            <FunnelIcon class="w-5 h-5" />
+                            <span class="uppercase tracking-widest text-xs">Filters</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+                            <!-- Sub-Unit -->
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Sub-Unit</label>
+                                <Autocomplete
+                                    v-model="filterSubUnit"
+                                    :options="subUnitOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="All Sub-Units"
+                                />
+                            </div>
 
-            <template #header>
-                <tr class="bg-gray-50">
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selfie</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Log Time</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
-                </tr>
-            </template>
+                            <!-- Date From -->
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Date From</label>
+                                <input 
+                                    v-model="filterDateFrom" 
+                                    type="date" 
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px]"
+                                >
+                            </div>
 
-            <template #body="{ data }">
-                <tr v-for="log in data" :key="log.id" class="hover:bg-gray-50 transition-colors">
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex-shrink-0 h-12 w-12 cursor-pointer group relative" @click="openPreview(log.photo_path)">
-                            <img 
-                                :src="'/serve-storage/' + log.photo_path" 
-                                class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105"
-                                alt="Selfie"
-                            />
-                            <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
-                                <MagnifyingGlassPlusIcon class="w-5 h-5 text-white" />
+                            <!-- Date To -->
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Date To</label>
+                                <input 
+                                    v-model="filterDateTo" 
+                                    type="date" 
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px]"
+                                >
                             </div>
                         </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="text-sm font-semibold text-gray-900">{{ log.user?.name }}</div>
-                        <div class="text-xs text-gray-500">{{ log.user?.email }}</div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-gray-900">{{ formatDate(log.log_time, { year: undefined, month: undefined, day: undefined }) }}</span>
-                            <span class="text-xs text-gray-500">{{ formatDate(log.log_time, { hour: undefined, minute: undefined, second: undefined }) }}</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span 
-                            :class="[
-                                'px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full uppercase tracking-tighter',
-                                log.type === 'time_in' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
-                            ]"
+
+                        <button 
+                            @click="clearFilters"
+                            class="px-6 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors h-[42px] border border-red-100"
                         >
-                            {{ log.type === 'time_in' ? 'In' : 'Out' }}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <a 
-                            :href="getGoogleMapsUrl(log.latitude, log.longitude)" 
-                            target="_blank"
-                            class="inline-flex items-center text-blue-600 hover:text-blue-800 gap-1 font-medium transition-colors"
-                        >
-                            <MapPinIcon class="w-4 h-4" />
-                            <span>View on Map</span>
-                            <ArrowTopRightOnSquareIcon class="w-3 h-3" />
-                        </a>
-                    </td>
-                    <td class="px-6 py-4 text-xs text-gray-400 min-w-[220px]">
-                        {{ log.device_info || 'Unknown Device' }}
-                    </td>
-                </tr>
-            </template>
-        </DataTable>
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <DataTable
+                title="Logs"
+                subtitle="View your time-in and time-out history"
+                v-model:search="search"
+                :data="logs.data"
+                :currentPage="logs.current_page"
+                :lastPage="logs.last_page"
+                :perPage="logs.per_page"
+                :showingText="`Showing ${logs.from} to ${logs.to} of ${logs.total} results`"
+                :isLoading="isLoading"
+                @goToPage="goToPage"
+                @changePerPage="changePerPage"
+            >
+                <template #actions>
+                    <Link
+                        :href="route('attendance.index')"
+                        class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-blue-700 active:bg-blue-900 focus:outline-none focus:border-blue-900 focus:ring ring-blue-300 disabled:opacity-25 transition ease-in-out duration-150 whitespace-nowrap"
+                    >
+                        Log New Attendance
+                    </Link>
+                </template>
+
+                <template #header>
+                    <tr class="bg-gray-50">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selfie</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Log Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
+                    </tr>
+                </template>
+
+                <template #body="{ data }">
+                    <tr v-for="log in data" :key="log.id" class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex-shrink-0 h-12 w-12 cursor-pointer group relative" @click="openPreview(log.photo_path)">
+                                <img 
+                                    :src="'/serve-storage/' + log.photo_path" 
+                                    class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105"
+                                    alt="Selfie"
+                                />
+                                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
+                                    <MagnifyingGlassPlusIcon class="w-5 h-5 text-white" />
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-semibold text-gray-900">{{ log.user?.name }}</div>
+                            <div class="text-xs text-gray-500">{{ log.user?.email }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-bold text-gray-900">{{ formatDate(log.log_time, { year: undefined, month: undefined, day: undefined }) }}</span>
+                                <span class="text-xs text-gray-500">{{ formatDate(log.log_time, { hour: undefined, minute: undefined, second: undefined }) }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span 
+                                :class="[
+                                    'px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full uppercase tracking-tighter',
+                                    log.type === 'time_in' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                                ]"
+                            >
+                                {{ log.type === 'time_in' ? 'In' : 'Out' }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <a 
+                                :href="getGoogleMapsUrl(log.latitude, log.longitude)" 
+                                target="_blank"
+                                class="inline-flex items-center text-blue-600 hover:text-blue-800 gap-1 font-medium transition-colors"
+                            >
+                                <MapPinIcon class="w-4 h-4" />
+                                <span>View on Map</span>
+                                <ArrowTopRightOnSquareIcon class="w-3 h-3" />
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 text-xs text-gray-400 min-w-[220px]">
+                            {{ log.device_info || 'Unknown Device' }}
+                        </td>
+                    </tr>
+                </template>
+            </DataTable>
+        </div>
 
         <!-- Selfie Preview Modal -->
         <Modal :show="isPreviewOpen" @close="closePreview" maxWidth="2xl">

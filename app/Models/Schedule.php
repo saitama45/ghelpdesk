@@ -49,4 +49,9 @@ class Schedule extends Model
     {
         return $this->belongsTo(Store::class);
     }
+
+    public function scheduleStores()
+    {
+        return $this->hasMany(ScheduleStore::class)->orderBy('start_time');
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
 use App\Models\Store;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -24,7 +25,7 @@ class AttendanceController extends Controller implements HasMiddleware
         ];
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $user = auth()->user();
         
@@ -44,13 +45,23 @@ class AttendanceController extends Controller implements HasMiddleware
                 ->get();
         }
 
-        // Find the user's active On-site/Off-site schedule for the current time
+        // Find the user's active On-site/Off-site schedule for the current time.
+        // Grace period is per schedule_store; query with a generous max window then filter in PHP.
+        $now = now('Asia/Manila');
+
         $todaySchedule = Schedule::where('user_id', $user->id)
             ->whereIn('status', ['On-site', 'Off-site'])
-            ->where('start_time', '<=', now('Asia/Manila'))
-            ->where('end_time', '>=', now('Asia/Manila'))
-            ->with('store')
-            ->first();
+            ->where('start_time', '<=', $now->copy()->addMinutes(480))
+            ->where('end_time', '>=', $now)
+            ->with(['store', 'scheduleStores'])
+            ->get()
+            ->first(function ($s) use ($now) {
+                // Active if any store entry's window (with its grace) covers now
+                return $s->scheduleStores->some(
+                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes($ss->grace_period_minutes ?? 30))
+                              && $ss->end_time->gte($now)
+                ) || $s->scheduleStores->isEmpty(); // fallback for legacy schedules with no store entries
+            });
 
         // Scope lastLog to this schedule so a forgotten yesterday Time Out doesn't bleed into today
         $lastLog = $todaySchedule
@@ -59,6 +70,8 @@ class AttendanceController extends Controller implements HasMiddleware
                 ->latest('log_time')
                 ->first()
             : null;
+
+        $users = User::active()->orderBy('name')->get(['id', 'name', 'sub_unit']);
 
         return Inertia::render('Attendance/Index', [
             'lastLog' => $lastLog,
@@ -73,18 +86,58 @@ class AttendanceController extends Controller implements HasMiddleware
                     ? ['id' => $todaySchedule->store->id, 'name' => $todaySchedule->store->name]
                     : null,
             ] : null,
+            'users' => $users,
+            'filters' => $request->only(['sub_unit', 'date_from', 'date_to']),
         ]);
     }
 
-    public function logs()
+    public function logs(Request $request)
     {
-        $logs = auth()->user()->attendanceLogs()
-            ->with('user')
-            ->latest('log_time')
-            ->paginate(20);
+        $user = auth()->user();
+        
+        // Base query
+        $query = AttendanceLog::with('user')->latest('log_time');
+
+        // Privacy Logic: Show only own logs + subordinates, unless Admin/Dev
+        if (!$user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
+            $subordinateIds = $user->subordinates()->pluck('users.id')->toArray();
+            $allowedUserIds = array_merge([$user->id], $subordinateIds);
+            $query->whereIn('user_id', $allowedUserIds);
+        }
+
+        // Filter by Sub-Unit
+        if ($request->filled('sub_unit')) {
+            $query->whereHas('user', function($q) use ($request) {
+                $q->where('sub_unit', $request->sub_unit);
+            });
+        }
+
+        // Filter by Date Range (Default to today if not set)
+        $dateFrom = $request->get('date_from', now()->toDateString());
+        $dateTo = $request->get('date_to', now()->toDateString());
+
+        $query->whereDate('log_time', '>=', $dateFrom)
+              ->whereDate('log_time', '<=', $dateTo);
+
+        if ($request->filled('search')) {
+            $query->where(function($q) use ($request) {
+                $q->whereHas('user', fn($uq) => $uq->where('name', 'like', "%{$request->search}%"))
+                  ->orWhere('device_info', 'like', "%{$request->search}%")
+                  ->orWhere('type', 'like', "%{$request->search}%");
+            });
+        }
+
+        $logs = $query->paginate($request->get('perPage', 10))->withQueryString();
+        $users = User::active()->orderBy('name')->get(['id', 'name', 'sub_unit']);
 
         return Inertia::render('Attendance/Logs', [
-            'logs' => $logs
+            'logs' => $logs,
+            'users' => $users,
+            'filters' => [
+                'sub_unit' => $request->sub_unit,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+            ],
         ]);
     }
 
@@ -147,12 +200,22 @@ class AttendanceController extends Controller implements HasMiddleware
             return back()->with('error', 'Too many attempts. Please try again in ' . RateLimiter::availableIn($throttleKey) . ' seconds.');
         }
 
-        // Find the active On-site/Off-site schedule for this user right now
+        // Find the active On-site/Off-site schedule for this user right now.
+        // Grace period is per schedule_store; query with a generous max window then filter in PHP.
+        $now = now('Asia/Manila');
+
         $schedule = Schedule::where('user_id', $user->id)
             ->whereIn('status', ['On-site', 'Off-site'])
-            ->where('start_time', '<=', now('Asia/Manila'))
-            ->where('end_time', '>=', now('Asia/Manila'))
-            ->first();
+            ->where('start_time', '<=', $now->copy()->addMinutes(480))
+            ->where('end_time', '>=', $now)
+            ->with('scheduleStores')
+            ->get()
+            ->first(function ($s) use ($now) {
+                return $s->scheduleStores->some(
+                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes($ss->grace_period_minutes ?? 30))
+                              && $ss->end_time->gte($now)
+                ) || $s->scheduleStores->isEmpty(); // fallback for legacy schedules
+            });
 
         if (!$schedule) {
             return back()->with('error', 'No active On-site or Off-site schedule found for your current time. Please contact your supervisor.');
