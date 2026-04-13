@@ -60,6 +60,8 @@
         .col-backlogs  { width: 11%; }
         .col-remarks   { width: 17%; }
         .col-actual    { width: 9%; }
+        .actual-in     { color: #16a34a; font-weight: bold; }
+        .actual-out    { color: #ea580c; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -112,10 +114,10 @@
                             @endif
                         </td>
                         <td>{{ $row['remarks'] ?? '-' }}</td>
-                        <td class="nowrap">
+                        <td class="nowrap actual-in">
                             {{ $row['actual_time_in'] ? \Carbon\Carbon::parse($row['actual_time_in'])->format('h:i A') : '-' }}
                         </td>
-                        <td class="nowrap">
+                        <td class="nowrap actual-out">
                             {{ $row['actual_time_out'] ? \Carbon\Carbon::parse($row['actual_time_out'])->format('h:i A') : '-' }}
                         </td>
                     </tr>

@@ -394,6 +394,17 @@
                                     </div>
                                 </div>
 
+                                <!-- Actual Time In / Out (read-only, schedule-level) -->
+                                <div v-if="isEditing && (currentActualTimeIn || currentActualTimeOut)"
+                                     class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-semibold">
+                                    <span class="text-emerald-600">
+                                        Actual In: {{ currentActualTimeIn ? formatTime(currentActualTimeIn) : '—' }}
+                                    </span>
+                                    <span class="text-orange-500">
+                                        Actual Out: {{ currentActualTimeOut ? formatTime(currentActualTimeOut) : '—' }}
+                                    </span>
+                                </div>
+
                                 <!-- Row 2: Grace | Remarks -->
                                 <div class="grid grid-cols-1 md:grid-cols-[120px_1fr] gap-3">
                                     <div>
@@ -646,7 +657,9 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const isViewingOnly = ref(false)
 const canEditSchedule = ref(false)
-const currentScheduleId = ref(null)
+const currentScheduleId    = ref(null)
+const currentActualTimeIn  = ref(null)
+const currentActualTimeOut = ref(null)
 
 const statuses = [
     'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
@@ -662,6 +675,11 @@ const form = reactive({
     backlogs_end: '',
 })
 
+const formatTime = (isoString) => {
+    if (!isoString) return '—'
+    return new Date(isoString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
 const formatDateForInput = (date) => {
     const d = new Date(date);
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -672,6 +690,8 @@ const openCreateModal = () => {
     isEditing.value = false
     isViewingOnly.value = false
     currentScheduleId.value = null
+    currentActualTimeIn.value  = null
+    currentActualTimeOut.value = null
 
     form.user_id = isManager.value ? null : authUser.value.id
     form.status = 'On-site'
@@ -717,7 +737,9 @@ const handleEventClick = (event) => {
     isEditing.value = true; // Signifies we are interacting with an existing record
     isViewingOnly.value = true; // Always start in View mode
     canEditSchedule.value = canEdit; // Store permission for the Pencil icon
-    currentScheduleId.value = event.id
+    currentScheduleId.value    = event.id
+    currentActualTimeIn.value  = event.actual_time_in  || null
+    currentActualTimeOut.value = event.actual_time_out || null
 
     form.user_id = event.user_id
     form.status = event.status

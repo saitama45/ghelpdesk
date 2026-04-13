@@ -56,22 +56,37 @@ class ScheduleController extends Controller implements HasMiddleware
             });
         }
 
-        $schedules = $query->get()->map(function($schedule) {
+        $rawSchedules = $query->get();
+
+        // Batch-load attendance logs (avoids N+1)
+        $scheduleIds = $rawSchedules->pluck('id')->toArray();
+        $attendanceLogs = \App\Models\AttendanceLog::whereIn('schedule_id', $scheduleIds)
+            ->orderBy('log_time')
+            ->get(['schedule_id', 'type', 'log_time'])
+            ->groupBy('schedule_id');
+
+        $schedules = $rawSchedules->map(function($schedule) use ($attendanceLogs) {
+            $logs          = $attendanceLogs->get($schedule->id, collect());
+            $actualTimeIn  = $logs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
+            $actualTimeOut = $logs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
+
             return [
-                'id' => $schedule->id,
-                'user_id' => $schedule->user_id,
-                'store_id' => $schedule->store_id,
-                'ticket_id' => $schedule->ticket_id,
-                'status' => $schedule->status,
-                'start_time' => $schedule->start_time->toIso8601String(),
-                'end_time' => $schedule->end_time->toIso8601String(),
-                'pickup_start' => $schedule->pickup_start ? substr($schedule->pickup_start, 0, 5) : null,
-                'pickup_end' => $schedule->pickup_end ? substr($schedule->pickup_end, 0, 5) : null,
-                'backlogs_start' => $schedule->backlogs_start ? substr($schedule->backlogs_start, 0, 5) : null,
-                'backlogs_end' => $schedule->backlogs_end ? substr($schedule->backlogs_end, 0, 5) : null,
-                'remarks' => $schedule->remarks,
-                'user' => $schedule->user,
-                'store' => $schedule->store,
+                'id'              => $schedule->id,
+                'user_id'         => $schedule->user_id,
+                'store_id'        => $schedule->store_id,
+                'ticket_id'       => $schedule->ticket_id,
+                'status'          => $schedule->status,
+                'start_time'      => $schedule->start_time->toIso8601String(),
+                'end_time'        => $schedule->end_time->toIso8601String(),
+                'pickup_start'    => $schedule->pickup_start ? substr($schedule->pickup_start, 0, 5) : null,
+                'pickup_end'      => $schedule->pickup_end   ? substr($schedule->pickup_end,   0, 5) : null,
+                'backlogs_start'  => $schedule->backlogs_start ? substr($schedule->backlogs_start, 0, 5) : null,
+                'backlogs_end'    => $schedule->backlogs_end   ? substr($schedule->backlogs_end,   0, 5) : null,
+                'remarks'         => $schedule->remarks,
+                'actual_time_in'  => $actualTimeIn,
+                'actual_time_out' => $actualTimeOut,
+                'user'            => $schedule->user,
+                'store'           => $schedule->store,
                 'schedule_stores' => $schedule->scheduleStores->map(fn ($ss) => [
                     'id'                   => $ss->id,
                     'store_id'             => $ss->store_id,
