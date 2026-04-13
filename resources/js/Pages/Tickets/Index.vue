@@ -17,6 +17,7 @@ const props = defineProps({
     staff: Array,
     companies: Array,
     stores: Array,
+    vendors: Array,
     filters: Object,
     departments: Array,
 });
@@ -146,6 +147,7 @@ const createForm = useForm({
     company_id: '',
     store_id: '',
     item_id: '',
+    vendor_id: null,
     title: '',
     description: '',
     type: 'task',
@@ -804,12 +806,24 @@ const formatItemName = (item) => {
                         
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item</label>
-                            <Autocomplete 
+                            <Autocomplete
                                 v-model="createForm.item_id"
                                 :options="items"
                                 label-key="display_name"
                                 value-key="id"
                                 placeholder="Select item..."
+                                size="sm"
+                            />
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Vendor Escalation</label>
+                            <Autocomplete
+                                v-model="createForm.vendor_id"
+                                :options="vendors"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="None"
                                 size="sm"
                             />
                         </div>

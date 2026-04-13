@@ -65,6 +65,7 @@ Route::middleware('auth')->group(function () {
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);
+    Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
     Route::resource('activity-templates', \App\Http\Controllers\ActivityTemplateController::class)->except(['show', 'create', 'edit']);
     Route::get('schedules/template', [\App\Http\Controllers\ScheduleController::class, 'template'])->name('schedules.template');
     Route::post('schedules/import', [\App\Http\Controllers\ScheduleController::class, 'import'])->name('schedules.import');

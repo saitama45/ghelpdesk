@@ -83,7 +83,7 @@ onMounted(() => {
     if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) {
         openMenus.value.operations = true;
     }
-    if (route().current('companies.*') || route().current('stores.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
+    if (route().current('companies.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -111,11 +111,12 @@ const canSeeOperations = computed(() => {
            hasPermission('presence.view');
 });
 const canSeeReferences = computed(() => {
-    return hasPermission('companies.view') || 
-           hasPermission('stores.view') || 
-           hasPermission('activity_templates.view') || 
-           hasPermission('categories.view') || 
-           hasPermission('subcategories.view') || 
+    return hasPermission('companies.view') ||
+           hasPermission('stores.view') ||
+           hasPermission('vendors.view') ||
+           hasPermission('activity_templates.view') ||
+           hasPermission('categories.view') ||
+           hasPermission('subcategories.view') ||
            hasPermission('items.view') ||
            hasPermission('request_types.view');
 });
@@ -340,6 +341,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Stores</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('vendors.view')"
+                            :href="route('vendors.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('vendors.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Vendors</span>
                         </Link>
                         <Link
                             v-if="hasPermission('activity_templates.view')"

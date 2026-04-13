@@ -91,6 +91,12 @@ class RolesAndPermissionSeeder extends Seeder
             'stores.create' => 'Create stores',
             'stores.edit' => 'Edit stores',
 
+            // Vendors
+            'vendors.view'   => 'View vendors',
+            'vendors.create' => 'Create vendors',
+            'vendors.edit'   => 'Edit vendors',
+            'vendors.delete' => 'Delete vendors',
+
             // Activity Templates
             'activity_templates.view' => 'View activity templates',
             'activity_templates.create' => 'Create activity templates',

@@ -13,6 +13,7 @@ use App\Models\TicketAttachment;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Store;
+use App\Models\Vendor;
 use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -122,11 +123,15 @@ class TicketController extends Controller
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
+        $vendors = collect([['id' => null, 'name' => 'None']])
+            ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
+
         return Inertia::render('Tickets/Index', [
             'tickets' => $tickets,
             'staff' => $staff,
             'companies' => $companies,
             'stores' => $stores,
+            'vendors' => $vendors,
             'departments' => $departments,
             'filters' => [
                 'status' => $statusFilter,
@@ -289,13 +294,16 @@ class TicketController extends Controller
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
-        
+        $vendors = collect([['id' => null, 'name' => 'None']])
+            ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
+
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
             'staff' => $staff,
             'companies' => $companies,
             'users' => $users,
             'stores' => $stores,
+            'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
         ]);
     }

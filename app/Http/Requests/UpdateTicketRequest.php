@@ -39,6 +39,7 @@ class UpdateTicketRequest extends FormRequest
             'category_id' => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_id' => 'nullable|exists:items,id',
+            'vendor_id' => 'nullable|exists:vendors,id',
         ];
     }
 }

@@ -346,6 +346,7 @@ const landingPageOptions = [
         options: [
             { label: 'Companies', value: 'companies.index' },
             { label: 'Stores', value: 'stores.index' },
+            { label: 'Vendors', value: 'vendors.index' },
             { label: 'Categories', value: 'categories.index' },
             { label: 'Sub-Categories', value: 'sub-categories.index' },
             { label: 'Items', value: 'items.index' },

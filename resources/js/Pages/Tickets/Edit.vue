@@ -19,6 +19,7 @@ const props = defineProps({
     companies: Array,
     users: Array,
     stores: Array,
+    vendors: Array,
     cannedMessages: Array,
 });
 
@@ -210,6 +211,7 @@ const editForm = useForm({
     company_id: props.ticket.company_id || '',
     store_id: props.ticket.store_id || '',
     item_id: props.ticket.item_id || '',
+    vendor_id: props.ticket.vendor_id || null,
     title: props.ticket.title,
     description: props.ticket.description,
     type: props.ticket.type,
@@ -507,6 +509,12 @@ watch(() => editForm.item_id, (newVal, oldVal) => {
         if (item) {
             editForm.priority = item.priority.toLowerCase();
         }
+        updateTicket({ preserveScroll: true });
+    }
+});
+
+watch(() => editForm.vendor_id, (newVal, oldVal) => {
+    if (newVal !== oldVal && oldVal !== undefined) {
         updateTicket({ preserveScroll: true });
     }
 });
@@ -850,12 +858,25 @@ const linkify = (text) => {
 
                                 <div>
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Item</label>
-                                    <Autocomplete 
+                                    <Autocomplete
                                         v-model="editForm.item_id"
                                         :options="items"
                                         label-key="display_name"
                                         value-key="id"
                                         placeholder="Select item..."
+                                        :disabled="!hasPermission('tickets.edit')"
+                                        size="sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Vendor Escalation</label>
+                                    <Autocomplete
+                                        v-model="editForm.vendor_id"
+                                        :options="vendors"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="None"
                                         :disabled="!hasPermission('tickets.edit')"
                                         size="sm"
                                     />

@@ -27,6 +27,7 @@ class Ticket extends Model
         'category_id',
         'sub_category_id',
         'item_id',
+        'vendor_id',
         'parent_id',
         'sender_email',
         'sender_name',
@@ -117,5 +118,10 @@ class Ticket extends Model
     public function store()
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function vendor()
+    {
+        return $this->belongsTo(\App\Models\Vendor::class);
     }
 }
