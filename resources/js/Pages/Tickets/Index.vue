@@ -227,6 +227,10 @@ watch(() => [pagination.currentPage.value, pagination.search.value], () => {
     selectedIds.value = []
 })
 
+const storesWithLabel = computed(() =>
+    props.stores.map(s => ({ ...s, display_name: `${s.code} - ${s.name}` }))
+)
+
 // ── Bulk Form ─────────────────────────────────────────────────────────────
 const bulkForm = reactive({
     store_id: '', item_id: '', assignee_id: ''
@@ -486,8 +490,8 @@ const formatItemName = (item) => {
                     <!-- Store -->
                     <div class="flex flex-col gap-1">
                         <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Store</label>
-                        <Autocomplete v-model="bulkForm.store_id" :options="stores"
-                                      label-key="name" value-key="id" placeholder="Unchanged..." />
+                        <Autocomplete v-model="bulkForm.store_id" :options="storesWithLabel"
+                                      label-key="display_name" value-key="id" placeholder="Unchanged..." />
                     </div>
 
                     <!-- Item -->
@@ -795,10 +799,10 @@ const formatItemName = (item) => {
 
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
-                            <Autocomplete 
+                            <Autocomplete
                                 v-model="createForm.store_id"
-                                :options="stores"
-                                label-key="name"
+                                :options="storesWithLabel"
+                                label-key="display_name"
                                 value-key="id"
                                 placeholder="Select store..."
                             />
@@ -903,8 +907,8 @@ const formatItemName = (item) => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store <span class="text-red-500">*</span></label>
                             <Autocomplete
                                 v-model="acceptForm.store_id"
-                                :options="stores"
-                                label-key="name"
+                                :options="storesWithLabel"
+                                label-key="display_name"
                                 value-key="id"
                                 placeholder="Select store..."
                             />

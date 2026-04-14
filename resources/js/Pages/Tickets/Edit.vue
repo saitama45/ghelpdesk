@@ -403,6 +403,10 @@ const isClassificationComplete = computed(() => {
     return !!editForm.company_id && !!editForm.store_id && !!editForm.item_id && !!editForm.department;
 });
 
+const storesWithLabel = computed(() =>
+    props.stores.map(s => ({ ...s, display_name: `${s.code} - ${s.name}` }))
+);
+
 const updateTicket = (options = {}) => {
     if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
         showError('You do not have permission to update tickets.');
@@ -846,10 +850,10 @@ const linkify = (text) => {
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-6">
                                 <div>
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Store</label>
-                                    <Autocomplete 
+                                    <Autocomplete
                                         v-model="editForm.store_id"
-                                        :options="stores"
-                                        label-key="name"
+                                        :options="storesWithLabel"
+                                        label-key="display_name"
                                         value-key="id"
                                         placeholder="Select store..."
                                         :disabled="!hasPermission('tickets.edit')"
