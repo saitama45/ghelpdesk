@@ -237,7 +237,7 @@ const formatDateLong = (date) => {
                         <div 
                             v-for="(event, eIndex) in getEventsForDate(day.date).slice(0, 2)" 
                             :key="event.id"
-                            @click.stop="emit('event-click', event)"
+                            @click.stop="emit('event-click', { event, date: day.date })"
                             class="group relative py-1 px-2 text-[10px] leading-none shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 border"
                             :class="[
                                 getChipColor(event),
@@ -298,7 +298,7 @@ const formatDateLong = (date) => {
                         <div 
                             v-for="event in selectedDayEvents" 
                             :key="event.id"
-                            @click="() => { emit('event-click', event); closeDayModal(); }"
+                            @click="() => { emit('event-click', { event, date: selectedDayDate }); closeDayModal(); }"
                             class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group"
                             :class="isUrgentTicket(event) ? 'border-l-2 !border-l-red-500 pl-2' : ''"
                         >

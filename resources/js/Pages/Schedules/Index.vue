@@ -399,11 +399,11 @@
                                      class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold bg-white/50 p-2 rounded-md border border-gray-100 shadow-sm">
                                     <span v-if="entry.actual_time_in" class="text-emerald-600 flex items-center gap-1">
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-                                        Actual In: {{ formatTime(entry.actual_time_in) }}
+                                        Actual In: {{ formatDateTime(entry.actual_time_in) }}
                                     </span>
                                     <span v-if="entry.actual_time_out" class="text-orange-500 flex items-center gap-1">
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-                                        Actual Out: {{ formatTime(entry.actual_time_out) }}
+                                        Actual Out: {{ formatDateTime(entry.actual_time_out) }}
                                     </span>
                                 </div>
 
@@ -593,7 +593,7 @@ const exportPdf = () => {
     window.open(route('schedules.export.pdf', params), '_blank');
 };
 
-// ── Import ──────────────────────────────────────────────────────────────
+// Import
 const showImportModal = ref(false)
 const importFile = ref(null)
 const importFileInput = ref(null)
@@ -654,7 +654,7 @@ const submitImport = async () => {
     }
 }
 
-// ── Create / Edit ────────────────────────────────────────────────────────
+// Create / Edit
 const showModal = ref(false)
 const isEditing = ref(false)
 const isViewingOnly = ref(false)
@@ -678,14 +678,24 @@ const form = reactive({
 })
 
 const formatTime = (isoString) => {
-    if (!isoString) return '—'
+    if (!isoString) return '-'
     return new Date(isoString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
+const formatDateTime = (isoString) => {
+    if (!isoString) return '-'
+    return new Date(isoString).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
 const formatDateForInput = (date) => {
     const d = new Date(date);
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
+}
+
+const getManilaDateKey = (value) => {
+    if (!value) return null
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value))
 }
 
 const openCreateModal = () => {
@@ -723,7 +733,10 @@ const handleDateClick = (date) => {
     form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30 }]
 }
 
-const handleEventClick = (event) => {
+const handleEventClick = (payload) => {
+    const event = payload?.event ?? payload
+    const clickedDateKey = getManilaDateKey(payload?.date ?? event?.start_time)
+
     if (!hasPermission('schedules.view') && !hasPermission('schedules.edit')) return;
 
     const user = page.props.auth.user;
@@ -740,8 +753,8 @@ const handleEventClick = (event) => {
     isViewingOnly.value = true; // Always start in View mode
     canEditSchedule.value = canEdit; // Store permission for the Pencil icon
     currentScheduleId.value    = event.id
-    currentActualTimeIn.value  = event.actual_time_in  || null
-    currentActualTimeOut.value = event.actual_time_out || null
+    currentActualTimeIn.value  = event.actual_time_in && getManilaDateKey(event.actual_time_in) === clickedDateKey ? event.actual_time_in : null
+    currentActualTimeOut.value = event.actual_time_out && getManilaDateKey(event.actual_time_out) === clickedDateKey ? event.actual_time_out : null
 
     form.user_id = event.user_id
     form.status = event.status
@@ -758,8 +771,8 @@ const handleEventClick = (event) => {
             end_time: formatDateForInput(new Date(ss.end_time)),
             grace_period_minutes: ss.grace_period_minutes ?? 30,
             remarks: ss.remarks || '',
-            actual_time_in: ss.actual_time_in,
-            actual_time_out: ss.actual_time_out,
+            actual_time_in: ss.actual_time_in && getManilaDateKey(ss.actual_time_in) === clickedDateKey ? ss.actual_time_in : null,
+            actual_time_out: ss.actual_time_out && getManilaDateKey(ss.actual_time_out) === clickedDateKey ? ss.actual_time_out : null,
         }))
     } else {
         form.stores = [{
@@ -768,8 +781,8 @@ const handleEventClick = (event) => {
             end_time: formatDateForInput(new Date(event.end_time)),
             grace_period_minutes: 30,
             remarks: event.remarks || '',
-            actual_time_in: event.actual_time_in,
-            actual_time_out: event.actual_time_out,
+            actual_time_in: event.actual_time_in && getManilaDateKey(event.actual_time_in) === clickedDateKey ? event.actual_time_in : null,
+            actual_time_out: event.actual_time_out && getManilaDateKey(event.actual_time_out) === clickedDateKey ? event.actual_time_out : null,
         }]
     }
 
