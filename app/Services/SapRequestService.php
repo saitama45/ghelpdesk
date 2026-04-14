@@ -9,6 +9,7 @@ use App\Mail\SapRequestNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class SapRequestService
 {
@@ -134,7 +135,7 @@ class SapRequestService
 
         $requestType = $sapRequest->requestType;
         $requestTypeName = $requestType->name;
-        $subject = "SAP Request - {$requestTypeName}";
+        $subject = $this->buildTicketTitle($requestTypeName, $sapRequest->company?->name);
 
         $formData = $sapRequest->form_data ?? [];
         $schema = $requestType->form_schema;
@@ -213,5 +214,16 @@ class SapRequestService
         }
 
         return (string)$value;
+    }
+
+    private function buildTicketTitle(string $requestTypeName, ?string $companyName = null): string
+    {
+        $title = "SAP Request - {$requestTypeName}";
+
+        if (filled($companyName)) {
+            $title .= " for {$companyName}";
+        }
+
+        return Str::limit($title, 255, '...');
     }
 }

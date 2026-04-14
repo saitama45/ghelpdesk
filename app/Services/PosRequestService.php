@@ -8,6 +8,7 @@ use App\Models\Ticket;
 use App\Mail\PosRequestNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class PosRequestService
 {
@@ -178,7 +179,7 @@ class PosRequestService
         $requestType = $posRequest->requestType;
         $schema = $requestType->form_schema;
 
-        $subject = "POS Request - {$requestType->name} to {$storeCodes}";
+        $subject = $this->buildTicketTitle($requestType->name, $posRequest->stores_covered);
         $detailsContent = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
         $detailsContent .= "   📋 LINE ITEM DETAILS\n";
         $detailsContent .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
@@ -336,5 +337,28 @@ class PosRequestService
         }
 
         return (string)$value;
+    }
+
+    private function buildTicketTitle(string $requestTypeName, array $storesCovered): string
+    {
+        if (in_array('all', $storesCovered, true)) {
+            return Str::limit("POS Request - {$requestTypeName} to All Stores", 255, '...');
+        }
+
+        $stores = array_values(array_filter($storesCovered, fn ($store) => filled($store)));
+        $storeCount = count($stores);
+
+        if ($storeCount === 0) {
+            return Str::limit("POS Request - {$requestTypeName}", 255, '...');
+        }
+
+        $previewStores = array_slice($stores, 0, 3);
+        $storeSummary = implode(', ', $previewStores);
+
+        if ($storeCount > 3) {
+            $storeSummary .= ' +' . ($storeCount - 3) . ' more';
+        }
+
+        return Str::limit("POS Request - {$requestTypeName} to {$storeSummary}", 255, '...');
     }
 }
