@@ -17,6 +17,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Illuminate\Support\Facades\DB;
 
 class ScheduleController extends Controller implements HasMiddleware
 {
@@ -472,8 +473,19 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         $request->validate(['file' => 'required|file|mimes:xlsx,csv|max:5120']);
 
-        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+        $filePath = $request->file('file')->getRealPath();
+        $reader = IOFactory::createReaderForFile($filePath);
+        if (method_exists($reader, 'setReadDataOnly')) {
+            $reader->setReadDataOnly(true);
+        }
+        if (method_exists($reader, 'setReadEmptyCells')) {
+            $reader->setReadEmptyCells(false);
+        }
+
+        $spreadsheet = $reader->load($filePath);
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
 
         if (empty($rows)) {
             return response()->json(['imported' => 0, 'errors' => ['File is empty.']]);
@@ -512,6 +524,10 @@ class ScheduleController extends Controller implements HasMiddleware
         $imported = 0;
         $errors   = [];
         $rowNum   = 1;
+        $candidates = [];
+        $candidateUserIds = [];
+        $candidateDates = [];
+        $seenImportDates = [];
 
         foreach ($rows as $line) {
             $rowNum++;
@@ -546,47 +562,94 @@ class ScheduleController extends Controller implements HasMiddleware
                     continue;
                 }
 
-                $startTime = Carbon::createFromFormat('Y-m-d', $dateStr)->setTime(7, 0, 0);
-                $endTime   = Carbon::createFromFormat('Y-m-d', $dateStr)->setTime(17, 0, 0);
-
-                // Skip if an overlapping schedule already exists for this user on this date
-                $overlap = Schedule::where('user_id', $userId)
-                    ->where(function ($q) use ($startTime, $endTime) {
-                        $q->whereBetween('start_time', [$startTime, $endTime])
-                          ->orWhereBetween('end_time', [$startTime, $endTime])
-                          ->orWhere(function ($q2) use ($startTime, $endTime) {
-                              $q2->where('start_time', '<=', $startTime)
-                                 ->where('end_time', '>=', $endTime);
-                          });
-                    })->exists();
-
-                if ($overlap) {
-                    $errors[] = "Row {$rowNum}, {$dateStr}: user ID {$userId} already has a schedule for this date, skipped.";
+                $importKey = $userId . '|' . $dateStr;
+                if (isset($seenImportDates[$importKey])) {
+                    $errors[] = "Row {$rowNum}, {$dateStr}: duplicate import entry for user ID {$userId}, skipped.";
                     continue;
                 }
 
-                $schedule = Schedule::create([
-                    'user_id'    => $userId,
-                    'store_id'   => null,
-                    'status'     => $rawValue,
+                $seenImportDates[$importKey] = true;
+                $candidates[] = [
+                    'user_id' => $userId,
+                    'date' => $dateStr,
+                    'status' => $rawValue,
+                    'remarks' => $rawRemarks ?: null,
+                    'row_num' => $rowNum,
+                ];
+                $candidateUserIds[$userId] = true;
+                $candidateDates[$dateStr] = true;
+            }
+        }
+
+        if (empty($candidates)) {
+            return response()->json(['imported' => 0, 'errors' => $errors]);
+        }
+
+        $candidateDateKeys = array_keys($candidateDates);
+        sort($candidateDateKeys);
+
+        $rangeStart = Carbon::createFromFormat('Y-m-d', $candidateDateKeys[0])->startOfDay();
+        $rangeEnd = Carbon::createFromFormat('Y-m-d', end($candidateDateKeys))->endOfDay();
+
+        $existingDateMap = [];
+        $existingSchedules = Schedule::query()
+            ->select(['user_id', 'start_time', 'end_time'])
+            ->whereIn('user_id', array_keys($candidateUserIds))
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart)
+            ->get();
+
+        foreach ($existingSchedules as $existingSchedule) {
+            $day = $existingSchedule->start_time->copy()->startOfDay();
+            $lastDay = $existingSchedule->end_time->copy()->startOfDay();
+
+            while ($day->lte($lastDay)) {
+                $existingDateMap[$existingSchedule->user_id . '|' . $day->toDateString()] = true;
+                $day->addDay();
+            }
+        }
+
+        DB::transaction(function () use ($candidates, &$errors, &$imported, &$existingDateMap) {
+            $timestamp = now();
+
+            foreach ($candidates as $candidate) {
+                $importKey = $candidate['user_id'] . '|' . $candidate['date'];
+                if (isset($existingDateMap[$importKey])) {
+                    $errors[] = "Row {$candidate['row_num']}, {$candidate['date']}: user ID {$candidate['user_id']} already has a schedule for this date, skipped.";
+                    continue;
+                }
+
+                $startTime = Carbon::createFromFormat('Y-m-d', $candidate['date'])->setTime(7, 0, 0);
+                $endTime = Carbon::createFromFormat('Y-m-d', $candidate['date'])->setTime(17, 0, 0);
+
+                $scheduleId = DB::table('schedules')->insertGetId([
+                    'user_id' => $candidate['user_id'],
+                    'store_id' => null,
+                    'status' => $candidate['status'],
                     'start_time' => $startTime,
-                    'end_time'   => $endTime,
-                    'remarks'    => $rawRemarks ?: null,
+                    'end_time' => $endTime,
+                    'remarks' => $candidate['remarks'],
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
                 ]);
 
-                if (in_array($rawValue, ['On-site', 'Off-site'], true)) {
-                    $schedule->scheduleStores()->create([
-                        'store_id'             => null,
-                        'start_time'           => $startTime,
-                        'end_time'             => $endTime,
+                if (in_array($candidate['status'], ['On-site', 'Off-site'], true)) {
+                    DB::table('schedule_stores')->insert([
+                        'schedule_id' => $scheduleId,
+                        'store_id' => null,
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
                         'grace_period_minutes' => 30,
-                        'remarks'              => $rawRemarks ?: null,
+                        'remarks' => $candidate['remarks'],
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
                     ]);
                 }
 
+                $existingDateMap[$importKey] = true;
                 $imported++;
             }
-        }
+        });
 
         return response()->json(['imported' => $imported, 'errors' => $errors]);
     }

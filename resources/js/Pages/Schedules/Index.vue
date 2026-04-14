@@ -664,9 +664,10 @@ const submitImport = async () => {
             headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
             body: formData
         })
-        
-        const result = await response.json()
-        
+
+        const isJson = response.headers.get('content-type')?.includes('application/json')
+        const result = isJson ? await response.json() : null
+
         if (response.ok) {
             importResult.value = result
             if (result.imported > 0) {
@@ -674,7 +675,12 @@ const submitImport = async () => {
                 router.reload({ only: ['schedules'] })
             }
         } else {
-            showError(result.message || 'Import failed. Please check your session and try again.')
+            if (response.status === 504) {
+                showError('Import timed out on the server. The import flow has been optimized; please try the file again.')
+                return
+            }
+
+            showError(result?.message || 'Import failed. Please check your file and try again.')
         }
     } catch (e) {
         showError('Import failed. Please try again.')
