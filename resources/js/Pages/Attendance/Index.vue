@@ -8,6 +8,7 @@ import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCirc
 
 const props = defineProps({
     lastLog: Object,
+    isSegmentComplete: Boolean,
     assignedStores: Array,
     totalAssignedCount: Number,
     todaySchedule: Object,
@@ -391,6 +392,7 @@ const submit = async () => {
 
 const canSave = computed(() => {
     return !!props.todaySchedule &&
+           !props.isSegmentComplete &&
            !!capturedImage.value &&
            isLocationStable.value === true &&
            isWithinStoreVicinity.value === true &&
@@ -399,6 +401,7 @@ const canSave = computed(() => {
 
 const statusMessage = computed(() => {
     if (!props.todaySchedule) return 'No active On-site/Off-site schedule for your current time.';
+    if (props.isSegmentComplete) return 'You have already completed Time In and Time Out for this schedule.';
     if (props.assignedStores.length === 0) return 'No assigned work sites found.';
     if (!capturedImage.value) return 'Please take a selfie first.';
     if (!latitude.value) return 'Acquiring GPS...';

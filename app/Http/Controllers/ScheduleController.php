@@ -116,7 +116,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $users = User::active()->with('managers:id')->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
-        // ── Generate Pivot Report Data ──
+        // -- Generate Pivot Report Data --
         // Get all unique years available in the database
         $dbYears = Schedule::selectRaw('YEAR(start_time) as year')
             ->distinct()
@@ -154,7 +154,10 @@ class ScheduleController extends Controller implements HasMiddleware
         $pivotUsersQuery = User::with(['schedules' => function ($q) use ($selectedYears, $request) {
             $q->whereIn(\DB::raw('YEAR(start_time)'), $selectedYears);
             if ($request->filled('store_id')) {
-                $q->where('store_id', $request->store_id);
+                $q->where(function ($sq) use ($request) {
+                    $sq->where('store_id', $request->store_id)
+                       ->orWhereHas('scheduleStores', fn ($ssq) => $ssq->where('store_id', $request->store_id));
+                });
             }
         }])->whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name');
 
@@ -179,7 +182,22 @@ class ScheduleController extends Controller implements HasMiddleware
                 $yearSchedules = $u->schedules->filter(fn($sched) => $sched->start_time->year === $y);
 
                 foreach ($pivotStatuses as $s) {
-                    $yearCounts[$s] = $yearSchedules->where('status', $s)->count();
+                    $yearCounts[$s] = $yearSchedules
+                        ->where('status', $s)
+                        ->flatMap(function ($sched) {
+                            $days = [];
+                            $currentDay = $sched->start_time->copy()->startOfDay();
+                            $lastDay = $sched->end_time->copy()->startOfDay();
+
+                            while ($currentDay->lte($lastDay)) {
+                                $days[] = $currentDay->toDateString();
+                                $currentDay->addDay();
+                            }
+
+                            return $days;
+                        })
+                        ->unique()
+                        ->count();
                 }
                 $rowData['years'][$y] = $yearCounts;
             }
@@ -345,7 +363,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
         $spreadsheet = new Spreadsheet();
 
-        // ── Hidden Lists sheet ──────────────────────────────────────────
+        // -- Hidden Lists sheet ------------------------------------------
         $listsSheet = $spreadsheet->createSheet(1);
         $listsSheet->setTitle('Lists');
         $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
@@ -365,7 +383,7 @@ class ScheduleController extends Controller implements HasMiddleware
             $listsSheet->setCellValue('C' . ($i + 2), $st->code);
         }
 
-        // ── Import Template sheet ───────────────────────────────────────
+        // -- Import Template sheet ---------------------------------------
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
@@ -475,7 +493,7 @@ class ScheduleController extends Controller implements HasMiddleware
             $storeId = null;
             if (!empty($data['store_code'])) {
                 if (!isset($storeMap[$data['store_code']])) {
-                    $errors[] = "Row {$rowNum}: store code '{$data['store_code']}' not found — row imported without store.";
+                    $errors[] = "Row {$rowNum}: store code '{$data['store_code']}' not found ï¿½ row imported without store.";
                 } else {
                     $storeId = $storeMap[$data['store_code']];
                 }

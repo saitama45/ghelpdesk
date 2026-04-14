@@ -81,8 +81,21 @@ class AttendanceController extends Controller implements HasMiddleware
             $lastLog = $lastLogQuery->latest('log_time')->first();
         }
 
+        // Check if the current segment already has both time_in and time_out
+        $isSegmentComplete = false;
+        if ($todaySchedule) {
+            $segmentLogsQuery = AttendanceLog::where('user_id', $user->id)
+                ->where('schedule_id', $todaySchedule->id);
+            if ($activeStoreEntry) {
+                $segmentLogsQuery->where('schedule_store_id', $activeStoreEntry->id);
+            }
+            $segmentTypes = $segmentLogsQuery->pluck('type');
+            $isSegmentComplete = $segmentTypes->contains('time_in') && $segmentTypes->contains('time_out');
+        }
+
         return Inertia::render('Attendance/Index', [
             'lastLog' => $lastLog,
+            'isSegmentComplete' => $isSegmentComplete,
             'assignedStores' => $assignedStores,
             'totalAssignedCount' => $totalAssignedCount,
             'todaySchedule' => $todaySchedule ? [
@@ -251,6 +264,17 @@ class AttendanceController extends Controller implements HasMiddleware
         }
 
         $lastLog = $lastLogQuery->latest('log_time')->first();
+
+        // Block if both time_in and time_out already exist for this schedule segment
+        $segmentLogsQuery = AttendanceLog::where('user_id', $user->id)
+            ->where('schedule_id', $schedule->id);
+        if ($activeStoreEntry) {
+            $segmentLogsQuery->where('schedule_store_id', $activeStoreEntry->id);
+        }
+        $segmentLogs = $segmentLogsQuery->pluck('type');
+        if ($segmentLogs->contains('time_in') && $segmentLogs->contains('time_out')) {
+            return back()->with('error', 'You have already completed Time In and Time Out for this schedule. No further logging is allowed for this time frame.');
+        }
 
         $type = (!$lastLog || $lastLog->type === 'time_out') ? 'time_in' : 'time_out';
 
