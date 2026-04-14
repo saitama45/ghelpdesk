@@ -514,7 +514,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 continue;
             }
 
-            Schedule::create([
+            $schedule = Schedule::create([
                 'user_id'        => $userId,
                 'store_id'       => $storeId,
                 'status'         => $data['status'],
@@ -526,6 +526,16 @@ class ScheduleController extends Controller implements HasMiddleware
                 'backlogs_end'   => $data['backlogs_end'] ?: null,
                 'remarks'        => $data['remarks'] ?: null,
             ]);
+
+            if (in_array($data['status'], ['On-site', 'Off-site'], true)) {
+                $schedule->scheduleStores()->create([
+                    'store_id' => $storeId,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'grace_period_minutes' => 30,
+                    'remarks' => $data['remarks'] ?: null,
+                ]);
+            }
 
             $imported++;
         }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
+use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -63,13 +64,9 @@ class AttendanceController extends Controller implements HasMiddleware
             });
 
         // Find the specific active store entry within the schedule
-        $activeStoreEntry = null;
-        if ($todaySchedule) {
-            $activeStoreEntry = $todaySchedule->scheduleStores->first(function ($ss) use ($now) {
-                return $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
-                    && $ss->end_time->gte($now);
-            });
-        }
+        $activeStoreEntry = $todaySchedule
+            ? $this->resolveActiveScheduleStore($todaySchedule, $now)
+            : null;
 
         // Scope lastLog to the specific segment if available, otherwise the whole schedule
         $lastLog = null;
@@ -242,11 +239,8 @@ class AttendanceController extends Controller implements HasMiddleware
             return back()->with('error', 'No active On-site or Off-site schedule found for your current time. Please contact your supervisor.');
         }
 
-        // Find the specific active store entry
-        $activeStoreEntry = $schedule->scheduleStores->first(function ($ss) use ($now) {
-            return $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
-                && $ss->end_time->gte($now);
-        });
+        // Find the specific active store entry, normalizing legacy schedules when possible.
+        $activeStoreEntry = $this->resolveActiveScheduleStore($schedule, $now);
 
         // Determine type per-segment if possible, otherwise per-schedule
         $lastLogQuery = AttendanceLog::where('user_id', $user->id)
@@ -321,5 +315,33 @@ class AttendanceController extends Controller implements HasMiddleware
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadius * $c;
+    }
+
+    private function resolveActiveScheduleStore(Schedule $schedule, $now): ?ScheduleStore
+    {
+        $activeStoreEntry = $schedule->scheduleStores->first(function ($ss) use ($now) {
+            return $ss->start_time->lte($now->copy()->addMinutes((int) ($ss->grace_period_minutes ?? 30)))
+                && $ss->end_time->gte($now);
+        });
+
+        if ($activeStoreEntry || $schedule->scheduleStores->isNotEmpty()) {
+            return $activeStoreEntry;
+        }
+
+        if (!in_array($schedule->status, ['On-site', 'Off-site'], true) || !$schedule->store_id) {
+            return null;
+        }
+
+        $scheduleStore = $schedule->scheduleStores()->create([
+            'store_id' => $schedule->store_id,
+            'start_time' => $schedule->start_time,
+            'end_time' => $schedule->end_time,
+            'grace_period_minutes' => 30,
+            'remarks' => $schedule->remarks,
+        ]);
+
+        $schedule->setRelation('scheduleStores', collect([$scheduleStore]));
+
+        return $scheduleStore;
     }
 }

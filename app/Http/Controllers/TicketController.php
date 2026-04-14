@@ -536,7 +536,7 @@ class TicketController extends Controller
                 'created_at' => now('Asia/Manila'),
             ]);
 
-            Schedule::create([
+            $schedule = Schedule::create([
                 'ticket_id' => $childTicket->id,
                 'user_id' => $validated['user_id'],
                 'store_id' => $ticket->store_id,
@@ -550,6 +550,16 @@ class TicketController extends Controller
                 'remarks' => $validated['remarks'],
                 'created_at' => now('Asia/Manila'),
             ]);
+
+            if (in_array($validated['status'], ['On-site', 'Off-site'], true)) {
+                $schedule->scheduleStores()->create([
+                    'store_id' => $ticket->store_id,
+                    'start_time' => $validated['start_time'],
+                    'end_time' => $validated['end_time'],
+                    'grace_period_minutes' => 30,
+                    'remarks' => $validated['remarks'],
+                ]);
+            }
 
             // Set parent to Open when a new child is added
             $ticket->update(['status' => 'open']);
