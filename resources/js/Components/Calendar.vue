@@ -302,6 +302,23 @@ const goToToday = () => {
     }
 };
 
+// ── Go-to-date ────────────────────────────────────────────────────────────────
+const goToDateInput = ref('');
+
+const goToDate = () => {
+    if (!goToDateInput.value) return;
+    const target = new Date(goToDateInput.value + 'T00:00:00'); // suffix avoids UTC-shift
+    if (isNaN(target.getTime())) return;
+
+    if (calendarView.value === 'day') {
+        switchToDay(target);
+    } else {
+        currentDate.value = new Date(target.getFullYear(), target.getMonth(), 1);
+    }
+    goToDateInput.value = '';
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 onMounted(() => {
     setInterval(() => { nowDate.value = new Date(); }, 60000);
 });
@@ -358,6 +375,21 @@ const formatDateLong = (date) => {
             </div>
 
             <div class="flex items-center space-x-3">
+                <!-- Go-to-date input -->
+                <div class="flex items-center gap-1">
+                    <input
+                        v-model="goToDateInput"
+                        type="date"
+                        @keydown.enter="goToDate"
+                        class="border border-gray-200 rounded-lg pl-3 pr-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white shadow-sm cursor-pointer"
+                        title="Go to date"
+                    />
+                    <button
+                        @click="goToDate"
+                        class="px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition-colors whitespace-nowrap"
+                    >Go</button>
+                </div>
+
                 <!-- Month / Day view toggle -->
                 <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner">
                     <button
@@ -427,7 +459,7 @@ const formatDateLong = (date) => {
                     <!-- Events List -->
                     <div class="space-y-1.5 relative z-10">
                         <div 
-                            v-for="(event, eIndex) in getEventsForDate(day.date).slice(0, 2)" 
+                            v-for="event in getEventsForDate(day.date).slice(0, 2)" 
                             :key="event.id"
                             @click.stop="emit('event-click', { event, date: day.date })"
                             class="group relative py-1 px-2 text-[10px] leading-none shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 border"

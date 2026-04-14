@@ -354,11 +354,20 @@ class ScheduleController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Schedule updated successfully');
     }
 
-    public function template()
+    public function template(Request $request)
     {
-        $users  = User::active()->orderBy('name')->get(['id', 'name', 'email']);
-        $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
+        $year = (int) $request->input('year', now()->year);
+        $year = max(2020, min(2100, $year));
 
+        // Build full-year date list
+        $dates = [];
+        $startDate = Carbon::create($year, 1, 1);
+        $endDate   = Carbon::create($year, 12, 31);
+        for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
+            $dates[] = $d->format('Y-m-d');
+        }
+
+        $users    = User::active()->orderBy('name')->get(['id', 'name']);
         $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
 
         $spreadsheet = new Spreadsheet();
@@ -367,78 +376,87 @@ class ScheduleController extends Controller implements HasMiddleware
         $listsSheet = $spreadsheet->createSheet(1);
         $listsSheet->setTitle('Lists');
         $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
-
         $listsSheet->setCellValue('A1', 'Status');
         foreach ($statuses as $i => $s) {
             $listsSheet->setCellValue('A' . ($i + 2), $s);
         }
-
-        $listsSheet->setCellValue('B1', 'User Email');
-        foreach ($users as $i => $u) {
-            $listsSheet->setCellValue('B' . ($i + 2), $u->email);
-        }
-
-        $listsSheet->setCellValue('C1', 'Store Code');
-        foreach ($stores as $i => $st) {
-            $listsSheet->setCellValue('C' . ($i + 2), $st->code);
-        }
+        $listsSheet->setCellValue('A' . (count($statuses) + 2), 'NA');
 
         // -- Import Template sheet ---------------------------------------
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
-        $headers = [
-            'user_email', 'store_code', 'status',
-            'start_time', 'end_time',
-            'pickup_start', 'pickup_end',
-            'backlogs_start', 'backlogs_end',
-            'remarks',
-        ];
+        // Layout: A=user_id, B=user_name, then per date: [YYYY-MM-DD | YYYY-MM-DD_remarks] pairs
+        $sheet->setCellValue('A1', 'user_id');
+        $sheet->setCellValue('B1', 'user_name');
 
-        foreach ($headers as $i => $h) {
-            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
-            $sheet->setCellValue("{$col}1", $h);
+        foreach ($dates as $i => $date) {
+            // Each date occupies 2 columns: status then remarks
+            $statusColIdx  = ($i * 2) + 3;                // col C, E, G, ...
+            $remarksColIdx = ($i * 2) + 4;                // col D, F, H, ...
+            $statusCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
+            $remarksCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($remarksColIdx);
+            $sheet->setCellValue("{$statusCol}1",  $date);
+            $sheet->setCellValue("{$remarksCol}1", "{$date}_remarks");
         }
 
-        // Example row
-        $exEmail = $users->get(0)?->email ?? 'user@example.com';
-        $exStore = $stores->get(0)?->code ?? 'STR-001';
-        $sheet->setCellValue('A2', $exEmail);
-        $sheet->setCellValue('B2', $exStore);
-        $sheet->setCellValue('C2', 'On-site');
-        $sheet->setCellValue('D2', date('Y-m-d') . ' 08:00');
-        $sheet->setCellValue('E2', date('Y-m-d') . ' 17:00');
-        $sheet->setCellValue('F2', '07:30');
-        $sheet->setCellValue('G2', '08:00');
-        $sheet->setCellValue('H2', '17:00');
-        $sheet->setCellValue('I2', '18:00');
-        $sheet->setCellValue('J2', 'On-site visit remarks');
+        // Fill user rows
+        $lastUserRow = count($users) + 1;
+        foreach ($users as $rowIdx => $user) {
+            $row = $rowIdx + 2;
+            $sheet->setCellValue("A{$row}", $user->id);
+            $sheet->setCellValue("B{$row}", $user->name);
+        }
 
-        // Header styling
-        $sheet->getStyle('A1:J1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:J1')->getFill()
+        // Style user_name column (col B) — grey, reference-only
+        $sheet->getStyle("B2:B{$lastUserRow}")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFF0F0F0');
+        $sheet->getStyle("B2:B{$lastUserRow}")->getFont()
+            ->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF9CA3AF'));
+
+        // Header styling across all columns
+        $totalCols     = 2 + (count($dates) * 2);
+        $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols);
+        $sheet->getStyle("A1:{$lastColLetter}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastColLetter}1")->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
-        // Auto-size
-        foreach (range(1, 10) as $ci) {
-            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($ci);
-            $sheet->getColumnDimension($col)->setAutoSize(true);
+        // Status dropdown for every status column; remarks columns stay free-text
+        $statusFormula   = 'Lists!$A$2:$A$' . (count($statuses) + 2);
+        $dropdownLastRow = max($lastUserRow, 2);
+
+        foreach ($dates as $i => $date) {
+            $statusColIdx = ($i * 2) + 3;
+            $col   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
+            $sqref = "{$col}2:{$col}{$dropdownLastRow}";
+            $v = $sheet->getCell("{$col}2")->getDataValidation();
+            $v->setType(DataValidation::TYPE_LIST)
+              ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+              ->setAllowBlank(true)
+              ->setShowDropDown(false)
+              ->setFormula1($statusFormula)
+              ->setSqref($sqref);
         }
 
-        // Status dropdown C2:C1001
-        $statusValidation = $sheet->getCell('C2')->getDataValidation();
-        $statusValidation->setType(DataValidation::TYPE_LIST)
-            ->setErrorStyle(DataValidation::STYLE_INFORMATION)
-            ->setAllowBlank(false)
-            ->setShowDropDown(false)
-            ->setFormula1('Lists!$A$2:$A$' . (count($statuses) + 1))
-            ->setSqref('C2:C1001');
+        // Column widths
+        $sheet->getColumnDimension('A')->setWidth(10);
+        $sheet->getColumnDimension('B')->setAutoSize(true);
+        foreach ($dates as $i => $date) {
+            $sCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 2) + 3);
+            $rCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 2) + 4);
+            $sheet->getColumnDimension($sCol)->setWidth(12);
+            $sheet->getColumnDimension($rCol)->setWidth(18);
+        }
+
+        // Freeze panes at C2 — user_id + user_name stay pinned while scrolling
+        $sheet->freezePane('C2');
 
         $spreadsheet->setActiveSheetIndex(0);
 
         $writer   = new Xlsx($spreadsheet);
-        $filename = 'schedules-import-template.xlsx';
+        $filename = "schedules-import-{$year}.xlsx";
         $httpHeaders = [
             'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
@@ -457,11 +475,39 @@ class ScheduleController extends Controller implements HasMiddleware
         $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
 
-        $header = array_map('trim', array_shift($rows));
-        $userMap  = User::pluck('id', 'email')->toArray();
-        $storeMap = Store::pluck('id', 'code')->toArray();
+        if (empty($rows)) {
+            return response()->json(['imported' => 0, 'errors' => ['File is empty.']]);
+        }
+
+        // Row 0 = header: user_id | user_name | YYYY-MM-DD | YYYY-MM-DD | ...
+        $header = array_map(fn($v) => trim((string) $v), array_shift($rows));
+
+        // Build lookup: user_id (int) → exists
+        $validUserIds = User::pluck('id')->flip()->toArray(); // [id => 0]
 
         $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+
+        // Build date-column map from header:
+        //   dateStr => [ 'statusIdx' => int, 'remarksIdx' => int|null ]
+        // Header format: col 0 = user_id, col 1 = user_name,
+        //   then pairs: YYYY-MM-DD  |  YYYY-MM-DD_remarks  |  ...
+        $dateCols = [];
+        foreach ($header as $idx => $h) {
+            if ($idx < 2) continue;
+            if (preg_match('/^(\d{4}-\d{2}-\d{2})_remarks$/', $h, $m)) {
+                // Remarks column — attach to the already-registered date entry
+                if (isset($dateCols[$m[1]])) {
+                    $dateCols[$m[1]]['remarksIdx'] = $idx;
+                }
+            } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $h)) {
+                // Status column for this date
+                $dateCols[$h] = ['statusIdx' => $idx, 'remarksIdx' => null];
+            }
+        }
+
+        if (empty($dateCols)) {
+            return response()->json(['imported' => 0, 'errors' => ['No valid date columns found in the header row.']]);
+        }
 
         $imported = 0;
         $errors   = [];
@@ -474,88 +520,72 @@ class ScheduleController extends Controller implements HasMiddleware
                 continue;
             }
 
-            if (count($line) !== count($header)) {
-                $errors[] = "Row {$rowNum}: column count mismatch, skipped.";
+            // Resolve user_id from column 0
+            $rawId  = isset($line[0]) ? trim((string) $line[0]) : '';
+            $userId = (int) $rawId;
+
+            if (!$userId || !isset($validUserIds[$userId])) {
+                $errors[] = "Row {$rowNum}: user_id '{$rawId}' not found, row skipped.";
                 continue;
             }
 
-            $data = array_combine($header, array_map(fn($v) => trim((string) $v), $line));
+            // Process each date pair
+            foreach ($dateCols as $dateStr => $cols) {
+                $rawValue   = isset($line[$cols['statusIdx']]) ? trim((string) $line[$cols['statusIdx']]) : '';
+                $rawRemarks = ($cols['remarksIdx'] !== null && isset($line[$cols['remarksIdx']]))
+                    ? trim((string) $line[$cols['remarksIdx']])
+                    : '';
 
-            // Resolve user
-            $userEmail = $data['user_email'] ?? '';
-            if (!isset($userMap[$userEmail])) {
-                $errors[] = "Row {$rowNum}: user email '{$userEmail}' not found, skipped.";
-                continue;
-            }
-            $userId = $userMap[$userEmail];
-
-            // Resolve store (optional)
-            $storeId = null;
-            if (!empty($data['store_code'])) {
-                if (!isset($storeMap[$data['store_code']])) {
-                    $errors[] = "Row {$rowNum}: store code '{$data['store_code']}' not found ï¿½ row imported without store.";
-                } else {
-                    $storeId = $storeMap[$data['store_code']];
+                // Empty or NA → no schedule for this date
+                if ($rawValue === '' || strtoupper($rawValue) === 'NA') {
+                    continue;
                 }
-            }
 
-            $validator = \Validator::make([
-                'status'     => $data['status'] ?? null,
-                'start_time' => $data['start_time'] ?? null,
-                'end_time'   => $data['end_time'] ?? null,
-            ], [
-                'status'     => 'required|in:' . implode(',', $statuses),
-                'start_time' => 'required|date',
-                'end_time'   => 'required|date|after_or_equal:start_time',
-            ]);
+                if (!in_array($rawValue, $statuses, true)) {
+                    $errors[] = "Row {$rowNum}, {$dateStr}: invalid status '{$rawValue}', skipped.";
+                    continue;
+                }
 
-            if ($validator->fails()) {
-                $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
-                continue;
-            }
+                $startTime = Carbon::createFromFormat('Y-m-d', $dateStr)->setTime(7, 0, 0);
+                $endTime   = Carbon::createFromFormat('Y-m-d', $dateStr)->setTime(17, 0, 0);
 
-            $startTime = \Illuminate\Support\Carbon::parse($data['start_time']);
-            $endTime   = \Illuminate\Support\Carbon::parse($data['end_time']);
+                // Skip if an overlapping schedule already exists for this user on this date
+                $overlap = Schedule::where('user_id', $userId)
+                    ->where(function ($q) use ($startTime, $endTime) {
+                        $q->whereBetween('start_time', [$startTime, $endTime])
+                          ->orWhereBetween('end_time', [$startTime, $endTime])
+                          ->orWhere(function ($q2) use ($startTime, $endTime) {
+                              $q2->where('start_time', '<=', $startTime)
+                                 ->where('end_time', '>=', $endTime);
+                          });
+                    })->exists();
 
-            $overlap = Schedule::where('user_id', $userId)
-                ->where(function ($q) use ($startTime, $endTime) {
-                    $q->whereBetween('start_time', [$startTime, $endTime])
-                      ->orWhereBetween('end_time', [$startTime, $endTime])
-                      ->orWhere(function ($q2) use ($startTime, $endTime) {
-                          $q2->where('start_time', '<=', $startTime)
-                             ->where('end_time', '>=', $endTime);
-                      });
-                })->exists();
+                if ($overlap) {
+                    $errors[] = "Row {$rowNum}, {$dateStr}: user ID {$userId} already has a schedule for this date, skipped.";
+                    continue;
+                }
 
-            if ($overlap) {
-                $errors[] = "Row {$rowNum}: user '{$userEmail}' already has an overlapping schedule for this time range, skipped.";
-                continue;
-            }
-
-            $schedule = Schedule::create([
-                'user_id'        => $userId,
-                'store_id'       => $storeId,
-                'status'         => $data['status'],
-                'start_time'     => $startTime,
-                'end_time'       => $endTime,
-                'pickup_start'   => $data['pickup_start'] ?: null,
-                'pickup_end'     => $data['pickup_end'] ?: null,
-                'backlogs_start' => $data['backlogs_start'] ?: null,
-                'backlogs_end'   => $data['backlogs_end'] ?: null,
-                'remarks'        => $data['remarks'] ?: null,
-            ]);
-
-            if (in_array($data['status'], ['On-site', 'Off-site'], true)) {
-                $schedule->scheduleStores()->create([
-                    'store_id' => $storeId,
+                $schedule = Schedule::create([
+                    'user_id'    => $userId,
+                    'store_id'   => null,
+                    'status'     => $rawValue,
                     'start_time' => $startTime,
-                    'end_time' => $endTime,
-                    'grace_period_minutes' => 30,
-                    'remarks' => $data['remarks'] ?: null,
+                    'end_time'   => $endTime,
+                    'remarks'    => $rawRemarks ?: null,
                 ]);
-            }
 
-            $imported++;
+                if (in_array($rawValue, ['On-site', 'Off-site'], true)) {
+                    $schedule->scheduleStores()->create([
+                        'store_id'             => null,
+                        'start_time'           => $startTime,
+                        'end_time'             => $endTime,
+                        'grace_period_minutes' => 30,
+                        'remarks'              => $rawRemarks ?: null,
+                    ]);
+                }
+
+                $imported++;
+            }
         }
 
         return response()->json(['imported' => $imported, 'errors' => $errors]);

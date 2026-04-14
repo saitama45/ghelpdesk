@@ -213,23 +213,26 @@
                         </button>
                     </div>
                     <div class="space-y-4">
-                        <p class="text-sm text-gray-600">
-                            Import schedules in bulk using an Excel file. Columns:
-                            <span class="font-semibold">user_email</span>,
-                            <span class="font-semibold">store_code</span> (optional),
-                            <span class="font-semibold">status</span> (dropdown),
-                            <span class="font-semibold">start_time</span>,
-                            <span class="font-semibold">end_time</span>,
-                            <span class="font-semibold">pickup_start</span>,
-                            <span class="font-semibold">pickup_end</span>,
-                            <span class="font-semibold">backlogs_start</span>,
-                            <span class="font-semibold">backlogs_end</span>,
-                            <span class="font-semibold">remarks</span>.
-                        </p>
+                        <!-- Format description -->
+                        <div class="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-800 space-y-1">
+                            <p class="font-bold">Format: wide (one row per user, one column per date)</p>
+                            <ul class="list-disc list-inside space-y-0.5 text-blue-700">
+                                <li><span class="font-semibold">user_id</span> — numeric user ID (column A)</li>
+                                <li><span class="font-semibold">user_name</span> — reference only, not imported (column B)</li>
+                                <li><span class="font-semibold">YYYY-MM-DD columns</span> — one per day; set status or leave <span class="font-semibold">NA</span> / blank for no schedule</li>
+                            </ul>
+                            <p class="text-blue-600 mt-1">Default schedule time: <span class="font-semibold">07:00 – 17:00</span></p>
+                        </div>
 
-                        <!-- Template Download -->
-                        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
-                            <a href="/schedules/template" class="flex items-center space-x-3 text-blue-600 hover:text-blue-800 transition-colors group">
+                        <!-- Template Download with month/year selector -->
+                        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 space-y-3">
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Step 1 — Download template</p>
+                            <div class="flex items-center gap-2">
+                                <select v-model="importYear" class="border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+                                </select>
+                            </div>
+                            <a :href="importTemplateUrl" class="flex items-center space-x-3 text-blue-600 hover:text-blue-800 transition-colors group">
                                 <div class="h-10 w-10 bg-blue-100 group-hover:bg-blue-200 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors">
                                     <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -237,21 +240,14 @@
                                 </div>
                                 <div>
                                     <div class="text-sm font-semibold">Download Excel Template</div>
-                                    <div class="text-xs text-gray-500">schedules-import-template.xlsx</div>
+                                    <div class="text-xs text-gray-500">schedules-import-{{ importYear }}.xlsx</div>
                                 </div>
                             </a>
                         </div>
 
-                        <!-- Divider -->
-                        <div class="flex items-center space-x-3">
-                            <div class="flex-1 border-t border-gray-200"></div>
-                            <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Then Upload</span>
-                            <div class="flex-1 border-t border-gray-200"></div>
-                        </div>
-
                         <!-- File Upload -->
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Upload Excel File</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Step 2 — Upload filled template</label>
                             <div v-if="!importFile"
                                  @click="importFileInput.click()"
                                  class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 p-6 text-center cursor-pointer transition-colors">
@@ -622,6 +618,16 @@ const importFile = ref(null)
 const importFileInput = ref(null)
 const isImporting = ref(false)
 const importResult = ref(null)
+const importYear = ref(new Date().getFullYear())
+
+const importTemplateUrl = computed(() =>
+    `/schedules/template?year=${importYear.value}`
+)
+
+const yearOptions = computed(() => {
+    const current = new Date().getFullYear()
+    return [current - 1, current, current + 1]
+})
 
 const openImportModal = () => { showImportModal.value = true }
 
