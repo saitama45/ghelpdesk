@@ -14,6 +14,43 @@ const emit = defineEmits(['date-click', 'event-click']);
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
 
+// ── Status filter ────────────────────────────────────────────────────────────
+const STATUS_FILTERS = [
+    { status: 'On-site',  label: 'On-site',  bg: 'bg-blue-600'    },
+    { status: 'Off-site', label: 'Off-site', bg: 'bg-purple-600'  },
+    { status: 'WFH',      label: 'WFH',      bg: 'bg-emerald-600' },
+    { status: 'SL',       label: 'SL',       bg: 'bg-rose-600'    },
+    { status: 'VL',       label: 'VL',       bg: 'bg-amber-500'   },
+    { status: 'Restday',  label: 'Rest Day', bg: 'bg-slate-400'   },
+    { status: 'Holiday',  label: 'Holiday',  bg: 'bg-yellow-500'  },
+    { status: 'Offset',   label: 'Offset',   bg: 'bg-cyan-600'    },
+];
+
+const selectedStatuses = ref(STATUS_FILTERS.map(s => s.status));
+
+const filteredEvents = computed(() =>
+    selectedStatuses.value.length === STATUS_FILTERS.length
+        ? props.events
+        : props.events.filter(e => selectedStatuses.value.includes(e.status))
+);
+
+const allStatusSelected = computed(() => selectedStatuses.value.length === STATUS_FILTERS.length);
+
+const toggleStatus = (status) => {
+    if (selectedStatuses.value.includes(status)) {
+        selectedStatuses.value = selectedStatuses.value.filter(s => s !== status);
+    } else {
+        selectedStatuses.value = [...selectedStatuses.value, status];
+    }
+};
+
+const toggleAllStatuses = () => {
+    selectedStatuses.value = allStatusSelected.value
+        ? []
+        : STATUS_FILTERS.map(s => s.status);
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Day view state ────────────────────────────────────────────────────────────
 const HOUR_HEIGHT = 64; // px per hour (24 × 64 = 1536 px total grid)
 const calendarView = ref('month'); // 'month' | 'day'
@@ -171,7 +208,7 @@ const getEventsForDate = (date) => {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
 
-    return props.events
+    return filteredEvents.value
         .filter(event => {
             const start = new Date(event.start_time);
             start.setHours(0, 0, 0, 0);
@@ -336,6 +373,24 @@ const formatDateLong = (date) => {
                 </div>
                 <slot name="actions"></slot>
             </div>
+        </div>
+
+        <!-- Status Filter Strip -->
+        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/40 flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Status:</span>
+            <button
+                v-for="s in STATUS_FILTERS"
+                :key="s.status"
+                @click="toggleStatus(s.status)"
+                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                :class="selectedStatuses.includes(s.status)
+                    ? [s.bg, 'text-white border-transparent shadow-sm']
+                    : 'bg-white text-gray-400 border-gray-200'"
+            >{{ s.label }}</button>
+            <button
+                @click="toggleAllStatuses"
+                class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
+            >{{ allStatusSelected ? 'Clear all' : 'Select all' }}</button>
         </div>
 
         <!-- Days of Week Header (month view only) -->
