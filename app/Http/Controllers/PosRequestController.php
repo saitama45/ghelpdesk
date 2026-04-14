@@ -9,6 +9,7 @@ use App\Models\RequestType;
 use App\Models\Company;
 use App\Models\Store;
 use App\Models\Ticket;
+use App\Models\User;
 use App\Services\PosRequestService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -99,6 +100,7 @@ class PosRequestController extends Controller implements HasMiddleware
         
         return Inertia::render('PosRequests/Show', [
             'posRequest' => $posRequest,
+            'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
     }
 
@@ -157,6 +159,23 @@ class PosRequestController extends Controller implements HasMiddleware
             'approver_data' => 'nullable|array',
         ]);
 
+        $requestType = $posRequest->requestType;
+        $currentLevel = (int) $posRequest->current_approval_level;
+        $authUserId = (int) auth()->id();
+
+        if ($currentLevel <= 0 || !$this->canUserApproveLevel($requestType, $currentLevel, $authUserId)) {
+            return redirect()->back()->with('error', 'You are not assigned as an approver for this approval level.');
+        }
+
+        $alreadyApprovedCurrentLevel = $posRequest->approvals()
+            ->where('level', $currentLevel)
+            ->where('user_id', $authUserId)
+            ->exists();
+
+        if ($alreadyApprovedCurrentLevel) {
+            return redirect()->back()->with('error', 'You already approved this level.');
+        }
+
         DB::transaction(function () use ($request, $posRequest) {
             $requestType = $posRequest->requestType;
 
@@ -193,5 +212,22 @@ class PosRequestController extends Controller implements HasMiddleware
         $posRequest->load(['approvals.user', 'requestType', 'company', 'user', 'details']);
 
         return redirect()->back()->with('success', 'Request approved successfully');
+    }
+
+    private function canUserApproveLevel(RequestType $requestType, int $level, int $userId): bool
+    {
+        $assignedUsers = collect($requestType->approver_matrix ?? [])
+            ->firstWhere('level', $level)['user_ids'] ?? [];
+
+        $assignedUsers = collect($assignedUsers)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->values();
+
+        if ($assignedUsers->isEmpty()) {
+            return true;
+        }
+
+        return $assignedUsers->contains($userId);
     }
 }

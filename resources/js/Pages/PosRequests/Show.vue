@@ -8,7 +8,11 @@ import { useConfirm } from '@/Composables/useConfirm'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
 const props = defineProps({
-    posRequest: Object
+    posRequest: Object,
+    users: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const page = usePage()
@@ -19,6 +23,22 @@ const { confirm } = useConfirm()
 const authUserId = computed(() => page.props.auth.user.id)
 
 const approverFields = computed(() => props.posRequest.request_type?.form_schema?.approver_fields ?? [])
+const approverMatrix = computed(() => props.posRequest.request_type?.approver_matrix ?? [])
+const assignedApproversByLevel = computed(() => {
+    const users = props.users ?? []
+
+    return approverMatrix.value.reduce((carry, entry) => {
+        const level = Number(entry.level)
+        const ids = Array.isArray(entry.user_ids) ? entry.user_ids.map(Number) : []
+
+        carry[level] = users.filter(user => ids.includes(Number(user.id)))
+
+        return carry
+    }, {})
+})
+const currentLevelAssignedApprovers = computed(() => {
+    return assignedApproversByLevel.value[Number(props.posRequest.current_approval_level)] ?? []
+})
 
 const approvalForm = useForm({
     remarks: '',
@@ -62,12 +82,20 @@ const submitApproval = async () => {
 
 const canApprove = computed(() => {
     const status = props.posRequest.status || ''
-    const alreadyApproved = props.posRequest.approvals?.some(a => Number(a.user_id) === Number(authUserId.value))
+    const currentLevel = Number(props.posRequest.current_approval_level)
+    const alreadyApprovedCurrentLevel = props.posRequest.approvals?.some(a =>
+        Number(a.user_id) === Number(authUserId.value) &&
+        Number(a.level) === currentLevel
+    )
+    const assignedApprovers = currentLevelAssignedApprovers.value
+    const isAssignedApprover = assignedApprovers.length === 0 ||
+        assignedApprovers.some(user => Number(user.id) === Number(authUserId.value))
 
     return (status === 'Open' || status.startsWith('Approved Level')) && 
            hasPermission('pos_requests.approve') &&
-           props.posRequest.current_approval_level > 0 &&
-           !alreadyApproved;
+           currentLevel > 0 &&
+           isAssignedApprover &&
+           !alreadyApprovedCurrentLevel;
 })
 
 const getStatusBadgeClass = (status) => {
@@ -408,6 +436,18 @@ const formatDateTime = (dateStr) => {
                                                     </svg>
                                                     <span class="text-[10px] font-black uppercase tracking-widest">Awaiting Decision</span>
                                                 </div>
+                                                <div v-if="(assignedApproversByLevel[Number(lvl)] ?? []).length > 0" class="mt-3 pt-3 border-t border-indigo-100">
+                                                    <p class="text-[9px] font-black uppercase tracking-widest text-indigo-500 mb-2">Assigned Approvers</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <span
+                                                            v-for="approver in assignedApproversByLevel[Number(lvl)]"
+                                                            :key="approver.id"
+                                                            class="px-2.5 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold"
+                                                        >
+                                                            {{ approver.name }}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <!-- Future State -->
@@ -422,6 +462,21 @@ const formatDateTime = (dateStr) => {
                             <!-- Action Area -->
                             <div v-if="canApprove" class="mt-12 pt-10 border-t border-gray-100 relative">
                                 <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">Your Decision</div>
+
+                                <div v-if="currentLevelAssignedApprovers.length > 0" class="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                                    <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2">
+                                        Level {{ posRequest.current_approval_level }} Assigned Approvers
+                                    </p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span
+                                            v-for="approver in currentLevelAssignedApprovers"
+                                            :key="approver.id"
+                                            class="px-3 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold"
+                                        >
+                                            {{ approver.name }}
+                                        </span>
+                                    </div>
+                                </div>
                                 
                                 <!-- Approver Fields -->
                                 <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">

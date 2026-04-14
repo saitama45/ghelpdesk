@@ -1,9 +1,10 @@
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import FieldBuilderModal from '@/Components/RequestType/FieldBuilderModal.vue'
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -11,7 +12,11 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    requestTypes: Object
+    requestTypes: Object,
+    users: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const { showSuccess, showError } = useToast()
@@ -29,10 +34,33 @@ const form = reactive({
     name: '',
     request_for: [],
     approval_levels: 0,
+    approver_matrix: [],
     cc_emails: '',
     is_active: true,
     form_schema: null,
 })
+
+const userOptions = computed(() => {
+    return (props.users ?? []).map(user => ({
+        id: user.id,
+        name: user.email ? `${user.name} (${user.email})` : user.name,
+    }))
+})
+
+const syncApproverMatrix = (levels) => {
+    const totalLevels = Math.max(0, Number(levels) || 0)
+    const currentMatrix = Array.isArray(form.approver_matrix) ? form.approver_matrix : []
+
+    form.approver_matrix = Array.from({ length: totalLevels }, (_, index) => {
+        const level = index + 1
+        const existing = currentMatrix.find(entry => Number(entry.level) === level)
+
+        return {
+            level,
+            user_ids: Array.isArray(existing?.user_ids) ? [...existing.user_ids] : [],
+        }
+    })
+}
 
 onMounted(() => {
     pagination.updateData(props.requestTypes)
@@ -42,6 +70,10 @@ watch(() => props.requestTypes, (newTypes) => {
     pagination.updateData(newTypes)
 }, { deep: true })
 
+watch(() => form.approval_levels, (newValue) => {
+    syncApproverMatrix(newValue)
+})
+
 const openCreateModal = () => {
     isEditing.value = false
     currentRequestType.value = null
@@ -49,6 +81,7 @@ const openCreateModal = () => {
     form.name = ''
     form.request_for = ['SAP']
     form.approval_levels = 0
+    form.approver_matrix = []
     form.cc_emails = ''
     form.is_active = true
     form.form_schema = null
@@ -62,8 +95,16 @@ const editRequestType = (type) => {
     form.name = type.name
     form.request_for = Array.isArray(type.request_for) ? [...type.request_for] : [type.request_for]
     form.approval_levels = type.approval_levels ?? 0
+    form.approver_matrix = Array.isArray(type.approver_matrix)
+        ? type.approver_matrix.map(entry => ({
+            level: Number(entry.level),
+            user_ids: Array.isArray(entry.user_ids) ? [...entry.user_ids] : [],
+        }))
+        : []
     form.cc_emails = type.cc_emails || ''
     form.is_active = type.is_active
+    form.form_schema = type.form_schema ? JSON.parse(JSON.stringify(type.form_schema)) : null
+    syncApproverMatrix(form.approval_levels)
     showModal.value = true
 }
 
@@ -133,9 +174,16 @@ const duplicateRequestType = (type) => {
     form.name = `Copy of ${type.name}`
     form.request_for = Array.isArray(type.request_for) ? [...type.request_for] : [type.request_for]
     form.approval_levels = type.approval_levels ?? 0
+    form.approver_matrix = Array.isArray(type.approver_matrix)
+        ? type.approver_matrix.map(entry => ({
+            level: Number(entry.level),
+            user_ids: Array.isArray(entry.user_ids) ? [...entry.user_ids] : [],
+        }))
+        : []
     form.cc_emails = type.cc_emails || ''
     form.is_active = true
     form.form_schema = type.form_schema ? JSON.parse(JSON.stringify(type.form_schema)) : null
+    syncApproverMatrix(form.approval_levels)
     showModal.value = true
 }
 
@@ -422,6 +470,44 @@ const toggleSystem = (system) => {
                             <textarea v-model="form.cc_emails" rows="3" placeholder="email1@example.com&#10;email2@example.com"
                                       class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300 custom-scrollbar"></textarea>
                             <p class="text-[10px] text-gray-400 mt-2 ml-1 italic">These addresses will be notified via CC on ticket updates.</p>
+                        </div>
+
+                        <div v-if="form.approval_levels > 0" class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">Approval Matrix</label>
+                                    <p class="text-xs text-gray-500 ml-1">Assign one or more approvers for each approval level.</p>
+                                </div>
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100">
+                                    {{ form.approval_levels }} Level{{ form.approval_levels > 1 ? 's' : '' }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div
+                                    v-for="level in form.approver_matrix"
+                                    :key="level.level"
+                                    class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4"
+                                >
+                                    <div class="flex items-center justify-between gap-3 mb-3">
+                                        <div>
+                                            <p class="text-sm font-black text-gray-900">Level {{ level.level }}</p>
+                                            <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black">
+                                                {{ level.user_ids.length }} approver{{ level.user_ids.length !== 1 ? 's' : '' }} assigned
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <MultiAutocomplete
+                                        v-model="level.user_ids"
+                                        :options="userOptions"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Search and assign approvers..."
+                                        :limit="4"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div v-if="isEditing" class="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">

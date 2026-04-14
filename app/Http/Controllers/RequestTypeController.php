@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\RequestType;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -36,6 +37,7 @@ class RequestTypeController extends Controller implements HasMiddleware
         
         return Inertia::render('RequestTypes/Index', [
             'requestTypes' => $requestTypes,
+            'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
     }
 
@@ -47,6 +49,10 @@ class RequestTypeController extends Controller implements HasMiddleware
             'request_for' => 'required|array|min:1',
             'request_for.*' => 'in:SAP,POS',
             'approval_levels' => 'required|integer|min:0',
+            'approver_matrix' => 'nullable|array',
+            'approver_matrix.*.level' => 'required|integer|min:1',
+            'approver_matrix.*.user_ids' => 'nullable|array',
+            'approver_matrix.*.user_ids.*' => 'exists:users,id',
             'cc_emails' => 'nullable|string',
             'form_schema' => 'nullable|array',
         ]);
@@ -56,6 +62,10 @@ class RequestTypeController extends Controller implements HasMiddleware
             'name' => $request->name,
             'request_for' => $request->request_for,
             'approval_levels' => $request->approval_levels,
+            'approver_matrix' => $this->normalizeApproverMatrix(
+                $request->input('approver_matrix', []),
+                (int) $request->approval_levels
+            ),
             'cc_emails' => $request->cc_emails,
             'form_schema' => $request->form_schema,
             'is_active' => true,
@@ -72,6 +82,10 @@ class RequestTypeController extends Controller implements HasMiddleware
             'request_for' => 'required|array|min:1',
             'request_for.*' => 'in:SAP,POS',
             'approval_levels' => 'required|integer|min:0',
+            'approver_matrix' => 'nullable|array',
+            'approver_matrix.*.level' => 'required|integer|min:1',
+            'approver_matrix.*.user_ids' => 'nullable|array',
+            'approver_matrix.*.user_ids.*' => 'exists:users,id',
             'cc_emails' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
@@ -81,6 +95,10 @@ class RequestTypeController extends Controller implements HasMiddleware
             'name' => $request->name,
             'request_for' => $request->request_for,
             'approval_levels' => $request->approval_levels,
+            'approver_matrix' => $this->normalizeApproverMatrix(
+                $request->input('approver_matrix', []),
+                (int) $request->approval_levels
+            ),
             'cc_emails' => $request->cc_emails,
             'is_active' => $request->boolean('is_active'),
         ]);
@@ -103,5 +121,28 @@ class RequestTypeController extends Controller implements HasMiddleware
     {
         $requestType->delete();
         return redirect()->back()->with('success', 'Request Type deleted successfully');
+    }
+
+    private function normalizeApproverMatrix(array $approverMatrix, int $approvalLevels): array
+    {
+        if ($approvalLevels <= 0) {
+            return [];
+        }
+
+        return collect(range(1, $approvalLevels))
+            ->map(function (int $level) use ($approverMatrix) {
+                $match = collect($approverMatrix)->firstWhere('level', $level);
+
+                return [
+                    'level' => $level,
+                    'user_ids' => collect($match['user_ids'] ?? [])
+                        ->map(fn ($id) => (int) $id)
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->all();
     }
 }

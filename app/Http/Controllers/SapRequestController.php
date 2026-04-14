@@ -6,6 +6,7 @@ use App\Models\SapRequest;
 use App\Models\SapRequestApproval;
 use App\Models\RequestType;
 use App\Models\Company;
+use App\Models\User;
 use App\Services\SapRequestService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -91,6 +92,7 @@ class SapRequestController extends Controller implements HasMiddleware
 
         return Inertia::render('SapRequests/Show', [
             'sapRequest' => $sapRequest,
+            'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
     }
 
@@ -142,6 +144,23 @@ class SapRequestController extends Controller implements HasMiddleware
             'approver_data' => 'nullable|array',
         ]);
 
+        $requestType = $sapRequest->requestType;
+        $currentLevel = (int) $sapRequest->current_approval_level;
+        $authUserId = (int) auth()->id();
+
+        if ($currentLevel <= 0 || !$this->canUserApproveLevel($requestType, $currentLevel, $authUserId)) {
+            return redirect()->back()->with('error', 'You are not assigned as an approver for this approval level.');
+        }
+
+        $alreadyApprovedCurrentLevel = $sapRequest->approvals()
+            ->where('level', $currentLevel)
+            ->where('user_id', $authUserId)
+            ->exists();
+
+        if ($alreadyApprovedCurrentLevel) {
+            return redirect()->back()->with('error', 'You already approved this level.');
+        }
+
         DB::transaction(function () use ($request, $sapRequest) {
             $requestType = $sapRequest->requestType;
 
@@ -174,5 +193,22 @@ class SapRequestController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Request approved successfully.');
+    }
+
+    private function canUserApproveLevel(RequestType $requestType, int $level, int $userId): bool
+    {
+        $assignedUsers = collect($requestType->approver_matrix ?? [])
+            ->firstWhere('level', $level)['user_ids'] ?? [];
+
+        $assignedUsers = collect($assignedUsers)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->values();
+
+        if ($assignedUsers->isEmpty()) {
+            return true;
+        }
+
+        return $assignedUsers->contains($userId);
     }
 }

@@ -7,7 +7,13 @@ import { useConfirm } from '@/Composables/useConfirm'
 import { useToast } from '@/Composables/useToast'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
-const props = defineProps({ sapRequest: Object })
+const props = defineProps({
+    sapRequest: Object,
+    users: {
+        type: Array,
+        default: () => [],
+    },
+})
 
 const page = usePage()
 const { hasPermission } = usePermission()
@@ -21,6 +27,22 @@ const approvalForm = useForm({
 const authUserId = computed(() => page.props.auth.user.id)
 
 const approverFields = computed(() => props.sapRequest.request_type?.form_schema?.approver_fields ?? [])
+const approverMatrix = computed(() => props.sapRequest.request_type?.approver_matrix ?? [])
+const assignedApproversByLevel = computed(() => {
+    const users = props.users ?? []
+
+    return approverMatrix.value.reduce((carry, entry) => {
+        const level = Number(entry.level)
+        const ids = Array.isArray(entry.user_ids) ? entry.user_ids.map(Number) : []
+
+        carry[level] = users.filter(user => ids.includes(Number(user.id)))
+
+        return carry
+    }, {})
+})
+const currentLevelAssignedApprovers = computed(() => {
+    return assignedApproversByLevel.value[Number(props.sapRequest.current_approval_level)] ?? []
+})
 
 const validateApproverFields = () => {
     if (!approverFields.value.length) return true;
@@ -59,12 +81,20 @@ async function submitApproval() {
 
 const canApprove = computed(() => {
     const s = props.sapRequest.status ?? ''
-    const alreadyApproved = (props.sapRequest.approvals ?? []).some(a => Number(a.user_id) === Number(authUserId.value))
+    const currentLevel = Number(props.sapRequest.current_approval_level)
+    const alreadyApprovedCurrentLevel = (props.sapRequest.approvals ?? []).some(a =>
+        Number(a.user_id) === Number(authUserId.value) &&
+        Number(a.level) === currentLevel
+    )
+    const assignedApprovers = currentLevelAssignedApprovers.value
+    const isAssignedApprover = assignedApprovers.length === 0 ||
+        assignedApprovers.some(user => Number(user.id) === Number(authUserId.value))
 
     return (s === 'Open' || s.startsWith('Approved Level')) &&
         hasPermission('sap_requests.approve') &&
-        props.sapRequest.current_approval_level > 0 &&
-        !alreadyApproved
+        currentLevel > 0 &&
+        isAssignedApprover &&
+        !alreadyApprovedCurrentLevel
 })
 
 const totalLevels = computed(() => Number(props.sapRequest.request_type?.approval_levels ?? 0))
@@ -267,6 +297,18 @@ const getLabel = (key, value, isItem = false) => {
                                                     <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                                     <span class="text-[10px] font-black uppercase tracking-widest">Awaiting Decision</span>
                                                 </div>
+                                                <div v-if="(assignedApproversByLevel[Number(lvl)] ?? []).length > 0" class="mt-3 pt-3 border-t border-teal-100">
+                                                    <p class="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-2">Assigned Approvers</p>
+                                                    <div class="flex flex-wrap gap-2">
+                                                        <span
+                                                            v-for="approver in assignedApproversByLevel[Number(lvl)]"
+                                                            :key="approver.id"
+                                                            class="px-2.5 py-1 rounded-full bg-white text-teal-700 border border-teal-200 text-[10px] font-bold"
+                                                        >
+                                                            {{ approver.name }}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic">Locked</div>
                                         </div>
@@ -277,6 +319,21 @@ const getLabel = (key, value, isItem = false) => {
                             <!-- Approve Action -->
                             <div v-if="canApprove" class="mt-10 pt-8 border-t border-gray-100 relative">
                                 <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-teal-500 uppercase tracking-[0.3em]">Your Decision</div>
+
+                                <div v-if="currentLevelAssignedApprovers.length > 0" class="mb-6 p-4 bg-teal-50 border border-teal-100 rounded-2xl">
+                                    <p class="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-2">
+                                        Level {{ sapRequest.current_approval_level }} Assigned Approvers
+                                    </p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span
+                                            v-for="approver in currentLevelAssignedApprovers"
+                                            :key="approver.id"
+                                            class="px-3 py-1 rounded-full bg-white text-teal-700 border border-teal-200 text-[10px] font-bold"
+                                        >
+                                            {{ approver.name }}
+                                        </span>
+                                    </div>
+                                </div>
                                 
                                 <!-- Approver Fields -->
                                 <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-teal-100 rounded-[2rem] p-6 shadow-sm">

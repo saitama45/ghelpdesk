@@ -11,6 +11,7 @@ class RequestType extends Model
         'name',
         'request_for',
         'approval_levels',
+        'approver_matrix',
         'cc_emails',
         'is_active',
         'form_schema',
@@ -19,6 +20,7 @@ class RequestType extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'request_for' => 'array',
+        'approver_matrix' => 'array',
         'form_schema' => 'array',
     ];
 }
