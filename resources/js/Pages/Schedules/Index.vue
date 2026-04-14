@@ -118,6 +118,26 @@
                     </div>
                 </div>
 
+                <!-- Color Legend (calendar view only) -->
+                <div v-if="currentView === 'calendar'" class="flex flex-col gap-1.5 px-1 py-2.5 border-t border-gray-100">
+                    <!-- Priority row -->
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest w-14 shrink-0">Priority:</span>
+                        <div v-for="item in priorityLegend" :key="item.key" class="flex items-center gap-1.5">
+                            <span :class="[item.color, 'w-3 h-3 rounded-full inline-block shrink-0']"></span>
+                            <span class="text-xs font-medium text-gray-600">{{ item.label }}</span>
+                        </div>
+                    </div>
+                    <!-- Status row -->
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest w-14 shrink-0">Status:</span>
+                        <div v-for="item in scheduleLegend" :key="item.status" class="flex items-center gap-1.5">
+                            <span :class="[item.color, 'w-3 h-3 rounded-full inline-block shrink-0']"></span>
+                            <span class="text-xs font-medium text-gray-600">{{ item.label }}</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Calendar View -->
                 <div v-if="currentView === 'calendar'">
                     <Calendar 
@@ -665,6 +685,24 @@ const currentActualTimeOut = ref(null)
 
 const statuses = [
     'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
+]
+
+const priorityLegend = [
+    { key: 'urgent', label: 'P1 - Urgent', color: 'bg-red-600' },
+    { key: 'high',   label: 'P2 - High',   color: 'bg-orange-500' },
+    { key: 'medium', label: 'P3 - Medium', color: 'bg-yellow-500' },
+    { key: 'low',    label: 'P4 - Low',    color: 'bg-green-600' },
+]
+
+const scheduleLegend = [
+    { status: 'On-site',  label: 'On-site',       color: 'bg-blue-600' },
+    { status: 'Off-site', label: 'Off-site',       color: 'bg-purple-600' },
+    { status: 'WFH',      label: 'WFH',            color: 'bg-emerald-600' },
+    { status: 'SL',       label: 'Sick Leave',     color: 'bg-rose-600' },
+    { status: 'VL',       label: 'Vacation Leave', color: 'bg-amber-500' },
+    { status: 'Restday',  label: 'Rest Day',       color: 'bg-slate-400' },
+    { status: 'Holiday',  label: 'Holiday',        color: 'bg-yellow-500' },
+    { status: 'Offset',   label: 'Offset',         color: 'bg-cyan-600' },
 ]
 
 const form = reactive({

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -13,6 +13,105 @@ const emit = defineEmits(['date-click', 'event-click']);
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
+
+// ── Day view state ────────────────────────────────────────────────────────────
+const HOUR_HEIGHT = 64; // px per hour (24 × 64 = 1536 px total grid)
+const calendarView = ref('month'); // 'month' | 'day'
+const currentDayDate = ref(new Date());
+const dayScrollRef = ref(null);
+const nowDate = ref(new Date());
+
+const dayHeaderLabel = computed(() =>
+    new Intl.DateTimeFormat('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    }).format(currentDayDate.value)
+);
+
+const isViewingToday = computed(() =>
+    currentDayDate.value.toDateString() === nowDate.value.toDateString()
+);
+
+const currentTimeTop = computed(() => {
+    const mins = nowDate.value.getHours() * 60 + nowDate.value.getMinutes();
+    return (mins / 60) * HOUR_HEIGHT;
+});
+
+const formatHourLabel = (h) => {
+    if (h === 0)  return '12 AM';
+    if (h < 12)   return `${h} AM`;
+    if (h === 12) return '12 PM';
+    return `${h - 12} PM`;
+};
+
+const prevDay = () => {
+    const d = new Date(currentDayDate.value);
+    d.setDate(d.getDate() - 1);
+    currentDayDate.value = d;
+};
+
+const nextDay = () => {
+    const d = new Date(currentDayDate.value);
+    d.setDate(d.getDate() + 1);
+    currentDayDate.value = d;
+};
+
+const scrollDayToTime = () => {
+    if (!dayScrollRef.value) return;
+    const mins = nowDate.value.getHours() * 60 + nowDate.value.getMinutes();
+    dayScrollRef.value.scrollTop = Math.max(0, (mins / 60) * HOUR_HEIGHT - 200);
+};
+
+const switchToDay = (date) => {
+    currentDayDate.value = new Date(date);
+    calendarView.value = 'day';
+    nextTick(() => scrollDayToTime());
+};
+
+const dailyEventsLayout = computed(() => {
+    const dayEvents = getEventsForDate(currentDayDate.value);
+    if (!dayEvents.length) return [];
+
+    const sorted = [...dayEvents].sort((a, b) => {
+        const sd = new Date(a.start_time) - new Date(b.start_time);
+        if (sd !== 0) return sd;
+        return (new Date(b.end_time) - new Date(b.start_time)) - (new Date(a.end_time) - new Date(a.start_time));
+    });
+
+    // Greedy column assignment
+    const colEnds = [];
+    const assignments = [];
+    for (const event of sorted) {
+        const startMs = new Date(event.start_time).getTime();
+        let placed = false;
+        for (let c = 0; c < colEnds.length; c++) {
+            if (colEnds[c] <= startMs) {
+                colEnds[c] = new Date(event.end_time).getTime();
+                assignments.push({ event, col: c });
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            assignments.push({ event, col: colEnds.length });
+            colEnds.push(new Date(event.end_time).getTime());
+        }
+    }
+
+    const totalCols = Math.max(1, colEnds.length);
+    return assignments.map(({ event, col }) => {
+        const start = new Date(event.start_time);
+        const end   = new Date(event.end_time);
+        const startMins = start.getHours() * 60 + start.getMinutes();
+        let   endMins   = end.getHours()   * 60 + end.getMinutes();
+        if (endMins <= startMins) endMins = startMins + 60;
+        const top      = (startMins / 60) * HOUR_HEIGHT;
+        const height   = Math.max(((endMins - startMins) / 60) * HOUR_HEIGHT, 28);
+        const leftPct  = (col / totalCols) * 100;
+        const widthPct = (1 / totalCols) * 100;
+        return { event, col, totalCols, top, height, leftPct, widthPct };
+    });
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 const currentMonth = computed(() => currentDate.value.getMonth());
 const currentYear = computed(() => currentDate.value.getFullYear());
@@ -83,6 +182,11 @@ const getEventsForDate = (date) => {
             return d >= start && d <= end;
         })
         .sort((a, b) => {
+            const priorityRank = { urgent: 1, high: 2, medium: 3, low: 4 };
+            const rankA = a.ticket?.priority ? (priorityRank[String(a.ticket.priority).toLowerCase()] ?? 5) : 6;
+            const rankB = b.ticket?.priority ? (priorityRank[String(b.ticket.priority).toLowerCase()] ?? 5) : 6;
+            if (rankA !== rankB) return rankA - rankB;
+            // Within same group, longer duration first then earlier start
             const durationA = new Date(a.end_time) - new Date(a.start_time);
             const durationB = new Date(b.end_time) - new Date(b.start_time);
             if (durationB !== durationA) return durationB - durationA;
@@ -153,8 +257,17 @@ const prevMonth = () => {
 };
 
 const goToToday = () => {
-    currentDate.value = new Date();
+    if (calendarView.value === 'day') {
+        currentDayDate.value = new Date();
+        nextTick(() => scrollDayToTime());
+    } else {
+        currentDate.value = new Date();
+    }
 };
+
+onMounted(() => {
+    setInterval(() => { nowDate.value = new Date(); }, 60000);
+});
 
 const isToday = (date) => {
     return date.toDateString() === new Date().toDateString();
@@ -184,34 +297,56 @@ const formatDateLong = (date) => {
         <!-- Calendar Header -->
         <div class="p-6 border-b border-gray-200 flex items-center justify-between bg-white">
             <div class="flex items-center space-x-6">
-                <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ monthName }} <span class="text-gray-400 font-light">{{ currentYear }}</span></h2>
+                <!-- Title -->
+                <h2 class="text-2xl font-black text-gray-900 tracking-tight">
+                    <template v-if="calendarView === 'month'">
+                        {{ monthName }} <span class="text-gray-400 font-light">{{ currentYear }}</span>
+                    </template>
+                    <template v-else>
+                        <span class="text-xl">{{ dayHeaderLabel }}</span>
+                    </template>
+                </h2>
+                <!-- Navigation -->
                 <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner">
-                    <button @click="prevMonth" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200">
+                    <button @click="calendarView === 'month' ? prevMonth() : prevDay()" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200">
                         <ChevronLeftIcon class="w-5 h-5 text-gray-600" />
                     </button>
                     <button @click="goToToday" class="px-4 py-2 text-sm font-bold text-gray-700 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 mx-1">
                         Today
                     </button>
-                    <button @click="nextMonth" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200">
+                    <button @click="calendarView === 'month' ? nextMonth() : nextDay()" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200">
                         <ChevronRightIcon class="w-5 h-5 text-gray-600" />
                     </button>
                 </div>
             </div>
-            
+
             <div class="flex items-center space-x-3">
+                <!-- Month / Day view toggle -->
+                <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner">
+                    <button
+                        @click="calendarView = 'month'"
+                        class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200"
+                        :class="calendarView === 'month' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+                    >Month</button>
+                    <button
+                        @click="switchToDay(currentDayDate)"
+                        class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200"
+                        :class="calendarView === 'day' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+                    >Day</button>
+                </div>
                 <slot name="actions"></slot>
             </div>
         </div>
 
-        <!-- Days of Week Header -->
-        <div class="grid grid-cols-7 border-b border-gray-100 bg-gray-50/50">
+        <!-- Days of Week Header (month view only) -->
+        <div v-if="calendarView === 'month'" class="grid grid-cols-7 border-b border-gray-100 bg-gray-50/50">
             <div v-for="day in days" :key="day" class="py-3 text-center text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]">
                 {{ day }}
             </div>
         </div>
 
-        <!-- Calendar Grid -->
-        <div class="flex-1 overflow-y-auto custom-scrollbar bg-gray-100/30">
+        <!-- Calendar Grid (month view only) -->
+        <div v-if="calendarView === 'month'" class="flex-1 overflow-y-auto custom-scrollbar bg-gray-100/30">
             <div v-for="(week, wIndex) in weeks" :key="wIndex" class="grid grid-cols-7 border-b border-gray-100 min-h-[140px] bg-white">
                 <div 
                     v-for="(day, dIndex) in week" 
@@ -222,11 +357,13 @@ const formatDateLong = (date) => {
                 >
                     <!-- Date Number -->
                     <div class="flex justify-start mb-2">
-                        <span 
-                            class="text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full transition-all duration-300"
+                        <span
+                            @click.stop="switchToDay(day.date)"
+                            class="text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full transition-all duration-300 hover:ring-2 hover:ring-blue-300"
                             :class="[
                                 isToday(day.date) ? 'bg-blue-600 text-white shadow-lg scale-110' : 'text-gray-500'
                             ]"
+                            title="Open day view"
                         >
                             {{ day.date.getDate() }}
                         </span>
@@ -273,6 +410,84 @@ const formatDateLong = (date) => {
                         >
                             +{{ getEventsForDate(day.date).length - 2 }} more
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Day View (time grid) -->
+        <div v-if="calendarView === 'day'" ref="dayScrollRef" class="flex-1 overflow-y-auto custom-scrollbar">
+            <div class="relative" :style="{ height: `${HOUR_HEIGHT * 24}px` }">
+
+                <!-- Hour rows -->
+                <template v-for="h in 24" :key="h - 1">
+                    <div
+                        class="absolute w-full border-b border-gray-100 flex"
+                        :style="{ top: `${(h - 1) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }"
+                    >
+                        <!-- Time label -->
+                        <div class="w-16 shrink-0 flex items-start justify-end pr-3 pt-1">
+                            <span class="text-[10px] font-medium text-gray-400 select-none">
+                                {{ formatHourLabel(h - 1) }}
+                            </span>
+                        </div>
+                        <!-- Hour lane background -->
+                        <div class="flex-1 border-l border-gray-100"></div>
+                    </div>
+                </template>
+
+                <!-- Current-time red line -->
+                <div
+                    v-if="isViewingToday"
+                    class="absolute left-16 right-0 z-10 pointer-events-none"
+                    :style="{ top: `${currentTimeTop}px` }"
+                >
+                    <div class="relative flex items-center">
+                        <div class="w-2.5 h-2.5 rounded-full bg-red-500 -ml-1.5 shrink-0 shadow-sm"></div>
+                        <div class="flex-1 border-t-2 border-red-500 opacity-80"></div>
+                    </div>
+                </div>
+
+                <!-- Events layer -->
+                <div class="absolute left-16 right-2 top-0 bottom-0">
+                    <div
+                        v-for="item in dailyEventsLayout"
+                        :key="item.event.id"
+                        @click="emit('event-click', { event: item.event, date: currentDayDate })"
+                        class="absolute cursor-pointer rounded-lg border shadow-sm overflow-hidden hover:z-20 hover:shadow-md transition-shadow"
+                        :class="[getChipColor(item.event), isUrgentTicket(item.event) ? 'ring-2 ring-red-400 ring-offset-1' : '']"
+                        :style="{
+                            top:    `${item.top + 1}px`,
+                            height: `${item.height - 2}px`,
+                            left:   `calc(${item.leftPct}% + 2px)`,
+                            width:  `calc(${item.widthPct}% - 4px)`,
+                        }"
+                        :title="`${item.event.user?.name}: ${item.event.status}${item.event.ticket ? ` [${item.event.ticket.ticket_key}] ${String(item.event.ticket.priority).toUpperCase()}` : ''}`"
+                    >
+                        <div class="p-1.5 flex flex-col h-full overflow-hidden gap-0.5">
+                            <div class="flex items-center gap-1 flex-wrap">
+                                <span
+                                    v-if="isUrgentTicket(item.event)"
+                                    class="inline-flex items-center px-1 rounded text-[8px] font-black bg-red-500 text-white leading-tight animate-pulse shrink-0"
+                                >P1</span>
+                                <span v-if="item.event.ticket" class="text-[10px] font-bold opacity-75 shrink-0">[{{ item.event.ticket.ticket_key }}]</span>
+                                <span class="text-[11px] font-bold truncate">{{ item.event.user?.name }}</span>
+                            </div>
+                            <span class="text-[10px] opacity-90 truncate">{{ item.event.status }}</span>
+                            <span class="text-[9px] opacity-75">{{ formatTime(item.event.start_time) }} – {{ formatTime(item.event.end_time) }}</span>
+                            <p v-if="item.event.store" class="text-[9px] opacity-75 italic truncate">@ {{ item.event.store.name }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Empty state -->
+                <div v-if="dailyEventsLayout.length === 0" class="absolute inset-0 flex items-center justify-center ml-16 pointer-events-none">
+                    <div class="text-center pointer-events-auto">
+                        <p class="text-sm font-medium text-gray-400">No schedules for this day</p>
+                        <button
+                            @click="emit('date-click', currentDayDate)"
+                            class="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                        >+ Add Schedule</button>
                     </div>
                 </div>
             </div>
