@@ -60,10 +60,16 @@ class ScheduleController extends Controller implements HasMiddleware
         $rawSchedules = $query->get();
 
         // Batch-load attendance logs (avoids N+1)
-        $scheduleIds = $rawSchedules->pluck('id')->toArray();
-        $attendanceLogs = \App\Models\AttendanceLog::whereIn('schedule_id', $scheduleIds)
-            ->orderBy('log_time')
-            ->get(['schedule_id', 'schedule_store_id', 'type', 'log_time']);
+        $scheduleIds = $rawSchedules->pluck('id')->filter()->values();
+        $attendanceLogs = collect();
+
+        foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
+            $attendanceLogs = $attendanceLogs->concat(
+                \App\Models\AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                    ->orderBy('log_time')
+                    ->get(['schedule_id', 'schedule_store_id', 'type', 'log_time'])
+            );
+        }
         
         $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
         $logsBySegment  = $attendanceLogs->whereNotNull('schedule_store_id')->groupBy('schedule_store_id');
