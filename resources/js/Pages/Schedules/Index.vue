@@ -347,18 +347,21 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">User</label>
-                                <template v-if="isManager">
+                                <template v-if="isManager && !isViewingOnly">
+                                    <!-- Edit / create mode: pick from subordinates -->
                                     <Autocomplete
                                         v-model="form.user_id"
                                         :options="subordinateUsers"
                                         label-key="name"
                                         value-key="id"
                                         placeholder="Select user..."
-                                        :disabled="isViewingOnly"
                                     />
                                 </template>
                                 <template v-else>
-                                    <p class="px-3 py-2 text-sm text-gray-800 bg-gray-100 rounded-lg border border-gray-200">{{ authUser.name }}</p>
+                                    <!-- View mode (any user) or non-manager: show read-only label -->
+                                    <p class="px-3 py-2 text-sm text-gray-800 bg-gray-100 rounded-lg border border-gray-200">
+                                        {{ (props.users ?? []).find(u => Number(u.id) === Number(form.user_id))?.name || authUser.name }}
+                                    </p>
                                 </template>
                             </div>
                             <div>
