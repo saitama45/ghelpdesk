@@ -41,35 +41,25 @@ class PublicPosRequestController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'requester_name' => 'required|string|max:255',
             'requester_email' => 'required|email|max:255',
             'company_id' => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
             'launch_date' => 'required|date',
             'stores_covered' => 'required|array|min:1',
-            'details' => 'required|array|min:1',
-            'details.*.product_name' => 'required|string|max:255',
-            'details.*.pos_name' => 'required|string|max:255',
-            'details.*.price_type' => 'required|string',
-            'details.*.price_amount' => 'nullable|numeric',
-            'details.*.category' => 'nullable|string|max:255',
-            'details.*.sub_category' => 'nullable|string|max:255',
-            'details.*.item_code' => 'nullable|string|max:255',
-            'details.*.sc' => 'nullable|string|max:255',
-            'details.*.local_tax' => 'nullable|string|max:255',
-            'details.*.mgr_meal' => 'nullable|boolean',
-            'details.*.printer' => 'nullable|string|max:255',
-            'details.*.remarks_mechanics' => 'nullable|string',
-            'details.*.validity_date' => 'nullable|date',
+            'form_data' => 'nullable|array',
+            'details' => 'nullable|array',
         ]);
 
         \Illuminate\Support\Facades\Log::info('Public POS Request Submission', [
-            'requester_name' => $validated['requester_name'],
-            'requester_email' => $validated['requester_email']
+            'requester_name' => $request->input('requester_name'),
+            'requester_email' => $request->input('requester_email')
         ]);
 
-        $this->posRequestService->createRequest($validated, null);
+        // Use $request->all() so schema-driven item fields (which vary per request type)
+        // are not stripped by $request->validated() which only returns validated keys.
+        $this->posRequestService->createRequest($request->all(), null);
 
         // Redirect back with success message or to a thank you page
         return redirect()->back()->with('success', 'POS Request created successfully. You will receive an email update soon.');

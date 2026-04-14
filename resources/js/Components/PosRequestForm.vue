@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { router, useForm, Link } from '@inertiajs/vue3'
 import { useToast } from '@/Composables/useToast'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
@@ -20,6 +20,13 @@ const props = defineProps({
 
 const { showError, showSuccess } = useToast()
 
+// Inline confirmation dialog state
+const showConfirm = ref(false)
+let resolveConfirm = null
+const openConfirm = () => new Promise(resolve => { resolveConfirm = resolve; showConfirm.value = true })
+const onConfirmYes = () => { showConfirm.value = false; resolveConfirm?.(true) }
+const onConfirmNo  = () => { showConfirm.value = false; resolveConfirm?.(false) }
+
 const isEditing = computed(() => !!props.posRequest)
 
 const form = useForm({
@@ -27,40 +34,44 @@ const form = useForm({
     requester_email: props.posRequest?.requester_email ?? '',
     company_id: props.posRequest?.company_id ?? '',
     request_type_id: props.posRequest?.request_type_id ?? '',
-    launch_date: props.posRequest?.launch_date ?? '',
+    launch_date: props.posRequest?.launch_date ?? new Date().toISOString().slice(0, 10),
     stores_covered: props.posRequest?.stores_covered ?? [],
-    form_data: props.posRequest?.form_data ?? {},
-    details: props.posRequest?.details ? props.posRequest.details.map(d => ({
-        product_name: d.product_name,
-        pos_name: d.pos_name,
-        remarks_mechanics: d.remarks_mechanics,
-        price_type: d.price_type,
-        price_amount: d.price_amount,
-        category: d.category,
-        sub_category: d.sub_category,
-        validity_date: d.validity_date,
-        item_code: d.item_code,
-        sc: d.sc,
-        local_tax: d.local_tax,
-        mgr_meal: d.mgr_meal === 'Yes' || d.mgr_meal === true,
-        printer: d.printer
-    })) : [
-        {
-            product_name: '',
-            pos_name: '',
-            remarks_mechanics: '',
-            price_type: 'In-Store',
-            price_amount: '',
-            category: '',
-            sub_category: '',
-            validity_date: '',
-            item_code: '',
-            sc: '',
-            local_tax: '',
-            mgr_meal: false,
-            printer: ''
+    form_data: (() => {
+        // Strip the 'items' key that was merged in by the service — it belongs in details, not form_data
+        const fd = { ...(props.posRequest?.form_data ?? {}) }
+        delete fd.items
+        return fd
+    })(),
+    details: (() => {
+        // Schema-driven items live in form_data.items; hard-coded items live in posRequest.details
+        const schemaItems = props.posRequest?.form_data?.items
+        if (schemaItems && schemaItems.length > 0) return schemaItems
+
+        if (props.posRequest?.details?.length > 0) {
+            return props.posRequest.details.map(d => ({
+                product_name: d.product_name,
+                pos_name: d.pos_name,
+                remarks_mechanics: d.remarks_mechanics,
+                price_type: d.price_type,
+                price_amount: d.price_amount,
+                category: d.category,
+                sub_category: d.sub_category,
+                validity_date: d.validity_date,
+                item_code: d.item_code,
+                sc: d.sc,
+                local_tax: d.local_tax,
+                mgr_meal: d.mgr_meal === 'Yes' || d.mgr_meal === true,
+                printer: d.printer
+            }))
         }
-    ]
+
+        return [{
+            product_name: '', pos_name: '', remarks_mechanics: '',
+            price_type: 'In-Store', price_amount: '', category: '',
+            sub_category: '', validity_date: '', item_code: '',
+            sc: '', local_tax: '', mgr_meal: false, printer: ''
+        }]
+    })()
 })
 
 // Autocomplete Logic
@@ -136,6 +147,22 @@ const removeRow = (index) => {
 }
 
 const getError = (key) => form.errors[key]
+const allErrors = computed(() => [...Object.values(form.errors).flat(), ...lineItemErrors.value])
+const errorBanner = ref(null)
+const scrollToErrors = () => nextTick(() => errorBanner.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+
+// Disable submit when a line-items section is shown but no items have been added yet
+const canSubmit = computed(() => !schemaHasItems || form.details.length > 0)
+
+// Client-side validation errors for schema line item required fields
+const lineItemErrors = ref([])
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const emailFormatError = computed(() =>
+    form.requester_email && !emailRegex.test(form.requester_email)
+        ? 'Please enter a valid email address.'
+        : null
+)
 
 // ── Schema-driven ────────────────────────────────────────────────────────────
 const selectedRequestType = computed(() =>
@@ -152,47 +179,73 @@ const useSchema = computed(() => schemaFields.value.length > 0 || schemaHasItems
 // True when the schema defines a tabular items section
 const useSchemaItems = computed(() => schemaHasItems.value && schemaItemsColumns.value.length > 0)
 
-// Re-initialize detail rows when switching to a schema-driven tabular type
-watch(useSchemaItems, (val) => {
-    if (val && form.details.length === 1) {
-        const blank = {}
-        schemaItemsColumns.value.forEach(c => { blank[c.key] = '' })
-        const existing = form.details[0]
-        const hasData = Object.values(existing).some(v => v !== '' && v !== false && v !== null)
-        if (!hasData) form.details = [blank]
+// Reset form_data and details when request type changes
+watch(() => form.request_type_id, () => {
+    form.form_data = {}
+    lineItemErrors.value = []
+
+    const rt = props.requestTypes?.find(rt => rt.id == form.request_type_id)
+    const hasSchema = (rt?.form_schema?.fields?.length > 0) || !!rt?.form_schema?.has_items
+    if (hasSchema) {
+        // Schema type: clear the stale hard-coded row so product_name/pos_name are not submitted
+        form.details = []
+    } else {
+        // Non-schema type: restore a blank hard-coded row for the fallback card
+        form.details = [{
+            product_name: '', pos_name: '', remarks_mechanics: '',
+            price_type: 'In-Store', price_amount: '', category: '',
+            sub_category: '', validity_date: '', item_code: '',
+            sc: '', local_tax: '', mgr_meal: false, printer: ''
+        }]
     }
 })
 
-// Reset form_data when request type changes
-watch(() => form.request_type_id, () => {
-    form.form_data = {}
-})
+const submit = async () => {
+    if (emailFormatError.value) return
 
-const submit = () => {
+    // Validate required fields in schema line items
+    lineItemErrors.value = []
+    if (schemaHasItems && schemaItemsColumns.value.length > 0) {
+        form.details.forEach((row, rowIdx) => {
+            schemaItemsColumns.value.forEach(col => {
+                if (col.required && (row[col.key] === '' || row[col.key] === null || row[col.key] === undefined)) {
+                    lineItemErrors.value.push(`Item #${rowIdx + 1}: "${col.label}" is required.`)
+                }
+            })
+        })
+    }
+    if (lineItemErrors.value.length > 0) { scrollToErrors(); return }
+
+    const confirmed = await openConfirm()
+    if (!confirmed) return
+
     form.clearErrors()
-    
+
     if (props.isPublic) {
         form.post(route('public.pos-requests.store'), {
             onSuccess: () => {
                 form.reset()
             },
-            onError: (errors) => {
-                const errorCount = Object.keys(errors).length
-                showError(`Please fix ${errorCount} validation error(s) highlighted in red.`)
+            onError: () => {
+                showError('Please review the errors highlighted below.')
+                scrollToErrors()
             }
         })
     } else if (isEditing.value) {
-        form.put(route('pos-requests.update', props.posRequest.id), {
-            onError: (errors) => {
-                const errorCount = Object.keys(errors).length
-                showError(`Please fix ${errorCount} validation error(s) highlighted in red.`)
-            }
-        })
+        // PHP does not parse multipart/form-data bodies on real HTTP PUT requests.
+        // Use POST + _method:put (Laravel method spoofing) so PHP always parses the body.
+        form.transform(data => ({ ...data, _method: 'put' }))
+            .post(route('pos-requests.update', props.posRequest.id), {
+                onError: () => {
+                    showError('Please review the errors highlighted below.')
+                    scrollToErrors()
+                }
+            })
     } else {
         form.post(route('pos-requests.store'), {
-            onError: (errors) => {
-                const errorCount = Object.keys(errors).length
-                showError(`Please fix ${errorCount} validation error(s) highlighted in red.`)
+            onError: () => {
+                showError('Please review the errors highlighted below.')
+                scrollToErrors()
             }
         })
     }
@@ -201,7 +254,24 @@ const submit = () => {
 
 <template>
     <form @submit.prevent="submit" class="space-y-8">
-        
+
+        <!-- Validation Error Summary -->
+        <div v-if="allErrors.length > 0" ref="errorBanner"
+             class="bg-rose-50 border-2 border-rose-200 rounded-2xl px-6 py-4 flex gap-4 items-start">
+            <svg class="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                      d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <div>
+                <p class="text-xs font-black text-rose-700 uppercase tracking-widest mb-1">
+                    Please fix {{ allErrors.length }} error(s) before submitting:
+                </p>
+                <ul class="space-y-0.5">
+                    <li v-for="(msg, i) in allErrors" :key="i" class="text-xs text-rose-600 font-medium">• {{ msg }}</li>
+                </ul>
+            </div>
+        </div>
+
         <!-- Header Card -->
         <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden">
             <div class="absolute top-0 right-0 w-96 h-96 bg-indigo-50/50 rounded-full -mr-48 -mt-48 blur-3xl"></div>
@@ -227,10 +297,11 @@ const submit = () => {
 
                     <div class="space-y-2">
                         <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Your Email</label>
-                        <input v-model="form.requester_email" type="email" required placeholder="john.doe@example.com"
-                               :class="[getError('requester_email') ? 'border-rose-500 bg-rose-50' : 'bg-gray-50 border-gray-50']"
+                        <input v-model="form.requester_email" type="text" required placeholder="john.doe@example.com"
+                               :class="[getError('requester_email') || emailFormatError ? 'border-rose-500 bg-rose-50' : 'bg-gray-50 border-gray-50']"
                                class="w-full border-2 rounded-2xl px-5 py-4 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all outline-none">
-                        <p v-if="getError('requester_email')" class="text-[10px] text-rose-600 font-bold ml-1">{{ getError('requester_email') }}</p>
+                        <p v-if="emailFormatError" class="text-[10px] text-rose-600 font-bold ml-1">{{ emailFormatError }}</p>
+                        <p v-else-if="getError('requester_email')" class="text-[10px] text-rose-600 font-bold ml-1">{{ getError('requester_email') }}</p>
                     </div>
                 </div>
 
@@ -521,14 +592,46 @@ const submit = () => {
         <!-- Actions -->
         <div class="flex justify-end items-center space-x-8 pb-12">
             <Link v-if="!isPublic" :href="route('pos-requests.index')" class="text-xs font-black text-gray-400 uppercase tracking-[0.3em] hover:text-gray-900 transition-all underline decoration-2 decoration-transparent hover:decoration-indigo-500 underline-offset-8">Discard Request</Link>
-            <button type="submit" :disabled="form.processing" 
-                    class="px-16 py-6 bg-black text-white text-base font-black rounded-[2rem] hover:bg-indigo-600 shadow-2xl shadow-indigo-200/50 transition-all transform hover:-translate-y-2 active:scale-95 disabled:opacity-50 flex items-center">
+            <button type="submit" :disabled="form.processing || !canSubmit"
+                    :title="!canSubmit ? 'Please add at least 1 line item before submitting.' : ''"
+                    class="px-16 py-6 bg-black text-white text-base font-black rounded-[2rem] hover:bg-indigo-600 shadow-2xl shadow-indigo-200/50 transition-all transform hover:-translate-y-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-black disabled:hover:translate-y-0 flex items-center">
                 {{ form.processing ? 'Processing Transaction...' : 'Confirm & Submit POS Request' }}
                 <svg class="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
             </button>
         </div>
+
+        <!-- Inline Confirmation Dialog -->
+        <Teleport to="body">
+            <div v-if="showConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="onConfirmNo"></div>
+                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-black text-gray-900">Submit POS Request</h3>
+                            <p class="text-sm text-gray-500 mt-0.5">Please review all details before confirming.</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-8">Are you sure you want to submit this POS request? Once submitted, it will be sent for processing.</p>
+                    <div class="flex gap-3">
+                        <button type="button" @click="onConfirmNo"
+                                class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all">
+                            Cancel
+                        </button>
+                        <button type="button" @click="onConfirmYes"
+                                class="flex-[2] px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-700 shadow-lg transition-all">
+                            Yes, Submit Request
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
     </form>
 </template>
 

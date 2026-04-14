@@ -19,6 +19,7 @@ class PosRequest extends Model
         'launch_date',
         'effectivity_date',
         'stores_covered',
+        'form_data',
         'approver_data',
         'status',
         'current_approval_level',
@@ -26,6 +27,7 @@ class PosRequest extends Model
 
     protected $casts = [
         'stores_covered' => 'array',
+        'form_data' => 'array',
         'approver_data' => 'array',
         'launch_date' => 'date:Y-m-d',
         'effectivity_date' => 'date:Y-m-d',

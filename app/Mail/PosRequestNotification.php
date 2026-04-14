@@ -43,8 +43,18 @@ class PosRequestNotification extends Mailable
      */
     public function content(): Content
     {
+        $schema      = $this->posRequest->requestType->form_schema ?? [];
+        $itemCols    = $schema['items_columns'] ?? [];
+        $schemaItems = $this->posRequest->form_data['items'] ?? [];
+        $hasSchema   = !empty($schema['has_items']) && !empty($itemCols);
+
         return new Content(
             view: 'emails.pos-requests.notification',
+            with: [
+                'hasSchemaItems' => $hasSchema && count($schemaItems) > 0,
+                'itemColumns'    => $itemCols,
+                'schemaItems'    => $schemaItems,
+            ],
         );
     }
 

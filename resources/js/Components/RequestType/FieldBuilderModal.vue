@@ -32,11 +32,26 @@ const editingItemColIndex = ref(null)
 watch(() => props.show, (val) => {
     if (!val) return
     const src = props.requestType.form_schema || {}
-    schema.fields = (src.fields || []).map(f => ({ ...f, options: f.options ? f.options.map(o => ({ ...o })) : [] }))
-    schema.approver_fields = (src.approver_fields || []).map(f => ({ ...f, options: f.options ? f.options.map(o => ({ ...o })) : [] }))
+    const deepCloneOptionMap = (om) => om
+        ? Object.fromEntries(Object.entries(om).map(([k, v]) => [k, v.map(o => ({ ...o }))]))
+        : {}
+    schema.fields = (src.fields || []).map(f => ({
+        ...f,
+        options: (f.options || []).map(o => ({ ...o })),
+        option_map: deepCloneOptionMap(f.option_map),
+    }))
+    schema.approver_fields = (src.approver_fields || []).map(f => ({
+        ...f,
+        options: (f.options || []).map(o => ({ ...o })),
+        option_map: deepCloneOptionMap(f.option_map),
+    }))
     schema.has_items = src.has_items ?? false
     schema.item_label = src.item_label ?? 'Row'
-    schema.items_columns = (src.items_columns || []).map(c => ({ ...c }))
+    schema.items_columns = (src.items_columns || []).map(c => ({
+        ...c,
+        options: (c.options || []).map(o => ({ ...o })),
+        option_map: deepCloneOptionMap(c.option_map),
+    }))
     editingField.value = null
     editingItemCol.value = null
     activeTab.value = 'fields'
@@ -72,9 +87,13 @@ const blankField = () => ({
     options: [],
     show_when: null,
     multiple: false,
+    depends_on: null,
+    option_map: {},
     _showCondition: false,
     _conditionField: '',
     _conditionValue: '',
+    _dependentOptions: false,
+    _dependsOnField: '',
 })
 
 const openAddField = () => {
@@ -87,9 +106,14 @@ const openEditField = (idx) => {
     editingField.value = {
         ...f,
         options: (f.options || []).map(o => ({ ...o })),
+        option_map: f.option_map
+            ? Object.fromEntries(Object.entries(f.option_map).map(([k, v]) => [k, v.map(o => ({ ...o }))]))
+            : {},
         _showCondition: !!f.show_when,
         _conditionField: f.show_when?.field ?? '',
         _conditionValue: f.show_when?.value ?? '',
+        _dependentOptions: !!f.depends_on,
+        _dependsOnField: f.depends_on ?? '',
     }
     editingIndex.value = idx
 }
@@ -118,6 +142,17 @@ const saveField = () => {
     delete f._conditionField
     delete f._conditionValue
 
+    // Build depends_on
+    if (f._dependentOptions && f._dependsOnField) {
+        f.depends_on = f._dependsOnField
+        f.options = []
+    } else {
+        f.depends_on = null
+        f.option_map = {}
+    }
+    delete f._dependentOptions
+    delete f._dependsOnField
+
     if (editingIndex.value === null) {
         f.sort_order = activeFields.value.length + 1
         activeFields.value.push(f)
@@ -144,13 +179,22 @@ const removeOption = (i) => editingField.value.options.splice(i, 1)
 // ── Items columns ─────────────────────────────────────────────────────────────
 const ITEM_COL_TYPES = FIELD_TYPES.map(t => t.value)
 
-const blankItemCol = () => ({ key: '', label: '', type: 'text', required: false, options: [] })
+const blankItemCol = () => ({ key: '', label: '', type: 'text', required: false, options: [], depends_on: null, option_map: {}, _dependentOptions: false, _dependsOnField: '' })
 const openAddItemCol = () => {
     editingItemCol.value = blankItemCol()
     editingItemColIndex.value = null
 }
 const openEditItemCol = (idx) => {
-    editingItemCol.value = { ...schema.items_columns[idx], options: (schema.items_columns[idx].options || []).map(o => ({ ...o })) }
+    const c = schema.items_columns[idx]
+    editingItemCol.value = {
+        ...c,
+        options: (c.options || []).map(o => ({ ...o })),
+        option_map: c.option_map
+            ? Object.fromEntries(Object.entries(c.option_map).map(([k, v]) => [k, v.map(o => ({ ...o }))]))
+            : {},
+        _dependentOptions: !!c.depends_on,
+        _dependsOnField: c.depends_on ?? '',
+    }
     editingItemColIndex.value = idx
 }
 const saveItemCol = () => {
@@ -158,6 +202,18 @@ const saveItemCol = () => {
     const c = { ...editingItemCol.value }
     if (!c.label.trim()) { showError('Column label is required'); return }
     if (!c.key.trim()) c.key = slugify(c.label)
+
+    // Build depends_on
+    if (c._dependentOptions && c._dependsOnField) {
+        c.depends_on = c._dependsOnField
+        c.options = []
+    } else {
+        c.depends_on = null
+        c.option_map = {}
+    }
+    delete c._dependentOptions
+    delete c._dependsOnField
+
     if (editingItemColIndex.value === null) {
         schema.items_columns.push(c)
     } else {
@@ -190,6 +246,38 @@ const saveSchema = () => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const typeLabel = (t) => FIELD_TYPES.find(x => x.value === t)?.label ?? t
 const fieldKeys = computed(() => activeFields.value.map(f => f.key).filter(Boolean))
+
+// ── Dependent dropdown helpers ────────────────────────────────────────────────
+const optionFields = computed(() =>
+    activeFields.value.filter(f => HAS_OPTIONS.includes(f.type) && f.key && f.key !== editingField.value?.key)
+)
+const optionItemCols = computed(() =>
+    schema.items_columns.filter(c => HAS_OPTIONS.includes(c.type) && c.key && c.key !== editingItemCol.value?.key)
+)
+
+const getParentOptions = (parentKey, sourceList) =>
+    sourceList.find(f => f.key === parentKey)?.options ?? []
+
+const syncOptionMapKeys = (target, parentKey, sourceList) => {
+    if (!parentKey) return
+    const parentOpts = getParentOptions(parentKey, sourceList)
+    if (!target.option_map) target.option_map = {}
+    parentOpts.forEach(po => {
+        if (!target.option_map[po.value]) target.option_map[po.value] = []
+    })
+    Object.keys(target.option_map).forEach(k => {
+        if (!parentOpts.find(po => po.value === k)) delete target.option_map[k]
+    })
+}
+
+watch(() => editingField.value?._dependsOnField, (newKey) => {
+    if (editingField.value?._dependentOptions)
+        syncOptionMapKeys(editingField.value, newKey, activeFields.value)
+})
+watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
+    if (editingItemCol.value?._dependentOptions)
+        syncOptionMapKeys(editingItemCol.value, newKey, schema.items_columns)
+})
 </script>
 
 <template>
@@ -266,6 +354,9 @@ const fieldKeys = computed(() => activeFields.value.map(f => f.key).filter(Boole
                                             <span v-if="field.show_when" class="text-[10px] bg-amber-50 text-amber-600 font-bold rounded px-1.5 py-0.5 border border-amber-100">
                                                 when {{ field.show_when.field }} = {{ field.show_when.value }}
                                             </span>
+                                            <span v-if="field.depends_on" class="text-[10px] bg-purple-50 text-purple-600 font-bold rounded px-1.5 py-0.5 border border-purple-100">
+                                                depends on {{ field.depends_on }}
+                                            </span>
                                         </div>
                                         <div v-if="field.help_text" class="text-xs text-gray-400 mt-0.5 truncate">{{ field.help_text }}</div>
                                     </div>
@@ -318,18 +409,59 @@ const fieldKeys = computed(() => activeFields.value.map(f => f.key).filter(Boole
                                     </div>
                                 </div>
                                 <!-- Options -->
-                                <div v-if="HAS_OPTIONS.includes(editingField.type)">
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">Options</label>
-                                    <div class="space-y-1.5">
-                                        <div v-for="(opt, oi) in editingField.options" :key="oi" class="flex gap-2 items-center">
-                                            <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
-                                            <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-indigo-500 focus:border-indigo-500" />
-                                            <button @click="removeOption(oi)" class="text-rose-400 hover:text-rose-600 p-1">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                            </button>
+                                <div v-if="HAS_OPTIONS.includes(editingField.type)" class="space-y-3">
+                                    <!-- Dependent toggle -->
+                                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="editingField._dependentOptions"
+                                            @change="editingField._dependsOnField = ''; editingField.option_map = {}"
+                                            class="rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                                        <span class="text-xs font-bold text-gray-700">Dependent Options <span class="text-gray-400 font-normal">(options change based on another field)</span></span>
+                                    </label>
+
+                                    <!-- Branch A: flat options -->
+                                    <template v-if="!editingField._dependentOptions">
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Options</label>
+                                        <div class="space-y-1.5">
+                                            <div v-for="(opt, oi) in editingField.options" :key="oi" class="flex gap-2 items-center">
+                                                <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
+                                                <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-indigo-500 focus:border-indigo-500" />
+                                                <button @click="removeOption(oi)" class="text-rose-400 hover:text-rose-600 p-1">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <button @click="addOption" class="mt-2 text-xs text-indigo-600 font-bold hover:underline">+ Add option</button>
+                                        <button @click="addOption" class="mt-2 text-xs text-indigo-600 font-bold hover:underline">+ Add option</button>
+                                    </template>
+
+                                    <!-- Branch B: dependent options -->
+                                    <template v-else>
+                                        <div>
+                                            <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Parent Field</label>
+                                            <select v-model="editingField._dependsOnField" class="w-full rounded-xl border-gray-200 text-xs bg-white focus:ring-purple-500 focus:border-purple-500">
+                                                <option value="">-- select parent field --</option>
+                                                <option v-for="pf in optionFields" :key="pf.key" :value="pf.key">{{ pf.label }} ({{ pf.key }})</option>
+                                            </select>
+                                        </div>
+                                        <div v-if="editingField._dependsOnField && editingField.option_map" class="space-y-3">
+                                            <div v-for="(childOpts, parentVal) in editingField.option_map" :key="parentVal"
+                                                class="p-3 bg-purple-50 rounded-xl border border-purple-100">
+                                                <p class="text-[10px] font-black text-purple-700 uppercase tracking-wider mb-2">
+                                                    When "{{ editingField._dependsOnField }}" = <span class="font-mono">{{ parentVal }}</span>
+                                                </p>
+                                                <div class="space-y-1.5">
+                                                    <div v-for="(opt, oi) in childOpts" :key="oi" class="flex gap-2 items-center">
+                                                        <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-purple-500 focus:border-purple-500" />
+                                                        <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-purple-500 focus:border-purple-500" />
+                                                        <button @click="childOpts.splice(oi, 1)" class="text-rose-400 hover:text-rose-600 p-1">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <button @click="childOpts.push({ label: '', value: '' })" class="mt-1.5 text-xs text-purple-600 font-bold hover:underline">+ Add option</button>
+                                            </div>
+                                        </div>
+                                        <p v-else-if="editingField._dependentOptions && !editingField._dependsOnField" class="text-xs text-gray-400 italic">Select a parent field to configure option buckets.</p>
+                                    </template>
                                 </div>
                                 <!-- Flags row -->
                                 <div class="flex flex-wrap gap-4 items-center">
@@ -398,6 +530,7 @@ const fieldKeys = computed(() => activeFields.value.map(f => f.key).filter(Boole
                                                 <span class="ml-2 text-[10px] font-mono bg-gray-200 text-gray-600 rounded px-1.5 py-0.5">{{ col.key }}</span>
                                                 <span class="ml-1 text-[10px] bg-teal-50 text-teal-700 font-bold rounded px-1.5 py-0.5 border border-teal-100">{{ typeLabel(col.type) }}</span>
                                                 <span v-if="col.required" class="ml-1 text-[10px] bg-red-50 text-red-600 font-bold rounded px-1.5 py-0.5 border border-red-100">Required</span>
+                                                <span v-if="col.depends_on" class="ml-1 text-[10px] bg-purple-50 text-purple-600 font-bold rounded px-1.5 py-0.5 border border-purple-100">depends on {{ col.depends_on }}</span>
                                             </div>
                                             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                                 <button @click="openEditItemCol(idx)" class="p-1.5 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
@@ -440,18 +573,59 @@ const fieldKeys = computed(() => activeFields.value.map(f => f.key).filter(Boole
                                         </div>
                                     </div>
                                     <!-- Options for select, radio, or checkbox_group type -->
-                                    <div v-if="HAS_OPTIONS.includes(editingItemCol.type)">
-                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">Options</label>
-                                        <div class="space-y-1.5">
-                                            <div v-for="(opt, oi) in editingItemCol.options" :key="oi" class="flex gap-2 items-center">
-                                                <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white" />
-                                                <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white" />
-                                                <button @click="editingItemCol.options.splice(oi, 1)" class="text-rose-400 hover:text-rose-600 p-1">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                                </button>
+                                    <div v-if="HAS_OPTIONS.includes(editingItemCol.type)" class="space-y-3">
+                                        <!-- Dependent toggle -->
+                                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                                            <input type="checkbox" v-model="editingItemCol._dependentOptions"
+                                                @change="editingItemCol._dependsOnField = ''; editingItemCol.option_map = {}"
+                                                class="rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                                            <span class="text-xs font-bold text-gray-700">Dependent Options <span class="text-gray-400 font-normal">(options change based on another column)</span></span>
+                                        </label>
+
+                                        <!-- Branch A: flat options -->
+                                        <template v-if="!editingItemCol._dependentOptions">
+                                            <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Options</label>
+                                            <div class="space-y-1.5">
+                                                <div v-for="(opt, oi) in editingItemCol.options" :key="oi" class="flex gap-2 items-center">
+                                                    <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white" />
+                                                    <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white" />
+                                                    <button @click="editingItemCol.options.splice(oi, 1)" class="text-rose-400 hover:text-rose-600 p-1">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <button @click="editingItemCol.options.push({ label: '', value: '' })" class="mt-1.5 text-xs text-teal-600 font-bold hover:underline">+ Add option</button>
+                                            <button @click="editingItemCol.options.push({ label: '', value: '' })" class="mt-1.5 text-xs text-teal-600 font-bold hover:underline">+ Add option</button>
+                                        </template>
+
+                                        <!-- Branch B: dependent options -->
+                                        <template v-else>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Parent Column</label>
+                                                <select v-model="editingItemCol._dependsOnField" class="w-full rounded-xl border-gray-200 text-xs bg-white focus:ring-purple-500 focus:border-purple-500">
+                                                    <option value="">-- select parent column --</option>
+                                                    <option v-for="pc in optionItemCols" :key="pc.key" :value="pc.key">{{ pc.label }} ({{ pc.key }})</option>
+                                                </select>
+                                            </div>
+                                            <div v-if="editingItemCol._dependsOnField && editingItemCol.option_map" class="space-y-3">
+                                                <div v-for="(childOpts, parentVal) in editingItemCol.option_map" :key="parentVal"
+                                                    class="p-3 bg-purple-50 rounded-xl border border-purple-100">
+                                                    <p class="text-[10px] font-black text-purple-700 uppercase tracking-wider mb-2">
+                                                        When "{{ editingItemCol._dependsOnField }}" = <span class="font-mono">{{ parentVal }}</span>
+                                                    </p>
+                                                    <div class="space-y-1.5">
+                                                        <div v-for="(opt, oi) in childOpts" :key="oi" class="flex gap-2 items-center">
+                                                            <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-purple-500 focus:border-purple-500" />
+                                                            <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-purple-500 focus:border-purple-500" />
+                                                            <button @click="childOpts.splice(oi, 1)" class="text-rose-400 hover:text-rose-600 p-1">
+                                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <button @click="childOpts.push({ label: '', value: '' })" class="mt-1.5 text-xs text-purple-600 font-bold hover:underline">+ Add option</button>
+                                                </div>
+                                            </div>
+                                            <p v-else-if="editingItemCol._dependentOptions && !editingItemCol._dependsOnField" class="text-xs text-gray-400 italic">Select a parent column to configure option buckets.</p>
+                                        </template>
                                     </div>
                                     <label class="flex items-center gap-2 cursor-pointer select-none">
                                         <input v-model="editingItemCol.required" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />

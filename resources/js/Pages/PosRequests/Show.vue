@@ -89,6 +89,26 @@ const getApprovalForLevel = (lvl) => {
     return props.posRequest.approvals.find(a => Number(a.level) === Number(lvl))
 }
 
+// ── Schema helpers ────────────────────────────────────────────────────────────
+const schemaItemsColumns = computed(() => props.posRequest.request_type?.form_schema?.items_columns ?? [])
+const schemaFields       = computed(() => props.posRequest.request_type?.form_schema?.fields ?? [])
+const hasSchemaItems     = computed(() => !!props.posRequest.request_type?.form_schema?.has_items && schemaItemsColumns.value.length > 0)
+const hasSchema          = computed(() => schemaFields.value.length > 0 || hasSchemaItems.value)
+
+// Items from form_data.items (schema) or from the legacy details relation (hard-coded)
+const lineItems = computed(() =>
+    hasSchemaItems.value
+        ? (props.posRequest.form_data?.items ?? [])
+        : (props.posRequest.details ?? [])
+)
+
+// Regular (non-tabular) form fields stored in form_data
+const regularFormData = computed(() => {
+    const fd = { ...(props.posRequest.form_data ?? {}) }
+    delete fd.items
+    return fd
+})
+
 const getLabel = (key, value) => {
     const schema = props.posRequest.request_type?.form_schema;
     if (!schema) return value;
@@ -114,6 +134,36 @@ const getLabel = (key, value) => {
     if (Array.isArray(value)) return value.join(', ');
     return value ?? '—';
 };
+
+const getCellValue = (item, col) => {
+    const v = item[col.key]
+    if (v === null || v === undefined || v === '') return '—'
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+    if (col.options?.length > 0) {
+        if (Array.isArray(v)) {
+            return col.options.filter(o => v.includes(o.value)).map(o => o.label).join(', ') || '—'
+        }
+        const opt = col.options.find(o => String(o.value) === String(v))
+        return opt ? opt.label : v
+    }
+    if (Array.isArray(v)) return v.join(', ')
+    return v
+}
+
+const getFieldLabel = (key, value) => {
+    if (value === null || value === undefined || value === '') return '—'
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+    const field = schemaFields.value.find(f => f.key === key)
+    if (field?.options?.length > 0) {
+        if (Array.isArray(value)) {
+            return field.options.filter(o => value.includes(o.value)).map(o => o.label).join(', ') || '—'
+        }
+        const opt = field.options.find(o => String(o.value) === String(value))
+        return opt ? opt.label : value
+    }
+    if (Array.isArray(value)) return value.join(', ')
+    return value
+}
 
 const formatDateTime = (dateStr) => {
     if (!dateStr) return ''
@@ -192,8 +242,60 @@ const formatDateTime = (dateStr) => {
                             </div>
                         </div>
 
-                        <!-- Line Items Table -->
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+                        <!-- Regular Schema Fields (non-tabular) -->
+                        <div v-if="schemaFields.length > 0 && Object.keys(regularFormData).length > 0"
+                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+                            <h3 class="text-2xl font-black text-gray-900 mb-8">Form Details</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <div v-for="field in schemaFields" :key="field.key" class="bg-gray-50 rounded-2xl p-5">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{{ field.label }}</label>
+                                    <p class="text-sm font-bold text-gray-900">{{ getFieldLabel(field.key, regularFormData[field.key]) }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Line Items — Schema-driven (dynamic columns) -->
+                        <div v-if="hasSchemaItems"
+                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+                            <div class="flex items-center justify-between mb-8">
+                                <h3 class="text-2xl font-black text-gray-900">Line Items</h3>
+                                <span class="px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                    {{ lineItems.length }} {{ lineItems.length === 1 ? 'Item' : 'Items' }}
+                                </span>
+                            </div>
+
+                            <div v-if="lineItems.length === 0" class="text-center py-12 text-gray-400 font-bold text-sm italic">
+                                No line items recorded.
+                            </div>
+                            <div v-else class="overflow-x-auto custom-scrollbar">
+                                <table class="w-full border-separate border-spacing-y-3 min-w-max">
+                                    <thead>
+                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left">
+                                            <th class="px-4 pb-4 text-center">#</th>
+                                            <th v-for="col in schemaItemsColumns" :key="col.key" class="px-4 pb-4 whitespace-nowrap">
+                                                {{ col.label }}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(item, idx) in lineItems" :key="idx"
+                                            class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
+                                            <td class="px-4 py-5 rounded-l-2xl text-center text-[10px] font-black text-gray-400">
+                                                {{ idx + 1 }}
+                                            </td>
+                                            <td v-for="col in schemaItemsColumns" :key="col.key"
+                                                class="px-4 py-5 last:rounded-r-2xl text-sm font-bold text-gray-700 whitespace-nowrap">
+                                                {{ getCellValue(item, col) }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Line Items — Hard-coded fallback (legacy types) -->
+                        <div v-else-if="!hasSchema && posRequest.details?.length > 0"
+                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
                             <h3 class="text-2xl font-black text-gray-900 mb-8">Detailed Configuration</h3>
                             <div class="overflow-x-auto custom-scrollbar">
                                 <table class="w-full border-separate border-spacing-y-3">
@@ -213,7 +315,8 @@ const formatDateTime = (dateStr) => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="item in posRequest.details" :key="item.id" class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
+                                        <tr v-for="item in posRequest.details" :key="item.id"
+                                            class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
                                             <td class="px-6 py-5 rounded-l-2xl">
                                                 <div class="font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{{ item.product_name }}</div>
                                             </td>
@@ -227,7 +330,7 @@ const formatDateTime = (dateStr) => {
                                                 {{ item.price_amount ? Number(item.price_amount).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-' }}
                                             </td>
                                             <td class="px-6 py-5 font-bold text-gray-700">{{ getLabel('category', item.category) }}</td>
-                                            <td class="px-6 py-5 font-mono text-xs font-black bg-white/50 rounded-lg">{{ item.item_code }}</td>
+                                            <td class="px-6 py-5 font-mono text-xs font-black">{{ item.item_code }}</td>
                                             <td class="px-6 py-5">
                                                 <div class="text-[11px] text-gray-600 font-medium max-w-[200px] truncate" :title="item.remarks_mechanics">
                                                     {{ item.remarks_mechanics || '-' }}

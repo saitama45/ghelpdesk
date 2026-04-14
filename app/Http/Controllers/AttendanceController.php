@@ -71,13 +71,18 @@ class AttendanceController extends Controller implements HasMiddleware
             });
         }
 
-        // Scope lastLog to this schedule so a forgotten yesterday Time Out doesn't bleed into today
-        $lastLog = $todaySchedule
-            ? AttendanceLog::where('user_id', $user->id)
-                ->where('schedule_id', $todaySchedule->id)
-                ->latest('log_time')
-                ->first()
-            : null;
+        // Scope lastLog to the specific segment if available, otherwise the whole schedule
+        $lastLog = null;
+        if ($todaySchedule) {
+            $lastLogQuery = AttendanceLog::where('user_id', $user->id)
+                ->where('schedule_id', $todaySchedule->id);
+            
+            if ($activeStoreEntry) {
+                $lastLogQuery->where('schedule_store_id', $activeStoreEntry->id);
+            }
+
+            $lastLog = $lastLogQuery->latest('log_time')->first();
+        }
 
         return Inertia::render('Attendance/Index', [
             'lastLog' => $lastLog,

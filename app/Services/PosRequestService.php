@@ -20,23 +20,39 @@ class PosRequestService
      */
     public function createRequest(array $data, ?int $userId = null): PosRequest
     {
+        $data = $this->storeFileUploads($data);
+
         return DB::transaction(function () use ($data, $userId) {
             $requestType = RequestType::findOrFail($data['request_type_id']);
-            
+            $hasSchema = !empty($requestType->form_schema['fields'] ?? []) || !empty($requestType->form_schema['has_items']);
+
+            // For schema-driven types, merge schema fields + items into form_data JSON
+            $formData = null;
+            if ($hasSchema) {
+                $formData = $data['form_data'] ?? [];
+                if (!empty($data['details'])) {
+                    $formData['items'] = $data['details'];
+                }
+            }
+
             $posRequest = PosRequest::create([
                 'company_id' => $data['company_id'],
                 'request_type_id' => $data['request_type_id'],
                 'user_id' => $userId,
-                'requester_name' => isset($data['requester_name']) ? $data['requester_name'] : null,
-                'requester_email' => isset($data['requester_email']) ? $data['requester_email'] : null,
+                'requester_name' => $data['requester_name'] ?? null,
+                'requester_email' => $data['requester_email'] ?? null,
                 'launch_date' => $data['launch_date'],
                 'stores_covered' => $data['stores_covered'],
+                'form_data' => $formData,
                 'status' => $requestType->approval_levels == 0 ? 'Approved' : 'Open',
                 'current_approval_level' => $requestType->approval_levels == 0 ? 0 : 1,
             ]);
 
-            foreach ($data['details'] as $detail) {
-                $posRequest->details()->create($detail);
+            // Only insert into pos_request_details for non-schema (hard-coded fallback) types
+            if (!$hasSchema && !empty($data['details'])) {
+                foreach ($data['details'] as $detail) {
+                    $posRequest->details()->create($detail);
+                }
             }
 
             if ($posRequest->status === 'Approved') {
@@ -45,7 +61,7 @@ class PosRequestService
 
             // Send notification to CC emails
             $this->notifyCcEmails($posRequest, 'created');
-            
+
             // Send confirmation to requester
             $this->notifyRequester($posRequest, 'created');
 
@@ -58,18 +74,34 @@ class PosRequestService
      */
     public function updateRequest(PosRequest $posRequest, array $data): PosRequest
     {
+        $data = $this->storeFileUploads($data);
+
         return DB::transaction(function () use ($posRequest, $data) {
+            $requestType = RequestType::findOrFail($data['request_type_id']);
+            $hasSchema = !empty($requestType->form_schema['fields'] ?? []) || !empty($requestType->form_schema['has_items']);
+
+            $formData = null;
+            if ($hasSchema) {
+                $formData = $data['form_data'] ?? [];
+                if (!empty($data['details'])) {
+                    $formData['items'] = $data['details'];
+                }
+            }
+
             $posRequest->update([
                 'company_id' => $data['company_id'],
                 'request_type_id' => $data['request_type_id'],
                 'launch_date' => $data['launch_date'],
                 'stores_covered' => $data['stores_covered'],
+                'form_data' => $formData,
             ]);
 
-            // Sync Details: simplest way is delete and recreate for this type of record
+            // Only sync pos_request_details for non-schema (hard-coded fallback) types
             $posRequest->details()->delete();
-            foreach ($data['details'] as $detail) {
-                $posRequest->details()->create($detail);
+            if (!$hasSchema && !empty($data['details'])) {
+                foreach ($data['details'] as $detail) {
+                    $posRequest->details()->create($detail);
+                }
             }
 
             // Send notification to CC emails
@@ -151,27 +183,44 @@ class PosRequestService
         $detailsContent .= "   📋 LINE ITEM DETAILS\n";
         $detailsContent .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
 
-        foreach ($posRequest->details as $index => $detail) {
-            $num = $index + 1;
-            $mealStatus = ($detail->mgr_meal === 'Yes' || $detail->mgr_meal === true || $detail->mgr_meal == 1) ? 'YES' : 'NO';
+        $schemaItemCols = $schema['items_columns'] ?? [];
+        $schemaItems    = $posRequest->form_data['items'] ?? [];
+        $useSchema      = !empty($schema['has_items']) && !empty($schemaItemCols) && count($schemaItems) > 0;
 
-            $priceTypeLabel = $this->getLabelFromSchema($schema, 'price_type', $detail->price_type);
-            $categoryLabel = $this->getLabelFromSchema($schema, 'category', $detail->category);
-
-            $detailsContent .= "【 PRODUCT #{$num} 】\n";
-            $detailsContent .= " • Name: {$detail->product_name}\n";
-            $detailsContent .= " • POS Alias: {$detail->pos_name}\n";
-            $detailsContent .= " • Pricing: {$priceTypeLabel} (₱" . number_format($detail->price_amount, 2) . ")\n";
-            $detailsContent .= " • Classification: {$categoryLabel} ➔ " . ($detail->sub_category ?? 'N/A') . "\n";
-            $detailsContent .= " • SKU/Code: " . ($detail->item_code ?? 'N/A') . " | Printer: " . ($detail->printer ?? 'N/A') . "\n";
-            $detailsContent .= " • Validity: " . ($detail->validity_date ? $detail->validity_date->format('Y-m-d') : 'ASAP') . "\n";
-
-            if ($detail->remarks_mechanics) {
-                $detailsContent .= " • Remarks: {$detail->remarks_mechanics}\n";
+        if ($useSchema) {
+            foreach ($schemaItems as $index => $item) {
+                $num = $index + 1;
+                $detailsContent .= "【 ITEM #{$num} 】\n";
+                foreach ($schemaItemCols as $col) {
+                    $val = $item[$col['key']] ?? null;
+                    $label = $this->getLabelFromSchema($schema, $col['key'], $val);
+                    $detailsContent .= " • {$col['label']}: {$label}\n";
+                }
+                $detailsContent .= "────────────────────────────────────────\n";
             }
+        } else {
+            foreach ($posRequest->details as $index => $detail) {
+                $num = $index + 1;
+                $mealStatus = ($detail->mgr_meal === 'Yes' || $detail->mgr_meal === true || $detail->mgr_meal == 1) ? 'YES' : 'NO';
 
-            $detailsContent .= " • Technicals: SC: {$detail->sc} | Tax: {$detail->local_tax}% | Mgr's Meal: {$mealStatus}\n";
-            $detailsContent .= "────────────────────────────────────────\n";
+                $priceTypeLabel = $this->getLabelFromSchema($schema, 'price_type', $detail->price_type);
+                $categoryLabel = $this->getLabelFromSchema($schema, 'category', $detail->category);
+
+                $detailsContent .= "【 PRODUCT #{$num} 】\n";
+                $detailsContent .= " • Name: {$detail->product_name}\n";
+                $detailsContent .= " • POS Alias: {$detail->pos_name}\n";
+                $detailsContent .= " • Pricing: {$priceTypeLabel} (₱" . number_format($detail->price_amount, 2) . ")\n";
+                $detailsContent .= " • Classification: {$categoryLabel} ➔ " . ($detail->sub_category ?? 'N/A') . "\n";
+                $detailsContent .= " • SKU/Code: " . ($detail->item_code ?? 'N/A') . " | Printer: " . ($detail->printer ?? 'N/A') . "\n";
+                $detailsContent .= " • Validity: " . ($detail->validity_date ? $detail->validity_date->format('Y-m-d') : 'ASAP') . "\n";
+
+                if ($detail->remarks_mechanics) {
+                    $detailsContent .= " • Remarks: {$detail->remarks_mechanics}\n";
+                }
+
+                $detailsContent .= " • Technicals: SC: {$detail->sc} | Tax: {$detail->local_tax}% | Mgr's Meal: {$mealStatus}\n";
+                $detailsContent .= "────────────────────────────────────────\n";
+            }
         }
 
         $fullDescription = "🆔 POS Request: #{$posRequest->id}\n" .
@@ -222,6 +271,44 @@ class PosRequestService
                 // Logic to send email notifications would go here
             }
         }
+    }
+
+    /**
+     * Detect UploadedFile instances inside $data['form_data'] and $data['details'],
+     * store them to disk, and replace them with their public storage paths.
+     */
+    private function storeFileUploads(array $data): array
+    {
+        $requestType = RequestType::find($data['request_type_id'] ?? null);
+        if (!$requestType) return $data;
+
+        $schema = $requestType->form_schema ?? [];
+
+        // Regular form_data fields
+        foreach ($schema['fields'] ?? [] as $field) {
+            if ($field['type'] === 'file') {
+                $key = $field['key'];
+                $file = $data['form_data'][$key] ?? null;
+                if ($file instanceof \Illuminate\Http\UploadedFile) {
+                    $data['form_data'][$key] = $file->store('pos-requests/attachments', 'public');
+                }
+            }
+        }
+
+        // Items line-item columns
+        foreach ($data['details'] ?? [] as $idx => $item) {
+            foreach ($schema['items_columns'] ?? [] as $col) {
+                if ($col['type'] === 'file') {
+                    $key = $col['key'];
+                    $file = $item[$key] ?? null;
+                    if ($file instanceof \Illuminate\Http\UploadedFile) {
+                        $data['details'][$idx][$key] = $file->store('pos-requests/attachments', 'public');
+                    }
+                }
+            }
+        }
+
+        return $data;
     }
 
     private function getLabelFromSchema($schema, $key, $value): string

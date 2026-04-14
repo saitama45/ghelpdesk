@@ -126,52 +126,95 @@
                 </div>
             </div>
 
-            <h2 class="section-header">Line Item Details ({{ count($posRequest->details) }})</h2>
+            {{-- ── Schema-driven items (form_data['items']) ──────────────────── --}}
+            @if($hasSchemaItems)
+                <h2 class="section-header">Line Item Details ({{ count($schemaItems) }})</h2>
 
-            @foreach($posRequest->details as $index => $detail)
-                <div class="item-card">
-                    <span class="item-number">PRODUCT #{{ $index + 1 }}</span>
-                    <div class="item-title">{{ $detail->product_name }}</div>
-                    <span class="item-subtitle">POS Alias: {{ $detail->pos_name }}</span>
-                    
-                    <div class="item-grid">
-                        <div class="item-col">
-                            <span class="data-label">Price & Type</span>
-                            <span class="data-value">₱{{ number_format($detail->price_amount, 2) }} <span style="font-weight: 400; color: #94a3b8; font-size: 12px;">({{ $detail->price_type }})</span></span>
+                @foreach($schemaItems as $index => $item)
+                    <div class="item-card">
+                        <span class="item-number">ITEM #{{ $index + 1 }}</span>
+                        <table role="presentation" style="width:100%; border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 12px;">
+                            @foreach(array_chunk($itemColumns, 2) as $colRow)
+                                <tr>
+                                    @foreach($colRow as $col)
+                                        @php
+                                            $rawVal = $item[$col['key']] ?? null;
+                                            if ($rawVal === null || $rawVal === '') {
+                                                $cellVal = '—';
+                                            } elseif (!empty($col['options'])) {
+                                                $opts = collect($col['options']);
+                                                if (is_array($rawVal)) {
+                                                    $cellVal = $opts->whereIn('value', $rawVal)->pluck('label')->implode(', ') ?: implode(', ', $rawVal);
+                                                } else {
+                                                    $found = $opts->firstWhere('value', $rawVal);
+                                                    $cellVal = $found ? $found['label'] : $rawVal;
+                                                }
+                                            } elseif (is_array($rawVal)) {
+                                                $cellVal = implode(', ', $rawVal);
+                                            } else {
+                                                $cellVal = $rawVal;
+                                            }
+                                        @endphp
+                                        <td width="50%" style="vertical-align: top; padding: 0 10px 16px 0;">
+                                            <span class="data-label">{{ $col['label'] }}</span>
+                                            <span class="data-value" style="font-size: 14px;">{{ $cellVal }}</span>
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </table>
+                    </div>
+                @endforeach
+
+            {{-- ── Legacy hard-coded items (pos_request_details table) ────────── --}}
+            @elseif($posRequest->details->count())
+                <h2 class="section-header">Line Item Details ({{ $posRequest->details->count() }})</h2>
+
+                @foreach($posRequest->details as $index => $detail)
+                    <div class="item-card">
+                        <span class="item-number">PRODUCT #{{ $index + 1 }}</span>
+                        <div class="item-title">{{ $detail->product_name }}</div>
+                        <span class="item-subtitle">POS Alias: {{ $detail->pos_name }}</span>
+
+                        <div class="item-grid">
+                            <div class="item-col">
+                                <span class="data-label">Price & Type</span>
+                                <span class="data-value">₱{{ number_format($detail->price_amount, 2) }} <span style="font-weight: 400; color: #94a3b8; font-size: 12px;">({{ $detail->price_type }})</span></span>
+                            </div>
+                            <div class="item-col">
+                                <span class="data-label">Validity</span>
+                                <span class="data-value">{{ $detail->validity_date ? $detail->validity_date->format('M d, Y') : 'Immediate' }}</span>
+                            </div>
                         </div>
-                        <div class="item-col">
-                            <span class="data-label">Validity</span>
-                            <span class="data-value">{{ $detail->validity_date ? $detail->validity_date->format('M d, Y') : 'Immediate' }}</span>
+
+                        <div class="item-grid" style="margin-top: 16px;">
+                            <div class="item-col">
+                                <span class="data-label">Category / Sub</span>
+                                <span class="data-value" style="font-size: 14px;">{{ $detail->category }} <span style="color: #cbd5e1;">➔</span> {{ $detail->sub_category }}</span>
+                            </div>
+                            <div class="item-col">
+                                <span class="data-label">Printer / SKU</span>
+                                <span class="data-value" style="font-size: 14px;">{{ $detail->printer }} <span style="color: #cbd5e1;">|</span> {{ $detail->item_code ?? 'N/A' }}</span>
+                            </div>
+                        </div>
+
+                        @if($detail->remarks_mechanics)
+                        <div class="data-row" style="margin-top: 20px; padding: 16px; background-color: #fffbeb; border-radius: 12px; border: 1px solid #fef3c7;">
+                            <span class="data-label" style="color: #92400e;">Remarks & Mechanics</span>
+                            <div style="font-size: 14px; color: #78350f; font-weight: 500;">{{ $detail->remarks_mechanics }}</div>
+                        </div>
+                        @endif
+
+                        <div class="tech-box">
+                            <div class="tech-text">
+                                SC: <span style="color: #0f172a;">{{ $detail->sc }}</span> &nbsp;|&nbsp;
+                                TAX: <span style="color: #0f172a;">{{ $detail->local_tax }}%</span> &nbsp;|&nbsp;
+                                MGR MEAL: <span style="color: #0f172a;">{{ $detail->mgr_meal ? 'YES' : 'NO' }}</span>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="item-grid" style="margin-top: 16px;">
-                        <div class="item-col">
-                            <span class="data-label">Category / Sub</span>
-                            <span class="data-value" style="font-size: 14px;">{{ $detail->category }} <span style="color: #cbd5e1;">➔</span> {{ $detail->sub_category }}</span>
-                        </div>
-                        <div class="item-col">
-                            <span class="data-label">Printer / SKU</span>
-                            <span class="data-value" style="font-size: 14px;">{{ $detail->printer }} <span style="color: #cbd5e1;">|</span> {{ $detail->item_code ?? 'N/A' }}</span>
-                        </div>
-                    </div>
-
-                    @if($detail->remarks_mechanics)
-                    <div class="data-row" style="margin-top: 20px; padding: 16px; background-color: #fffbeb; border-radius: 12px; border: 1px solid #fef3c7;">
-                        <span class="data-label" style="color: #92400e;">Remarks & Mechanics</span>
-                        <div style="font-size: 14px; color: #78350f; font-weight: 500;">{{ $detail->remarks_mechanics }}</div>
-                    </div>
-                    @endif
-
-                    <div class="tech-box">
-                        <div class="tech-text">
-                            SC: <span style="color: #0f172a;">{{ $detail->sc }}</span> &nbsp;|&nbsp; 
-                            TAX: <span style="color: #0f172a;">{{ $detail->local_tax }}%</span> &nbsp;|&nbsp; 
-                            MGR MEAL: <span style="color: #0f172a;">{{ $detail->mgr_meal ? 'YES' : 'NO' }}</span>
-                        </div>
-                    </div>
-                </div>
-            @endforeach
+                @endforeach
+            @endif
 
             <div class="footer-cta">
                 <a href="{{ route('pos-requests.show', $posRequest->id) }}" class="btn">

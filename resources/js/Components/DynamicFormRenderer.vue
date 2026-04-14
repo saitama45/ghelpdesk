@@ -89,7 +89,12 @@ const visibleFields = computed(() => sortedFields.value.filter(isVisible))
 const getValue = (key) => props.modelValue[key] ?? ''
 
 const setValue = (key, value) => {
-    emit('update:modelValue', { ...props.modelValue, [key]: value })
+    const updated = { ...props.modelValue, [key]: value }
+    // Auto-clear child fields that depend on this key
+    props.fields.forEach(f => {
+        if (f.depends_on === key) updated[f.key] = Array.isArray(updated[f.key]) ? [] : ''
+    })
+    emit('update:modelValue', updated)
 }
 
 const getCheckboxValue = (key) => {
@@ -104,11 +109,30 @@ const toggleCheckbox = (key, optValue) => {
     setValue(key, next)
 }
 
+// ── Cascading dropdown helpers ────────────────────────────────────────────────
+const getOptions = (field) => {
+    if (field.depends_on && field.option_map) {
+        return field.option_map[props.modelValue[field.depends_on] ?? ''] ?? []
+    }
+    return field.options ?? []
+}
+
+const getItemColOptions = (col, row) => {
+    if (col.depends_on && col.option_map) {
+        return col.option_map[row[col.depends_on] ?? ''] ?? []
+    }
+    return col.options ?? []
+}
+
 // ── Items table helpers ───────────────────────────────────────────────────────
 const addItemRow = () => {
-    const blank = {}
-    props.itemsColumns.forEach(c => { blank[c.key] = '' })
-    emit('update:items', [...props.items, blank])
+    // Build from all known columns (copies first row values when one exists)
+    const first = props.items[0] ?? {}
+    const newRow = {}
+    props.itemsColumns.forEach(c => { newRow[c.key] = first[c.key] ?? '' })
+    // Ensure any keys already present on first row that aren't in itemsColumns are also carried over
+    Object.keys(first).forEach(k => { if (!(k in newRow)) newRow[k] = '' })
+    emit('update:items', [...props.items, newRow])
 }
 
 const removeItemRow = (idx) => {
@@ -117,7 +141,19 @@ const removeItemRow = (idx) => {
 }
 
 const setItemCell = (rowIdx, key, value) => {
-    const next = props.items.map((row, i) => i === rowIdx ? { ...row, [key]: value } : row)
+    const next = props.items.map((row, i) => {
+        if (i !== rowIdx) return row
+        // Normalise: always include every column key so nothing is silently dropped
+        // even if the row was initialised before itemsColumns were available
+        const base = {}
+        props.itemsColumns.forEach(c => { base[c.key] = row[c.key] ?? '' })
+        const updated = { ...base, [key]: value }
+        // Auto-clear child columns that depend on this key
+        props.itemsColumns.forEach(c => {
+            if (c.depends_on === key) updated[c.key] = Array.isArray(updated[c.key]) ? [] : ''
+        })
+        return updated
+    })
     emit('update:items', next)
 }
 
@@ -138,6 +174,18 @@ const buildBlankRow = () => {
     props.itemsColumns.forEach(c => { r[c.key] = '' })
     return r
 }
+
+// ── File attachment helpers ───────────────────────────────────────────────────
+// Returns a public URL for a stored path (e.g. "pos-requests/attachments/abc.jpg")
+const storageUrl = (path) => path ? `/storage/${path}` : null
+
+const isImagePath = (path) => {
+    if (!path || typeof path !== 'string') return false
+    return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(path)
+}
+
+// True when value is an existing stored path (string), not a fresh File object
+const isStoredFile = (value) => typeof value === 'string' && value.length > 0
 </script>
 
 <template>
@@ -181,13 +229,13 @@ const buildBlankRow = () => {
                         :class="inputClass"
                     >
                         <option value="">-- select --</option>
-                        <option v-for="opt in (field.options || [])" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                        <option v-for="opt in getOptions(field)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                     </select>
 
                     <!-- radio -->
                     <div v-else-if="field.type === 'radio'" class="flex flex-wrap gap-2">
                         <button
-                            v-for="opt in (field.options || [])" :key="opt.value"
+                            v-for="opt in getOptions(field)" :key="opt.value"
                             type="button"
                             @click="setValue(field.key, opt.value)"
                             :class="[
@@ -202,7 +250,7 @@ const buildBlankRow = () => {
                     <!-- checkbox_group -->
                     <div v-else-if="field.type === 'checkbox_group'" class="flex flex-wrap gap-2">
                         <button
-                            v-for="opt in (field.options || [])" :key="opt.value"
+                            v-for="opt in getOptions(field)" :key="opt.value"
                             type="button"
                             @click="toggleCheckbox(field.key, opt.value)"
                             :class="[
@@ -227,14 +275,34 @@ const buildBlankRow = () => {
                     </div>
 
                     <!-- file -->
-                    <input
-                        v-else-if="field.type === 'file'"
-                        type="file"
-                        :multiple="field.multiple"
-                        @change="setValue(field.key, field.multiple ? $event.target.files : $event.target.files[0])"
-                        :required="field.required"
-                        class="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
-                    />
+                    <template v-else-if="field.type === 'file'">
+                        <!-- Existing upload preview -->
+                        <div v-if="isStoredFile(getValue(field.key))" class="mb-2 flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                            <a :href="storageUrl(getValue(field.key))" target="_blank" rel="noopener" class="flex items-center gap-2 min-w-0">
+                                <img v-if="isImagePath(getValue(field.key))"
+                                     :src="storageUrl(getValue(field.key))"
+                                     class="h-12 w-12 object-cover rounded-lg border border-gray-200 flex-shrink-0"
+                                     alt="attachment preview" />
+                                <span v-else class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-indigo-50 rounded-lg border border-indigo-100">
+                                    <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                                    </svg>
+                                </span>
+                                <span class="text-xs font-bold text-indigo-600 hover:underline truncate">
+                                    {{ getValue(field.key).split('/').pop() }}
+                                </span>
+                            </a>
+                            <span class="ml-auto text-[10px] text-gray-400 font-bold uppercase flex-shrink-0">Current</span>
+                        </div>
+                        <input
+                            type="file"
+                            :multiple="field.multiple"
+                            @change="setValue(field.key, field.multiple ? $event.target.files : $event.target.files[0])"
+                            :required="field.required && !isStoredFile(getValue(field.key))"
+                            class="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
+                        />
+                        <p v-if="isStoredFile(getValue(field.key))" class="mt-1 text-[10px] text-gray-400 italic">Choose a new file to replace the current attachment.</p>
+                    </template>
 
                     <!-- help text -->
                     <p v-if="field.help_text" class="mt-1.5 text-[10px] text-gray-400 font-medium italic ml-1">{{ field.help_text }}</p>
@@ -255,7 +323,7 @@ const buildBlankRow = () => {
                 <button type="button" @click="addItemRow"
                     class="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-100">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                    Add {{ itemLabel }}
+                    Add Item
                 </button>
             </div>
 
@@ -289,7 +357,7 @@ const buildBlankRow = () => {
                                 @change="setItemCell(rowIdx, col.key, $event.target.value)"
                                 :class="inputClass">
                                 <option value="">-- select --</option>
-                                <option v-for="opt in (col.options || [])" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                                <option v-for="opt in getItemColOptions(col, row)" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
 
                             <!-- textarea -->
@@ -302,7 +370,7 @@ const buildBlankRow = () => {
 
                             <!-- radio -->
                             <div v-else-if="col.type === 'radio'" class="flex flex-wrap gap-2 p-1">
-                                <button v-for="opt in (col.options || [])" :key="opt.value"
+                                <button v-for="opt in getItemColOptions(col, row)" :key="opt.value"
                                     type="button"
                                     @click="setItemCell(rowIdx, col.key, opt.value)"
                                     :class="[
@@ -316,7 +384,7 @@ const buildBlankRow = () => {
 
                             <!-- checkbox_group -->
                             <div v-else-if="col.type === 'checkbox_group'" class="flex flex-wrap gap-2 p-1">
-                                <button v-for="opt in (col.options || [])" :key="opt.value"
+                                <button v-for="opt in getItemColOptions(col, row)" :key="opt.value"
                                     type="button"
                                     @click="toggleItemCellCheckbox(rowIdx, col.key, opt.value)"
                                     :class="[
@@ -339,11 +407,32 @@ const buildBlankRow = () => {
                             </div>
 
                             <!-- file -->
-                            <input v-else-if="col.type === 'file'"
-                                type="file"
-                                @change="setItemCell(rowIdx, col.key, $event.target.files[0])"
-                                class="block w-full text-[10px] text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
-                            />
+                            <template v-else-if="col.type === 'file'">
+                                <!-- Existing upload preview -->
+                                <div v-if="isStoredFile(row[col.key])" class="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-xl border border-gray-200">
+                                    <a :href="storageUrl(row[col.key])" target="_blank" rel="noopener" class="flex items-center gap-2 min-w-0">
+                                        <img v-if="isImagePath(row[col.key])"
+                                             :src="storageUrl(row[col.key])"
+                                             class="h-10 w-10 object-cover rounded-lg border border-gray-200 flex-shrink-0"
+                                             alt="attachment preview" />
+                                        <span v-else class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-indigo-50 rounded-lg border border-indigo-100">
+                                            <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                                            </svg>
+                                        </span>
+                                        <span class="text-[10px] font-bold text-indigo-600 hover:underline truncate">
+                                            {{ row[col.key].split('/').pop() }}
+                                        </span>
+                                    </a>
+                                    <span class="ml-auto text-[10px] text-gray-400 font-bold uppercase flex-shrink-0">Current</span>
+                                </div>
+                                <input
+                                    type="file"
+                                    @change="setItemCell(rowIdx, col.key, $event.target.files[0])"
+                                    class="block w-full text-[10px] text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
+                                />
+                                <p v-if="isStoredFile(row[col.key])" class="mt-0.5 text-[10px] text-gray-400 italic">Choose a new file to replace.</p>
+                            </template>
 
                             <!-- default: text/number/date/email/tel -->
                             <input v-else
@@ -357,6 +446,13 @@ const buildBlankRow = () => {
                     </div>
                 </div>
             </div>
+
+            <!-- Add Item button below last row -->
+            <button type="button" @click="addItemRow"
+                class="w-full flex items-center justify-center gap-2 px-6 py-3 border-2 border-dashed border-indigo-200 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 rounded-2xl text-xs font-black uppercase tracking-widest transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                Add Item
+            </button>
         </div>
     </div>
 </template>
