@@ -325,14 +325,20 @@ const landingPageOptions = [
         ]
     },
     {
-        group: 'Operations',
+        group: 'Admin Task',
         options: [
             { label: 'DTR (Attendance)', value: 'attendance.index' },
             { label: 'Attendance Logs', value: 'attendance.logs' },
+            { label: 'Scheduling', value: 'schedules.index' },
+            { label: 'Presence', value: 'presence.index' },
+        ]
+    },
+    {
+        group: 'Operations',
+        options: [
             { label: 'Tickets', value: 'tickets.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
             { label: 'SAP Requests', value: 'sap-requests.index' },
-            { label: 'Scheduling', value: 'schedules.index' },
         ]
     },
     {

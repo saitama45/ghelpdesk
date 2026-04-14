@@ -6,25 +6,14 @@ import {
     Bars3Icon,
     XMarkIcon,
     UserGroupIcon,
-    BuildingOffice2Icon,
-    HomeModernIcon,
-    DocumentTextIcon,
-    CurrencyDollarIcon,
-    CalendarIcon,
     ClipboardDocumentListIcon,
-    WrenchScrewdriverIcon,
-    BellIcon,
-    ChartBarIcon,
-    UsersIcon,
     BuildingOfficeIcon,
-    TagIcon,
     ChevronDownIcon,
     ChevronRightIcon,
     Cog6ToothIcon,
     QueueListIcon,
-    ClockIcon,
-    ChatBubbleBottomCenterTextIcon,
     PresentationChartLineIcon,
+    BriefcaseIcon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 import { usePresence } from '@/Composables/usePresence.js';
@@ -48,6 +37,7 @@ const { currentStatus, init: initPresence, destroy: destroyPresence } = usePrese
 const route = window.route;
 
 const openMenus = ref({
+    adminTask: false,
     operations: false,
     references: false,
     userManagement: false,
@@ -80,7 +70,10 @@ const toggleSidebar = () => {
 // Auto-expand menus based on current route
 onMounted(() => {
     initPresence();
-    if (route().current('tickets.*') || route().current('schedules.*') || route().current('attendance.*') || route().current('presence.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) {
+    if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) {
+        openMenus.value.adminTask = true;
+    }
+    if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) {
         openMenus.value.operations = true;
     }
     if (route().current('companies.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
@@ -101,14 +94,17 @@ onUnmounted(() => {
     destroyPresence();
 });
 
-const canSeeOperations = computed(() => {
-    return hasPermission('attendance.view') || 
-           hasPermission('attendance.logs') || 
-           hasPermission('tickets.view') || 
-           hasPermission('pos_requests.view') ||
-           hasPermission('sap_requests.view') ||
+const canSeeAdminTask = computed(() => {
+    return hasPermission('attendance.view') ||
+           hasPermission('attendance.logs') ||
            hasPermission('schedules.view') ||
            hasPermission('presence.view');
+});
+
+const canSeeOperations = computed(() => {
+    return hasPermission('tickets.view') ||
+           hasPermission('pos_requests.view') ||
+           hasPermission('sap_requests.view');
 });
 const canSeeReferences = computed(() => {
     return hasPermission('companies.view') ||
@@ -207,27 +203,27 @@ const canSeeSettings = computed(() => {
                     </div>
                 </Link>
 
-                <!-- Operations Section -->
-                <div v-if="canSeeOperations" class="space-y-1 pt-2">
+                <!-- Admin Task Section -->
+                <div v-if="canSeeAdminTask" class="space-y-1 pt-2">
                     <button
-                        @click="toggleMenu('operations')"
+                        @click="toggleMenu('adminTask')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('tickets.*') || route().current('schedules.*') || route().current('presence.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) && !openMenus.operations
+                            (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) && !openMenus.adminTask
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
                     >
-                        <QueueListIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Operations</span>
-                        <ChevronDownIcon v-if="!isCollapsed && openMenus.operations" class="w-4 h-4 ml-2" />
-                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.operations" class="w-4 h-4 ml-2" />
+                        <BriefcaseIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Admin Task</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.adminTask" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.adminTask" class="w-4 h-4 ml-2" />
                         <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Operations
+                            Admin Task
                         </div>
                     </button>
 
-                    <div v-if="!isCollapsed && openMenus.operations" class="pl-10 space-y-1 mt-1 transition-all duration-300">
+                    <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
                             v-if="hasPermission('attendance.view')"
                             :href="route('attendance.index')"
@@ -248,6 +244,50 @@ const canSeeSettings = computed(() => {
                         >
                             <span>Attendance Logs</span>
                         </Link>
+                        <Link
+                            v-if="hasPermission('schedules.view')"
+                            :href="route('schedules.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Scheduling</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('presence.view')"
+                            :href="route('presence.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Presence</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Operations Section -->
+                <div v-if="canSeeOperations" class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('operations')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) && !openMenus.operations
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <QueueListIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Operations</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.operations" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.operations" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Operations
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.operations" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
                             v-if="hasPermission('tickets.view')"
                             :href="route('tickets.index')"
@@ -277,26 +317,6 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>SAP Requests</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('schedules.view')"
-                            :href="route('schedules.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Scheduling</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('presence.view')"
-                            :href="route('presence.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Presence</span>
                         </Link>
                     </div>
                 </div>
