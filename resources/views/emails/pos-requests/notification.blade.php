@@ -128,36 +128,18 @@
 
             {{-- ── Schema-driven items (form_data['items']) ──────────────────── --}}
             @if($hasSchemaItems)
-                <h2 class="section-header">Line Item Details ({{ count($schemaItems) }})</h2>
+                <h2 class="section-header">Line Item Details ({{ $resolvedItems->count() }})</h2>
 
-                @foreach($schemaItems as $index => $item)
+                @foreach($resolvedItems as $index => $itemFields)
                     <div class="item-card">
                         <span class="item-number">ITEM #{{ $index + 1 }}</span>
                         <table role="presentation" style="width:100%; border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 12px;">
-                            @foreach(array_chunk($itemColumns, 2) as $colRow)
+                            @foreach(array_chunk($itemFields, 2) as $colRow)
                                 <tr>
-                                    @foreach($colRow as $col)
-                                        @php
-                                            $rawVal = $item[$col['key']] ?? null;
-                                            if ($rawVal === null || $rawVal === '') {
-                                                $cellVal = '—';
-                                            } elseif (!empty($col['options'])) {
-                                                $opts = collect($col['options']);
-                                                if (is_array($rawVal)) {
-                                                    $cellVal = $opts->whereIn('value', $rawVal)->pluck('label')->implode(', ') ?: implode(', ', $rawVal);
-                                                } else {
-                                                    $found = $opts->firstWhere('value', $rawVal);
-                                                    $cellVal = $found ? $found['label'] : $rawVal;
-                                                }
-                                            } elseif (is_array($rawVal)) {
-                                                $cellVal = implode(', ', $rawVal);
-                                            } else {
-                                                $cellVal = $rawVal;
-                                            }
-                                        @endphp
+                                    @foreach($colRow as $field)
                                         <td width="50%" style="vertical-align: top; padding: 0 10px 16px 0;">
-                                            <span class="data-label">{{ $col['label'] }}</span>
-                                            <span class="data-value" style="font-size: 14px;">{{ $cellVal }}</span>
+                                            <span class="data-label">{{ $field['label'] }}</span>
+                                            <span class="data-value" style="font-size: 14px;">{{ $field['value'] }}</span>
                                         </td>
                                     @endforeach
                                 </tr>

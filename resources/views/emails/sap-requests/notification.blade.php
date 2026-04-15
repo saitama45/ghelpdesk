@@ -96,39 +96,30 @@
                 </div>
             </div>
 
-            @php $formData = $sapRequest->form_data ?? []; @endphp
-            @if(!empty($formData))
+            @if(!empty($resolvedFormFields))
             <div class="fields-card">
                 <span class="fields-title">Form Details</span>
-                @foreach($formData as $key => $value)
-                    @php
-                        $displayVal = is_array($value) ? implode(', ', $value) : ($value ?? '—');
-                        $label = ucwords(str_replace('_', ' ', $key));
-                    @endphp
+                @foreach($resolvedFormFields as $field)
                     <div class="field-row">
-                        <span class="field-key">{{ $label }}</span>
-                        <span class="field-val">{{ $displayVal }}</span>
+                        <span class="field-key">{{ $field['label'] }}</span>
+                        <span class="field-val">{{ $field['value'] }}</span>
                     </div>
                 @endforeach
             </div>
             @endif
 
-            @if($sapRequest->items && $sapRequest->items->count() > 0)
+            @if($resolvedItems->isNotEmpty())
             <div class="items-section">
                 <h2 style="font-size: 16px; font-weight: 900; color: #1e293b; margin-bottom: 16px;">
-                    Items ({{ $sapRequest->items->count() }})
+                    Items ({{ $resolvedItems->count() }})
                 </h2>
-                @foreach($sapRequest->items as $index => $item)
+                @foreach($resolvedItems as $index => $itemFields)
                 <div class="item-card">
                     <span class="item-number">Item #{{ $index + 1 }}</span>
-                    @foreach($item->item_data as $key => $value)
-                        @php
-                            $displayVal = is_array($value) ? implode(', ', $value) : ($value ?? '—');
-                            $label = ucwords(str_replace('_', ' ', $key));
-                        @endphp
+                    @foreach($itemFields as $field)
                         <div class="field-row" style="border-bottom: 1px solid #f1f5f9; padding: 8px 0;">
-                            <span class="field-key">{{ $label }}</span>
-                            <span class="field-val">{{ $displayVal }}</span>
+                            <span class="field-key">{{ $field['label'] }}</span>
+                            <span class="field-val">{{ $field['value'] }}</span>
                         </div>
                     @endforeach
                 </div>

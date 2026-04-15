@@ -294,6 +294,9 @@ const createTicket = () => {
             if (typeof value === 'boolean') {
                 value = value ? 1 : 0;
             }
+            if (value === null || value === undefined || value === '') {
+                return; // skip — backend treats missing nullable fields as null
+            }
             formData.append(key, value);
         }
     });

@@ -48,14 +48,76 @@ class PosRequestNotification extends Mailable
         $schemaItems = $this->posRequest->form_data['items'] ?? [];
         $hasSchema   = !empty($schema['has_items']) && !empty($itemCols);
 
+        $resolvedItems = collect();
+        if ($hasSchema) {
+            $resolvedItems = collect($schemaItems)->map(
+                fn($item) => $this->resolveFields($itemCols, $item)
+            )->values();
+        }
+
         return new Content(
             view: 'emails.pos-requests.notification',
             with: [
                 'hasSchemaItems' => $hasSchema && count($schemaItems) > 0,
-                'itemColumns'    => $itemCols,
-                'schemaItems'    => $schemaItems,
+                'resolvedItems'  => $resolvedItems,
             ],
         );
+    }
+
+    /**
+     * Resolve a data array against its field definitions, returning
+     * [['label' => ..., 'value' => ...], ...] with option codes replaced
+     * by their human-readable labels.
+     */
+    private function resolveFields(array $fieldDefs, array $data): array
+    {
+        $fieldMap = collect($fieldDefs)->keyBy('key');
+        $result   = [];
+
+        foreach ($data as $key => $value) {
+            $field = $fieldMap->get($key);
+
+            $label = $field['label'] ?? ucwords(str_replace('_', ' ', $key));
+
+            if ($value === null || $value === '') {
+                $result[] = ['label' => $label, 'value' => '—'];
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $result[] = ['label' => $label, 'value' => $value ? 'Yes' : 'No'];
+                continue;
+            }
+
+            $options = null;
+            if ($field) {
+                if (!empty($field['option_map']) && !empty($field['depends_on'])) {
+                    $options = $field['option_map'][$data[$field['depends_on']] ?? ''] ?? null;
+                }
+                if ($options === null) {
+                    $options = $field['options'] ?? null;
+                }
+            }
+
+            if (!empty($options)) {
+                $optMap = collect($options)->keyBy('value');
+                if (is_array($value)) {
+                    $displayVal = collect($value)
+                        ->map(fn($v) => $optMap->get((string)$v)['label'] ?? (string)$v)
+                        ->implode(', ');
+                } else {
+                    $displayVal = $optMap->get((string)$value)['label'] ?? (string)$value;
+                }
+            } elseif (is_array($value)) {
+                $displayVal = implode(', ', array_map('strval', $value));
+            } else {
+                $displayVal = (string)$value;
+            }
+
+            $result[] = ['label' => $label, 'value' => $displayVal ?: '—'];
+        }
+
+        return $result;
     }
 
     /**
