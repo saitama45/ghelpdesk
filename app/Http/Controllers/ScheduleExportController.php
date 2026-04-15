@@ -4,14 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ScheduleExportController extends Controller
 {
     public function pdf(Request $request)
     {
+        if ($request->input('view') === 'report') {
+            return $this->reportPdf($request);
+        }
+
         $query = Schedule::with(['user', 'scheduleStores.store'])
             ->orderBy('start_time', 'asc');
 
@@ -108,5 +114,89 @@ class ScheduleExportController extends Controller
         ]);
 
         return $pdf->setPaper('a4', 'landscape')->stream('scheduling-report.pdf');
+    }
+
+    private function reportPdf(Request $request)
+    {
+        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $selectedYearsInput = $request->input('report_years');
+        $selectedYears = $selectedYearsInput
+            ? collect((array) $selectedYearsInput)->map(fn ($y) => (int) $y)->unique()->sort()->values()->toArray()
+            : [now()->year - 1, now()->year, now()->year + 1];
+
+        $pivotUsersQuery = User::whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name');
+        if ($request->filled('sub_unit')) {
+            $pivotUsersQuery->where('sub_unit', $request->sub_unit);
+        }
+        $pivotUsers = $pivotUsersQuery->get(['id', 'name', 'sub_unit']);
+        $pivotUserIds = $pivotUsers->pluck('id')->toArray();
+
+        if (empty($pivotUserIds) || empty($selectedYears)) {
+            $pdf = Pdf::loadView('pdf.schedules-report', [
+                'pivotYears' => $selectedYears,
+                'pivotStatuses' => $pivotStatuses,
+                'pivotData' => [],
+                'filters' => [
+                    'sub_unit' => $request->input('sub_unit'),
+                    'store_id' => $request->input('store_id'),
+                ],
+            ]);
+
+            return $pdf->setPaper('a4', 'landscape')->stream('scheduling-report-view.pdf');
+        }
+
+        $rawQuery = DB::table('schedules')
+            ->select([
+                'user_id',
+                DB::raw('YEAR(start_time) as year'),
+                'status',
+                DB::raw('SUM(DATEDIFF(day, CAST(start_time AS DATE), CAST(end_time AS DATE)) + 1) as day_count'),
+            ])
+            ->whereIn(DB::raw('YEAR(start_time)'), $selectedYears)
+            ->whereIn('user_id', $pivotUserIds)
+            ->whereIn('status', $pivotStatuses);
+
+        if ($request->filled('store_id')) {
+            $storeId = $request->store_id;
+            $rawQuery->whereExists(function ($sub) use ($storeId) {
+                $sub->from('schedule_stores')
+                    ->whereColumn('schedule_stores.schedule_id', 'schedules.id')
+                    ->where('schedule_stores.store_id', $storeId);
+            });
+        }
+
+        $grouped = $rawQuery
+            ->groupBy('user_id', DB::raw('YEAR(start_time)'), 'status')
+            ->get()
+            ->groupBy('user_id');
+
+        $pivotData = [];
+        foreach ($pivotUsers as $user) {
+            $byYear = $grouped->get($user->id, collect())->groupBy('year');
+            $rowData = ['unit' => $user->sub_unit, 'name' => $user->name, 'years' => []];
+
+            foreach ($selectedYears as $year) {
+                $yearRows = $byYear->get((string) $year, collect());
+                $yearCounts = [];
+                foreach ($pivotStatuses as $status) {
+                    $yearCounts[$status] = (int) ($yearRows->firstWhere('status', $status)?->day_count ?? 0);
+                }
+                $rowData['years'][$year] = $yearCounts;
+            }
+
+            $pivotData[] = $rowData;
+        }
+
+        $pdf = Pdf::loadView('pdf.schedules-report', [
+            'pivotYears' => $selectedYears,
+            'pivotStatuses' => $pivotStatuses,
+            'pivotData' => $pivotData,
+            'filters' => [
+                'sub_unit' => $request->input('sub_unit'),
+                'store_id' => $request->input('store_id'),
+            ],
+        ]);
+
+        return $pdf->setPaper('a4', 'landscape')->stream('scheduling-report-view.pdf');
     }
 }

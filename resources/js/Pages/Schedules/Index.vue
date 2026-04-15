@@ -26,14 +26,13 @@
                         <!-- Action Buttons -->
                         <div class="flex items-center space-x-2">
                             <button
-                                v-if="currentView === 'calendar'"
                                 @click="exportPdf"
                                 class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm"
                             >
                                 <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                 </svg>
-                                <span>Export PDF</span>
+                                <span>{{ currentView === 'report' ? 'Export Report PDF' : 'Export PDF' }}</span>
                             </button>
                             <button
                                 v-if="hasPermission('schedules.create')"
@@ -151,7 +150,7 @@
                 <!-- Pivot Report View -->
                 <div v-else-if="currentView === 'report'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900">3-Year Schedule Comparison</h3>
+                        <h3 class="text-lg font-bold text-gray-900">{{ reportTitle }}</h3>
                         <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Live Report</span>
                     </div>
                     <div class="overflow-x-auto custom-scrollbar">
@@ -161,13 +160,13 @@
                                 <tr>
                                     <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-0 min-w-[100px]">Unit</th>
                                     <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[100px] min-w-[150px]">Name</th>
-                                    <th v-for="year in pivotYears" :key="'header-' + year" :colspan="pivotStatuses.length" class="px-4 py-2 text-center text-xs font-black text-white bg-slate-700 uppercase tracking-widest border-r border-slate-600 last:border-r-0">
+                                    <th v-for="year in activePivotYears" :key="'header-' + year" :colspan="pivotStatuses.length" class="px-4 py-2 text-center text-xs font-black text-white bg-slate-700 uppercase tracking-widest border-r border-slate-600 last:border-r-0">
                                         {{ year }}
                                     </th>
                                 </tr>
                                 <!-- Status Headers -->
                                 <tr>
-                                    <template v-for="year in pivotYears" :key="'status-' + year">
+                                    <template v-for="year in activePivotYears" :key="'status-' + year">
                                         <th v-for="status in pivotStatuses" :key="year + '-' + status" class="px-2 py-2 text-center text-[9px] font-black text-gray-500 uppercase tracking-tighter border-r border-gray-200 border-t last:border-r-0" :class="status === 'Holiday' ? 'bg-red-50/50' : (status === 'Restday' ? 'bg-gray-50/50' : 'bg-white')">
                                             {{ status === 'On-site' ? 'On-site' : (status === 'Off-site' ? 'Off-site' : (status === 'Restday' ? 'RD' : status)) }}
                                         </th>
@@ -177,7 +176,7 @@
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <!-- Loading state -->
                                 <tr v-if="isPivotLoading">
-                                    <td :colspan="2 + (pivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center">
+                                    <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center">
                                         <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -192,7 +191,7 @@
                                         <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10">{{ row.unit || '-' }}</td>
                                         <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10">{{ row.name }}</td>
 
-                                        <template v-for="year in pivotYears" :key="'data-' + year">
+                                        <template v-for="year in activePivotYears" :key="'data-' + year">
                                             <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0" :class="[
                                                 (row.years[year] && row.years[year][status] > 0) ? 'font-black text-blue-700' : 'font-medium text-gray-300',
                                                 status === 'Holiday' ? 'bg-red-50/30' : (status === 'Restday' ? 'bg-gray-50/30' : '')
@@ -202,7 +201,7 @@
                                         </template>
                                     </tr>
                                     <tr v-if="pivotData.length === 0">
-                                        <td :colspan="2 + (pivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
                                             No schedule data found for the reporting period.
                                         </td>
                                     </tr>
@@ -552,6 +551,11 @@ const selectedReportYears = useRemember(
     props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears],
     'schedules.selectedReportYears'
 )
+const activePivotYears = computed(() => [...selectedReportYears.value].sort((a, b) => a - b))
+const reportTitle = computed(() => {
+    const count = activePivotYears.value.length
+    return `${count}-Year Schedule Comparison`
+})
 const currentView = useRemember('calendar', 'schedules.currentView')
 const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
 
@@ -707,11 +711,19 @@ const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
 
 const exportPdf = () => {
-    const params = {
-        start: visibleRange.value.start,
-        end: visibleRange.value.end,
-    };
-    if (filterUser.value)    params.user_id  = filterUser.value;
+    const params = currentView.value === 'report'
+        ? {
+            view: 'report',
+            report_years: selectedReportYears.value,
+        }
+        : {
+            start: visibleRange.value.start,
+            end: visibleRange.value.end,
+        };
+
+    if (currentView.value === 'calendar' && filterUser.value) {
+        params.user_id = filterUser.value;
+    }
     if (filterSubUnit.value) params.sub_unit = filterSubUnit.value;
     if (filterStore.value)   params.store_id = filterStore.value;
 
