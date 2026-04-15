@@ -2,14 +2,63 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import { useToast } from '@/Composables/useToast'
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 
 const props = defineProps({
     requestType: { type: Object, required: true },
     show: { type: Boolean, default: false },
+    users: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['close'])
 
 const { showError } = useToast()
+
+const normalizeApprovalMatrix = (matrix = [], levels = null) => {
+    const source = Array.isArray(matrix) ? matrix : []
+    const inferredLevels = source.reduce((max, entry) => {
+        const level = Number(entry?.level ?? 0)
+        return level > max ? level : max
+    }, 0)
+    const totalLevels = Math.max(0, Number(levels ?? inferredLevels) || 0)
+
+    return Array.from({ length: totalLevels }, (_, index) => {
+        const level = index + 1
+        const existing = source.find(entry => Number(entry?.level) === level)
+
+        return {
+            level,
+            user_ids: Array.isArray(existing?.user_ids)
+                ? [...new Set(existing.user_ids.map(Number).filter(Boolean))]
+                : [],
+        }
+    })
+}
+
+const cloneOption = (option = {}) => {
+    const legacyUserIds = Array.isArray(option.approver_user_ids) ? option.approver_user_ids : []
+    const hasMatrix = Array.isArray(option.approval_matrix) && option.approval_matrix.length > 0
+    const approvalLevels = Math.max(
+        Number(option.approval_levels ?? 0) || 0,
+        hasMatrix ? option.approval_matrix.length : 0,
+        legacyUserIds.length > 0 ? 1 : 0,
+    )
+    const approvalMatrix = hasMatrix
+        ? normalizeApprovalMatrix(option.approval_matrix, approvalLevels)
+        : normalizeApprovalMatrix(
+            legacyUserIds.length > 0 ? [{ level: 1, user_ids: legacyUserIds }] : [],
+            approvalLevels
+        )
+
+    return {
+        ...option,
+        approver_user_ids: [...legacyUserIds],
+        has_custom_approval_matrix: Boolean(option.has_custom_approval_matrix || hasMatrix || legacyUserIds.length > 0),
+        approval_levels: approvalLevels,
+        approval_matrix: approvalMatrix,
+    }
+}
+
+const cloneOptions = (options = []) => options.map(cloneOption)
 
 // ── Schema state ──────────────────────────────────────────────────────────────
 const activeTab = ref('fields')
@@ -37,12 +86,12 @@ watch(() => props.show, (val) => {
         : {}
     schema.fields = (src.fields || []).map(f => ({
         ...f,
-        options: (f.options || []).map(o => ({ ...o })),
+        options: cloneOptions(f.options),
         option_map: deepCloneOptionMap(f.option_map),
     }))
     schema.approver_fields = (src.approver_fields || []).map(f => ({
         ...f,
-        options: (f.options || []).map(o => ({ ...o })),
+        options: cloneOptions(f.options),
         option_map: deepCloneOptionMap(f.option_map),
     }))
     schema.has_items = src.has_items ?? false
@@ -78,6 +127,13 @@ const activeFields = computed(() => {
     return activeTab.value === 'approver' ? schema.approver_fields : schema.fields
 })
 
+const userOptions = computed(() =>
+    (props.users || []).map(user => ({
+        id: user.id,
+        name: user.email ? `${user.name} (${user.email})` : user.name,
+    }))
+)
+
 const blankField = () => ({
     key: '',
     label: '',
@@ -94,6 +150,16 @@ const blankField = () => ({
     _conditionValue: '',
     _dependentOptions: false,
     _dependsOnField: '',
+    has_option_approvers: false,
+})
+
+const blankOption = () => ({
+    label: '',
+    value: '',
+    approver_user_ids: [],
+    has_custom_approval_matrix: false,
+    approval_levels: 0,
+    approval_matrix: [],
 })
 
 const openAddField = () => {
@@ -105,7 +171,7 @@ const openEditField = (idx) => {
     const f = activeFields.value[idx]
     editingField.value = {
         ...f,
-        options: (f.options || []).map(o => ({ ...o })),
+        options: cloneOptions(f.options),
         option_map: f.option_map
             ? Object.fromEntries(Object.entries(f.option_map).map(([k, v]) => [k, v.map(o => ({ ...o }))]))
             : {},
@@ -150,6 +216,35 @@ const saveField = () => {
         f.depends_on = null
         f.option_map = {}
     }
+
+    if (f.type !== 'checkbox_group' || f._dependentOptions) {
+        f.has_option_approvers = false
+        f.options = (f.options || []).map(option => ({
+            ...option,
+            approver_user_ids: [],
+            has_custom_approval_matrix: false,
+            approval_levels: 0,
+            approval_matrix: [],
+        }))
+    } else if (f.has_option_approvers) {
+        f.options = (f.options || []).map(option => {
+            const hasCustomApprovalMatrix = Boolean(option.has_custom_approval_matrix)
+            const approvalLevels = hasCustomApprovalMatrix
+                ? Math.max(0, Number(option.approval_levels) || 0)
+                : 0
+            const approvalMatrix = hasCustomApprovalMatrix
+                ? normalizeApprovalMatrix(option.approval_matrix, approvalLevels)
+                : []
+
+            return {
+                ...option,
+                approver_user_ids: approvalMatrix.find(entry => entry.level === 1)?.user_ids ?? [],
+                has_custom_approval_matrix: hasCustomApprovalMatrix,
+                approval_levels: approvalLevels,
+                approval_matrix: approvalMatrix,
+            }
+        })
+    }
     delete f._dependentOptions
     delete f._dependsOnField
 
@@ -173,7 +268,20 @@ const moveField = (idx, dir) => {
 }
 
 // Option rows
-const addOption = () => editingField.value.options.push({ label: '', value: '' })
+const syncOptionApprovalMatrix = (option) => {
+    if (!option) return
+    const levels = Math.max(0, Number(option.approval_levels) || 0)
+    option.approval_matrix = normalizeApprovalMatrix(option.approval_matrix, levels)
+    option.approver_user_ids = option.approval_matrix.find(entry => entry.level === 1)?.user_ids ?? []
+}
+
+const countAssignedApprovers = (option) => {
+    return (option?.approval_matrix ?? []).reduce((total, level) => {
+        return total + (Array.isArray(level.user_ids) ? level.user_ids.length : 0)
+    }, 0)
+}
+
+const addOption = () => editingField.value.options.push(blankOption())
 const removeOption = (i) => editingField.value.options.splice(i, 1)
 
 // ── Items columns ─────────────────────────────────────────────────────────────
@@ -420,14 +528,125 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
 
                                     <!-- Branch A: flat options -->
                                     <template v-if="!editingField._dependentOptions">
+                                        <label v-if="editingField.type === 'checkbox_group'" class="flex items-center gap-2 cursor-pointer select-none">
+                                            <input
+                                                v-model="editingField.has_option_approvers"
+                                                type="checkbox"
+                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <span class="text-xs font-bold text-gray-700">
+                                                Use Custom Approval Matrix
+                                                <span class="text-gray-400 font-normal">(assign approval levels per checkbox option)</span>
+                                            </span>
+                                        </label>
+                                        <div v-if="editingField.type === 'checkbox_group' && editingField.has_option_approvers" class="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
+                                            <p class="text-xs font-bold text-indigo-900">Option-level approval overrides</p>
+                                            <p class="text-[11px] text-indigo-700 mt-1">
+                                                Selected checkbox options can replace the normal request-type approvers level by level. Unconfigured levels still fall back to the default approval matrix.
+                                            </p>
+                                        </div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Options</label>
-                                        <div class="space-y-1.5">
-                                            <div v-for="(opt, oi) in editingField.options" :key="oi" class="flex gap-2 items-center">
-                                                <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
-                                                <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-indigo-500 focus:border-indigo-500" />
-                                                <button @click="removeOption(oi)" class="text-rose-400 hover:text-rose-600 p-1">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                                </button>
+                                        <div class="space-y-3">
+                                            <div
+                                                v-for="(opt, oi) in editingField.options"
+                                                :key="oi"
+                                                class="rounded-2xl border border-gray-200 bg-white p-3"
+                                            >
+                                                <div class="flex gap-2 items-start">
+                                                    <input v-model="opt.label" @input="opt.value = slugify(opt.label)" placeholder="Label" class="flex-1 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
+                                                    <input v-model="opt.value" placeholder="Value" class="flex-1 rounded-xl border-gray-200 text-xs font-mono bg-white focus:ring-indigo-500 focus:border-indigo-500" />
+                                                    <button @click="removeOption(oi)" class="text-rose-400 hover:text-rose-600 p-1 mt-1">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                    </button>
+                                                </div>
+                                                <div v-if="editingField.has_option_approvers" class="mt-3 space-y-3 border-t border-gray-100 pt-3">
+                                                    <div class="flex items-center justify-between gap-3">
+                                                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                                                            <input
+                                                                v-model="opt.has_custom_approval_matrix"
+                                                                type="checkbox"
+                                                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                                @change="!opt.has_custom_approval_matrix && (opt.approval_levels = 0, opt.approval_matrix = [], opt.approver_user_ids = [])"
+                                                            />
+                                                            <span class="text-xs font-bold text-gray-700">Custom Matrix for this option</span>
+                                                        </label>
+                                                        <span
+                                                            v-if="opt.has_custom_approval_matrix && opt.approval_levels > 0"
+                                                            class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                                        >
+                                                            {{ opt.approval_levels }} Level{{ opt.approval_levels > 1 ? 's' : '' }}
+                                                        </span>
+                                                    </div>
+
+                                                    <div v-if="opt.has_custom_approval_matrix" class="flex flex-wrap gap-2">
+                                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+                                                            {{ countAssignedApprovers(opt) }} assigned approver{{ countAssignedApprovers(opt) !== 1 ? 's' : '' }}
+                                                        </span>
+                                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                            Level 1 {{ (opt.approval_matrix.find(entry => entry.level === 1)?.user_ids?.length ?? 0) > 0 ? 'configured' : 'falls back to default' }}
+                                                        </span>
+                                                    </div>
+
+                                                    <div v-if="opt.has_custom_approval_matrix" class="space-y-3">
+                                                        <div>
+                                                            <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">Custom Approval Levels</label>
+                                                            <div class="flex items-center space-x-3 bg-gray-50 rounded-2xl p-1 border border-gray-200">
+                                                                <button
+                                                                    type="button"
+                                                                    @click="opt.approval_levels = Math.max(0, (Number(opt.approval_levels) || 0) - 1); syncOptionApprovalMatrix(opt)"
+                                                                    class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                                                                >
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                                                                    </svg>
+                                                                </button>
+                                                                <input
+                                                                    v-model.number="opt.approval_levels"
+                                                                    type="number"
+                                                                    min="0"
+                                                                    class="w-full text-center bg-transparent border-none focus:ring-0 text-xs font-black text-gray-900"
+                                                                    @input="syncOptionApprovalMatrix(opt)"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    @click="opt.approval_levels = (Number(opt.approval_levels) || 0) + 1; syncOptionApprovalMatrix(opt)"
+                                                                    class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"
+                                                                >
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <div v-if="opt.approval_levels > 0" class="space-y-2">
+                                                            <div
+                                                                v-for="level in opt.approval_matrix"
+                                                                :key="`${oi}-${level.level}`"
+                                                                class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4"
+                                                            >
+                                                                <div class="flex items-center justify-between gap-3 mb-3">
+                                                                    <div>
+                                                                        <p class="text-sm font-black text-gray-900">Level {{ level.level }}</p>
+                                                                        <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black">
+                                                                            {{ level.user_ids.length }} approver{{ level.user_ids.length !== 1 ? 's' : '' }} assigned
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <MultiAutocomplete
+                                                                    v-model="level.user_ids"
+                                                                    :options="userOptions"
+                                                                    label-key="name"
+                                                                    value-key="id"
+                                                                    placeholder="Search and assign approvers..."
+                                                                    :limit="4"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <p v-else class="text-xs text-gray-400 italic">Increase the level count to configure approvers for this option.</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                         <button @click="addOption" class="mt-2 text-xs text-indigo-600 font-bold hover:underline">+ Add option</button>

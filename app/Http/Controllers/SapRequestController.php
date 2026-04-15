@@ -148,7 +148,7 @@ class SapRequestController extends Controller implements HasMiddleware
         $currentLevel = (int) $sapRequest->current_approval_level;
         $authUserId = (int) auth()->id();
 
-        if ($currentLevel <= 0 || !$this->canUserApproveLevel($requestType, $currentLevel, $authUserId)) {
+        if ($currentLevel <= 0 || !$this->canUserApproveLevel($requestType, $sapRequest->form_data ?? [], $currentLevel, $authUserId)) {
             return redirect()->back()->with('error', 'You are not assigned as an approver for this approval level.');
         }
 
@@ -163,6 +163,7 @@ class SapRequestController extends Controller implements HasMiddleware
 
         DB::transaction(function () use ($request, $sapRequest) {
             $requestType = $sapRequest->requestType;
+            $effectiveApprovalLevels = $this->getEffectiveApprovalLevels($requestType, $sapRequest->form_data ?? []);
 
             SapRequestApproval::create([
                 'sap_request_id' => $sapRequest->id,
@@ -178,7 +179,7 @@ class SapRequestController extends Controller implements HasMiddleware
                 ]);
             }
 
-            if ($sapRequest->current_approval_level >= $requestType->approval_levels) {
+            if ($sapRequest->current_approval_level >= $effectiveApprovalLevels) {
                 $sapRequest->update([
                     'status'                => 'Approved',
                     'current_approval_level'=> 0,
@@ -195,20 +196,19 @@ class SapRequestController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Request approved successfully.');
     }
 
-    private function canUserApproveLevel(RequestType $requestType, int $level, int $userId): bool
+    private function canUserApproveLevel(RequestType $requestType, array $formData, int $level, int $userId): bool
     {
-        $assignedUsers = collect($requestType->approver_matrix ?? [])
-            ->firstWhere('level', $level)['user_ids'] ?? [];
-
-        $assignedUsers = collect($assignedUsers)
-            ->map(fn ($id) => (int) $id)
-            ->filter()
-            ->values();
+        $assignedUsers = $this->sapRequestService->getApproverIdsForLevel($requestType, $formData, $level);
 
         if ($assignedUsers->isEmpty()) {
             return true;
         }
 
         return $assignedUsers->contains($userId);
+    }
+
+    private function getEffectiveApprovalLevels(RequestType $requestType, array $formData): int
+    {
+        return $this->sapRequestService->getEffectiveApprovalLevels($requestType, $formData);
     }
 }

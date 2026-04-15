@@ -197,6 +197,21 @@ const toggleSystem = (system) => {
         showError('At least one system must be selected')
     }
 }
+
+const countCheckboxApprovalOverrides = (type) => {
+    const fields = type?.form_schema?.fields ?? []
+
+    return fields.filter(field => {
+        if (field?.type !== 'checkbox_group' || !field?.has_option_approvers) {
+            return false
+        }
+
+        return (field.options ?? []).some(option =>
+            (Array.isArray(option.approval_matrix) && option.approval_matrix.length > 0) ||
+            (Array.isArray(option.approver_user_ids) && option.approver_user_ids.length > 0)
+        )
+    }).length
+}
 </script>
 
 <template>
@@ -310,6 +325,9 @@ const toggleSystem = (system) => {
                                             <span v-if="type.form_schema?.approver_fields?.length" class="text-[9px] font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                                                 {{ type.form_schema.approver_fields.length }} approver fields
                                             </span>
+                                            <span v-if="countCheckboxApprovalOverrides(type) > 0" class="text-[9px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                                {{ countCheckboxApprovalOverrides(type) }} checkbox override{{ countCheckboxApprovalOverrides(type) !== 1 ? 's' : '' }}
+                                            </span>
                                             <span v-if="type.form_schema?.has_items && type.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                                                 {{ type.form_schema.items_columns.length }} line item cols
                                             </span>
@@ -368,6 +386,7 @@ const toggleSystem = (system) => {
             v-if="fieldBuilderTarget"
             :show="showFieldBuilder"
             :request-type="fieldBuilderTarget"
+            :users="props.users"
             @close="showFieldBuilder = false; fieldBuilderTarget = null"
         />
 

@@ -27,11 +27,88 @@ const approvalForm = useForm({
 const authUserId = computed(() => page.props.auth.user.id)
 
 const approverFields = computed(() => props.sapRequest.request_type?.form_schema?.approver_fields ?? [])
-const approverMatrix = computed(() => props.sapRequest.request_type?.approver_matrix ?? [])
+const schemaFields = computed(() => props.sapRequest.request_type?.form_schema?.fields ?? [])
+const requestFormData = computed(() => props.sapRequest.form_data ?? {})
+const normalizeApproverMatrix = (matrix = [], levels = 0) => {
+    const totalLevels = Math.max(0, Number(levels) || 0)
+
+    return Array.from({ length: totalLevels }, (_, index) => {
+        const level = index + 1
+        const existing = Array.isArray(matrix)
+            ? matrix.find(entry => Number(entry?.level) === level)
+            : null
+
+        return {
+            level,
+            user_ids: Array.isArray(existing?.user_ids)
+                ? [...new Set(existing.user_ids.map(Number).filter(Boolean))]
+                : [],
+        }
+    })
+}
+
+const resolveOptionApprovalMatrix = (option = {}) => {
+    if (Array.isArray(option.approval_matrix) && option.approval_matrix.length > 0) {
+        const levels = Math.max(Number(option.approval_levels ?? 0) || 0, option.approval_matrix.length)
+        return normalizeApproverMatrix(option.approval_matrix, levels)
+    }
+
+    const legacyIds = Array.isArray(option.approver_user_ids)
+        ? [...new Set(option.approver_user_ids.map(Number).filter(Boolean))]
+        : []
+
+    return legacyIds.length > 0
+        ? [{ level: 1, user_ids: legacyIds }]
+        : []
+}
+
+const effectiveApproverMatrix = computed(() => {
+    const baseLevels = Number(props.sapRequest.request_type?.approval_levels ?? 0)
+    const baseMatrix = normalizeApproverMatrix(props.sapRequest.request_type?.approver_matrix ?? [], baseLevels)
+    const dynamicLevelMap = {}
+
+    schemaFields.value
+        .filter(field => field.type === 'checkbox_group' && field.has_option_approvers && field.key)
+        .forEach(field => {
+            const selectedValues = requestFormData.value[field.key]
+            if (!Array.isArray(selectedValues) || selectedValues.length === 0) {
+                return
+            }
+
+            ;(field.options || [])
+                .filter(option => selectedValues.includes(option.value))
+                .forEach(option => {
+                    resolveOptionApprovalMatrix(option).forEach(entry => {
+                        const level = Number(entry.level)
+                        if (!level) return
+
+                        if (!Array.isArray(dynamicLevelMap[level])) {
+                            dynamicLevelMap[level] = []
+                        }
+
+                        dynamicLevelMap[level].push(...(entry.user_ids || []).map(Number).filter(Boolean))
+                    })
+                })
+        })
+
+    const dynamicLevels = Object.keys(dynamicLevelMap).map(Number).filter(Boolean)
+    const totalLevels = Math.max(baseLevels, dynamicLevels.length ? Math.max(...dynamicLevels) : 0)
+
+    return Array.from({ length: totalLevels }, (_, index) => {
+        const level = index + 1
+        const dynamicUserIds = [...new Set((dynamicLevelMap[level] || []).map(Number).filter(Boolean))]
+        const baseEntry = baseMatrix.find(entry => Number(entry.level) === level)
+
+        return {
+            level,
+            user_ids: dynamicUserIds.length > 0 ? dynamicUserIds : (baseEntry?.user_ids ?? []),
+        }
+    })
+})
+
 const assignedApproversByLevel = computed(() => {
     const users = props.users ?? []
-
-    return approverMatrix.value.reduce((carry, entry) => {
+    return effectiveApproverMatrix.value.reduce((carry, entry) => {
         const level = Number(entry.level)
         const ids = Array.isArray(entry.user_ids) ? entry.user_ids.map(Number) : []
 
@@ -97,7 +174,9 @@ const canApprove = computed(() => {
         !alreadyApprovedCurrentLevel
 })
 
-const totalLevels = computed(() => Number(props.sapRequest.request_type?.approval_levels ?? 0))
+const totalLevels = computed(() => {
+    return effectiveApproverMatrix.value.length
+})
 const stages = computed(() => Array.from({ length: totalLevels.value }, (_, i) => i + 1))
 
 function getApprovalForLevel(lvl) {
