@@ -57,6 +57,8 @@ const nextAction = computed(() => {
     return (!props.lastLog || props.lastLog.type === 'time_out') ? 'Time In' : 'Time Out';
 });
 
+const isTimeOutFlow = computed(() => nextAction.value === 'Time Out');
+
 // Current presence status label and style for the status dot/text.
 // Three states:
 //   'not-started' — no log at all today (fresh day, user hasn't timed in yet)
@@ -113,6 +115,7 @@ const scheduleWindow = computed(() => {
 });
 
 const isWithinScheduleWindow = computed(() => {
+    if (isTimeOutFlow.value && props.todaySchedule && props.lastLog?.type === 'time_in') return true;
     if (!scheduleWindow.value) return false;
 
     return nowMs.value >= scheduleWindow.value.graceStart.getTime() &&
@@ -121,6 +124,7 @@ const isWithinScheduleWindow = computed(() => {
 
 const scheduleWindowMessage = computed(() => {
     if (!scheduleWindow.value) return 'No active On-site/Off-site schedule for your current time.';
+    if (isTimeOutFlow.value && props.todaySchedule && props.lastLog?.type === 'time_in') return '';
 
     if (nowMs.value < scheduleWindow.value.graceStart.getTime()) {
         return `Time In will be available at ${scheduleWindow.value.graceStart.toLocaleTimeString('en-US', {

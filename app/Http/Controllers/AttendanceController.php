@@ -46,26 +46,8 @@ class AttendanceController extends Controller implements HasMiddleware
                 ->get();
         }
 
-        // Find the user's active On-site/Off-site schedule for the current time.
-        // Grace period is per schedule_store; query with a generous max window then filter in PHP.
         $now = now('Asia/Manila');
-
-        $todaySchedule = Schedule::where('user_id', $user->id)
-            ->whereIn('status', ['On-site', 'Off-site'])
-            ->where('start_time', '<=', $now->copy()->addMinutes(480))
-            ->where('end_time', '>=', $now)
-            ->with(['scheduleStores.store'])
-            ->get()
-            ->first(function ($s) use ($now) {
-                return $s->scheduleStores->some(
-                    fn ($ss) => $this->isWithinScheduleStoreWindow($ss, $now)
-                ) || $s->scheduleStores->isEmpty();
-            });
-
-        // Find the specific active store entry within the schedule
-        $activeStoreEntry = $todaySchedule
-            ? $this->resolveActiveScheduleStore($todaySchedule, $now)
-            : null;
+        [$todaySchedule, $activeStoreEntry] = $this->resolveScheduleForAttendance($user->id, $now);
 
         // Scope lastLog to the specific segment if available, otherwise the whole schedule.
         // Also restrict to today's date so yesterday's logs for a multi-day schedule are ignored.
@@ -220,24 +202,11 @@ class AttendanceController extends Controller implements HasMiddleware
         // Grace period is per schedule_store; query with a generous max window then filter in PHP.
         $now = now('Asia/Manila');
 
-        $schedule = Schedule::where('user_id', $user->id)
-            ->whereIn('status', ['On-site', 'Off-site'])
-            ->where('start_time', '<=', $now->copy()->addMinutes(480))
-            ->where('end_time', '>=', $now)
-            ->with('scheduleStores')
-            ->get()
-            ->first(function ($s) use ($now) {
-                return $s->scheduleStores->some(
-                    fn ($ss) => $this->isWithinScheduleStoreWindow($ss, $now)
-                ) || $s->scheduleStores->isEmpty(); // fallback for legacy schedules
-            });
+        [$schedule, $activeStoreEntry] = $this->resolveScheduleForAttendance($user->id, $now);
 
         if (!$schedule) {
             return back()->with('error', 'No active On-site or Off-site schedule found for your current time. Please contact your supervisor.');
         }
-
-        // Find the specific active store entry, normalizing legacy schedules when possible.
-        $activeStoreEntry = $this->resolveActiveScheduleStore($schedule, $now);
 
         // Determine type per-segment if possible, otherwise per-schedule
         $lastLogQuery = $this->buildSegmentLogsQuery($user->id, $schedule, $activeStoreEntry, $now);
@@ -322,6 +291,51 @@ class AttendanceController extends Controller implements HasMiddleware
         });
 
         return $activeStoreEntry ?: null;
+    }
+
+    private function resolveScheduleForAttendance(int $userId, $now): array
+    {
+        $schedule = Schedule::where('user_id', $userId)
+            ->whereIn('status', ['On-site', 'Off-site'])
+            ->where('start_time', '<=', $now->copy()->addMinutes(480))
+            ->where('end_time', '>=', $now)
+            ->with(['scheduleStores.store'])
+            ->get()
+            ->first(function ($s) use ($now) {
+                return $s->scheduleStores->some(
+                    fn ($ss) => $this->isWithinScheduleStoreWindow($ss, $now)
+                ) || $s->scheduleStores->isEmpty();
+            });
+
+        if ($schedule) {
+            return [$schedule, $this->resolveActiveScheduleStore($schedule, $now)];
+        }
+
+        // Allow Time Out for an already-open same-day attendance session,
+        // even if the strict active window is no longer matched.
+        $lastOpenLog = AttendanceLog::with(['schedule.scheduleStores.store', 'scheduleStore.store'])
+            ->where('user_id', $userId)
+            ->whereDate('log_time', $now->toDateString())
+            ->where('type', 'time_in')
+            ->latest('log_time')
+            ->first();
+
+        if (!$lastOpenLog || !$lastOpenLog->schedule) {
+            return [null, null];
+        }
+
+        $schedule = $lastOpenLog->schedule;
+
+        if (!in_array($schedule->status, ['On-site', 'Off-site'], true)) {
+            return [null, null];
+        }
+
+        $segmentLogs = $this->buildSegmentLogsQuery($userId, $schedule, $lastOpenLog->scheduleStore, $now)->pluck('type');
+        if ($segmentLogs->contains('time_in') && !$segmentLogs->contains('time_out')) {
+            return [$schedule->loadMissing(['scheduleStores.store']), $lastOpenLog->scheduleStore];
+        }
+
+        return [null, null];
     }
 
     private function isWithinScheduleStoreWindow(ScheduleStore $scheduleStore, $now): bool
