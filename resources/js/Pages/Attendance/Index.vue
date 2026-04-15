@@ -50,9 +50,21 @@ const form = useForm({
     public_ip: null,
 });
 
+const DEFAULT_GRACE_PERIOD_MINUTES = 30;
+
 const nextAction = computed(() => {
     if (!props.todaySchedule) return null;
     return (!props.lastLog || props.lastLog.type === 'time_out') ? 'Time In' : 'Time Out';
+});
+
+// Current presence status label and style for the status dot/text.
+// Three states:
+//   'not-started' — no log at all today (fresh day, user hasn't timed in yet)
+//   'in'          — last log today was a time_in (currently on-site)
+//   'out'         — last log today was a time_out (finished for the day)
+const presenceState = computed(() => {
+    if (!props.lastLog) return 'not-started';
+    return props.lastLog.type === 'time_in' ? 'in' : 'out';
 });
 
 const currentTime = ref(new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -84,6 +96,46 @@ const recentLogCooldownLabel = computed(() => {
     return `${m}:${String(s).padStart(2, '0')}`;
 });
 
+const scheduleWindow = computed(() => {
+    if (!props.todaySchedule?.start_time || !props.todaySchedule?.end_time) return null;
+
+    const start = new Date(props.todaySchedule.start_time);
+    const end = new Date(props.todaySchedule.end_time);
+    const graceStart = new Date(start.getTime() - DEFAULT_GRACE_PERIOD_MINUTES * 60 * 1000);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+
+    return {
+        start,
+        end,
+        graceStart,
+    };
+});
+
+const isWithinScheduleWindow = computed(() => {
+    if (!scheduleWindow.value) return false;
+
+    return nowMs.value >= scheduleWindow.value.graceStart.getTime() &&
+           nowMs.value <= scheduleWindow.value.end.getTime();
+});
+
+const scheduleWindowMessage = computed(() => {
+    if (!scheduleWindow.value) return 'No active On-site/Off-site schedule for your current time.';
+
+    if (nowMs.value < scheduleWindow.value.graceStart.getTime()) {
+        return `Time In will be available at ${scheduleWindow.value.graceStart.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Asia/Manila',
+        })}.`;
+    }
+
+    if (nowMs.value > scheduleWindow.value.end.getTime()) {
+        return 'This schedule window has already ended.';
+    }
+
+    return '';
+});
 let clockInterval;
 
 const loadGoogleMapsScript = () => {
@@ -429,6 +481,7 @@ const submit = async () => {
 
 const canSave = computed(() => {
     return !!props.todaySchedule &&
+           isWithinScheduleWindow.value &&
            !props.isSegmentComplete &&
            !isRecentlyLogged.value &&
            !!capturedImage.value &&
@@ -439,6 +492,7 @@ const canSave = computed(() => {
 
 const statusMessage = computed(() => {
     if (!props.todaySchedule) return 'No active On-site/Off-site schedule for your current time.';
+    if (!isWithinScheduleWindow.value) return scheduleWindowMessage.value;
     if (props.isSegmentComplete) return 'You have already completed Time In and Time Out for this schedule.';
     if (isRecentlyLogged.value) return `A log was already recorded recently. Please wait ${recentLogCooldownLabel.value} before logging again.`;
     if (props.assignedStores.length === 0) return 'No assigned work sites found.';
@@ -594,9 +648,9 @@ const statusMessage = computed(() => {
                             <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
                             <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
                             <div class="flex items-center gap-2 mt-1 justify-center md:justify-start">
-                                <div :class="['w-2 h-2 rounded-full animate-pulse', nextAction === 'Time In' ? 'bg-red-500' : 'bg-green-500']"></div>
-                                <p class="text-xs sm:text-sm font-bold" :class="nextAction === 'Time In' ? 'text-red-600' : 'text-green-600'">
-                                    Status: {{ nextAction === 'Time In' ? 'OUT' : 'IN' }}
+                                <div :class="['w-2 h-2 rounded-full animate-pulse', presenceState === 'in' ? 'bg-green-500' : presenceState === 'out' ? 'bg-red-500' : 'bg-gray-400']"></div>
+                                <p class="text-xs sm:text-sm font-bold" :class="presenceState === 'in' ? 'text-green-600' : presenceState === 'out' ? 'text-red-600' : 'text-gray-500'">
+                                    Status: {{ presenceState === 'in' ? 'IN' : presenceState === 'out' ? 'OUT' : 'Not Yet Logged' }}
                                 </p>
                             </div>
                         </div>
@@ -653,3 +707,4 @@ const statusMessage = computed(() => {
 <style scoped>
 .mirrored { transform: scaleX(-1); }
 </style>
+

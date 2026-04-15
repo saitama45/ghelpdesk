@@ -12,7 +12,7 @@ class ScheduleExportController extends Controller
 {
     public function pdf(Request $request)
     {
-        $query = Schedule::with(['user', 'store', 'scheduleStores.store'])
+        $query = Schedule::with(['user', 'scheduleStores.store'])
             ->orderBy('start_time', 'asc');
 
         // Date range
@@ -37,12 +37,9 @@ class ScheduleExportController extends Controller
             $query->whereHas('user', fn($q) => $q->where('sub_unit', $request->sub_unit));
         }
 
-        // Store filter (checks both main store_id and schedule_stores)
+        // Store filter
         if ($request->filled('store_id')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('store_id', $request->store_id)
-                  ->orWhereHas('scheduleStores', fn($sq) => $sq->where('store_id', $request->store_id));
-            });
+            $query->whereHas('scheduleStores', fn($sq) => $sq->where('store_id', $request->store_id));
         }
 
         $schedules = $query->get();
@@ -97,7 +94,7 @@ class ScheduleExportController extends Controller
                     'actual_time_in' => $timeIn?->log_time,
                     'actual_time_out'=> $timeOut?->log_time,
                     'date'           => $schedule->start_time->format('Y-m-d'),
-                    'store'          => $schedule->store->name ?? '-',
+                    'store'          => '-',
                     'start_time'     => $schedule->start_time,
                     'end_time'       => $schedule->end_time,
                 ];

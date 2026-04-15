@@ -32,7 +32,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Schedule::with(['user', 'store', 'ticket.item', 'scheduleStores.store']);
+        $query = Schedule::with(['user', 'ticket.item', 'scheduleStores.store']);
 
         if ($request->filled('start') && $request->filled('end')) {
             $query->whereBetween('start_time', [$request->start, $request->end]);
@@ -51,10 +51,7 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         if ($request->filled('store_id')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('store_id', $request->store_id)
-                  ->orWhereHas('scheduleStores', fn ($sq) => $sq->where('store_id', $request->store_id));
-            });
+            $query->whereHas('scheduleStores', fn ($sq) => $sq->where('store_id', $request->store_id));
         }
 
         $rawSchedules = $query->get();
@@ -82,7 +79,6 @@ class ScheduleController extends Controller implements HasMiddleware
             return [
                 'id'              => $schedule->id,
                 'user_id'         => $schedule->user_id,
-                'store_id'        => $schedule->store_id,
                 'ticket_id'       => $schedule->ticket_id,
                 'status'          => $schedule->status,
                 'start_time'      => $schedule->start_time->toIso8601String(),
@@ -95,7 +91,6 @@ class ScheduleController extends Controller implements HasMiddleware
                 'actual_time_in'  => $actualTimeIn,
                 'actual_time_out' => $actualTimeOut,
                 'user'            => $schedule->user,
-                'store'           => $schedule->store,
                 'schedule_stores' => $schedule->scheduleStores->map(function ($ss) use ($logsBySegment) {
                     $segLogs = $logsBySegment->get($ss->id, collect());
                     return [
@@ -198,18 +193,17 @@ class ScheduleController extends Controller implements HasMiddleware
             'status'       => $request->status,
             'start_time'   => $startTime,
             'end_time'     => $endTime,
-            'store_id'     => null,
             'pickup_start' => $request->pickup_start,
             'pickup_end'   => $request->pickup_end,
             'backlogs_start' => $request->backlogs_start,
             'backlogs_end'   => $request->backlogs_end,
         ]);
 
-        foreach ($storeEntries as $entry) {
+        foreach ($this->expandStoreEntries($storeEntries) as $entry) {
             $schedule->scheduleStores()->create([
                 'store_id'             => $entry['store_id'] ?? null,
-                'start_time'           => Carbon::parse($entry['start_time']),
-                'end_time'             => Carbon::parse($entry['end_time']),
+                'start_time'           => $entry['start_time'],
+                'end_time'             => $entry['end_time'],
                 'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
                 'remarks'              => $entry['remarks'] ?? null,
             ]);
@@ -273,7 +267,6 @@ class ScheduleController extends Controller implements HasMiddleware
             'status'         => $request->status,
             'start_time'     => $startTime,
             'end_time'       => $endTime,
-            'store_id'       => null,
             'pickup_start'   => $request->pickup_start,
             'pickup_end'     => $request->pickup_end,
             'backlogs_start' => $request->backlogs_start,
@@ -282,17 +275,65 @@ class ScheduleController extends Controller implements HasMiddleware
 
         // Rebuild store entries
         $schedule->scheduleStores()->delete();
-        foreach ($storeEntries as $entry) {
+        foreach ($this->expandStoreEntries($storeEntries) as $entry) {
             $schedule->scheduleStores()->create([
                 'store_id'             => $entry['store_id'] ?? null,
-                'start_time'           => Carbon::parse($entry['start_time']),
-                'end_time'             => Carbon::parse($entry['end_time']),
+                'start_time'           => $entry['start_time'],
+                'end_time'             => $entry['end_time'],
                 'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
                 'remarks'              => $entry['remarks'] ?? null,
             ]);
         }
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
+    }
+
+    /**
+     * Expand each store entry into one record per calendar day.
+     *
+     * A single entry with start=2026-04-15 08:00 / end=2026-04-20 17:00
+     * becomes six rows, each covering one day at the same start/end times.
+     */
+    private function expandStoreEntries(array $storeEntries): array
+    {
+        $expanded = [];
+
+        foreach ($storeEntries as $entry) {
+            $start     = Carbon::parse($entry['start_time']);
+            $end       = Carbon::parse($entry['end_time']);
+            $startDate = $start->copy()->startOfDay();
+            $endDate   = $end->copy()->startOfDay();
+
+            // Single-day entry — keep as-is
+            if ($startDate->eq($endDate)) {
+                $expanded[] = [
+                    'store_id'             => $entry['store_id'] ?? null,
+                    'start_time'           => $start,
+                    'end_time'             => $end,
+                    'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
+                    'remarks'              => $entry['remarks'] ?? null,
+                ];
+                continue;
+            }
+
+            // Multi-day — one row per day using the same time-of-day
+            $startTimeStr = $start->format('H:i:s');
+            $endTimeStr   = $end->format('H:i:s');
+            $current      = $startDate->copy();
+
+            while ($current->lte($endDate)) {
+                $expanded[] = [
+                    'store_id'             => $entry['store_id'] ?? null,
+                    'start_time'           => $current->copy()->setTimeFromTimeString($startTimeStr),
+                    'end_time'             => $current->copy()->setTimeFromTimeString($endTimeStr),
+                    'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
+                    'remarks'              => $entry['remarks'] ?? null,
+                ];
+                $current->addDay();
+            }
+        }
+
+        return $expanded;
     }
 
     public function reportData(Request $request)
@@ -333,13 +374,10 @@ class ScheduleController extends Controller implements HasMiddleware
 
         if ($request->filled('store_id')) {
             $storeId = $request->store_id;
-            $rawQuery->where(function ($q) use ($storeId) {
-                $q->where('store_id', $storeId)
-                  ->orWhereExists(function ($sub) use ($storeId) {
-                      $sub->from('schedule_stores')
-                          ->whereColumn('schedule_stores.schedule_id', 'schedules.id')
-                          ->where('schedule_stores.store_id', $storeId);
-                  });
+            $rawQuery->whereExists(function ($sub) use ($storeId) {
+                $sub->from('schedule_stores')
+                    ->whereColumn('schedule_stores.schedule_id', 'schedules.id')
+                    ->where('schedule_stores.store_id', $storeId);
             });
         }
 
@@ -640,7 +678,6 @@ class ScheduleController extends Controller implements HasMiddleware
 
                 $toInsert[] = [
                     'user_id'    => $candidate['user_id'],
-                    'store_id'   => null,
                     'status'     => $candidate['status'],
                     'start_time' => $startTime->toDateTimeString(),
                     'end_time'   => $endTime->toDateTimeString(),

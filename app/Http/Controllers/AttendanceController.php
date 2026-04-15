@@ -54,12 +54,11 @@ class AttendanceController extends Controller implements HasMiddleware
             ->whereIn('status', ['On-site', 'Off-site'])
             ->where('start_time', '<=', $now->copy()->addMinutes(480))
             ->where('end_time', '>=', $now)
-            ->with(['store', 'scheduleStores.store'])
+            ->with(['scheduleStores.store'])
             ->get()
             ->first(function ($s) use ($now) {
                 return $s->scheduleStores->some(
-                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
-                              && $ss->end_time->gte($now)
+                    fn ($ss) => $this->isWithinScheduleStoreWindow($ss, $now)
                 ) || $s->scheduleStores->isEmpty();
             });
 
@@ -72,28 +71,14 @@ class AttendanceController extends Controller implements HasMiddleware
         // Also restrict to today's date so yesterday's logs for a multi-day schedule are ignored.
         $lastLog = null;
         if ($todaySchedule) {
-            $lastLogQuery = AttendanceLog::where('user_id', $user->id)
-                ->where('schedule_id', $todaySchedule->id)
-                ->where('log_time', '>=', $now->copy()->startOfDay())
-                ->where('log_time', '<=', $now->copy()->endOfDay());
-
-            if ($activeStoreEntry) {
-                $lastLogQuery->where('schedule_store_id', $activeStoreEntry->id);
-            }
-
+            $lastLogQuery = $this->buildSegmentLogsQuery($user->id, $todaySchedule, $activeStoreEntry, $now);
             $lastLog = $lastLogQuery->latest('log_time')->first();
         }
 
         // Check if the current segment already has both time_in and time_out for TODAY.
         $isSegmentComplete = false;
         if ($todaySchedule) {
-            $segmentLogsQuery = AttendanceLog::where('user_id', $user->id)
-                ->where('schedule_id', $todaySchedule->id)
-                ->where('log_time', '>=', $now->copy()->startOfDay())
-                ->where('log_time', '<=', $now->copy()->endOfDay());
-            if ($activeStoreEntry) {
-                $segmentLogsQuery->where('schedule_store_id', $activeStoreEntry->id);
-            }
+            $segmentLogsQuery = $this->buildSegmentLogsQuery($user->id, $todaySchedule, $activeStoreEntry, $now);
             $segmentTypes = $segmentLogsQuery->pluck('type');
             $isSegmentComplete = $segmentTypes->contains('time_in') && $segmentTypes->contains('time_out');
         }
@@ -110,9 +95,7 @@ class AttendanceController extends Controller implements HasMiddleware
                 'end_time'   => ($activeStoreEntry ? $activeStoreEntry->end_time : $todaySchedule->end_time)->toIso8601String(),
                 'store'      => ($activeStoreEntry && $activeStoreEntry->store)
                     ? ['id' => $activeStoreEntry->store->id, 'name' => $activeStoreEntry->store->name]
-                    : ($todaySchedule->store 
-                        ? ['id' => $todaySchedule->store->id, 'name' => $todaySchedule->store->name]
-                        : null),
+                    : null,
             ] : null,
         ]);
     }
@@ -122,7 +105,7 @@ class AttendanceController extends Controller implements HasMiddleware
         $user = auth()->user();
         
         // Base query - load relationships for both segment-based and legacy logs
-        $query = AttendanceLog::with(['user', 'scheduleStore.store', 'schedule.store'])->latest('log_time');
+        $query = AttendanceLog::with(['user', 'scheduleStore.store'])->latest('log_time');
 
         // Privacy Logic: Show only own logs if not Admin/Dev/Manager
         if (!$user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) && !$user->is_manager) {
@@ -138,10 +121,7 @@ class AttendanceController extends Controller implements HasMiddleware
 
         // Filter by Store
         if ($request->filled('store_id')) {
-            $query->where(function($q) use ($request) {
-                $q->whereHas('scheduleStore', fn($sq) => $sq->where('store_id', $request->store_id))
-                  ->orWhereHas('schedule', fn($sq) => $sq->where('store_id', $request->store_id));
-            });
+            $query->whereHas('scheduleStore', fn($sq) => $sq->where('store_id', $request->store_id));
         }
 
         // Filter by Date Range (Default to today if not set)
@@ -248,8 +228,7 @@ class AttendanceController extends Controller implements HasMiddleware
             ->get()
             ->first(function ($s) use ($now) {
                 return $s->scheduleStores->some(
-                    fn ($ss) => $ss->start_time->lte($now->copy()->addMinutes((int)($ss->grace_period_minutes ?? 30)))
-                              && $ss->end_time->gte($now)
+                    fn ($ss) => $this->isWithinScheduleStoreWindow($ss, $now)
                 ) || $s->scheduleStores->isEmpty(); // fallback for legacy schedules
             });
 
@@ -261,25 +240,11 @@ class AttendanceController extends Controller implements HasMiddleware
         $activeStoreEntry = $this->resolveActiveScheduleStore($schedule, $now);
 
         // Determine type per-segment if possible, otherwise per-schedule
-        $lastLogQuery = AttendanceLog::where('user_id', $user->id)
-            ->where('schedule_id', $schedule->id)
-            ->where('log_time', '>=', $now->copy()->startOfDay())
-            ->where('log_time', '<=', $now->copy()->endOfDay());
-
-        if ($activeStoreEntry) {
-            $lastLogQuery->where('schedule_store_id', $activeStoreEntry->id);
-        }
-
+        $lastLogQuery = $this->buildSegmentLogsQuery($user->id, $schedule, $activeStoreEntry, $now);
         $lastLog = $lastLogQuery->latest('log_time')->first();
 
         // Block if both time_in and time_out already exist for this schedule segment
-        $segmentLogsQuery = AttendanceLog::where('user_id', $user->id)
-            ->where('schedule_id', $schedule->id)
-            ->where('log_time', '>=', $now->copy()->startOfDay())
-            ->where('log_time', '<=', $now->copy()->endOfDay());
-        if ($activeStoreEntry) {
-            $segmentLogsQuery->where('schedule_store_id', $activeStoreEntry->id);
-        }
+        $segmentLogsQuery = $this->buildSegmentLogsQuery($user->id, $schedule, $activeStoreEntry, $now);
         $segmentLogs = $segmentLogsQuery->pluck('type');
         if ($segmentLogs->contains('time_in') && $segmentLogs->contains('time_out')) {
             return back()->with('error', 'You have already completed Time In and Time Out for this schedule. No further logging is allowed for this time frame.');
@@ -353,28 +318,40 @@ class AttendanceController extends Controller implements HasMiddleware
     private function resolveActiveScheduleStore(Schedule $schedule, $now): ?ScheduleStore
     {
         $activeStoreEntry = $schedule->scheduleStores->first(function ($ss) use ($now) {
-            return $ss->start_time->lte($now->copy()->addMinutes((int) ($ss->grace_period_minutes ?? 30)))
-                && $ss->end_time->gte($now);
+            return $this->isWithinScheduleStoreWindow($ss, $now);
         });
 
-        if ($activeStoreEntry || $schedule->scheduleStores->isNotEmpty()) {
-            return $activeStoreEntry;
+        return $activeStoreEntry ?: null;
+    }
+
+    private function isWithinScheduleStoreWindow(ScheduleStore $scheduleStore, $now): bool
+    {
+        $graceMinutes = (int) ($scheduleStore->grace_period_minutes ?? 30);
+        $windowStart = $scheduleStore->start_time->copy()->subMinutes($graceMinutes);
+
+        return $windowStart->lte($now) && $scheduleStore->end_time->gte($now);
+    }
+
+    private function buildSegmentLogsQuery(int $userId, Schedule $schedule, ?ScheduleStore $activeStoreEntry, $now)
+    {
+        $query = AttendanceLog::where('user_id', $userId)
+            ->where('schedule_id', $schedule->id)
+            ->where('log_time', '>=', $now->copy()->startOfDay())
+            ->where('log_time', '<=', $now->copy()->endOfDay());
+
+        if (!$activeStoreEntry) {
+            return $query;
         }
 
-        if (!in_array($schedule->status, ['On-site', 'Off-site'], true) || !$schedule->store_id) {
-            return null;
-        }
+        $graceMinutes = (int) ($activeStoreEntry->grace_period_minutes ?? 30);
+        $windowStart = $activeStoreEntry->start_time->copy()->subMinutes($graceMinutes);
+        $windowEnd = $activeStoreEntry->end_time->copy();
 
-        $scheduleStore = $schedule->scheduleStores()->create([
-            'store_id' => $schedule->store_id,
-            'start_time' => $schedule->start_time,
-            'end_time' => $schedule->end_time,
-            'grace_period_minutes' => 30,
-            'remarks' => $schedule->remarks,
-        ]);
-
-        $schedule->setRelation('scheduleStores', collect([$scheduleStore]));
-
-        return $scheduleStore;
+        return $query->where(function ($logQuery) use ($activeStoreEntry, $windowStart, $windowEnd) {
+            $logQuery->where('schedule_store_id', $activeStoreEntry->id)
+                ->orWhere(function ($fallbackQuery) use ($windowStart, $windowEnd) {
+                    $fallbackQuery->whereBetween('log_time', [$windowStart, $windowEnd]);
+                });
+        });
     }
 }
