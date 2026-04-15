@@ -654,6 +654,10 @@ const applyFilter = () => {
         preserveScroll: true,
         replace: true,
     })
+
+    if (currentView.value === 'report') {
+        fetchPivotData()
+    }
 }
 
 const handleVisibleRangeChange = (range) => {
