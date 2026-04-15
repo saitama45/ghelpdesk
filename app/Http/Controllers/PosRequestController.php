@@ -64,7 +64,10 @@ class PosRequestController extends Controller implements HasMiddleware
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
-            'stores' => Store::where('is_active', true)->get(['id', 'code', 'name']),
+            'stores' => Store::with('cluster:id,name')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'brand', 'cluster_id']),
             'priceTypes' => [
                 'In-Store', 
                 'Delivery (GF, FP, Pickaroo)', 
@@ -118,7 +121,10 @@ class PosRequestController extends Controller implements HasMiddleware
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
-            'stores' => Store::where('is_active', true)->get(['id', 'code', 'name']),
+            'stores' => Store::with('cluster:id,name')
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'brand', 'cluster_id']),
             'priceTypes' => [
                 'In-Store', 
                 'Delivery (GF, FP, Pickaroo)', 

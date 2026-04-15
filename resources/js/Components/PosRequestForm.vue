@@ -89,13 +89,63 @@ const selectSuggest = (index, type, val) => {
 
 // Store Selection Logic
 const storeSearch = ref('')
+const selectedCluster = ref('')
+const selectedBrand = ref('')
+
+const clusterOptions = computed(() => {
+    return [...new Set(
+        (props.stores ?? [])
+            .map(store => store.cluster?.name || store.cluster_name || '')
+            .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b))
+})
+
+const brandOptions = computed(() => {
+    return [...new Set(
+        (props.stores ?? [])
+            .map(store => store.brand || '')
+            .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b))
+})
+
 const filteredStores = computed(() => {
-    if (!storeSearch.value) return props.stores.slice(0, 50)
-    const search = storeSearch.value.toLowerCase()
-    return props.stores.filter(s => 
-        s.code.toLowerCase().includes(search) || 
-        s.name.toLowerCase().includes(search)
-    ).slice(0, 100)
+    const search = storeSearch.value.trim().toLowerCase()
+
+    return (props.stores ?? []).filter(store => {
+        const clusterName = store.cluster?.name || store.cluster_name || ''
+        const brandName = store.brand || ''
+        const matchesCluster = !selectedCluster.value || clusterName === selectedCluster.value
+        const matchesBrand = !selectedBrand.value || brandName === selectedBrand.value
+        const matchesSearch = !search
+            || store.code.toLowerCase().includes(search)
+            || store.name.toLowerCase().includes(search)
+            || clusterName.toLowerCase().includes(search)
+            || brandName.toLowerCase().includes(search)
+
+        return matchesCluster && matchesBrand && matchesSearch
+    }).slice(0, search ? 100 : 150)
+})
+
+const autoSelectedStoreCodes = computed(() => filteredStores.value.map(store => store.code))
+const visibleSelectedStoreCodes = computed(() => form.stores_covered.slice(0, 10))
+const hiddenSelectedStoreCount = computed(() => Math.max(form.stores_covered.length - visibleSelectedStoreCodes.value.length, 0))
+
+const clearStoreFilters = () => {
+    storeSearch.value = ''
+    selectedCluster.value = ''
+    selectedBrand.value = ''
+    if (!isAllStores.value) {
+        form.stores_covered = []
+    }
+}
+
+watch([selectedCluster, selectedBrand], ([cluster, brand], [prevCluster, prevBrand]) => {
+    if (cluster === prevCluster && brand === prevBrand) return
+    if (isAllStores.value) form.stores_covered = []
+
+    if (!cluster && !brand) return
+
+    form.stores_covered = autoSelectedStoreCodes.value
 })
 
 const isAllStores = computed(() => form.stores_covered.includes('all'))
@@ -354,26 +404,59 @@ const submit = async () => {
                     </div>
 
                     <div v-if="!isAllStores" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 mb-2">Filter By Cluster</label>
+                                <select v-model="selectedCluster"
+                                        class="w-full bg-white border-2 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none shadow-sm">
+                                    <option value="">All Clusters</option>
+                                    <option v-for="cluster in clusterOptions" :key="cluster" :value="cluster">{{ cluster }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1 mb-2">Filter By Brand</label>
+                                <select v-model="selectedBrand"
+                                        class="w-full bg-white border-2 border-gray-100 rounded-2xl px-5 py-4 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none shadow-sm">
+                                    <option value="">All Brands</option>
+                                    <option v-for="brand in brandOptions" :key="brand" :value="brand">{{ brand }}</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div class="flex flex-col md:flex-row gap-6">
                             <div class="flex-1 relative">
                                 <svg class="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
-                                <input v-model="storeSearch" type="text" placeholder="Search stores by code or name..."
+                                <input v-model="storeSearch" type="text" placeholder="Search stores by code, name, cluster, or brand..."
                                        class="w-full bg-white border-2 border-gray-100 rounded-2xl pl-14 pr-6 py-4 text-sm font-bold focus:border-indigo-500 focus:ring-0 transition-all outline-none shadow-sm">
                             </div>
                             
                             <div class="flex-[2] bg-white border-2 rounded-2xl p-4 min-h-[60px] flex flex-wrap gap-2 shadow-sm transition-colors"
                                  :class="getError('stores_covered') ? 'border-rose-300' : 'border-gray-100'">
                                 <span v-if="form.stores_covered.length === 0" class="text-xs font-bold text-gray-300 italic flex items-center px-2">No stores selected yet...</span>
-                                <button v-for="code in form.stores_covered" :key="code" type="button" @click="removeStoreTag(code)"
+                                <button v-for="code in visibleSelectedStoreCodes" :key="code" type="button" @click="removeStoreTag(code)"
                                         class="group inline-flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black transition-all hover:bg-indigo-600 hover:text-white">
                                     {{ code }}
                                     <svg class="w-3 h-3 ml-2 opacity-50 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </button>
+                                <span v-if="hiddenSelectedStoreCount > 0"
+                                      class="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-600 rounded-xl text-xs font-black uppercase tracking-widest">
+                                    +{{ hiddenSelectedStoreCount }}
+                                </span>
                             </div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-4">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                {{ (selectedCluster || selectedBrand) ? 'Auto-selected' : 'Showing' }} {{ filteredStores.length }} store{{ filteredStores.length !== 1 ? 's' : '' }}
+                            </p>
+                            <button type="button" @click="clearStoreFilters"
+                                    class="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white text-gray-500 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm">
+                                Clear Filters
+                            </button>
                         </div>
 
                         <div class="grid grid-cols-2 md:grid-cols-5 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
@@ -384,6 +467,9 @@ const submit = async () => {
                                 {{ s.code }}
                             </button>
                         </div>
+                        <p v-if="filteredStores.length === 0" class="text-center text-xs font-bold text-gray-400 italic py-6">
+                            No stores matched the selected cluster, brand, and search filters.
+                        </p>
                     </div>
                     <div v-else class="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-indigo-100">
                         <span class="text-indigo-600 font-black text-2xl uppercase italic tracking-tighter opacity-40">Matrix applies to every operational store</span>
