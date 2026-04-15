@@ -673,6 +673,17 @@ class ScheduleController extends Controller implements HasMiddleware
 
         DB::transaction(function () use ($candidates, &$errors, &$imported, &$existingDateMap) {
             $timestamp = now();
+            $maxSqlServerParameters = 2000;
+            $chunkRowsForInsert = function (array $rows) use ($maxSqlServerParameters): array {
+                if (empty($rows)) {
+                    return [];
+                }
+
+                $columnCount = max(1, count($rows[0]));
+                $chunkSize = max(1, (int) floor($maxSqlServerParameters / $columnCount));
+
+                return array_chunk($rows, $chunkSize);
+            };
 
             // Phase 1 — filter out duplicates and build the rows to insert
             $toInsert       = [];  // rows for schedules table
@@ -714,7 +725,7 @@ class ScheduleController extends Controller implements HasMiddleware
             }
 
             // Phase 2 — bulk insert schedules in chunks of 500
-            foreach (array_chunk($toInsert, 500) as $chunk) {
+            foreach ($chunkRowsForInsert($toInsert) as $chunk) {
                 DB::table('schedules')->insert($chunk);
             }
             $imported = count($toInsert);
@@ -758,7 +769,7 @@ class ScheduleController extends Controller implements HasMiddleware
                     ];
                 }
 
-                foreach (array_chunk($storeRows, 500) as $chunk) {
+                foreach ($chunkRowsForInsert($storeRows) as $chunk) {
                     DB::table('schedule_stores')->insert($chunk);
                 }
             }
