@@ -728,7 +728,7 @@ const importTemplateUrl = computed(() =>
 
 const yearOptions = computed(() => {
     const current = new Date().getFullYear()
-    return [current - 1, current, current + 1]
+    return Array.from({ length: 5 }, (_, index) => current - 2 + index)
 })
 
 const openImportModal = () => { showImportModal.value = true }
