@@ -5,7 +5,7 @@
                 <DataTable
                     title="Store Management"
                     subtitle="Manage store locations and assigned users"
-                    search-placeholder="Search stores by name, code, area, brand, cluster or user..."
+                    search-placeholder="Search stores by name, code, area, brand, cluster, email or user..."
                     empty-message="No stores found. Create your first store to get started."
                     :search="pagination.search.value"
                     :data="pagination.data.value"
@@ -76,7 +76,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm text-gray-900">{{ store.brand }}</div>
-                                <div class="text-xs text-gray-500">Cluster: {{ store.cluster }}</div>
+                                <div class="text-xs text-gray-500">Cluster: {{ store.cluster_name || store.cluster?.name || 'Unassigned' }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span v-if="store.class === 'Kitchen'" class="px-2 py-1 bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest rounded-lg border border-amber-100 flex items-center w-fit">
@@ -172,7 +172,7 @@
                         <p class="text-sm text-gray-600">
                             Import stores in bulk using an Excel file. Columns: <span class="font-semibold">code</span>, <span class="font-semibold">name</span>, <span class="font-semibold">email</span>,
                             <span class="font-semibold">sector</span> (1–8), <span class="font-semibold">area</span>, <span class="font-semibold">brand</span>,
-                            <span class="font-semibold">class</span> (dropdown: Regular/Kitchen), <span class="font-semibold">cluster</span>,
+                            <span class="font-semibold">class</span> (dropdown: Regular/Kitchen), <span class="font-semibold">cluster</span> (existing cluster code or name),
                             <span class="font-semibold">latitude</span>, <span class="font-semibold">longitude</span>, <span class="font-semibold">radius_meters</span>,
                             <span class="font-semibold">is_active</span> (1 or 0),
                             <span class="font-semibold">users</span> (semicolon-separated emails, e.g. <span class="font-mono text-xs">john@x.com;jane@x.com</span>).
@@ -375,8 +375,16 @@
                             </div>
                             <div class="md:col-span-3">
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cluster</label>
-                                <input v-model="form.cluster" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <select
+                                    v-model="form.cluster_id"
+                                    required
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                >
+                                    <option disabled value="">Select a cluster</option>
+                                    <option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id">
+                                        {{ cluster.name }} ({{ cluster.code }})
+                                    </option>
+                                </select>
                             </div>
                         </div>
 
@@ -465,6 +473,7 @@ import { usePermission } from '@/Composables/usePermission'
 const props = defineProps({
     stores: Object,
     users: Array,
+    clusters: Array,
     settings: Object
 })
 
@@ -514,7 +523,7 @@ const form = reactive({
     area: '',
     brand: '',
     class: 'Regular',
-    cluster: '',
+    cluster_id: '',
     latitude: null,
     longitude: null,
     radius_meters: 150,
@@ -594,7 +603,7 @@ const openCreateModal = () => {
         area: '',
         brand: '',
         class: 'Regular',
-        cluster: '',
+        cluster_id: '',
         latitude: null,
         longitude: null,
         radius_meters: 150,
@@ -615,7 +624,7 @@ const editStore = (store) => {
         area: store.area,
         brand: store.brand,
         class: store.class || 'Regular',
-        cluster: store.cluster,
+        cluster_id: store.cluster_id || store.cluster?.id || '',
         latitude: store.latitude,
         longitude: store.longitude,
         radius_meters: store.radius_meters || 150,

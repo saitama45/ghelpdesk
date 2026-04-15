@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Cluster;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Setting;
@@ -30,30 +31,37 @@ class StoreController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Store::with(['users:id,name'])
+        $query = Store::with(['users:id,name,email', 'cluster:id,code,name'])
             ->withCount(['tickets' => function($q) {
                 $q->where('tickets.status', 'open');
             }]);
 
         if ($request->filled('search')) {
-            $query->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('code', 'like', "%{$request->search}%")
-                  ->orWhere('area', 'like', "%{$request->search}%")
-                  ->orWhere('brand', 'like', "%{$request->search}%")
-                  ->orWhere('cluster', 'like', "%{$request->search}%")
-                  ->orWhere('email', 'like', "%{$request->search}%")
-                  ->orWhereHas('users', function($q) use ($request) {
-                      $q->where('name', 'like', "%{$request->search}%");
-                  });
+            $query->where(function ($q) use ($request) {
+                $q->where('name', 'like', "%{$request->search}%")
+                    ->orWhere('code', 'like', "%{$request->search}%")
+                    ->orWhere('area', 'like', "%{$request->search}%")
+                    ->orWhere('brand', 'like', "%{$request->search}%")
+                    ->orWhere('email', 'like', "%{$request->search}%")
+                    ->orWhereHas('cluster', function ($clusterQuery) use ($request) {
+                        $clusterQuery->where('name', 'like', "%{$request->search}%")
+                            ->orWhere('code', 'like', "%{$request->search}%");
+                    })
+                    ->orWhereHas('users', function($userQuery) use ($request) {
+                        $userQuery->where('name', 'like', "%{$request->search}%");
+                    });
+            });
         }
 
         $stores = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
         $users = User::active()->orderBy('name')->get(['id', 'name']);
+        $clusters = Cluster::orderBy('name')->get(['id', 'code', 'name']);
         $settings = Setting::where('group', 'thresholds')->pluck('value', 'key');
 
         return Inertia::render('Stores/Index', [
             'stores' => $stores,
             'users' => $users,
+            'clusters' => $clusters,
             'settings' => $settings,
         ]);
     }
@@ -67,7 +75,7 @@ class StoreController extends Controller implements HasMiddleware
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'required|in:Regular,Kitchen',
-            'cluster' => 'required|string|max:255',
+            'cluster_id' => 'required|exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
@@ -97,7 +105,7 @@ class StoreController extends Controller implements HasMiddleware
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'required|in:Regular,Kitchen',
-            'cluster' => 'required|string|max:255',
+            'cluster_id' => 'required|exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
@@ -135,6 +143,13 @@ class StoreController extends Controller implements HasMiddleware
 
         $header = array_map('trim', array_shift($rows));
         $userMap = User::pluck('id', 'email')->toArray();
+        $clusters = Cluster::get(['id', 'code', 'name']);
+        $clusterLookup = $clusters->flatMap(function (Cluster $cluster) {
+            return [
+                mb_strtolower(trim($cluster->code)) => $cluster->id,
+                mb_strtolower(trim($cluster->name)) => $cluster->id,
+            ];
+        })->all();
 
         $imported = 0;
         $errors   = [];
@@ -153,6 +168,8 @@ class StoreController extends Controller implements HasMiddleware
             }
 
             $data = array_combine($header, array_map(fn($v) => trim((string) $v), $line));
+            $clusterValue = $data['cluster'] ?? null;
+            $clusterId = $clusterValue ? ($clusterLookup[mb_strtolower(trim($clusterValue))] ?? null) : null;
 
             $validator = \Validator::make([
                 'code'          => $data['code'] ?? null,
@@ -162,7 +179,8 @@ class StoreController extends Controller implements HasMiddleware
                 'area'          => $data['area'] ?? null,
                 'brand'         => $data['brand'] ?? null,
                 'class'         => $data['class'] ?? null,
-                'cluster'       => $data['cluster'] ?? null,
+                'cluster'       => $clusterValue,
+                'cluster_id'    => $clusterId,
                 'latitude'      => $data['latitude'] ?: null,
                 'longitude'     => $data['longitude'] ?: null,
                 'radius_meters' => $data['radius_meters'] ?: null,
@@ -176,10 +194,14 @@ class StoreController extends Controller implements HasMiddleware
                 'brand'         => 'required|string|max:255',
                 'class'         => 'required|in:Regular,Kitchen',
                 'cluster'       => 'required|string|max:255',
+                'cluster_id'    => 'required|exists:clusters,id',
                 'latitude'      => 'nullable|numeric|between:-90,90',
                 'longitude'     => 'nullable|numeric|between:-180,180',
                 'radius_meters' => 'nullable|integer|min:10|max:5000',
                 'is_active'     => 'nullable|in:0,1',
+            ], [
+                'cluster_id.required' => 'The selected cluster does not exist. Use a valid cluster code or name.',
+                'cluster_id.exists' => 'The selected cluster does not exist. Use a valid cluster code or name.',
             ]);
 
             if ($validator->fails()) {
@@ -195,7 +217,7 @@ class StoreController extends Controller implements HasMiddleware
                 'area'          => $data['area'],
                 'brand'         => $data['brand'],
                 'class'         => $data['class'],
-                'cluster'       => $data['cluster'],
+                'cluster_id'    => $clusterId,
                 'latitude'      => $data['latitude'] !== '' ? $data['latitude'] : null,
                 'longitude'     => $data['longitude'] !== '' ? $data['longitude'] : null,
                 'radius_meters' => !empty($data['radius_meters']) ? (int) $data['radius_meters'] : 150,
@@ -228,6 +250,7 @@ class StoreController extends Controller implements HasMiddleware
     public function template()
     {
         $users = User::active()->orderBy('name')->get(['id', 'name', 'email']);
+        $clusters = Cluster::orderBy('name')->get(['code', 'name']);
 
         $spreadsheet = new Spreadsheet();
 
@@ -243,6 +266,11 @@ class StoreController extends Controller implements HasMiddleware
         $listsSheet->setCellValue('B1', 'Available Users (email)');
         foreach ($users as $i => $user) {
             $listsSheet->setCellValue('B' . ($i + 2), $user->email);
+        }
+
+        $listsSheet->setCellValue('C1', 'Clusters');
+        foreach ($clusters as $i => $cluster) {
+            $listsSheet->setCellValue('C' . ($i + 2), $cluster->name);
         }
 
         // ── Import Template sheet ───────────────────────────────────────
@@ -268,7 +296,7 @@ class StoreController extends Controller implements HasMiddleware
         $sheet->setCellValue('E2', 'Metro Manila');
         $sheet->setCellValue('F2', 'Brand Name');
         $sheet->setCellValue('G2', 'Regular');
-        $sheet->setCellValue('H2', 'Cluster A');
+        $sheet->setCellValue('H2', $clusters->first()?->name ?? '');
         $sheet->setCellValue('I2', '');
         $sheet->setCellValue('J2', '');
         $sheet->setCellValue('K2', '150');
@@ -297,6 +325,16 @@ class StoreController extends Controller implements HasMiddleware
             ->setShowDropDown(false)
             ->setFormula1('Lists!$A$2:$A$3')
             ->setSqref('G2:G1001');
+
+        if ($clusters->isNotEmpty()) {
+            $clusterValidation = $sheet->getCell('H2')->getDataValidation();
+            $clusterValidation->setType(DataValidation::TYPE_LIST)
+                ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+                ->setAllowBlank(false)
+                ->setShowDropDown(false)
+                ->setFormula1(sprintf('Lists!$C$2:$C$%d', $clusters->count() + 1))
+                ->setSqref('H2:H1001');
+        }
 
         $spreadsheet->setActiveSheetIndex(0);
 

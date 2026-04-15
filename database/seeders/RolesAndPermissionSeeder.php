@@ -51,6 +51,12 @@ class RolesAndPermissionSeeder extends Seeder
             'companies.create' => 'Create companies',
             'companies.edit' => 'Edit companies',
 
+            // Clusters
+            'clusters.view' => 'View clusters',
+            'clusters.create' => 'Create clusters',
+            'clusters.edit' => 'Edit clusters',
+            'clusters.delete' => 'Delete clusters',
+
             // Categories
             'categories.view' => 'View categories',
             'categories.create' => 'Create categories',
@@ -154,6 +160,7 @@ class RolesAndPermissionSeeder extends Seeder
             'users.view',
             'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance',
             'companies.view',
+            'clusters.view',
             'categories.view',
             'subcategories.view',
             'items.view',

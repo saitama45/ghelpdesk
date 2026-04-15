@@ -44,6 +44,7 @@ class GlobalSearchController extends Controller
             ['name' => 'Scheduling', 'url' => route('schedules.index', [], false), 'path' => 'Operations > Scheduling', 'permission' => 'schedules.view'],
             ['name' => 'Presence', 'url' => route('presence.index', [], false), 'path' => 'Operations > Presence', 'permission' => 'presence.view'],
             ['name' => 'Companies', 'url' => route('companies.index', [], false), 'path' => 'References > Companies', 'permission' => 'companies.view'],
+            ['name' => 'Clusters', 'url' => route('clusters.index', [], false), 'path' => 'References > Clusters', 'permission' => 'clusters.view'],
             ['name' => 'Stores', 'url' => route('stores.index', [], false), 'path' => 'References > Stores', 'permission' => 'stores.view'],
             ['name' => 'Activity Templates', 'url' => route('activity-templates.index', [], false), 'path' => 'References > Activity Templates', 'permission' => 'activity_templates.view'],
             ['name' => 'Categories', 'url' => route('categories.index', [], false), 'path' => 'References > Categories', 'permission' => 'categories.view'],

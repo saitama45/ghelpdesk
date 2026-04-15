@@ -46,6 +46,8 @@ Route::middleware('auth')->group(function () {
     
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::resource('companies', CompanyController::class)->except(['show', 'create', 'edit']);
+    Route::resource('clusters', \App\Http\Controllers\ClusterController::class)->except(['show', 'create', 'edit']);
+    Route::post('clusters/{cluster}/assign-stores', [\App\Http\Controllers\ClusterController::class, 'assignStores'])->name('clusters.assign-stores');
     Route::get('categories/template', [\App\Http\Controllers\CategoryController::class, 'template'])->name('categories.template');
     Route::post('categories/import', [\App\Http\Controllers\CategoryController::class, 'import'])->name('categories.import');
     Route::get('sub-categories/template', [\App\Http\Controllers\SubCategoryController::class, 'template'])->name('sub-categories.template');

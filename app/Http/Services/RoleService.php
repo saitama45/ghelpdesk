@@ -30,11 +30,45 @@ class RoleService
     {
         $permissions = Permission::all();
         $grouped = [];
+        $preferredOrder = [
+            'dashboard',
+            'attendance',
+            'tickets',
+            'users',
+            'roles',
+            'reports',
+            'companies',
+            'clusters',
+            'categories',
+            'subcategories',
+            'items',
+            'request_types',
+            'pos_requests',
+            'sap_requests',
+            'stores',
+            'vendors',
+            'activity_templates',
+            'schedules',
+            'settings',
+            'canned_messages',
+            'projects',
+            'presence',
+        ];
         
         foreach ($permissions as $permission) {
             $category = explode('.', $permission->name)[0];
             $grouped[ucfirst($category)][] = $permission;
         }
+
+        uksort($grouped, function ($a, $b) use ($preferredOrder) {
+            $aIndex = array_search(strtolower($a), $preferredOrder, true);
+            $bIndex = array_search(strtolower($b), $preferredOrder, true);
+
+            $aIndex = $aIndex === false ? PHP_INT_MAX : $aIndex;
+            $bIndex = $bIndex === false ? PHP_INT_MAX : $bIndex;
+
+            return $aIndex <=> $bIndex ?: strcasecmp($a, $b);
+        });
         
         return $grouped;
     }

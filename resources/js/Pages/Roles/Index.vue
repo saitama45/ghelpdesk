@@ -351,6 +351,7 @@ const landingPageOptions = [
         group: 'References',
         options: [
             { label: 'Companies', value: 'companies.index' },
+            { label: 'Clusters', value: 'clusters.index' },
             { label: 'Stores', value: 'stores.index' },
             { label: 'Vendors', value: 'vendors.index' },
             { label: 'Categories', value: 'categories.index' },
