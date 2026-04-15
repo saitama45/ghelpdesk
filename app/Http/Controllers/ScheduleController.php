@@ -32,11 +32,17 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
+        $rangeStart = $request->filled('start')
+            ? Carbon::parse($request->start, 'Asia/Manila')->startOfDay()
+            : now('Asia/Manila')->startOfMonth();
+        $rangeEnd = $request->filled('end')
+            ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
+            : now('Asia/Manila')->endOfMonth();
+
         $query = Schedule::with(['user', 'ticket.item', 'scheduleStores.store']);
 
-        if ($request->filled('start') && $request->filled('end')) {
-            $query->whereBetween('start_time', [$request->start, $request->end]);
-        }
+        $query->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart);
 
         if ($request->filled('user_id')) {
             if ($request->user_id === 'my') {
@@ -148,7 +154,13 @@ class ScheduleController extends Controller implements HasMiddleware
             'pivotYears'     => $selectedYears,
             'availableYears' => $availableYears,
             'pivotStatuses'  => $pivotStatuses,
-            'filters'        => $request->only(['user_id', 'report_years', 'sub_unit', 'store_id']),
+            'filters'        => array_merge(
+                $request->only(['user_id', 'report_years', 'sub_unit', 'store_id']),
+                [
+                    'start' => $rangeStart->toDateString(),
+                    'end' => $rangeEnd->toDateString(),
+                ]
+            ),
         ]);
     }
 

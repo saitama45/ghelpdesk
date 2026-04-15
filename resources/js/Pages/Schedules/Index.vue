@@ -142,6 +142,7 @@
                 <div v-if="currentView === 'calendar'">
                     <Calendar 
                         :events="schedules" 
+                        @visible-range-change="handleVisibleRangeChange"
                         @date-click="handleDateClick"
                         @event-click="handleEventClick"
                     />
@@ -502,7 +503,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed, watch } from 'vue'
-import { router, usePage } from '@inertiajs/vue3'
+import { router, usePage, useRemember } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
@@ -521,12 +522,38 @@ const props = defineProps({
     filters: Object
 })
 
+const formatDateParam = (date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+
+    return `${year}-${month}-${day}`
+}
+
+const getMonthRange = (date = new Date()) => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+
+    return {
+        start: formatDateParam(new Date(year, month, 1)),
+        end: formatDateParam(new Date(year, month + 1, 0)),
+    }
+}
+
 const page = usePage()
-const filterUser = ref(props.filters?.user_id || '')
-const filterSubUnit = ref(props.filters?.sub_unit || '')
-const filterStore = ref(props.filters?.store_id || '')
-const selectedReportYears = ref(props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears])
-const currentView = ref('calendar') // 'calendar' or 'report'
+const initialRange = props.filters?.start && props.filters?.end
+    ? { start: props.filters.start, end: props.filters.end }
+    : getMonthRange()
+
+const filterUser = useRemember(props.filters?.user_id || '', 'schedules.filterUser')
+const filterSubUnit = useRemember(props.filters?.sub_unit || '', 'schedules.filterSubUnit')
+const filterStore = useRemember(props.filters?.store_id || '', 'schedules.filterStore')
+const selectedReportYears = useRemember(
+    props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears],
+    'schedules.selectedReportYears'
+)
+const currentView = useRemember('calendar', 'schedules.currentView')
+const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
 
 // Pivot report data — fetched on demand when the user opens the Report tab
 const pivotData = ref([])
@@ -615,13 +642,38 @@ const userFilterOptions = computed(() => {
 
 const applyFilter = () => {
     router.get(route('schedules.index'), {
+        start: visibleRange.value.start,
+        end: visibleRange.value.end,
         user_id: filterUser.value,
         sub_unit: filterSubUnit.value,
         store_id: filterStore.value,
         report_years: selectedReportYears.value
     }, {
+        only: ['schedules', 'filters'],
         preserveState: true,
-        preserveScroll: true
+        preserveScroll: true,
+        replace: true,
+    })
+}
+
+const handleVisibleRangeChange = (range) => {
+    if (!range?.start || !range?.end) return
+    if (visibleRange.value.start === range.start && visibleRange.value.end === range.end) return
+
+    visibleRange.value = range
+
+    router.get(route('schedules.index'), {
+        start: range.start,
+        end: range.end,
+        user_id: filterUser.value,
+        sub_unit: filterSubUnit.value,
+        store_id: filterStore.value,
+        report_years: selectedReportYears.value
+    }, {
+        only: ['schedules', 'filters'],
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
     })
 }
 
@@ -651,11 +703,10 @@ const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
 
 const exportPdf = () => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-
-    const params = { start, end };
+    const params = {
+        start: visibleRange.value.start,
+        end: visibleRange.value.end,
+    };
     if (filterUser.value)    params.user_id  = filterUser.value;
     if (filterSubUnit.value) params.sub_unit = filterSubUnit.value;
     if (filterStore.value)   params.store_id = filterStore.value;

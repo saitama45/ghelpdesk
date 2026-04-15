@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -9,7 +9,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['date-click', 'event-click']);
+const emit = defineEmits(['date-click', 'event-click', 'visible-range-change']);
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
@@ -153,6 +153,30 @@ const dailyEventsLayout = computed(() => {
 const currentMonth = computed(() => currentDate.value.getMonth());
 const currentYear = computed(() => currentDate.value.getFullYear());
 
+const toDateKey = (value) => {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value));
+};
+
+const parseDateKey = (key) => {
+    const [year, month, day] = key.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
+
+const sortEvents = (events) => {
+    return [...events].sort((a, b) => {
+        const priorityRank = { urgent: 1, high: 2, medium: 3, low: 4 };
+        const rankA = a.ticket?.priority ? (priorityRank[String(a.ticket.priority).toLowerCase()] ?? 5) : 6;
+        const rankB = b.ticket?.priority ? (priorityRank[String(b.ticket.priority).toLowerCase()] ?? 5) : 6;
+        if (rankA !== rankB) return rankA - rankB;
+
+        const durationA = new Date(a.end_time) - new Date(a.start_time);
+        const durationB = new Date(b.end_time) - new Date(b.start_time);
+        if (durationB !== durationA) return durationB - durationA;
+
+        return new Date(a.start_time) - new Date(b.start_time);
+    });
+};
+
 const monthName = computed(() => {
     return new Intl.DateTimeFormat('en-US', { month: 'long' }).format(currentDate.value);
 });
@@ -204,31 +228,30 @@ const weeks = computed(() => {
     return weekArray;
 });
 
-const getEventsForDate = (date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
+const eventsByDate = computed(() => {
+    const grouped = new Map();
 
-    return filteredEvents.value
-        .filter(event => {
-            const start = new Date(event.start_time);
-            start.setHours(0, 0, 0, 0);
-            
-            const end = new Date(event.end_time);
-            end.setHours(0, 0, 0, 0);
-            
-            return d >= start && d <= end;
-        })
-        .sort((a, b) => {
-            const priorityRank = { urgent: 1, high: 2, medium: 3, low: 4 };
-            const rankA = a.ticket?.priority ? (priorityRank[String(a.ticket.priority).toLowerCase()] ?? 5) : 6;
-            const rankB = b.ticket?.priority ? (priorityRank[String(b.ticket.priority).toLowerCase()] ?? 5) : 6;
-            if (rankA !== rankB) return rankA - rankB;
-            // Within same group, longer duration first then earlier start
-            const durationA = new Date(a.end_time) - new Date(a.start_time);
-            const durationB = new Date(b.end_time) - new Date(b.start_time);
-            if (durationB !== durationA) return durationB - durationA;
-            return new Date(a.start_time) - new Date(b.start_time);
-        });
+    for (const event of filteredEvents.value) {
+        let cursor = parseDateKey(toDateKey(event.start_time));
+        const end = parseDateKey(toDateKey(event.end_time));
+
+        while (cursor <= end) {
+            const key = toDateKey(cursor);
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(event);
+            cursor.setDate(cursor.getDate() + 1);
+        }
+    }
+
+    for (const [key, events] of grouped.entries()) {
+        grouped.set(key, sortEvents(events));
+    }
+
+    return grouped;
+});
+
+const getEventsForDate = (date) => {
+    return eventsByDate.value.get(toDateKey(date)) ?? [];
 };
 
 const getEventStatus = (event, date) => {
@@ -321,7 +344,28 @@ const goToDate = () => {
 
 onMounted(() => {
     setInterval(() => { nowDate.value = new Date(); }, 60000);
+    emitVisibleRange();
 });
+
+const emitVisibleRange = () => {
+    if (calendarView.value === 'day') {
+        const dayKey = toDateKey(currentDayDate.value);
+        emit('visible-range-change', { start: dayKey, end: dayKey });
+        return;
+    }
+
+    const start = new Date(currentYear.value, currentMonth.value, 1);
+    const end = new Date(currentYear.value, currentMonth.value + 1, 0);
+
+    emit('visible-range-change', {
+        start: toDateKey(start),
+        end: toDateKey(end),
+    });
+};
+
+watch([calendarView, currentDate, currentDayDate], () => {
+    emitVisibleRange();
+}, { deep: false });
 
 const isToday = (date) => {
     return date.toDateString() === new Date().toDateString();
