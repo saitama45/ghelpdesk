@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { 
     PlusIcon, 
@@ -32,6 +32,9 @@ const isEditing = ref(false);
 const editingTaskId = ref(null);
 const showFilters = ref(false);
 const isApplyingTemplates = ref(false);
+const localTasks = ref([]);
+const draggedTaskId = ref(null);
+const dragOverTaskId = ref(null);
 
 // Refs for scroll syncing (Simplified to single container)
 const mainWorkspaceRef = ref(null);
@@ -57,6 +60,20 @@ watch(() => form.task_progress, (newProgress) => {
         form.status = 'Pending';
     }
 });
+
+const sortTasks = (tasks = []) => {
+    return [...tasks].sort((a, b) => {
+        const aOrder = Number.isFinite(Number(a.order)) ? Number(a.order) : Number.MAX_SAFE_INTEGER;
+        const bOrder = Number.isFinite(Number(b.order)) ? Number(b.order) : Number.MAX_SAFE_INTEGER;
+
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return a.id - b.id;
+    });
+};
+
+watch(() => props.project.tasks, (tasks) => {
+    localTasks.value = sortTasks(tasks || []);
+}, { immediate: true, deep: true });
 
 const stats = computed(() => {
     const tasks = props.project.tasks || [];
@@ -299,8 +316,8 @@ const getGanttBarStyles = (task) => {
 };
 
 const groupedTasks = computed(() => {
-    if (!props.project.tasks) return {};
-    return props.project.tasks.reduce((groups, task) => {
+    if (!localTasks.value.length) return {};
+    return localTasks.value.reduce((groups, task) => {
         const category = task.category || 'General';
         if (!groups[category]) groups[category] = [];
         groups[category].push(task);
@@ -308,10 +325,79 @@ const groupedTasks = computed(() => {
     }, {});
 });
 
-const syncScroll = (e) => {
-    const { scrollTop } = e.target;
-    if (leftTableRef.value) leftTableRef.value.scrollTop = scrollTop;
-    if (rightTableRef.value) rightTableRef.value.scrollTop = scrollTop;
+const persistTaskOrder = () => {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    fetch(route('projects.tasks.gantt-update'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+        },
+        body: JSON.stringify({
+            tasks: localTasks.value.map((task, index) => ({
+                id: task.id,
+                order: index,
+            }))
+        })
+    })
+        .then(async (response) => {
+            if (!response.ok) {
+                throw new Error('Failed to update task order.');
+            }
+
+            return response.json();
+        })
+        .then(() => {
+            success('Task order updated.');
+        })
+        .catch(() => {
+            info('Unable to save task order.');
+        });
+};
+
+const handleTaskDragStart = (task) => {
+    draggedTaskId.value = task.id;
+};
+
+const handleTaskDragOver = (task) => {
+    if (!draggedTaskId.value || draggedTaskId.value === task.id) return;
+    dragOverTaskId.value = task.id;
+};
+
+const handleTaskDrop = (targetTask) => {
+    if (!draggedTaskId.value || draggedTaskId.value === targetTask.id) {
+        draggedTaskId.value = null;
+        dragOverTaskId.value = null;
+        return;
+    }
+
+    const reorderedTasks = [...localTasks.value];
+    const fromIndex = reorderedTasks.findIndex(task => task.id === draggedTaskId.value);
+    const toIndex = reorderedTasks.findIndex(task => task.id === targetTask.id);
+
+    if (fromIndex === -1 || toIndex === -1) {
+        draggedTaskId.value = null;
+        dragOverTaskId.value = null;
+        return;
+    }
+
+    const [movedTask] = reorderedTasks.splice(fromIndex, 1);
+    reorderedTasks.splice(toIndex, 0, movedTask);
+    localTasks.value = reorderedTasks.map((task, index) => ({
+        ...task,
+        order: index,
+    }));
+
+    draggedTaskId.value = null;
+    dragOverTaskId.value = null;
+    persistTaskOrder();
+};
+
+const handleTaskDragEnd = () => {
+    draggedTaskId.value = null;
+    dragOverTaskId.value = null;
 };
 
 const isToday = (date) => {
@@ -508,6 +594,9 @@ const isWeekend = (date) => {
 
                         <!-- Task Rows -->
                         <div v-for="task in tasks" :key="task.id" @click="editTask(task)"
+                             @dragover.prevent="handleTaskDragOver(task)"
+                             @drop.prevent="handleTaskDrop(task)"
+                             :class="dragOverTaskId === task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200' : ''"
                              class="flex min-h-[3.5rem] border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10">
                             
                             <!-- Left Task Info (Sticky) -->
@@ -518,6 +607,16 @@ const isWeekend = (date) => {
                                              :class="task.status === 'Done' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 group-hover:border-indigo-300'">
                                             <CheckCircleIcon v-if="task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
                                         </div>
+                                    </div>
+                                    <div class="flex items-center self-stretch" @click.stop>
+                                        <button type="button"
+                                                draggable="true"
+                                                @dragstart="handleTaskDragStart(task)"
+                                                @dragend="handleTaskDragEnd"
+                                                class="h-full px-1.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors"
+                                                title="Drag to reorder task">
+                                            <ArrowsPointingOutIcon class="w-4 h-4" />
+                                        </button>
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between mb-0.5">

@@ -153,14 +153,28 @@ class ProjectTaskController extends Controller
             'tasks.*.start_date' => 'nullable|date',
             'tasks.*.end_date' => 'nullable|date',
             'tasks.*.progress' => 'nullable|integer|min:0|max:100',
+            'tasks.*.order' => 'nullable|integer|min:0',
         ]);
 
         foreach ($validated['tasks'] as $taskData) {
-            ProjectTask::where('id', $taskData['id'])->update([
-                'start_date' => $taskData['start_date'],
-                'end_date' => $taskData['end_date'],
-                'progress' => $taskData['progress'] ?? 0,
-            ]);
+            $updates = [];
+
+            if (array_key_exists('start_date', $taskData)) {
+                $updates['start_date'] = $taskData['start_date'];
+            }
+            if (array_key_exists('end_date', $taskData)) {
+                $updates['end_date'] = $taskData['end_date'];
+            }
+            if (array_key_exists('progress', $taskData)) {
+                $updates['progress'] = $taskData['progress'] ?? 0;
+            }
+            if (array_key_exists('order', $taskData)) {
+                $updates['order'] = $taskData['order'];
+            }
+
+            if (!empty($updates)) {
+                ProjectTask::where('id', $taskData['id'])->update($updates);
+            }
         }
 
         return response()->json(['success' => true]);
