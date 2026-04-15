@@ -10,13 +10,13 @@
                         <!-- View Toggle -->
                         <div class="flex bg-gray-100 p-1 rounded-lg">
                             <button
-                                @click="currentView = 'calendar'"
+                                @click="switchView('calendar')"
                                 :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
                             >
                                 Calendar View
                             </button>
                             <button
-                                @click="currentView = 'report'"
+                                @click="switchView('report')"
                                 :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'report' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
                             >
                                 Report View
@@ -174,24 +174,38 @@
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
-                                <tr v-for="row in pivotData" :key="row.name + row.unit" class="hover:bg-blue-50/50 transition-colors">
-                                    <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10">{{ row.unit || '-' }}</td>
-                                    <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10">{{ row.name }}</td>
-                                    
-                                    <template v-for="year in pivotYears" :key="'data-' + year">
-                                        <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0" :class="[
-                                            (row.years[year] && row.years[year][status] > 0) ? 'font-black text-blue-700' : 'font-medium text-gray-300',
-                                            status === 'Holiday' ? 'bg-red-50/30' : (status === 'Restday' ? 'bg-gray-50/30' : '')
-                                        ]">
-                                            {{ (row.years[year] && row.years[year][status] > 0) ? row.years[year][status] : '-' }}
-                                        </td>
-                                    </template>
-                                </tr>
-                                <tr v-if="!pivotData || pivotData.length === 0">
-                                    <td :colspan="2 + (pivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
-                                        No schedule data found for the reporting period.
+                                <!-- Loading state -->
+                                <tr v-if="isPivotLoading">
+                                    <td :colspan="2 + (pivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center">
+                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                            <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
+                                            </svg>
+                                            Loading report data...
+                                        </div>
                                     </td>
                                 </tr>
+                                <template v-else>
+                                    <tr v-for="row in pivotData" :key="row.name + row.unit" class="hover:bg-blue-50/50 transition-colors">
+                                        <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10">{{ row.unit || '-' }}</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10">{{ row.name }}</td>
+
+                                        <template v-for="year in pivotYears" :key="'data-' + year">
+                                            <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0" :class="[
+                                                (row.years[year] && row.years[year][status] > 0) ? 'font-black text-blue-700' : 'font-medium text-gray-300',
+                                                status === 'Holiday' ? 'bg-red-50/30' : (status === 'Restday' ? 'bg-gray-50/30' : '')
+                                            ]">
+                                                {{ (row.years[year] && row.years[year][status] > 0) ? row.years[year][status] : '-' }}
+                                            </td>
+                                        </template>
+                                    </tr>
+                                    <tr v-if="pivotData.length === 0">
+                                        <td :colspan="2 + (pivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                            No schedule data found for the reporting period.
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
@@ -501,7 +515,6 @@ const props = defineProps({
     schedules: Array,
     users: Array,
     stores: Array,
-    pivotData: Array,
     pivotYears: Array,
     availableYears: Array,
     pivotStatuses: Array,
@@ -514,6 +527,36 @@ const filterSubUnit = ref(props.filters?.sub_unit || '')
 const filterStore = ref(props.filters?.store_id || '')
 const selectedReportYears = ref(props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears])
 const currentView = ref('calendar') // 'calendar' or 'report'
+
+// Pivot report data — fetched on demand when the user opens the Report tab
+const pivotData = ref([])
+const isPivotLoading = ref(false)
+
+const fetchPivotData = async () => {
+    if (isPivotLoading.value) return
+    isPivotLoading.value = true
+    try {
+        const params = new URLSearchParams()
+        selectedReportYears.value.forEach(y => params.append('report_years[]', y))
+        if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
+        if (filterStore.value)   params.set('store_id', filterStore.value)
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        const res = await fetch(`/schedules/report-data?${params}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+        })
+        if (res.ok) pivotData.value = await res.json()
+    } catch (e) {
+        console.error('Failed to load report data', e)
+    } finally {
+        isPivotLoading.value = false
+    }
+}
+
+const switchView = (view) => {
+    currentView.value = view
+    if (view === 'report') fetchPivotData()
+}
 
 const authUser = computed(() => page.props.auth.user)
 const isManager = computed(() => !!authUser.value?.is_manager)
@@ -582,10 +625,10 @@ const applyFilter = () => {
     })
 }
 
-// Watch for year selection changes to auto-apply filter in report view
+// Year changes in report view: re-fetch pivot data only (no full page reload needed)
 watch(selectedReportYears, () => {
     if (currentView.value === 'report') {
-        applyFilter()
+        fetchPivotData()
     }
 }, { deep: true })
 
