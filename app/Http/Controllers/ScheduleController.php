@@ -618,6 +618,10 @@ class ScheduleController extends Controller implements HasMiddleware
         DB::transaction(function () use ($candidates, &$errors, &$imported, &$existingDateMap) {
             $timestamp = now();
 
+            // Phase 1 — filter out duplicates and build the rows to insert
+            $toInsert       = [];  // rows for schedules table
+            $onSiteDateKeys = [];  // user_id|date keys that need a schedule_store
+
             foreach ($candidates as $candidate) {
                 $importKey = $candidate['user_id'] . '|' . $candidate['date'];
                 if (isset($existingDateMap[$importKey])) {
@@ -626,34 +630,82 @@ class ScheduleController extends Controller implements HasMiddleware
                 }
 
                 $startTime = Carbon::createFromFormat('Y-m-d', $candidate['date'])->setTime(7, 0, 0);
-                $endTime = Carbon::createFromFormat('Y-m-d', $candidate['date'])->setTime(17, 0, 0);
+                $endTime   = Carbon::createFromFormat('Y-m-d', $candidate['date'])->setTime(17, 0, 0);
 
-                $scheduleId = DB::table('schedules')->insertGetId([
-                    'user_id' => $candidate['user_id'],
-                    'store_id' => null,
-                    'status' => $candidate['status'],
-                    'start_time' => $startTime,
-                    'end_time' => $endTime,
-                    'remarks' => $candidate['remarks'],
+                $toInsert[] = [
+                    'user_id'    => $candidate['user_id'],
+                    'store_id'   => null,
+                    'status'     => $candidate['status'],
+                    'start_time' => $startTime->toDateTimeString(),
+                    'end_time'   => $endTime->toDateTimeString(),
+                    'remarks'    => $candidate['remarks'],
                     'created_at' => $timestamp,
                     'updated_at' => $timestamp,
-                ]);
+                ];
 
                 if (in_array($candidate['status'], ['On-site', 'Off-site'], true)) {
-                    DB::table('schedule_stores')->insert([
-                        'schedule_id' => $scheduleId,
-                        'store_id' => null,
-                        'start_time' => $startTime,
-                        'end_time' => $endTime,
-                        'grace_period_minutes' => 30,
-                        'remarks' => $candidate['remarks'],
-                        'created_at' => $timestamp,
-                        'updated_at' => $timestamp,
-                    ]);
+                    $onSiteDateKeys[$candidate['user_id'] . '|' . $candidate['date']] = [
+                        'start_time' => $startTime->toDateTimeString(),
+                        'end_time'   => $endTime->toDateTimeString(),
+                        'remarks'    => $candidate['remarks'],
+                    ];
                 }
 
                 $existingDateMap[$importKey] = true;
-                $imported++;
+            }
+
+            if (empty($toInsert)) {
+                return;
+            }
+
+            // Phase 2 — bulk insert schedules in chunks of 500
+            foreach (array_chunk($toInsert, 500) as $chunk) {
+                DB::table('schedules')->insert($chunk);
+            }
+            $imported = count($toInsert);
+
+            // Phase 3 — bulk insert schedule_stores for On-site / Off-site rows
+            if (!empty($onSiteDateKeys)) {
+                $insertedUserIds = array_unique(array_map(
+                    fn($k) => (int) explode('|', $k)[0],
+                    array_keys($onSiteDateKeys)
+                ));
+
+                $insertedDates = array_unique(array_map(
+                    fn($k) => explode('|', $k)[1],
+                    array_keys($onSiteDateKeys)
+                ));
+                sort($insertedDates);
+
+                // Re-query just the IDs we need (safe inside the transaction)
+                $insertedSchedules = DB::table('schedules')
+                    ->select(['id', 'user_id', 'start_time'])
+                    ->whereIn('user_id', $insertedUserIds)
+                    ->where('start_time', '>=', $insertedDates[0] . ' 07:00:00')
+                    ->where('start_time', '<=', end($insertedDates) . ' 07:00:00')
+                    ->get()
+                    ->keyBy(fn($s) => $s->user_id . '|' . substr($s->start_time, 0, 10));
+
+                $storeRows = [];
+                foreach ($onSiteDateKeys as $key => $times) {
+                    $sched = $insertedSchedules->get($key);
+                    if (!$sched) continue;
+
+                    $storeRows[] = [
+                        'schedule_id'          => $sched->id,
+                        'store_id'             => null,
+                        'start_time'           => $times['start_time'],
+                        'end_time'             => $times['end_time'],
+                        'grace_period_minutes' => 30,
+                        'remarks'              => $times['remarks'],
+                        'created_at'           => $timestamp,
+                        'updated_at'           => $timestamp,
+                    ];
+                }
+
+                foreach (array_chunk($storeRows, 500) as $chunk) {
+                    DB::table('schedule_stores')->insert($chunk);
+                }
             }
         });
 

@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCircleIcon, GlobeAsiaAustraliaIcon } from '@heroicons/vue/24/outline';
+import { useConfirm } from '@/Composables/useConfirm';
 
 const props = defineProps({
     lastLog: Object,
@@ -55,12 +56,33 @@ const nextAction = computed(() => {
 });
 
 const currentTime = ref(new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+const nowMs = ref(Date.now());
 
 const updateClock = () => {
     if (isMounted.value) {
-        currentTime.value = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const now = new Date();
+        currentTime.value = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        nowMs.value = now.getTime();
     }
 };
+
+// True while the 5-minute duplicate-log cooldown is still active.
+// Reacts to the clock tick so the button auto-unlocks without a page reload.
+const isRecentlyLogged = computed(() => {
+    if (!props.lastLog?.created_at) return false;
+    const loggedAt = new Date(props.lastLog.created_at).getTime();
+    return (loggedAt + 5 * 60 * 1000) > nowMs.value;
+});
+
+// Remaining cooldown as a "m:ss" string, e.g. "3:42"
+const recentLogCooldownLabel = computed(() => {
+    if (!props.lastLog?.created_at) return '';
+    const remaining = Math.max(0, (new Date(props.lastLog.created_at).getTime() + 5 * 60 * 1000) - nowMs.value);
+    const totalSecs = Math.ceil(remaining / 1000);
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+});
 
 let clockInterval;
 
@@ -375,12 +397,27 @@ const getPublicIp = async () => {
     }
 };
 
+const { confirm } = useConfirm();
+
 const submit = async () => {
     if (!canSave.value) return;
-    
+
+    const action = nextAction.value; // 'Time In' or 'Time Out'
+    const store  = props.todaySchedule?.store?.name ?? 'your assigned store';
+
+    const ok = await confirm({
+        title: `Confirm ${action}`,
+        message: `You are about to record ${action} at ${store}. Continue?`,
+        confirmLabel: action,
+        cancelLabel: 'Cancel',
+        variant: 'primary',
+    });
+
+    if (!ok) return;
+
     form.device_info = await getRefinedDeviceInfo();
     form.public_ip = await getPublicIp();
-    
+
     form.post(route('attendance.log'), {
         preserveScroll: true,
         onSuccess: () => {
@@ -393,6 +430,7 @@ const submit = async () => {
 const canSave = computed(() => {
     return !!props.todaySchedule &&
            !props.isSegmentComplete &&
+           !isRecentlyLogged.value &&
            !!capturedImage.value &&
            isLocationStable.value === true &&
            isWithinStoreVicinity.value === true &&
@@ -402,6 +440,7 @@ const canSave = computed(() => {
 const statusMessage = computed(() => {
     if (!props.todaySchedule) return 'No active On-site/Off-site schedule for your current time.';
     if (props.isSegmentComplete) return 'You have already completed Time In and Time Out for this schedule.';
+    if (isRecentlyLogged.value) return `A log was already recorded recently. Please wait ${recentLogCooldownLabel.value} before logging again.`;
     if (props.assignedStores.length === 0) return 'No assigned work sites found.';
     if (!capturedImage.value) return 'Please take a selfie first.';
     if (!latitude.value) return 'Acquiring GPS...';

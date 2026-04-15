@@ -68,12 +68,15 @@ class AttendanceController extends Controller implements HasMiddleware
             ? $this->resolveActiveScheduleStore($todaySchedule, $now)
             : null;
 
-        // Scope lastLog to the specific segment if available, otherwise the whole schedule
+        // Scope lastLog to the specific segment if available, otherwise the whole schedule.
+        // Also restrict to today's date so yesterday's logs for a multi-day schedule are ignored.
         $lastLog = null;
         if ($todaySchedule) {
             $lastLogQuery = AttendanceLog::where('user_id', $user->id)
-                ->where('schedule_id', $todaySchedule->id);
-            
+                ->where('schedule_id', $todaySchedule->id)
+                ->where('log_time', '>=', $now->copy()->startOfDay())
+                ->where('log_time', '<=', $now->copy()->endOfDay());
+
             if ($activeStoreEntry) {
                 $lastLogQuery->where('schedule_store_id', $activeStoreEntry->id);
             }
@@ -81,11 +84,13 @@ class AttendanceController extends Controller implements HasMiddleware
             $lastLog = $lastLogQuery->latest('log_time')->first();
         }
 
-        // Check if the current segment already has both time_in and time_out
+        // Check if the current segment already has both time_in and time_out for TODAY.
         $isSegmentComplete = false;
         if ($todaySchedule) {
             $segmentLogsQuery = AttendanceLog::where('user_id', $user->id)
-                ->where('schedule_id', $todaySchedule->id);
+                ->where('schedule_id', $todaySchedule->id)
+                ->where('log_time', '>=', $now->copy()->startOfDay())
+                ->where('log_time', '<=', $now->copy()->endOfDay());
             if ($activeStoreEntry) {
                 $segmentLogsQuery->where('schedule_store_id', $activeStoreEntry->id);
             }
@@ -257,8 +262,10 @@ class AttendanceController extends Controller implements HasMiddleware
 
         // Determine type per-segment if possible, otherwise per-schedule
         $lastLogQuery = AttendanceLog::where('user_id', $user->id)
-            ->where('schedule_id', $schedule->id);
-        
+            ->where('schedule_id', $schedule->id)
+            ->where('log_time', '>=', $now->copy()->startOfDay())
+            ->where('log_time', '<=', $now->copy()->endOfDay());
+
         if ($activeStoreEntry) {
             $lastLogQuery->where('schedule_store_id', $activeStoreEntry->id);
         }
@@ -267,7 +274,9 @@ class AttendanceController extends Controller implements HasMiddleware
 
         // Block if both time_in and time_out already exist for this schedule segment
         $segmentLogsQuery = AttendanceLog::where('user_id', $user->id)
-            ->where('schedule_id', $schedule->id);
+            ->where('schedule_id', $schedule->id)
+            ->where('log_time', '>=', $now->copy()->startOfDay())
+            ->where('log_time', '<=', $now->copy()->endOfDay());
         if ($activeStoreEntry) {
             $segmentLogsQuery->where('schedule_store_id', $activeStoreEntry->id);
         }

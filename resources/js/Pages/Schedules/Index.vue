@@ -518,10 +518,18 @@ const currentView = ref('calendar') // 'calendar' or 'report'
 const authUser = computed(() => page.props.auth.user)
 const isManager = computed(() => !!authUser.value?.is_manager)
 
-// Only show users who report directly to the logged-in manager
-const subordinateUsers = computed(() =>
-    (props.users ?? []).filter(u => u.managers?.some(m => m.id === authUser.value?.id))
-)
+// Users available to a manager in the schedule form:
+// the manager themselves + their direct subordinates
+const subordinateUsers = computed(() => {
+    const all = props.users ?? []
+    const subs = all.filter(u => u.managers?.some(m => Number(m.id) === Number(authUser.value?.id)))
+    const self = all.find(u => Number(u.id) === Number(authUser.value?.id))
+    // Prepend self if not already in the subordinates list
+    if (self && !subs.some(u => Number(u.id) === Number(authUser.value?.id))) {
+        return [self, ...subs]
+    }
+    return subs
+})
 
 const storeOptions = computed(() => {
     return [
