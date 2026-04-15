@@ -12,6 +12,35 @@ use Carbon\Carbon;
 
 class ScheduleExportController extends Controller
 {
+    private function buildActualTimesByDate($logs): array
+    {
+        return collect($logs)
+            ->groupBy(fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString())
+            ->map(function ($dailyLogs) {
+                return [
+                    'actual_time_in' => $dailyLogs->firstWhere('type', 'time_in')?->log_time,
+                    'actual_time_out' => $dailyLogs->filter(fn ($log) => $log->type === 'time_out')->last()?->log_time,
+                ];
+            })
+            ->toArray();
+    }
+
+    private function resolveSegmentLogs($scheduleLogs, $scheduleStore)
+    {
+        $graceMinutes = (int) ($scheduleStore->grace_period_minutes ?? 30);
+        $windowStart = $scheduleStore->start_time->copy()->subMinutes($graceMinutes);
+        $windowEnd = $scheduleStore->end_time->copy();
+
+        return collect($scheduleLogs)->filter(function ($log) use ($scheduleStore, $windowStart, $windowEnd) {
+            if ((int) $log->schedule_store_id === (int) $scheduleStore->id) {
+                return true;
+            }
+
+            return $log->log_time
+                && $log->log_time->betweenIncluded($windowStart, $windowEnd);
+        })->values();
+    }
+
     public function pdf(Request $request)
     {
         if ($request->input('view') === 'report') {
@@ -56,16 +85,20 @@ class ScheduleExportController extends Controller
             ->get();
         
         $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
-        $logsBySegment  = $attendanceLogs->whereNotNull('schedule_store_id')->groupBy('schedule_store_id');
 
         // Flatten to one row per store visit
         $rows = [];
         foreach ($schedules as $schedule) {
+            $scheduleLogs = $logsBySchedule->get($schedule->id, collect());
             if ($schedule->scheduleStores->isNotEmpty()) {
                 foreach ($schedule->scheduleStores as $ss) {
-                    $segLogs = $logsBySegment->get($ss->id, collect());
-                    $timeIn  = $segLogs->firstWhere('type', 'time_in');
-                    $timeOut = $segLogs->filter(fn($l) => $l->type === 'time_out')->last();
+                    $segLogs = $this->resolveSegmentLogs($scheduleLogs, $ss);
+                    $actualTimesByDate = $this->buildActualTimesByDate($segLogs);
+                    $rowDate = $ss->start_time->copy()->timezone('Asia/Manila')->toDateString();
+                    $dateActuals = $actualTimesByDate[$rowDate] ?? [
+                        'actual_time_in' => $segLogs->firstWhere('type', 'time_in')?->log_time,
+                        'actual_time_out' => $segLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time,
+                    ];
 
                     $rows[] = [
                         'user'           => $schedule->user->name,
@@ -75,9 +108,9 @@ class ScheduleExportController extends Controller
                         'backlogs_start' => $schedule->backlogs_start,
                         'backlogs_end'   => $schedule->backlogs_end,
                         'remarks'        => $ss->remarks,
-                        'actual_time_in' => $timeIn?->log_time,
-                        'actual_time_out'=> $timeOut?->log_time,
-                        'date'           => $ss->start_time->format('Y-m-d'),
+                        'actual_time_in' => $dateActuals['actual_time_in'],
+                        'actual_time_out'=> $dateActuals['actual_time_out'],
+                        'date'           => $rowDate,
                         'store'          => $ss->store->name ?? '-',
                         'start_time'     => $ss->start_time,
                         'end_time'       => $ss->end_time,
@@ -85,9 +118,13 @@ class ScheduleExportController extends Controller
                 }
             } else {
                 // Legacy fallback: schedule has no schedule_stores entries
-                $logs    = $logsBySchedule->get($schedule->id, collect());
-                $timeIn  = $logs->firstWhere('type', 'time_in');
-                $timeOut = $logs->filter(fn($l) => $l->type === 'time_out')->last();
+                $logs    = $scheduleLogs;
+                $actualTimesByDate = $this->buildActualTimesByDate($logs);
+                $rowDate = $schedule->start_time->copy()->timezone('Asia/Manila')->toDateString();
+                $dateActuals = $actualTimesByDate[$rowDate] ?? [
+                    'actual_time_in' => $logs->firstWhere('type', 'time_in')?->log_time,
+                    'actual_time_out' => $logs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time,
+                ];
 
                 $rows[] = [
                     'user'           => $schedule->user->name,
@@ -97,9 +134,9 @@ class ScheduleExportController extends Controller
                     'backlogs_start' => $schedule->backlogs_start,
                     'backlogs_end'   => $schedule->backlogs_end,
                     'remarks'        => $schedule->remarks,
-                    'actual_time_in' => $timeIn?->log_time,
-                    'actual_time_out'=> $timeOut?->log_time,
-                    'date'           => $schedule->start_time->format('Y-m-d'),
+                    'actual_time_in' => $dateActuals['actual_time_in'],
+                    'actual_time_out'=> $dateActuals['actual_time_out'],
+                    'date'           => $rowDate,
                     'store'          => '-',
                     'start_time'     => $schedule->start_time,
                     'end_time'       => $schedule->end_time,

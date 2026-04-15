@@ -21,6 +21,35 @@ use Illuminate\Support\Facades\DB;
 
 class ScheduleController extends Controller implements HasMiddleware
 {
+    private function buildActualTimesByDate($logs): array
+    {
+        return collect($logs)
+            ->groupBy(fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString())
+            ->map(function ($dailyLogs) {
+                return [
+                    'actual_time_in' => $dailyLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String(),
+                    'actual_time_out' => $dailyLogs->filter(fn ($log) => $log->type === 'time_out')->last()?->log_time?->toIso8601String(),
+                ];
+            })
+            ->toArray();
+    }
+
+    private function resolveSegmentLogs($scheduleLogs, ScheduleStore $scheduleStore)
+    {
+        $graceMinutes = (int) ($scheduleStore->grace_period_minutes ?? 30);
+        $windowStart = $scheduleStore->start_time->copy()->subMinutes($graceMinutes);
+        $windowEnd = $scheduleStore->end_time->copy();
+
+        return collect($scheduleLogs)->filter(function ($log) use ($scheduleStore, $windowStart, $windowEnd) {
+            if ((int) $log->schedule_store_id === (int) $scheduleStore->id) {
+                return true;
+            }
+
+            return $log->log_time
+                && $log->log_time->betweenIncluded($windowStart, $windowEnd);
+        })->values();
+    }
+
     public static function middleware(): array
     {
         return [
@@ -75,12 +104,12 @@ class ScheduleController extends Controller implements HasMiddleware
         }
         
         $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
-        $logsBySegment  = $attendanceLogs->whereNotNull('schedule_store_id')->groupBy('schedule_store_id');
 
-        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $logsBySegment) {
+        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule) {
             $schedLogs     = $logsBySchedule->get($schedule->id, collect());
             $actualTimeIn  = $schedLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
             $actualTimeOut = $schedLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
+            $actualTimesByDate = $this->buildActualTimesByDate($schedLogs);
 
             return [
                 'id'              => $schedule->id,
@@ -96,9 +125,11 @@ class ScheduleController extends Controller implements HasMiddleware
                 'remarks'         => $schedule->remarks,
                 'actual_time_in'  => $actualTimeIn,
                 'actual_time_out' => $actualTimeOut,
+                'actual_times_by_date' => $actualTimesByDate,
                 'user'            => $schedule->user,
-                'schedule_stores' => $schedule->scheduleStores->map(function ($ss) use ($logsBySegment) {
-                    $segLogs = $logsBySegment->get($ss->id, collect());
+                'schedule_stores' => $schedule->scheduleStores->map(function ($ss) use ($schedLogs) {
+                    $segLogs = $this->resolveSegmentLogs($schedLogs, $ss);
+                    $segmentActualTimesByDate = $this->buildActualTimesByDate($segLogs);
                     return [
                         'id'                   => $ss->id,
                         'store_id'             => $ss->store_id,
@@ -109,6 +140,7 @@ class ScheduleController extends Controller implements HasMiddleware
                         'store'                => $ss->store ? ['id' => $ss->store->id, 'name' => $ss->store->name] : null,
                         'actual_time_in'       => $segLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String(),
                         'actual_time_out'      => $segLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String(),
+                        'actual_times_by_date' => $segmentActualTimesByDate,
                     ];
                 }),
                 'ticket' => $schedule->ticket ? [

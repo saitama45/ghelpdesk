@@ -869,6 +869,47 @@ const getManilaDateKey = (value) => {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value))
 }
 
+const getCalendarDateKey = (value) => {
+    if (!value) return null
+
+    if (value instanceof Date) {
+        const year = value.getFullYear()
+        const month = String(value.getMonth() + 1).padStart(2, '0')
+        const day = String(value.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+    }
+
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value
+    }
+
+    return getManilaDateKey(value)
+}
+
+const getActualTimesForDate = (source, dateKey) => {
+    if (!source || !dateKey) {
+        return { actual_time_in: null, actual_time_out: null }
+    }
+
+    if (source.actual_times_by_date?.[dateKey]) {
+        return source.actual_times_by_date[dateKey]
+    }
+
+    return {
+        actual_time_in: source.actual_time_in && getManilaDateKey(source.actual_time_in) === dateKey ? source.actual_time_in : null,
+        actual_time_out: source.actual_time_out && getManilaDateKey(source.actual_time_out) === dateKey ? source.actual_time_out : null,
+    }
+}
+
+const isEntryOnDate = (entry, dateKey) => {
+    if (!entry || !dateKey) return false
+
+    const startKey = getManilaDateKey(entry.start_time)
+    const endKey = getManilaDateKey(entry.end_time)
+
+    return startKey === dateKey || endKey === dateKey
+}
+
 const openCreateModal = () => {
     isEditing.value = false
     isViewingOnly.value = false
@@ -906,7 +947,7 @@ const handleDateClick = (date) => {
 
 const handleEventClick = (payload) => {
     const event = payload?.event ?? payload
-    const clickedDateKey = getManilaDateKey(payload?.date ?? event?.start_time)
+    const clickedDateKey = getCalendarDateKey(payload?.date) ?? getManilaDateKey(event?.start_time)
 
     if (!hasPermission('schedules.view') && !hasPermission('schedules.edit')) return;
 
@@ -924,8 +965,9 @@ const handleEventClick = (payload) => {
     isViewingOnly.value = true; // Always start in View mode
     canEditSchedule.value = canEdit; // Store permission for the Pencil icon
     currentScheduleId.value    = event.id
-    currentActualTimeIn.value  = event.actual_time_in && getManilaDateKey(event.actual_time_in) === clickedDateKey ? event.actual_time_in : null
-    currentActualTimeOut.value = event.actual_time_out && getManilaDateKey(event.actual_time_out) === clickedDateKey ? event.actual_time_out : null
+    const eventActualTimes = getActualTimesForDate(event, clickedDateKey)
+    currentActualTimeIn.value  = eventActualTimes.actual_time_in
+    currentActualTimeOut.value = eventActualTimes.actual_time_out
 
     form.user_id = event.user_id
     form.status = event.status
@@ -936,24 +978,31 @@ const handleEventClick = (payload) => {
 
     // Populate store entries from schedule_stores; fall back to legacy single store+time
     if (event.schedule_stores && event.schedule_stores.length > 0) {
-        form.stores = event.schedule_stores.map(ss => ({
-            store_id: ss.store_id,
-            start_time: formatDateForInput(new Date(ss.start_time)),
-            end_time: formatDateForInput(new Date(ss.end_time)),
-            grace_period_minutes: ss.grace_period_minutes ?? 30,
-            remarks: ss.remarks || '',
-            actual_time_in: ss.actual_time_in && getManilaDateKey(ss.actual_time_in) === clickedDateKey ? ss.actual_time_in : null,
-            actual_time_out: ss.actual_time_out && getManilaDateKey(ss.actual_time_out) === clickedDateKey ? ss.actual_time_out : null,
-        }))
+        const dayStores = event.schedule_stores.filter(ss => isEntryOnDate(ss, clickedDateKey))
+        const storesToDisplay = dayStores.length > 0 ? dayStores : event.schedule_stores
+
+        form.stores = storesToDisplay.map(ss => {
+            const segmentActualTimes = getActualTimesForDate(ss, clickedDateKey)
+            return {
+                store_id: ss.store_id,
+                start_time: formatDateForInput(new Date(ss.start_time)),
+                end_time: formatDateForInput(new Date(ss.end_time)),
+                grace_period_minutes: ss.grace_period_minutes ?? 30,
+                remarks: ss.remarks || '',
+                actual_time_in: segmentActualTimes.actual_time_in,
+                actual_time_out: segmentActualTimes.actual_time_out,
+            }
+        })
     } else {
+        const scheduleActualTimes = getActualTimesForDate(event, clickedDateKey)
         form.stores = [{
             store_id: event.store_id || null,
             start_time: formatDateForInput(new Date(event.start_time)),
             end_time: formatDateForInput(new Date(event.end_time)),
             grace_period_minutes: 30,
             remarks: event.remarks || '',
-            actual_time_in: event.actual_time_in && getManilaDateKey(event.actual_time_in) === clickedDateKey ? event.actual_time_in : null,
-            actual_time_out: event.actual_time_out && getManilaDateKey(event.actual_time_out) === clickedDateKey ? event.actual_time_out : null,
+            actual_time_in: scheduleActualTimes.actual_time_in,
+            actual_time_out: scheduleActualTimes.actual_time_out,
         }]
     }
 
