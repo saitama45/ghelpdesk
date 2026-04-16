@@ -46,9 +46,21 @@ class Ticket extends Model
         return $this->hasMany(Ticket::class, 'parent_id');
     }
 
+    public function scheduleStore()
+    {
+        return $this->hasOne(ScheduleStore::class);
+    }
+
     public function schedule()
     {
-        return $this->hasOne(Schedule::class);
+        return $this->hasOneThrough(
+            Schedule::class,
+            ScheduleStore::class,
+            'ticket_id',   // FK on schedule_stores → tickets
+            'id',          // PK on schedules
+            'id',          // PK on tickets
+            'schedule_id'  // FK on schedule_stores → schedules
+        );
     }
 
     public function slaMetric()

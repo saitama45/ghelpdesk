@@ -68,7 +68,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
             : now('Asia/Manila')->endOfMonth();
 
-        $query = Schedule::with(['user', 'ticket.item', 'scheduleStores.store']);
+        $query = Schedule::with(['user', 'scheduleStores.store', 'scheduleStores.ticket.item']);
 
         $query->where('start_time', '<=', $rangeEnd)
             ->where('end_time', '>=', $rangeStart);
@@ -114,7 +114,6 @@ class ScheduleController extends Controller implements HasMiddleware
             return [
                 'id'              => $schedule->id,
                 'user_id'         => $schedule->user_id,
-                'ticket_id'       => $schedule->ticket_id,
                 'status'          => $schedule->status,
                 'start_time'      => $schedule->start_time->toIso8601String(),
                 'end_time'        => $schedule->end_time->toIso8601String(),
@@ -141,14 +140,23 @@ class ScheduleController extends Controller implements HasMiddleware
                         'actual_time_in'       => $segLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String(),
                         'actual_time_out'      => $segLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String(),
                         'actual_times_by_date' => $segmentActualTimesByDate,
+                        'ticket'               => $ss->ticket ? [
+                            'id'         => $ss->ticket->id,
+                            'ticket_key' => $ss->ticket->ticket_key,
+                            'title'      => $ss->ticket->title,
+                            'priority'   => $ss->ticket->item ? $ss->ticket->item->priority : $ss->ticket->priority,
+                            'status'     => $ss->ticket->status,
+                        ] : null,
                     ];
                 }),
-                'ticket' => $schedule->ticket ? [
-                    'id'         => $schedule->ticket->id,
-                    'ticket_key' => $schedule->ticket->ticket_key,
-                    'title'      => $schedule->ticket->title,
-                    'priority'   => $schedule->ticket->item ? $schedule->ticket->item->priority : $schedule->ticket->priority,
-                    'status'     => $schedule->ticket->status,
+                'ticket' => $schedule->scheduleStores->whereNotNull('ticket_id')->first()?->ticket ? [
+                    'id'         => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->id,
+                    'ticket_key' => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->ticket_key,
+                    'title'      => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->title,
+                    'priority'   => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item 
+                                    ? $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item->priority 
+                                    : $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->priority,
+                    'status'     => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->status,
                 ] : null,
             ];
         });

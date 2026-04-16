@@ -272,10 +272,11 @@ class TicketController extends Controller
             'store',
             'item',
             'parent',
-            'schedule.store',
+            'scheduleStore.schedule',
+            'scheduleStore.store',
             'slaMetric',
             'children' => function($query) {
-                $query->with(['schedule.store', 'reporter', 'assignee'])->orderBy('created_at', 'asc');
+                $query->with(['scheduleStore.schedule', 'scheduleStore.store', 'schedule', 'store', 'reporter', 'assignee'])->orderBy('created_at', 'asc');
             }
         ]);
 
@@ -540,7 +541,6 @@ class TicketController extends Controller
             ]);
 
             $schedule = Schedule::create([
-                'ticket_id' => $childTicket->id,
                 'user_id' => $validated['user_id'],
                 'status' => $validated['status'],
                 'start_time' => $validated['start_time'],
@@ -553,15 +553,15 @@ class TicketController extends Controller
                 'created_at' => now('Asia/Manila'),
             ]);
 
-            if (in_array($validated['status'], ['On-site', 'Off-site'], true)) {
-                $schedule->scheduleStores()->create([
-                    'store_id' => $ticket->store_id,
-                    'start_time' => $validated['start_time'],
-                    'end_time' => $validated['end_time'],
-                    'grace_period_minutes' => 30,
-                    'remarks' => $validated['remarks'],
-                ]);
-            }
+            // Always create a scheduleStore entry for child tickets so the ticket_id link is preserved
+            $schedule->scheduleStores()->create([
+                'store_id' => $ticket->store_id,
+                'ticket_id' => $childTicket->id,
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'grace_period_minutes' => 30,
+                'remarks' => $validated['remarks'],
+            ]);
 
             // Set parent to Open when a new child is added
             $ticket->update(['status' => 'open']);

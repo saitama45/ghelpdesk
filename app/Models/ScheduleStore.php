@@ -10,6 +10,7 @@ class ScheduleStore extends Model
     protected $fillable = [
         'schedule_id',
         'store_id',
+        'ticket_id',
         'start_time',
         'end_time',
         'grace_period_minutes',
@@ -30,5 +31,10 @@ class ScheduleStore extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function ticket(): BelongsTo
+    {
+        return $this->belongsTo(Ticket::class);
     }
 }

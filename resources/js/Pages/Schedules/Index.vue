@@ -428,16 +428,33 @@
                                 </div>
 
                                 <!-- Actual Time In / Out (per segment) -->
-                                <div v-if="isEditing && (entry.actual_time_in || entry.actual_time_out)"
-                                     class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold bg-white/50 p-2 rounded-md border border-gray-100 shadow-sm">
-                                    <span v-if="entry.actual_time_in" class="text-emerald-600 flex items-center gap-1">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-                                        Actual In: {{ formatDateTime(entry.actual_time_in) }}
-                                    </span>
-                                    <span v-if="entry.actual_time_out" class="text-orange-500 flex items-center gap-1">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-                                        Actual Out: {{ formatDateTime(entry.actual_time_out) }}
-                                    </span>
+                                <div v-if="entry.ticket || (isEditing && (entry.actual_time_in || entry.actual_time_out))"
+                                     class="flex flex-col gap-2 bg-white/50 p-3 rounded-md border border-gray-100 shadow-sm">
+                                    
+                                    <!-- Ticket Link per Visit -->
+                                    <div v-if="entry.ticket" class="flex items-center justify-between pb-2 border-b border-gray-100/50 mb-1">
+                                        <div class="flex items-center space-x-2">
+                                            <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5z" />
+                                            </svg>
+                                            <span class="text-[10px] font-black text-blue-700 uppercase tracking-widest">Visit Ticket:</span>
+                                            <Link :href="route('tickets.edit', entry.ticket.id)" class="text-xs font-black text-blue-600 hover:text-blue-800 hover:underline">
+                                                #{{ entry.ticket.ticket_key }}
+                                            </Link>
+                                        </div>
+                                        <span class="text-[9px] font-bold text-blue-400 truncate max-w-[200px]" :title="entry.ticket.title">{{ entry.ticket.title }}</span>
+                                    </div>
+
+                                    <div v-if="entry.actual_time_in || entry.actual_time_out" class="flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold">
+                                        <span v-if="entry.actual_time_in" class="text-emerald-600 flex items-center gap-1">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                                            Actual In: {{ formatDateTime(entry.actual_time_in) }}
+                                        </span>
+                                        <span v-if="entry.actual_time_out" class="text-orange-500 flex items-center gap-1">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                                            Actual Out: {{ formatDateTime(entry.actual_time_out) }}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <!-- Row 2: Grace | Remarks -->
@@ -502,7 +519,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed, watch } from 'vue'
-import { router, usePage, useRemember } from '@inertiajs/vue3'
+import { router, usePage, useRemember, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
@@ -991,6 +1008,7 @@ const handleEventClick = (payload) => {
                 remarks: ss.remarks || '',
                 actual_time_in: segmentActualTimes.actual_time_in,
                 actual_time_out: segmentActualTimes.actual_time_out,
+                ticket: ss.ticket || null,
             }
         })
     } else {
@@ -1003,6 +1021,7 @@ const handleEventClick = (payload) => {
             remarks: event.remarks || '',
             actual_time_in: scheduleActualTimes.actual_time_in,
             actual_time_out: scheduleActualTimes.actual_time_out,
+            ticket: event.ticket || null,
         }]
     }
 

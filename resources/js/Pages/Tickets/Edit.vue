@@ -107,6 +107,26 @@ const formatTime = (timeStr) => {
     }
 };
 
+const buildScheduleContext = (activity = {}) => {
+    const scheduleStore = activity.schedule_store || activity.scheduleStore || null;
+    const schedule = activity.schedule || scheduleStore?.schedule || null;
+    const descriptionRemarks = typeof activity.description === 'string'
+        ? activity.description.match(/Remarks:\s*(.*)$/s)?.[1]?.trim() || ''
+        : '';
+
+    return {
+        schedule,
+        store: activity.store || scheduleStore?.store || null,
+        remarks: scheduleStore?.remarks || schedule?.remarks || activity.remarks || descriptionRemarks,
+        start_time: schedule?.start_time || scheduleStore?.start_time || activity.start_time || null,
+        end_time: schedule?.end_time || scheduleStore?.end_time || activity.end_time || null,
+        pickup_start: schedule?.pickup_start || scheduleStore?.pickup_start || activity.pickup_start || null,
+        pickup_end: schedule?.pickup_end || scheduleStore?.pickup_end || activity.pickup_end || null,
+        backlogs_start: schedule?.backlogs_start || scheduleStore?.backlogs_start || activity.backlogs_start || null,
+        backlogs_end: schedule?.backlogs_end || scheduleStore?.backlogs_end || activity.backlogs_end || null,
+    };
+};
+
 const openChildModal = () => {
     childForm.reset();
     
@@ -351,6 +371,7 @@ const activities = computed(() => {
     }));
 
     // Add Description as an activity
+    const parentSStore = props.ticket.schedule_store || props.ticket.scheduleStore;
     const description = {
         id: 'description-' + props.ticket.id,
         activity_type: 'description',
@@ -360,18 +381,25 @@ const activities = computed(() => {
         sender_email: props.ticket.sender_email,
         text: props.ticket.description,
         // Include schedule for child context
-        schedule: props.ticket.schedule,
+        schedule: parentSStore?.schedule,
+        store: parentSStore?.store,
         assignee: props.ticket.assignee,
         // Attachments that are not linked to any comment (created with ticket)
         attachments: (props.ticket.attachments || []).filter(a => !a.comment_id)
     };
 
-    const children = (props.ticket.children || []).map(child => ({
-        ...child,
-        activity_type: 'child_ticket',
-        date: parseDate(child.created_at),
-        user: child.reporter
-    }));
+    const children = (props.ticket.children || []).map(child => {
+        const scheduleContext = buildScheduleContext(child);
+        return {
+            ...child,
+            activity_type: 'child_ticket',
+            date: parseDate(child.created_at),
+            user: child.reporter,
+            schedule: scheduleContext.schedule,
+            store: scheduleContext.store,
+            scheduleContext,
+        };
+    });
 
     // Sort ascending (oldest first)
     return [...comments, ...histories, ...children, description].sort((a, b) => {
@@ -1092,28 +1120,36 @@ const linkify = (text) => {
                                     </div>
 
                                     <!-- Child Schedule Context (for Child Tickets) -->
-                                    <div v-if="ticket.parent_id && activity.schedule" class="mb-6 bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
+                                    <div v-if="ticket.parent_id && (activity.schedule || activity.schedule_store || activity.scheduleStore)" class="mb-6 bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
                                         <div class="flex items-center justify-between border-b border-blue-100 pb-2 mb-2">
                                             <span class="text-[10px] font-black text-blue-400 uppercase tracking-widest">Schedule Assignment</span>
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200">{{ activity.schedule.status }}</span>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200">
+                                                {{ (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.status }}
+                                            </span>
                                         </div>
                                         
                                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div class="flex flex-col">
                                                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Scheduled Time</span>
-                                                <span class="text-xs font-bold text-gray-700">{{ formatDate(activity.schedule.start_time) }} – {{ formatDate(activity.schedule.end_time) }}</span>
+                                                <span class="text-xs font-bold text-gray-700">
+                                                    {{ formatDate((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.start_time) }} – 
+                                                    {{ formatDate((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.end_time) }}
+                                                </span>
                                             </div>
-                                            <div v-if="activity.schedule.store" class="flex flex-col">
+                                            <div v-if="activity.store || activity.schedule_store?.store || activity.scheduleStore?.store" class="flex flex-col">
                                                 <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Store Branch</span>
-                                                <span class="text-xs font-bold text-gray-700">{{ activity.schedule.store.name }}</span>
+                                                <span class="text-xs font-bold text-gray-700">
+                                                    {{ (activity.store || activity.schedule_store?.store || activity.scheduleStore?.store)?.name }}
+                                                </span>
                                             </div>
                                         </div>
 
-                                        <div v-if="activity.schedule.pickup_start || activity.schedule.backlogs_start" class="flex flex-col gap-2 pt-2 border-t border-blue-50">
+                                        <div v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start || (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start" class="flex flex-col gap-2 pt-2 border-t border-blue-50">
                                             <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Operational Windows</span>
                                             <div class="flex flex-wrap gap-2">
-                                                <span v-if="activity.schedule.pickup_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Pickup: {{ formatTime(activity.schedule.pickup_start) }}–{{ formatTime(activity.schedule.pickup_end) }}</span>
-                                                <span v-if="activity.schedule.backlogs_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Backlogs: {{ formatTime(activity.schedule.backlogs_start) }}–{{ formatTime(activity.schedule.backlogs_end) }}</span>
+                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Pickup: {{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start) }}–{{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_end) }}</span>
+                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start && (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start"> &nbsp;|&nbsp; </span>
+                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Backlogs: {{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start) }}–{{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_end) }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1267,29 +1303,33 @@ const linkify = (text) => {
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Assigned To</span>
                                             <span class="font-semibold text-gray-800">{{ activity.assignee.name }}</span>
                                         </div>
-                                        <div v-if="activity.schedule" class="flex items-center gap-2">
+                                        <div v-if="activity.scheduleContext?.schedule?.status" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Schedule</span>
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">{{ activity.schedule.status }}</span>
-                                        </div>
-                                        <div v-if="activity.schedule" class="flex items-center gap-2">
-                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Time</span>
-                                            <span class="text-gray-700">{{ formatDate(activity.schedule.start_time) }} – {{ formatDate(activity.schedule.end_time) }}</span>
-                                        </div>
-                                        <div v-if="activity.schedule && (activity.schedule.pickup_start || activity.schedule.backlogs_start)" class="flex items-center gap-2">
-                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Add'l Times</span>
-                                            <span class="text-gray-600 text-[11px]">
-                                                <span v-if="activity.schedule.pickup_start">Pickup: {{ formatTime(activity.schedule.pickup_start) }}–{{ formatTime(activity.schedule.pickup_end) }}</span>
-                                                <span v-if="activity.schedule.pickup_start && activity.schedule.backlogs_start"> &nbsp;|&nbsp; </span>
-                                                <span v-if="activity.schedule.backlogs_start">Backlogs: {{ formatTime(activity.schedule.backlogs_start) }}–{{ formatTime(activity.schedule.backlogs_end) }}</span>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+                                                {{ activity.scheduleContext.schedule.status }}
                                             </span>
                                         </div>
-                                        <div v-if="activity.schedule && activity.schedule.store" class="flex items-center gap-2">
-                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Store</span>
-                                            <span class="text-gray-700">{{ activity.schedule.store.name }}</span>
+                                        <div v-if="activity.scheduleContext?.start_time && activity.scheduleContext?.end_time" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Time</span>
+                                            <span class="text-gray-700">
+                                                {{ formatDate(activity.scheduleContext.start_time) }} - {{ formatDate(activity.scheduleContext.end_time) }}
+                                            </span>
                                         </div>
-                                        <div v-if="activity.schedule && activity.schedule.remarks" class="flex items-start gap-2">
+                                        <div v-if="activity.scheduleContext?.pickup_start || activity.scheduleContext?.backlogs_start" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Add'l Times</span>
+                                            <span class="text-gray-600 text-[11px]">
+                                                <span v-if="activity.scheduleContext?.pickup_start">Pickup: {{ formatTime(activity.scheduleContext.pickup_start) }}-{{ formatTime(activity.scheduleContext.pickup_end) }}</span>
+                                                <span v-if="activity.scheduleContext?.pickup_start && activity.scheduleContext?.backlogs_start"> | </span>
+                                                <span v-if="activity.scheduleContext?.backlogs_start">Backlogs: {{ formatTime(activity.scheduleContext.backlogs_start) }}-{{ formatTime(activity.scheduleContext.backlogs_end) }}</span>
+                                            </span>
+                                        </div>
+                                        <div v-if="activity.scheduleContext?.store" class="flex items-center gap-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Store</span>
+                                            <span class="text-gray-700">{{ activity.scheduleContext.store.name }}</span>
+                                        </div>
+                                        <div v-if="activity.scheduleContext?.remarks" class="flex items-start gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Remarks</span>
-                                            <span class="text-gray-700 whitespace-pre-wrap">{{ activity.schedule.remarks }}</span>
+                                            <span class="text-gray-700 whitespace-pre-wrap">{{ activity.scheduleContext.remarks }}</span>
                                         </div>
                                     </div>
                                 </template>

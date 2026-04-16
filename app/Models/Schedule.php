@@ -8,7 +8,6 @@ class Schedule extends Model
 {
     protected $fillable = [
         'user_id',
-        'ticket_id',
         'status',
         'start_time',
         'end_time',
@@ -32,11 +31,6 @@ class Schedule extends Model
     protected function serializeDate(\DateTimeInterface $date): string
     {
         return $date->setTimezone(new \DateTimeZone('Asia/Manila'))->format('Y-m-d H:i:s');
-    }
-
-    public function ticket()
-    {
-        return $this->belongsTo(Ticket::class);
     }
 
     public function user()
