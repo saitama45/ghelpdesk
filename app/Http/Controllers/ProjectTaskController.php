@@ -5,54 +5,54 @@ namespace App\Http\Controllers;
 use App\Models\ProjectTask;
 use App\Models\Project;
 use App\Models\ActivityTemplate;
+use App\Models\ProjectTemplate;
 use Illuminate\Http\Request;
 
 class ProjectTaskController extends Controller
 {
-    public function applyTemplates(Project $project)
+    public function applyTemplates(Request $request, Project $project)
     {
-        $store = $project->store;
-        
-        if (!$store) {
-            return redirect()->back()->with('error', 'Project does not have an assigned store.');
-        }
+        $request->validate([
+            'project_template_id' => 'required|exists:project_templates,id',
+        ]);
 
-        $storeClass = $store->class ?? 'Regular';
+        $template = ProjectTemplate::with('activities')->findOrFail($request->project_template_id);
+        $activities = $template->activities;
 
-        $templates = ActivityTemplate::whereIn('store_class', [$storeClass, 'Both'])
-            ->orderBy('order')
-            ->get();
-
-        if ($templates->isEmpty()) {
-            return redirect()->back()->with('info', 'No activity templates found for this store class.');
+        if ($activities->isEmpty()) {
+            return redirect()->back()->with('info', 'The selected template has no activities.');
         }
 
         $addedCount = 0;
 
-        foreach ($templates as $template) {
+        foreach ($activities as $activity) {
             // Check if task already exists to prevent duplicates
             $exists = ProjectTask::where('project_id', $project->id)
-                ->where('name', $template->name)
+                ->where('name', $activity->activity)
                 ->exists();
 
             if (!$exists) {
                 ProjectTask::create([
                     'project_id' => $project->id,
-                    'name' => $template->name,
-                    'category' => $template->category,
+                    'name' => $activity->activity,
+                    'category' => $activity->milestone,
+                    'asset_item' => $activity->asset_item,
+                    'model_specs' => $activity->model_specs,
+                    'qty' => $activity->qty,
+                    'responsible' => $activity->responsible,
                     'status' => 'Pending',
                     'progress' => 0,
-                    'order' => $template->order,
+                    'order' => $activity->order,
                 ]);
                 $addedCount++;
             }
         }
 
         if ($addedCount > 0) {
-            return redirect()->back()->with('success', "Applied {$addedCount} task templates successfully.");
+            return redirect()->back()->with('success', "Applied {$addedCount} activities from \"{$template->name}\" template successfully.");
         }
 
-        return redirect()->back()->with('info', 'All applicable templates have already been added.');
+        return redirect()->back()->with('info', 'All activities from this template have already been added.');
     }
 
     public function store(Request $request)

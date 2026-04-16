@@ -28,7 +28,8 @@ import {
 const props = defineProps({
     project: Object,
     users: Array,
-    stores: Array
+    stores: Array,
+    project_templates: Array
 });
 
 const formatDate = (dateString) => {
@@ -585,7 +586,7 @@ const getStatusColor = (status) => {
 
                 <!-- Gantt Chart Tab -->
                 <div v-if="activeTab === 'gantt'">
-                    <ProjectGantt :project="project" :users="users" />
+                    <ProjectGantt :project="project" :users="users" :projectTemplates="project_templates" />
                 </div>
 
                 <!-- Assets Board Tab -->

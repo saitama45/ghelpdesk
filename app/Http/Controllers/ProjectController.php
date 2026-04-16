@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\Store;
 use App\Models\User;
+use App\Models\ProjectTemplate;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -61,10 +62,15 @@ class ProjectController extends Controller
             'assets'
         ]);
 
+        $storeClass = $project->store->class ?? 'Regular';
+
         return Inertia::render('Projects/Show', [
             'project' => $project,
             'users' => User::all(['id', 'name']),
             'stores' => Store::all(['id', 'name']),
+            'project_templates' => ProjectTemplate::whereIn('store_class', [$storeClass, 'Both'])
+                ->withCount('activities')
+                ->get(),
         ]);
     }
 

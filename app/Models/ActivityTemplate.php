@@ -10,9 +10,13 @@ class ActivityTemplate extends Model
     use HasFactory;
 
     protected $fillable = [
-        'store_class',
-        'name',
-        'category',
+        'project_template_id',
+        'activity',
+        'milestone',
+        'asset_item',
+        'model_specs',
+        'qty',
+        'responsible',
         'default_duration_days',
         'order',
     ];
@@ -20,5 +24,11 @@ class ActivityTemplate extends Model
     protected $casts = [
         'default_duration_days' => 'integer',
         'order' => 'integer',
+        'qty' => 'integer',
     ];
+
+    public function projectTemplate()
+    {
+        return $this->belongsTo(ProjectTemplate::class);
+    }
 }

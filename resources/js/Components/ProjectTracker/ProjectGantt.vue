@@ -19,19 +19,25 @@ import {
 
 import { useToast } from '@/Composables/useToast.js';
 import { useConfirm } from '@/Composables/useConfirm.js';
+import Modal from '@/Components/Modal.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecondaryButton from '@/Components/SecondaryButton.vue';
 
 const props = defineProps({
     project: Object,
     users: Array,
+    projectTemplates: Array,
 });
 
-const { success, info } = useToast();
+const { success, info, error } = useToast();
 const { confirm: confirmAction } = useConfirm();
 const isAddingTask = ref(false);
 const isEditing = ref(false);
 const editingTaskId = ref(null);
 const showFilters = ref(false);
 const isApplyingTemplates = ref(false);
+const showTemplateModal = ref(false);
+const selectedTemplateId = ref('');
 const localTasks = ref([]);
 const draggedTaskId = ref(null);
 const dragOverTaskId = ref(null);
@@ -110,24 +116,47 @@ const projectTeamMembers = computed(() => {
     });
 });
 
-const applyActivityTemplates = async () => {
-    const storeClass = props.project.store?.class || 'Regular';
+const applyActivityTemplates = () => {
+    if (!props.projectTemplates || props.projectTemplates.length === 0) {
+        info('No activity templates available for this project class.');
+        return;
+    }
+    showTemplateModal.value = true;
+};
+
+const confirmApplyTemplate = async () => {
+    if (!selectedTemplateId.value) {
+        error('Please select a template first.');
+        return;
+    }
+
+    const template = props.projectTemplates.find(t => t.id === selectedTemplateId.value);
+    
+    // Close selection modal first to allow confirmation dialog to take focus
+    showTemplateModal.value = false;
+
     const ok = await confirmAction({
-        title: 'Apply Activity Templates',
-        message: `Are you sure you want to auto-populate tasks based on the "${storeClass}" store class? Existing tasks will not be duplicated.`,
-        confirmLabel: 'Apply Templates',
-        cancelLabel: 'Cancel',
+        title: 'Apply Template',
+        message: `Are you sure you want to apply "${template.name}"? This will add ${template.activities_count} activities to the project. Existing tasks with the same name will not be duplicated.`,
+        confirmLabel: 'Apply now',
         variant: 'primary'
     });
-    
+
     if (ok) {
         isApplyingTemplates.value = true;
-        useForm({}).post(route('projects.apply-templates', props.project.id), {
+        
+        router.post(route('projects.apply-templates', props.project.id), {
+            project_template_id: selectedTemplateId.value
+        }, {
             preserveScroll: true,
             onFinish: () => {
                 isApplyingTemplates.value = false;
+                selectedTemplateId.value = '';
             }
         });
+    } else {
+        // Optional: Re-open selection if cancelled
+        showTemplateModal.value = true;
     }
 };
 
@@ -477,17 +506,17 @@ const isWeekend = (date) => {
             <div v-if="isAddingTask" class="p-6 bg-indigo-50/30 border-b border-indigo-100 z-30">
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-x-8 gap-y-4 items-end">
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Category</label>
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Milestone</label>
                         <input v-model="form.category" type="text" placeholder="Group Name" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
                         <div v-if="form.errors.category" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.category }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Task Name</label>
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Activity</label>
                         <input v-model="form.name" type="text" placeholder="What needs to be done?" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
                         <div v-if="form.errors.name" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.name }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Assigned To</label>
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Responsible</label>
                         <select v-model="form.assigned_to" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
                             <option value="">Unassigned</option>
                             <option v-for="member in projectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
@@ -528,8 +557,8 @@ const isWeekend = (date) => {
                 <div class="sticky top-0 z-50 flex h-14 bg-white border-b border-slate-200">
                     <!-- Left Header -->
                     <div class="sticky left-0 z-50 w-[480px] h-full flex items-center bg-slate-50 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
-                        <div class="w-1/2">Task Name</div>
-                        <div class="w-1/4 px-2 text-center">Owner</div>
+                        <div class="w-1/2">Activity</div>
+                        <div class="w-1/4 px-2 text-center">Responsible</div>
                         <div class="w-1/4 pl-2 pr-6 text-right">Status</div>
                     </div>
                     <!-- Right Header (Timeline) -->
@@ -566,15 +595,15 @@ const isWeekend = (date) => {
                              class="flex-shrink-0 w-12 border-r border-slate-100 h-full"
                              :class="[
                                 isWeekend(day) ? 'bg-slate-50/10' : '',
-                                isToday(day) ? 'bg-indigo-50/30 border-r-indigo-200 border-r-2' : ''
+                                isToday(day) ? 'bg-indigo-50/20' : ''
                              ]">
                         </div>
                     </div>
 
                     <!-- Today Indicator Line -->
                     <div v-for="(day, idx) in timelineDays" :key="'line'+idx">
-                         <div v-if="isToday(day)" class="absolute h-full w-[2px] bg-indigo-500/50 z-0 pointer-events-none" :style="{ left: (480 + idx * 48 + 23) + 'px' }">
-                            <div class="bg-indigo-600 text-[8px] text-white px-1 rounded-sm absolute -top-0 transform -translate-x-1/2 font-bold shadow-sm uppercase tracking-tighter">Today</div>
+                         <div v-if="isToday(day)" class="absolute h-full w-px bg-indigo-500/30 z-0 pointer-events-none" :style="{ left: (480 + idx * 48 + 24) + 'px' }">
+                            <div class="bg-indigo-600 text-[8px] text-white px-1.5 py-0.5 rounded-b shadow-sm absolute top-0 transform -translate-x-1/2 font-black uppercase tracking-tighter whitespace-nowrap">Today</div>
                          </div>
                     </div>
 
@@ -702,6 +731,58 @@ const isWeekend = (date) => {
                 <span>Last updated: {{ new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</span>
             </div>
         </div>
+
+        <!-- Template Selection Modal -->
+        <Modal :show="showTemplateModal" @close="showTemplateModal = false" maxWidth="lg">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-slate-900">Apply Activity Template</h3>
+                    <button @click="showTemplateModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <XMarkIcon class="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <p class="text-sm text-slate-600">Select a predefined activity blueprint to apply to this project. This will automatically create the associated tasks.</p>
+                    
+                    <div class="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                        <label v-for="template in projectTemplates" :key="template.id" 
+                               :class="[
+                                   'relative flex items-center p-4 cursor-pointer rounded-xl border-2 transition-all',
+                                   selectedTemplateId === template.id 
+                                       ? 'border-indigo-600 bg-indigo-50 shadow-md' 
+                                       : 'border-slate-100 hover:border-slate-200 bg-white'
+                               ]"
+                        >
+                            <input type="radio" :value="template.id" v-model="selectedTemplateId" class="sr-only">
+                            <div class="flex-1">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-sm font-bold text-slate-900">{{ template.name }}</span>
+                                    <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase rounded">{{ template.project_type }}</span>
+                                </div>
+                                <div class="flex items-center text-xs text-slate-500 font-medium space-x-3">
+                                    <span>{{ template.activities_count }} activities</span>
+                                    <span class="h-1 w-1 bg-slate-300 rounded-full"></span>
+                                    <span>{{ template.store_class }} Class</span>
+                                </div>
+                            </div>
+                            <div v-if="selectedTemplateId === template.id" class="ml-3 text-indigo-600">
+                                <CheckCircleIcon class="w-6 h-6 fill-indigo-600 text-white" />
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
+                    <SecondaryButton @click="showTemplateModal = false">
+                        Cancel
+                    </SecondaryButton>
+                    <PrimaryButton @click="confirmApplyTemplate" :disabled="!selectedTemplateId || isApplyingTemplates" class="bg-indigo-600 hover:bg-indigo-700">
+                        {{ isApplyingTemplates ? 'Applying...' : 'Apply Template' }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
     </div>
 </template>
 
