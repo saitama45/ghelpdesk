@@ -636,7 +636,7 @@ const userFilterOptions = computed(() => {
     ]
     
     props.users.forEach(user => {
-        if (user.id !== currentUserId) {
+        if (Number(user.id) !== Number(currentUserId)) {
             options.push({ id: user.id, name: user.name })
         }
     })

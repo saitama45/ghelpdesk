@@ -38,7 +38,7 @@ const route = window.route;
 
 const openMenus = ref({
     adminTask: false,
-    operations: false,
+    services: false,
     references: false,
     userManagement: false,
     settings: false,
@@ -74,7 +74,7 @@ onMounted(() => {
         openMenus.value.adminTask = true;
     }
     if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) {
-        openMenus.value.operations = true;
+        openMenus.value.services = true;
     }
     if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
         openMenus.value.references = true;
@@ -101,7 +101,7 @@ const canSeeAdminTask = computed(() => {
            hasPermission('presence.view');
 });
 
-const canSeeOperations = computed(() => {
+const canSeeServices = computed(() => {
     return hasPermission('tickets.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view');
@@ -268,27 +268,27 @@ const canSeeSettings = computed(() => {
                     </div>
                 </div>
 
-                <!-- Operations Section -->
-                <div v-if="canSeeOperations" class="space-y-1 pt-1">
+                <!-- Services Section -->
+                <div v-if="canSeeServices" class="space-y-1 pt-1">
                     <button
-                        @click="toggleMenu('operations')"
+                        @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) && !openMenus.operations
+                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) && !openMenus.services
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
                     >
                         <QueueListIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Operations</span>
-                        <ChevronDownIcon v-if="!isCollapsed && openMenus.operations" class="w-4 h-4 ml-2" />
-                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.operations" class="w-4 h-4 ml-2" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Services</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.services" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.services" class="w-4 h-4 ml-2" />
                         <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Operations
+                            Services
                         </div>
                     </button>
 
-                    <div v-if="!isCollapsed && openMenus.operations" class="pl-10 space-y-1 mt-1 transition-all duration-300">
+                    <div v-if="!isCollapsed && openMenus.services" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
                             v-if="hasPermission('tickets.view')"
                             :href="route('tickets.index')"

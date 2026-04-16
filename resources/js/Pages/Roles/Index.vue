@@ -245,27 +245,86 @@
                             </div>
 
                             <div class="md:col-span-2">
-                                <div class="flex items-center justify-between mb-2">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
                                     <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Permissions</label>
-                                    <button type="button" @click="toggleAllPermissions" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800">
-                                        {{ areAllPermissionsSelected ? 'Unselect All' : 'Select All' }}
+                                    <div class="flex items-center space-x-3">
+                                        <div class="relative flex-1 sm:flex-none">
+                                            <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                                <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
+                                            </div>
+                                            <input v-model="permissionSearch" type="text" placeholder="Search permissions..." 
+                                                   class="pl-8 pr-3 py-1.5 text-xs border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 w-full sm:w-64 shadow-sm">
+                                        </div>
+                                        <button type="button" @click="toggleAllPermissions" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800 whitespace-nowrap px-2 py-1 bg-blue-50 rounded-md transition-colors">
+                                            {{ areAllPermissionsSelected ? 'Unselect All' : 'Select All' }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Tab Navigation -->
+                                <div class="flex overflow-x-auto custom-scrollbar border-b border-gray-200 mb-4 pb-1">
+                                    <button 
+                                        v-for="group in groupedPermissions" 
+                                        :key="group.name"
+                                        type="button"
+                                        @click="activeTab = group.name"
+                                        :class="[
+                                            'px-4 py-2 text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all border-b-2 -mb-[2px]',
+                                            activeTab === group.name 
+                                                ? 'border-blue-600 text-blue-600' 
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        ]"
+                                    >
+                                        {{ group.name }}
+                                        <span v-if="permissionSearch" class="ml-1 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px]">
+                                            {{ group.categories.reduce((acc, cat) => acc + cat.permissions.length, 0) }}
+                                        </span>
                                     </button>
                                 </div>
-                                <div class="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-                                    <div v-for="(perms, category) in permissions" :key="category" class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                        <div class="flex items-center justify-between mb-3 border-b border-gray-200 pb-2">
-                                            <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest">{{ category }}</h4>
-                                            <button type="button" @click="toggleCategory(category, perms)" class="text-[10px] font-bold text-blue-600 uppercase hover:text-blue-800">
-                                                {{ isCategorySelected(perms) ? 'Clear' : 'All' }}
-                                            </button>
+
+                                <!-- Tab Content -->
+                                <div class="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                    <div v-for="group in groupedPermissions" :key="group.name">
+                                        <div v-if="activeTab === group.name" class="space-y-4">
+                                            <div class="flex items-center justify-between">
+                                                <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest">{{ group.name }} Overview</h3>
+                                                <button type="button" @click="toggleGroup(group)" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors">
+                                                    {{ isGroupSelected(group) ? 'Clear All in Group' : 'Select All in Group' }}
+                                                </button>
+                                            </div>
+                                            
+                                            <div class="grid grid-cols-1 gap-4">
+                                                <div v-for="categoryData in group.categories" :key="categoryData.name" class="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                                    <div class="flex items-center justify-between mb-3 border-b border-gray-200 pb-2">
+                                                        <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest">{{ categoryData.name.replace(/_/g, ' ') }}</h4>
+                                                        <button type="button" @click="toggleCategory(categoryData.name, categoryData.permissions)" class="text-[10px] font-bold text-blue-600 uppercase hover:text-blue-800">
+                                                            {{ isCategorySelected(categoryData.permissions) ? 'Clear' : 'All' }}
+                                                        </button>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <label v-for="permission in sortPermissions(categoryData.permissions)" :key="permission.id" class="flex items-center group cursor-pointer p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200 shadow-sm sm:shadow-none">
+                                                            <input type="checkbox" :value="permission.name" v-model="form.permissions"
+                                                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors">
+                                                            <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors truncate" :title="permission.name">{{ permission.name.split('.')[1] }}</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="grid grid-cols-2 gap-2">
-                                            <label v-for="permission in sortPermissions(perms)" :key="permission.id" class="flex items-center group cursor-pointer">
-                                                <input type="checkbox" :value="permission.name" v-model="form.permissions"
-                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors">
-                                                <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors">{{ permission.name.split('.')[1] }}</span>
-                                            </label>
+                                    </div>
+                                    
+                                    <div v-if="groupedPermissions.length === 0" class="text-center py-12">
+                                        <div class="bg-gray-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                                            <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
                                         </div>
+                                        <p class="text-sm text-gray-500 font-medium">No permissions found matching "{{ permissionSearch }}"</p>
+                                        <button type="button" @click="permissionSearch = ''" class="mt-2 text-xs font-bold text-blue-600 uppercase hover:text-blue-800">
+                                            Clear search
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -334,7 +393,7 @@ const landingPageOptions = [
         ]
     },
     {
-        group: 'Operations',
+        group: 'Services',
         options: [
             { label: 'Tickets', value: 'tickets.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
@@ -425,6 +484,7 @@ const openCreateModal = () => {
     form.notify_on_ticket_create = false
     form.notify_on_ticket_assign = false
     form.notify_on_urgent_ticket = false
+    permissionSearch.value = ''
     showModal.value = true
 }
 
@@ -439,6 +499,7 @@ const editRole = (role) => {
     form.notify_on_ticket_create = !!role.notify_on_ticket_create
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket
+    permissionSearch.value = ''
     showModal.value = true
 }
 
@@ -453,6 +514,7 @@ const copyRole = (role) => {
     form.notify_on_ticket_create = !!role.notify_on_ticket_create;
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign;
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket;
+    permissionSearch.value = ''
     showModal.value = true;
 };
 
@@ -466,6 +528,7 @@ const closeModal = () => {
     form.notify_on_ticket_create = false
     form.notify_on_ticket_assign = false
     form.notify_on_urgent_ticket = false
+    permissionSearch.value = ''
 }
 
 const submitForm = () => {
@@ -496,6 +559,113 @@ const toggleAllCompanies = () => {
         form.companies = []
     } else {
         form.companies = props.companies.map(c => c.id)
+    }
+}
+
+const permissionSearch = ref('')
+const activeTab = ref('')
+
+const permissionGroups = [
+    { name: 'Dashboard', categories: ['Dashboard'] },
+    { name: 'Project Tracker', categories: ['Projects'] },
+    { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
+    { name: 'Services', categories: ['Tickets', 'Pos_requests', 'Sap_requests'] },
+    { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types'] },
+    { name: 'Reports', categories: ['Reports'] },
+    { name: 'User Management', categories: ['Users', 'Roles'] },
+    { name: 'Settings', categories: ['Settings', 'Canned_messages'] }
+]
+
+const groupedPermissions = computed(() => {
+    const search = permissionSearch.value.toLowerCase()
+    const result = []
+    
+    // Create a copy of permissions keys to track what's mapped
+    const availableCategories = Object.keys(props.permissions || {})
+    const mappedKeys = new Set()
+
+    permissionGroups.forEach(group => {
+        const groupCategories = []
+
+        group.categories.forEach(catName => {
+            // Find match regardless of case
+            const actualKey = availableCategories.find(k => k.toLowerCase() === catName.toLowerCase())
+            if (actualKey) {
+                const perms = props.permissions[actualKey]
+                if (perms) {
+                    const filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search))
+                    if (filteredPerms.length > 0) {
+                        groupCategories.push({
+                            name: actualKey,
+                            permissions: filteredPerms
+                        })
+                        mappedKeys.add(actualKey)
+                    }
+                }
+            }
+        })
+
+        if (groupCategories.length > 0) {
+            result.push({
+                name: group.name,
+                categories: groupCategories
+            })
+        }
+    })
+
+    // Handle any categories that were not mapped in the predefined groups
+    const otherCategories = []
+    availableCategories.forEach(catName => {
+        if (!mappedKeys.has(catName)) {
+            const perms = props.permissions[catName]
+            if (perms) {
+                const filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search))
+                if (filteredPerms.length > 0) {
+                    otherCategories.push({
+                        name: catName,
+                        permissions: filteredPerms
+                    })
+                }
+            }
+        }
+    })
+    
+    if (otherCategories.length > 0) {
+        result.push({
+            name: 'Other',
+            categories: otherCategories
+        })
+    }
+
+    return result
+})
+
+// Set default active tab to the first group that has content
+watch(groupedPermissions, (newGroups) => {
+    if (newGroups.length > 0 && (!activeTab.value || !newGroups.find(g => g.name === activeTab.value))) {
+        activeTab.value = newGroups[0].name
+    }
+}, { immediate: true })
+
+const isGroupSelected = (group) => {
+    if (!group || !group.categories) return false
+    const allNames = group.categories.flatMap(c => c.permissions.map(p => p.name))
+    if (allNames.length === 0) return false
+    return allNames.every(name => form.permissions.includes(name))
+}
+
+const toggleGroup = (group) => {
+    if (!group || !group.categories) return
+    const allNames = group.categories.flatMap(c => c.permissions.map(p => p.name))
+    if (allNames.length === 0) return
+    
+    const hasAll = allNames.every(name => form.permissions.includes(name))
+    
+    if (hasAll) {
+        form.permissions = form.permissions.filter(name => !allNames.includes(name))
+    } else {
+        const missing = allNames.filter(name => !form.permissions.includes(name))
+        form.permissions = [...form.permissions, ...missing]
     }
 }
 
