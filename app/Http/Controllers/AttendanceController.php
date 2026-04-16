@@ -87,7 +87,7 @@ class AttendanceController extends Controller implements HasMiddleware
         $user = auth()->user();
         
         // Base query - load relationships for both segment-based and legacy logs
-        $query = AttendanceLog::with(['user', 'scheduleStore.store'])->latest('log_time');
+        $query = AttendanceLog::with(['user', 'scheduleStore.store', 'schedule.store'])->latest('log_time');
 
         // Privacy Logic: Show only own logs if not Admin/Dev/Manager
         if (!$user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) && !$user->is_manager) {

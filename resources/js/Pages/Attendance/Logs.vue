@@ -306,7 +306,10 @@ const stopDrag = () => {
                             <div class="text-xs text-gray-500">{{ log.user?.email }}</div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-bold text-blue-600">{{ log.schedule_store?.store?.name || log.schedule?.store?.name || '-' }}</div>
+                            <div class="text-sm font-semibold text-gray-900">{{ log.schedule_store?.store?.name || log.schedule?.store?.name || '-' }}</div>
+                            <div v-if="log.schedule_store?.store?.code || log.schedule?.store?.code" class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
+                                CODE: {{ log.schedule_store?.store?.code || log.schedule?.store?.code }}
+                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex flex-col">
