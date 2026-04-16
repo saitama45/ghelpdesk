@@ -1,15 +1,23 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon, InformationCircleIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     events: {
         type: Array,
         default: () => []
+    },
+    statusFilter: {
+        type: Array,
+        default: () => []
+    },
+    priorityFilter: {
+        type: Array,
+        default: () => []
     }
 });
 
-const emit = defineEmits(['date-click', 'event-click', 'visible-range-change']);
+const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:priorityFilter']);
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
@@ -26,28 +34,61 @@ const STATUS_FILTERS = [
     { status: 'Offset',   label: 'Offset',   bg: 'bg-cyan-600'    },
 ];
 
-const selectedStatuses = ref(STATUS_FILTERS.map(s => s.status));
+// ── Priority filter ──────────────────────────────────────────────────────────
+const PRIORITY_FILTERS = [
+    { key: 'urgent', label: 'P1 - Urgent', bg: 'bg-red-600'    },
+    { key: 'high',   label: 'P2 - High',   bg: 'bg-orange-500' },
+    { key: 'medium', label: 'P3 - Medium', bg: 'bg-yellow-500' },
+    { key: 'low',    label: 'P4 - Low',    bg: 'bg-green-600'  },
+];
 
-const filteredEvents = computed(() =>
-    selectedStatuses.value.length === STATUS_FILTERS.length
-        ? props.events
-        : props.events.filter(e => selectedStatuses.value.includes(e.status))
-);
+const filteredEvents = computed(() => {
+    return props.events.filter(e => {
+        const matchesStatus = props.statusFilter.includes(e.status);
+        
+        // Priority logic: 
+        // 1. If no ticket exists, it is strictly 'none' (No Priority).
+        // 2. If a ticket exists, it MUST be one of the priority keys. 
+        //    We default to 'low' if the ticket has no priority set.
+        const priorityKey = e.ticket 
+            ? String(e.ticket.priority || 'low').toLowerCase() 
+            : 'none';
+            
+        const matchesPriority = props.priorityFilter.includes(priorityKey);
+        
+        return matchesStatus && matchesPriority;
+    });
+});
 
-const allStatusSelected = computed(() => selectedStatuses.value.length === STATUS_FILTERS.length);
+const allStatusSelected = computed(() => props.statusFilter.length === STATUS_FILTERS.length);
+const allPrioritySelected = computed(() => props.priorityFilter.length === (PRIORITY_FILTERS.length + 1));
 
 const toggleStatus = (status) => {
-    if (selectedStatuses.value.includes(status)) {
-        selectedStatuses.value = selectedStatuses.value.filter(s => s !== status);
+    let newVal = [...props.statusFilter];
+    if (newVal.includes(status)) {
+        newVal = newVal.filter(s => s !== status);
     } else {
-        selectedStatuses.value = [...selectedStatuses.value, status];
+        newVal.push(status);
     }
+    emit('update:statusFilter', newVal);
+};
+
+const togglePriority = (priority) => {
+    let newVal = [...props.priorityFilter];
+    if (newVal.includes(priority)) {
+        newVal = newVal.filter(p => p !== priority);
+    } else {
+        newVal.push(priority);
+    }
+    emit('update:priorityFilter', newVal);
 };
 
 const toggleAllStatuses = () => {
-    selectedStatuses.value = allStatusSelected.value
-        ? []
-        : STATUS_FILTERS.map(s => s.status);
+    emit('update:statusFilter', allStatusSelected.value ? [] : STATUS_FILTERS.map(s => s.status));
+};
+
+const toggleAllPriorities = () => {
+    emit('update:priorityFilter', allPrioritySelected.value ? [] : ['none', ...PRIORITY_FILTERS.map(p => p.key)]);
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -451,6 +492,14 @@ const formatDateLong = (date) => {
             </div>
         </div>
 
+        <!-- Filter Guide Note -->
+        <div class="px-4 py-1.5 bg-blue-50/30 border-b border-gray-100 flex items-center gap-2">
+            <InformationCircleIcon class="w-4 h-4 text-blue-500" />
+            <span class="text-[10px] text-blue-700 font-medium italic">
+                Tip: Toggle buttons to filter events. Unselect <strong class="font-black uppercase">"No Priority"</strong> to show only schedules with ticket numbers.
+            </span>
+        </div>
+
         <!-- Status Filter Strip -->
         <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/40 flex flex-wrap items-center gap-1.5">
             <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Status:</span>
@@ -459,7 +508,7 @@ const formatDateLong = (date) => {
                 :key="s.status"
                 @click="toggleStatus(s.status)"
                 class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
-                :class="selectedStatuses.includes(s.status)
+                :class="statusFilter.includes(s.status)
                     ? [s.bg, 'text-white border-transparent shadow-sm']
                     : 'bg-white text-gray-400 border-gray-200'"
             >{{ s.label }}</button>
@@ -467,6 +516,34 @@ const formatDateLong = (date) => {
                 @click="toggleAllStatuses"
                 class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
             >{{ allStatusSelected ? 'Clear all' : 'Select all' }}</button>
+        </div>
+
+        <!-- Priority Filter Strip -->
+        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/20 flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Priority:</span>
+            <button
+                v-for="p in PRIORITY_FILTERS"
+                :key="p.key"
+                @click="togglePriority(p.key)"
+                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                :class="priorityFilter.includes(p.key)
+                    ? [p.bg, 'text-white border-transparent shadow-sm']
+                    : 'bg-white text-gray-400 border-gray-200'"
+            >{{ p.label }}</button>
+            
+            <!-- None Option (for events without priority) -->
+            <button
+                @click="togglePriority('none')"
+                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                :class="priorityFilter.includes('none')
+                    ? ['bg-slate-500', 'text-white border-transparent shadow-sm']
+                    : 'bg-white text-gray-400 border-gray-200'"
+            >No Priority</button>
+
+            <button
+                @click="toggleAllPriorities"
+                class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
+            >{{ allPrioritySelected ? 'Clear all' : 'Select all' }}</button>
         </div>
 
         <!-- Days of Week Header (month view only) -->

@@ -77,6 +77,41 @@ class ScheduleExportController extends Controller
             $query->whereHas('scheduleStores', fn($sq) => $sq->where('store_id', $request->store_id));
         }
 
+        // Status filter
+        if ($request->filled('status')) {
+            $statuses = is_array($request->status) ? $request->status : explode(',', $request->status);
+            $query->whereIn('status', $statuses);
+        }
+
+        // Priority filter
+        if ($request->filled('priority')) {
+            $priorities = is_array($request->priority) ? $request->priority : explode(',', $request->priority);
+            $query->whereHas('scheduleStores.ticket', function($q) use ($priorities) {
+                $q->where(function($sub) use ($priorities) {
+                    // Check if ticket priority is in selected list
+                    $sub->whereIn('priority', $priorities);
+                    
+                    // Special case: if 'low' is selected, also include tickets with null priority (defaulting to low)
+                    if (in_array('low', $priorities)) {
+                        $sub->orWhereNull('priority');
+                    }
+                    
+                    // Also check item priority
+                    $sub->orWhereHas('item', function($iq) use ($priorities) {
+                        $iq->whereIn('priority', $priorities);
+                        if (in_array('low', $priorities)) {
+                            $iq->orWhereNull('priority');
+                        }
+                    });
+                });
+            });
+            
+            // If 'none' is NOT in the selected priorities, only show schedules with tickets
+            if (!in_array('none', $priorities)) {
+                $query->whereHas('scheduleStores.ticket');
+            }
+        }
+
         $schedules = $query->get();
 
         // Batch-load attendance logs for all matched schedules

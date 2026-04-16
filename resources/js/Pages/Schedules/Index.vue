@@ -117,30 +117,12 @@
                     </div>
                 </div>
 
-                <!-- Color Legend (calendar view only) -->
-                <div v-if="currentView === 'calendar'" class="flex flex-col gap-1.5 px-1 py-2.5 border-t border-gray-100">
-                    <!-- Priority row -->
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest w-14 shrink-0">Priority:</span>
-                        <div v-for="item in priorityLegend" :key="item.key" class="flex items-center gap-1.5">
-                            <span :class="[item.color, 'w-3 h-3 rounded-full inline-block shrink-0']"></span>
-                            <span class="text-xs font-medium text-gray-600">{{ item.label }}</span>
-                        </div>
-                    </div>
-                    <!-- Status row -->
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest w-14 shrink-0">Status:</span>
-                        <div v-for="item in scheduleLegend" :key="item.status" class="flex items-center gap-1.5">
-                            <span :class="[item.color, 'w-3 h-3 rounded-full inline-block shrink-0']"></span>
-                            <span class="text-xs font-medium text-gray-600">{{ item.label }}</span>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Calendar View -->
                 <div v-if="currentView === 'calendar'">
                     <Calendar 
                         :events="schedules" 
+                        v-model:statusFilter="filterStatus"
+                        v-model:priorityFilter="filterPriority"
                         @visible-range-change="handleVisibleRangeChange"
                         @date-click="handleDateClick"
                         @event-click="handleEventClick"
@@ -564,6 +546,17 @@ const initialRange = props.filters?.start && props.filters?.end
 const filterUser = useRemember(props.filters?.user_id || '', 'schedules.filterUser')
 const filterSubUnit = useRemember(props.filters?.sub_unit || '', 'schedules.filterSubUnit')
 const filterStore = useRemember(props.filters?.store_id || '', 'schedules.filterStore')
+
+// These filters are synced with the Calendar component
+const filterStatus = useRemember(
+    props.filters?.status ? (Array.isArray(props.filters.status) ? props.filters.status : [props.filters.status]) : ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Holiday', 'Offset'],
+    'schedules.filterStatus'
+)
+const filterPriority = useRemember(
+    props.filters?.priority ? (Array.isArray(props.filters.priority) ? props.filters.priority : [props.filters.priority]) : ['none', 'urgent', 'high', 'medium', 'low'],
+    'schedules.filterPriority'
+)
+
 const selectedReportYears = useRemember(
     props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears],
     'schedules.selectedReportYears'
@@ -736,6 +729,8 @@ const exportPdf = () => {
         : {
             start: visibleRange.value.start,
             end: visibleRange.value.end,
+            status: filterStatus.value.join(','),
+            priority: filterPriority.value.join(','),
         };
 
     if (currentView.value === 'calendar' && filterUser.value) {

@@ -89,6 +89,23 @@ class ScheduleController extends Controller implements HasMiddleware
             $query->whereHas('scheduleStores', fn ($sq) => $sq->where('store_id', $request->store_id));
         }
 
+        if ($request->filled('status')) {
+            $statuses = is_array($request->status) ? $request->status : [$request->status];
+            $query->whereIn('status', $statuses);
+        }
+
+        if ($request->filled('priority')) {
+            $priorities = is_array($request->priority) ? $request->priority : [$request->priority];
+            $query->whereHas('scheduleStores.ticket', function($q) use ($priorities) {
+                $q->where(function($sub) use ($priorities) {
+                    $sub->whereIn('priority', $priorities)
+                        ->orWhereHas('item', function($iq) use ($priorities) {
+                            $iq->whereIn('priority', $priorities);
+                        });
+                });
+            });
+        }
+
         $rawSchedules = $query->get();
 
         // Batch-load attendance logs (avoids N+1)
@@ -195,7 +212,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'availableYears' => $availableYears,
             'pivotStatuses'  => $pivotStatuses,
             'filters'        => array_merge(
-                $request->only(['user_id', 'report_years', 'sub_unit', 'store_id']),
+                $request->only(['user_id', 'report_years', 'sub_unit', 'store_id', 'status', 'priority']),
                 [
                     'start' => $rangeStart->toDateString(),
                     'end' => $rangeEnd->toDateString(),
@@ -430,6 +447,24 @@ class ScheduleController extends Controller implements HasMiddleware
                 $sub->from('schedule_stores')
                     ->whereColumn('schedule_stores.schedule_id', 'schedules.id')
                     ->where('schedule_stores.store_id', $storeId);
+            });
+        }
+
+        if ($request->filled('status')) {
+            $rawQuery->where('status', $request->status);
+        }
+
+        if ($request->filled('priority')) {
+            $priority = $request->priority;
+            $rawQuery->whereExists(function ($sub) use ($priority) {
+                $sub->from('schedule_stores')
+                    ->join('tickets', 'schedule_stores.ticket_id', '=', 'tickets.id')
+                    ->leftJoin('items', 'tickets.item_id', '=', 'items.id')
+                    ->whereColumn('schedule_stores.schedule_id', 'schedules.id')
+                    ->where(function($q) use ($priority) {
+                        $q->where('tickets.priority', $priority)
+                          ->orWhere('items.priority', $priority);
+                    });
             });
         }
 
