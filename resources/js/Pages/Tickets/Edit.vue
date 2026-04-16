@@ -1424,7 +1424,7 @@ const linkify = (text) => {
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned User</label>
-                            <Autocomplete v-model="childForm.user_id" :options="users" label-key="name" value-key="id" placeholder="Select user..." />
+                            <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Schedule Status</label>

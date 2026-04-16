@@ -490,9 +490,11 @@ class TicketController extends Controller
         $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
 
         $conflict = Schedule::where('user_id', $validated['user_id'])
-            ->where('store_id', $ticket->store_id)
             ->where('start_time', '<', $newEnd)
             ->where('end_time', '>', $newStart)
+            ->whereHas('scheduleStores', function($q) use ($ticket) {
+                $q->where('store_id', $ticket->store_id);
+            })
             ->first();
 
         if ($conflict) {
@@ -532,6 +534,7 @@ class TicketController extends Controller
                 'category_id' => $ticket->category_id,
                 'sub_category_id' => $ticket->sub_category_id,
                 'item_id' => $ticket->item_id,
+                'department' => $ticket->department,
                 'parent_id' => $ticket->id,
                 'created_at' => now('Asia/Manila'),
             ]);
@@ -539,7 +542,6 @@ class TicketController extends Controller
             $schedule = Schedule::create([
                 'ticket_id' => $childTicket->id,
                 'user_id' => $validated['user_id'],
-                'store_id' => $ticket->store_id,
                 'status' => $validated['status'],
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],

@@ -48,4 +48,19 @@ class Schedule extends Model
     {
         return $this->hasMany(ScheduleStore::class)->orderBy('start_time');
     }
+
+    /**
+     * Get the primary store for this schedule (shortcut for legacy single-store logic).
+     */
+    public function store()
+    {
+        return $this->hasOneThrough(
+            Store::class,
+            ScheduleStore::class,
+            'schedule_id', // Foreign key on schedule_stores table
+            'id',          // Foreign key on stores table
+            'id',          // Local key on schedules table
+            'store_id'     // Local key on schedule_stores table
+        );
+    }
 }
