@@ -116,7 +116,7 @@ const tableColumns = computed(() => {
                     :title="table.name"
                     :subtitle="table.description"
                     search-placeholder="Search records..."
-                    empty-message="No records found."
+                    empty-message="Get started by adding your first record."
                     :search="pagination.search.value"
                     :data="pagination.data.value"
                     :current-page="pagination.currentPage.value"

@@ -9,6 +9,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Str;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\Cache;
 
 class TableBuilderController extends Controller implements HasMiddleware
 {
@@ -70,6 +71,8 @@ class TableBuilderController extends Controller implements HasMiddleware
             ],
         ]);
 
+        Cache::forget('active_table_definitions');
+
         return redirect()->back()->with('success', 'Table Definition created successfully');
     }
 
@@ -96,6 +99,8 @@ class TableBuilderController extends Controller implements HasMiddleware
             'is_active' => $request->boolean('is_active'),
         ]);
 
+        Cache::forget('active_table_definitions');
+
         return redirect()->back()->with('success', 'Table Definition updated successfully');
     }
 
@@ -107,12 +112,17 @@ class TableBuilderController extends Controller implements HasMiddleware
 
         $tableBuilder->update(['form_schema' => $request->form_schema]);
 
+        Cache::forget('active_table_definitions');
+
         return redirect()->back()->with('success', 'Table schema saved successfully');
     }
 
     public function destroy(TableDefinition $tableBuilder)
     {
         $tableBuilder->delete();
+
+        Cache::forget('active_table_definitions');
+
         return redirect()->back()->with('success', 'Table Definition deleted successfully');
     }
 }
