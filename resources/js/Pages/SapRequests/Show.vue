@@ -225,6 +225,52 @@ const getLabel = (key, value, isItem = false) => {
     if (Array.isArray(value)) return value.join(', ');
     return value ?? '—';
 };
+
+const isFileField = (key, isItem = false) => {
+    const schema = props.sapRequest.request_type?.form_schema;
+    if (!schema) return false;
+    const fields = isItem ? (schema.items_columns || []) : (schema.fields || []);
+    const field = fields.find(f => f.key === key);
+    return field && field.type === 'file';
+};
+
+const isFileArray = (value) => {
+    return Array.isArray(value);
+};
+
+const getFileName = (value) => {
+    if (!value) return 'Attachment';
+    if (typeof value === 'object' && value.name) return value.name;
+    if (typeof value !== 'string') return 'Attachment';
+    
+    // Fallback for legacy string paths
+    const cleanPath = value.replace(/^public\//, '').replace(/^storage\//, '');
+    const parts = cleanPath.split(/[/\\]/);
+    return parts.pop() || 'Attachment';
+};
+
+const getFileUrl = (value) => {
+    if (!value) return '#';
+    
+    let path = typeof value === 'object' ? value.path : value;
+    let name = typeof value === 'object' ? value.name : '';
+    
+    if (typeof path !== 'string') return '#';
+
+    // If we have a name, use our download route to ensure the filename is correct
+    if (name) {
+        return route('attachments.download', { path, name });
+    }
+
+    // Fallback for legacy string paths
+    let cleanPath = path;
+    if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+    if (cleanPath.startsWith('public/')) cleanPath = cleanPath.substring(7);
+    if (cleanPath.startsWith('storage/')) cleanPath = cleanPath.substring(8);
+    
+    if (!cleanPath) return '#';
+    return `/storage/${cleanPath}`;
+};
 </script>
 
 <template>
@@ -295,7 +341,22 @@ const getLabel = (key, value, isItem = false) => {
                                         {{ String(key).replace(/_/g, ' ') }}
                                     </dt>
                                     <dd class="text-sm font-semibold text-gray-900 text-right w-2/3">
-                                        {{ getLabel(key, value) }}
+                                        <template v-if="isFileField(key)">
+                                            <div v-if="isFileArray(value)" class="flex flex-col items-end gap-1">
+                                                <a v-for="(file, fi) in value" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" :download="getFileName(file)" class="inline-flex items-center text-teal-600 hover:text-teal-800 hover:underline">
+                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                    {{ getFileName(file) }}
+                                                </a>
+                                            </div>
+                                            <a v-else-if="value" :href="getFileUrl(value)" target="_blank" rel="noopener noreferrer" :download="getFileName(value)" class="inline-flex items-center text-teal-600 hover:text-teal-800 hover:underline">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                {{ getFileName(value) }}
+                                            </a>
+                                            <span v-else>—</span>
+                                        </template>
+                                        <template v-else>
+                                            {{ getLabel(key, value) }}
+                                        </template>
                                     </dd>
                                 </div>
                             </dl>
@@ -311,7 +372,22 @@ const getLabel = (key, value, isItem = false) => {
                                         <div v-for="(val, k) in item.item_data" :key="k">
                                             <dt class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{{ String(k).replace(/_/g, ' ') }}</dt>
                                             <dd class="text-sm font-semibold text-gray-900">
-                                                {{ getLabel(k, val, true) }}
+                                                <template v-if="isFileField(k, true)">
+                                                    <div v-if="isFileArray(val)" class="flex flex-col gap-1">
+                                                        <a v-for="(file, fi) in val" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" :download="getFileName(file)" class="inline-flex items-center text-teal-600 hover:text-teal-800 hover:underline">
+                                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                            {{ getFileName(file) }}
+                                                        </a>
+                                                    </div>
+                                                    <a v-else-if="val" :href="getFileUrl(val)" target="_blank" rel="noopener noreferrer" :download="getFileName(val)" class="inline-flex items-center text-teal-600 hover:text-teal-800 hover:underline">
+                                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                        {{ getFileName(val) }}
+                                                    </a>
+                                                    <span v-else>—</span>
+                                                </template>
+                                                <template v-else>
+                                                    {{ getLabel(k, val, true) }}
+                                                </template>
                                             </dd>
                                         </div>
                                     </dl>
@@ -415,7 +491,7 @@ const getLabel = (key, value, isItem = false) => {
                                 </div>
                                 
                                 <!-- Approver Fields -->
-                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-teal-100 rounded-[2rem] p-6 shadow-sm">
+                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">
                                     <h4 class="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
                                     <DynamicFormRenderer
                                         :fields="approverFields"
@@ -432,7 +508,7 @@ const getLabel = (key, value, isItem = false) => {
                                 <button @click="submitApproval" :disabled="approvalForm.processing"
                                     class="w-full py-4 bg-teal-600 text-white rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-teal-200 hover:bg-teal-700 transform hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                                     <span>Release Level {{ sapRequest.current_approval_level }}</span>
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <svg class="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                 </button>
                             </div>
                         </div>

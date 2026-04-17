@@ -12,6 +12,11 @@ class RolesAndPermissionSeeder extends Seeder
 {
     public function run(): void
     {
+        // Reset cached roles and permissions
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        \Illuminate\Support\Facades\Cache::forget('permissions_version');
+        \Illuminate\Support\Facades\Cache::increment('permissions_version');
+
         // Define help desk permissions
         $permissions = [
             // Dashboard
@@ -77,6 +82,12 @@ class RolesAndPermissionSeeder extends Seeder
             'request_types.create' => 'Create request types',
             'request_types.edit' => 'Edit request types',
             'request_types.delete' => 'Delete request types',
+
+            // Table Builder
+            'table_builder.view' => 'View table builder',
+            'table_builder.create' => 'Create custom tables',
+            'table_builder.edit' => 'Edit custom tables',
+            'table_builder.delete' => 'Delete custom tables',
 
             // POS Requests
             'pos_requests.view' => 'View POS requests',

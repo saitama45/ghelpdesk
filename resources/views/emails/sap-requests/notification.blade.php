@@ -102,7 +102,7 @@
                 @foreach($resolvedFormFields as $field)
                     <div class="field-row">
                         <span class="field-key">{{ $field['label'] }}</span>
-                        <span class="field-val">{{ $field['value'] }}</span>
+                        <span class="field-val">{!! $field['value'] !!}</span>
                     </div>
                 @endforeach
             </div>
@@ -119,7 +119,7 @@
                     @foreach($itemFields as $field)
                         <div class="field-row" style="border-bottom: 1px solid #f1f5f9; padding: 8px 0;">
                             <span class="field-key">{{ $field['label'] }}</span>
-                            <span class="field-val">{{ $field['value'] }}</span>
+                            <span class="field-val">{!! $field['value'] !!}</span>
                         </div>
                     @endforeach
                 </div>

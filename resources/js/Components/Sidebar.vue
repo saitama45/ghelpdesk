@@ -30,6 +30,7 @@ const emit = defineEmits(['toggle']);
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
+const dynamicTables = computed(() => page.props.dynamicTables || []);
 const { hasPermission } = usePermission();
 const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
 
@@ -39,6 +40,7 @@ const route = window.route;
 const openMenus = ref({
     adminTask: false,
     services: false,
+    dynamicTables: false,
     references: false,
     userManagement: false,
     settings: false,
@@ -76,7 +78,10 @@ onMounted(() => {
     if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*')) {
         openMenus.value.services = true;
     }
-    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*')) {
+    if (route().current('dynamic-table.*')) {
+        openMenus.value.dynamicTables = true;
+    }
+    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('table-builder.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -115,7 +120,8 @@ const canSeeReferences = computed(() => {
            hasPermission('categories.view') ||
            hasPermission('subcategories.view') ||
            hasPermission('items.view') ||
-           hasPermission('request_types.view');
+           hasPermission('request_types.view') ||
+           hasPermission('table_builder.view');
 });
 
 const canSeeUserManagement = computed(() => {
@@ -322,13 +328,48 @@ const canSeeSettings = computed(() => {
                     </div>
                 </div>
 
+                <!-- Dynamic Tables Section -->
+                <div v-if="dynamicTables.length > 0 && hasPermission('table_builder.view')" class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('dynamicTables')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            route().current('dynamic-table.*') && !openMenus.dynamicTables
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <Bars3Icon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Reference Data</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.dynamicTables" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.dynamicTables" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Reference Data
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.dynamicTables" class="pl-10 space-y-1 mt-1 transition-all duration-300">
+                        <Link
+                            v-for="table in dynamicTables"
+                            :key="table.slug"
+                            :href="route('dynamic-table.index', table.slug)"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('dynamic-table.*') && page.url.includes('/tables/' + table.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>{{ table.name }}</span>
+                        </Link>
+                    </div>
+                </div>
+
                 <!-- References Section -->
                 <div v-if="canSeeReferences" class="space-y-1 pt-1">
                     <button
                         @click="toggleMenu('references')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('categories.*') || route().current('request-types.*')) && !openMenus.references
+                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('categories.*') || route().current('request-types.*') || route().current('table-builder.*')) && !openMenus.references
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -432,6 +473,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Request Types</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('table_builder.view')"
+                            :href="route('table-builder.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('table-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Table Builder</span>
                         </Link>
                     </div>
                 </div>

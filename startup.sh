@@ -13,6 +13,10 @@ mkdir -p /home/site/wwwroot/storage/framework/sessions
 mkdir -p /home/site/wwwroot/storage/framework/views
 mkdir -p /home/site/wwwroot/storage/logs
 
+# 2.1 Create storage symlink
+echo "🔗 Creating storage symlink..."
+php /home/site/wwwroot/artisan storage:link
+
 # 3. Fix permissions (Fast)
 echo "🔐 Setting storage permissions..."
 chmod -R 777 /home/site/wwwroot/storage

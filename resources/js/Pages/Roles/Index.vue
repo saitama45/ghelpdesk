@@ -417,6 +417,7 @@ const landingPageOptions = [
             { label: 'Sub-Categories', value: 'sub-categories.index' },
             { label: 'Items', value: 'items.index' },
             { label: 'Request Types', value: 'request-types.index' },
+            { label: 'Table Builder', value: 'table-builder.index' },
         ]
     },
     {
@@ -570,7 +571,7 @@ const permissionGroups = [
     { name: 'Project Tracker', categories: ['Projects'] },
     { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
     { name: 'Services', categories: ['Tickets', 'Pos_requests', 'Sap_requests'] },
-    { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types'] },
+    { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Table_builder'] },
     { name: 'Reports', categories: ['Reports'] },
     { name: 'User Management', categories: ['Users', 'Roles'] },
     { name: 'Settings', categories: ['Settings', 'Canned_messages'] }

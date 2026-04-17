@@ -17,7 +17,7 @@ class SapRequestService
     {
         $data = $this->storeFileUploads($data);
 
-        return DB::transaction(function () use ($data, $userId) {
+        $sapRequest = DB::transaction(function () use ($data, $userId) {
             $requestType = RequestType::findOrFail($data['request_type_id']);
             $effectiveApprovalLevels = $this->getEffectiveApprovalLevels($requestType, $data['form_data'] ?? []);
 
@@ -48,23 +48,24 @@ class SapRequestService
                 $this->processApprovedRequest($sapRequest);
             }
 
-            // Refresh relationships to ensure mailable has access to company, requestType and items
-            $sapRequest->load(['company', 'requestType', 'items']);
-
-            $this->notifyCcEmails($sapRequest, 'created');
-            
-            // Send confirmation to requester
-            $this->notifyRequester($sapRequest, 'created');
-
             return $sapRequest;
         });
+
+        // Refresh relationships outside transaction
+        $sapRequest->load(['company', 'requestType', 'items', 'user']);
+
+        // Send notifications
+        $this->notifyCcEmails($sapRequest, 'created');
+        $this->notifyRequester($sapRequest, 'created');
+
+        return $sapRequest;
     }
 
     public function updateRequest(SapRequest $sapRequest, array $data): SapRequest
     {
         $data = $this->storeFileUploads($data);
 
-        return DB::transaction(function () use ($sapRequest, $data) {
+        $sapRequest = DB::transaction(function () use ($sapRequest, $data) {
             $sapRequest->update([
                 'company_id'      => $data['company_id'],
                 'request_type_id' => $data['request_type_id'],
@@ -83,13 +84,17 @@ class SapRequestService
                 }
             }
 
-            // Refresh relationships
-            $sapRequest->load(['company', 'requestType', 'items']);
-
-            $this->notifyCcEmails($sapRequest, 'updated');
-
             return $sapRequest;
         });
+
+        // Refresh relationships outside transaction
+        $sapRequest->load(['company', 'requestType', 'items', 'user']);
+
+        // Send notifications
+        $this->notifyCcEmails($sapRequest, 'updated');
+        $this->notifyRequester($sapRequest, 'updated');
+
+        return $sapRequest;
     }
 
     /**
@@ -204,8 +209,26 @@ class SapRequestService
         if ($value === null) return '—';
         if (is_bool($value)) return $value ? 'Yes' : 'No';
 
+        // Check if it's a file object or array of file objects
+        if (is_array($value)) {
+            if (isset($value['path']) && isset($value['name'])) {
+                return $value['name'];
+            }
+            
+            // Multiple files
+            $names = [];
+            foreach ($value as $val) {
+                if (is_array($val) && isset($val['name'])) {
+                    $names[] = $val['name'];
+                } else {
+                    $names[] = (string)$val;
+                }
+            }
+            return implode(', ', $names);
+        }
+
         if (!$schema) {
-            return is_array($value) ? implode(', ', $value) : (string)$value;
+            return (string)$value;
         }
 
         $fields = $isItem ? ($schema['items_columns'] ?? []) : ($schema['fields'] ?? []);
@@ -213,15 +236,8 @@ class SapRequestService
 
         if ($field && isset($field['options']) && !empty($field['options'])) {
             $options = collect($field['options']);
-            if (is_array($value)) {
-                return $options->whereIn('value', $value)->pluck('label')->implode(', ');
-            }
             $option = $options->firstWhere('value', $value);
             return $option ? $option['label'] : (string)$value;
-        }
-
-        if (is_array($value)) {
-            return implode(', ', array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $value));
         }
 
         return (string)$value;
@@ -393,23 +409,61 @@ class SapRequestService
 
         // Regular form_data fields
         foreach ($schema['fields'] ?? [] as $field) {
-            if ($field['type'] === 'file') {
+            if (($field['type'] ?? '') === 'file') {
                 $key = $field['key'];
-                $file = $data['form_data'][$key] ?? null;
-                if ($file instanceof \Illuminate\Http\UploadedFile) {
-                    $data['form_data'][$key] = $file->store('sap-requests/attachments', 'public');
+                $val = $data['form_data'][$key] ?? null;
+                if (!$val) continue;
+
+                if (is_array($val)) {
+                    $paths = [];
+                    foreach ($val as $f) {
+                        if ($f instanceof \Illuminate\Http\UploadedFile) {
+                            $paths[] = [
+                                'path' => $f->store('sap-requests/attachments', 'public'),
+                                'name' => $f->getClientOriginalName(),
+                            ];
+                        } else if (is_string($f) || is_array($f)) {
+                            $paths[] = $f;
+                        }
+                    }
+                    $data['form_data'][$key] = $paths;
+                } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
+                    $data['form_data'][$key] = [
+                        'path' => $val->store('sap-requests/attachments', 'public'),
+                        'name' => $val->getClientOriginalName(),
+                    ];
                 }
             }
         }
 
         // Items line-item columns
-        foreach ($data['items'] ?? [] as $idx => $item) {
-            foreach ($schema['items_columns'] ?? [] as $col) {
-                if ($col['type'] === 'file') {
-                    $key = $col['key'];
-                    $file = $item[$key] ?? null;
-                    if ($file instanceof \Illuminate\Http\UploadedFile) {
-                        $data['items'][$idx][$key] = $file->store('sap-requests/attachments', 'public');
+        if (isset($data['items']) && is_array($data['items'])) {
+            foreach ($data['items'] as $idx => $item) {
+                foreach ($schema['items_columns'] ?? [] as $col) {
+                    if (($col['type'] ?? '') === 'file') {
+                        $key = $col['key'];
+                        $val = $item[$key] ?? null;
+                        if (!$val) continue;
+
+                        if (is_array($val)) {
+                            $paths = [];
+                            foreach ($val as $f) {
+                                if ($f instanceof \Illuminate\Http\UploadedFile) {
+                                    $paths[] = [
+                                        'path' => $f->store('sap-requests/attachments', 'public'),
+                                        'name' => $f->getClientOriginalName(),
+                                    ];
+                                } else if (is_string($f) || is_array($f)) {
+                                    $paths[] = $f;
+                                }
+                            }
+                            $data['items'][$idx][$key] = $paths;
+                        } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
+                            $data['items'][$idx][$key] = [
+                                'path' => $val->store('sap-requests/attachments', 'public'),
+                                'name' => $val->getClientOriginalName(),
+                            ];
+                        }
                     }
                 }
             }

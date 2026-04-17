@@ -62,6 +62,9 @@ class RoleController extends Controller
             $role->companies()->sync($request->companies);
         }
 
+        // Bump the global permissions version so all cached user permission arrays are invalidated
+        Cache::increment('permissions_version');
+
         return redirect()->back()->with('success', 'Role created successfully');
     }
 

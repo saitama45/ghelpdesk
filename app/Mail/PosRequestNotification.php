@@ -48,6 +48,9 @@ class PosRequestNotification extends Mailable
         $schemaItems = $this->posRequest->form_data['items'] ?? [];
         $hasSchema   = !empty($schema['has_items']) && !empty($itemCols);
 
+        $regularData = $this->posRequest->form_data ?? [];
+        unset($regularData['items']);
+
         $resolvedItems = collect();
         if ($hasSchema) {
             $resolvedItems = collect($schemaItems)->map(
@@ -58,6 +61,10 @@ class PosRequestNotification extends Mailable
         return new Content(
             view: 'emails.pos-requests.notification',
             with: [
+                'resolvedFormFields' => $this->resolveFields(
+                    $schema['fields'] ?? [],
+                    $regularData
+                ),
                 'hasSchemaItems' => $hasSchema && count($schemaItems) > 0,
                 'resolvedItems'  => $resolvedItems,
             ],
@@ -99,7 +106,33 @@ class PosRequestNotification extends Mailable
                 }
             }
 
-            if (!empty($options)) {
+            // Handle File upload fields specially to show as links
+            if ($field && ($field['type'] ?? '') === 'file') {
+                $files = $value;
+                if (!is_array($files) || isset($files['path'])) {
+                    $files = [$files];
+                }
+
+                $displayVal = collect($files)
+                    ->map(function($file) {
+                        if (empty($file)) return '';
+                        
+                        $path = is_array($file) ? ($file['path'] ?? '') : (string)$file;
+                        $name = is_array($file) ? ($file['name'] ?? '') : '';
+                        
+                        if (!$name && $path) {
+                            $name = basename($path);
+                        }
+                        
+                        if (!$path) return '';
+                        
+                        $downloadUrl = route('attachments.download', ['path' => $path, 'name' => $name]);
+                        
+                        return '<a href="' . $downloadUrl . '" style="color: #4f46e5; font-weight: 700;">' . ($name ?: 'View File') . '</a>';
+                    })
+                    ->filter()
+                    ->implode(', ');
+            } elseif (!empty($options)) {
                 $optMap = collect($options)->keyBy('value');
                 if (is_array($value)) {
                     $displayVal = collect($value)

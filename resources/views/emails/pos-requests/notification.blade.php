@@ -126,6 +126,24 @@
                 </div>
             </div>
 
+            @if(!empty($resolvedFormFields))
+            <div class="summary-card" style="background-color: #f0fdf4; border-color: #dcfce7; margin-top: -32px;">
+                <span class="summary-title" style="color: #16a34a;">Form Details</span>
+                <table role="presentation" style="width:100%;">
+                    @foreach(array_chunk($resolvedFormFields, 2) as $row)
+                        <tr>
+                            @foreach($row as $field)
+                                <td width="50%" style="vertical-align: top; padding-bottom: 16px;">
+                                    <span class="data-label">{{ $field['label'] }}</span>
+                                    <span class="data-value" style="font-size: 14px;">{!! $field['value'] !!}</span>
+                                </td>
+                            @endforeach
+                        </tr>
+                    @endforeach
+                </table>
+            </div>
+            @endif
+
             {{-- ── Schema-driven items (form_data['items']) ──────────────────── --}}
             @if($hasSchemaItems)
                 <h2 class="section-header">Line Item Details ({{ $resolvedItems->count() }})</h2>
@@ -139,7 +157,7 @@
                                     @foreach($colRow as $field)
                                         <td width="50%" style="vertical-align: top; padding: 0 10px 16px 0;">
                                             <span class="data-label">{{ $field['label'] }}</span>
-                                            <span class="data-value" style="font-size: 14px;">{{ $field['value'] }}</span>
+                                            <span class="data-value" style="font-size: 14px;">{!! $field['value'] !!}</span>
                                         </td>
                                     @endforeach
                                 </tr>

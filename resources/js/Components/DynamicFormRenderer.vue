@@ -15,7 +15,7 @@
  *   hasItems       – whether to show the items table section
  */
 
-import { computed } from 'vue'
+import { computed, reactive, onUnmounted } from 'vue'
 import { useToast } from '@/Composables/useToast'
 
 const props = defineProps({
@@ -36,6 +36,23 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'update:items'])
 
 const { showError } = useToast()
+
+// ── Local previews for newly selected files ──────────────────────────────────
+const filePreviews = reactive({}) // { [fieldKey]: objectUrl }
+const itemFilePreviews = reactive({}) // { [rowIdx_colKey]: objectUrl }
+
+const clearPreviews = (previews) => {
+    Object.values(previews).forEach(url => URL.revokeObjectURL(url))
+    Object.keys(previews).forEach(key => delete previews[key])
+}
+
+onUnmounted(() => {
+    clearPreviews(filePreviews)
+    clearPreviews(itemFilePreviews)
+})
+
+const getFieldError = (key) => props.errors[key] || props.errors[`form_data.${key}`]
+const getItemError = (rowIdx, colKey) => props.errors[`items.${rowIdx}.${colKey}`]
 
 const gridClass = computed(() => {
     const cols = Number(props.gridColumns)
@@ -191,23 +208,43 @@ const handleFileChange = (field, event) => {
 
     const maxSize = field.max_file_size || 10
     
+    // Revoke old preview if any
+    if (filePreviews[field.key]) {
+        URL.revokeObjectURL(filePreviews[field.key])
+        delete filePreviews[field.key]
+    }
+
     if (field.multiple) {
-        for (let i = 0; i < files.length; i++) {
-            if (!validateFileSize(files[i], maxSize)) {
-                showError(`File "${files[i].name}" exceeds the ${maxSize}MB limit.`)
+        const fileArray = Array.from(files)
+        for (const file of fileArray) {
+            if (!validateFileSize(file, maxSize)) {
+                showError(`File "${file.name}" exceeds the ${maxSize}MB limit.`)
                 event.target.value = ''
                 return
             }
         }
-        setValue(field.key, files)
+        setValue(field.key, fileArray)
     } else {
-        if (!validateFileSize(files[0], maxSize)) {
-            showError(`File "${files[0].name}" exceeds the ${maxSize}MB limit.`)
+        const file = files[0]
+        if (!validateFileSize(file, maxSize)) {
+            showError(`File "${file.name}" exceeds the ${maxSize}MB limit.`)
             event.target.value = ''
             return
         }
-        setValue(field.key, files[0])
+        
+        if (file.type.startsWith('image/')) {
+            filePreviews[field.key] = URL.createObjectURL(file)
+        }
+        setValue(field.key, file)
     }
+}
+
+const removeFile = (key) => {
+    if (filePreviews[key]) {
+        URL.revokeObjectURL(filePreviews[key])
+        delete filePreviews[key]
+    }
+    setValue(key, null)
 }
 
 const handleItemFileChange = (rowIdx, col, event) => {
@@ -215,36 +252,88 @@ const handleItemFileChange = (rowIdx, col, event) => {
     if (!files.length) return
 
     const maxSize = col.max_file_size || 10
+    const previewKey = `${rowIdx}_${col.key}`
     
+    if (itemFilePreviews[previewKey]) {
+        URL.revokeObjectURL(itemFilePreviews[previewKey])
+        delete itemFilePreviews[previewKey]
+    }
+
     if (col.multiple) {
-        for (let i = 0; i < files.length; i++) {
-            if (!validateFileSize(files[i], maxSize)) {
-                showError(`File "${files[i].name}" exceeds the ${maxSize}MB limit.`)
+        const fileArray = Array.from(files)
+        for (const file of fileArray) {
+            if (!validateFileSize(file, maxSize)) {
+                showError(`File "${file.name}" exceeds the ${maxSize}MB limit.`)
                 event.target.value = ''
                 return
             }
         }
-        setItemCell(rowIdx, col.key, files)
+        setItemCell(rowIdx, col.key, fileArray)
     } else {
-        if (!validateFileSize(files[0], maxSize)) {
-            showError(`File "${files[0].name}" exceeds the ${maxSize}MB limit.`)
+        const file = files[0]
+        if (!validateFileSize(file, maxSize)) {
+            showError(`File "${file.name}" exceeds the ${maxSize}MB limit.`)
             event.target.value = ''
             return
         }
-        setItemCell(rowIdx, col.key, files[0])
+
+        if (file.type.startsWith('image/')) {
+            itemFilePreviews[previewKey] = URL.createObjectURL(file)
+        }
+        setItemCell(rowIdx, col.key, file)
     }
 }
 
-// Returns a public URL for a stored path (e.g. "pos-requests/attachments/abc.jpg")
-const storageUrl = (path) => path ? `/storage/${path}` : null
+const removeItemFile = (rowIdx, colKey) => {
+    const previewKey = `${rowIdx}_${colKey}`
+    if (itemFilePreviews[previewKey]) {
+        URL.revokeObjectURL(itemFilePreviews[previewKey])
+        delete itemFilePreviews[previewKey]
+    }
+    setItemCell(rowIdx, colKey, null)
+}
 
-const isImagePath = (path) => {
-    if (!path || typeof path !== 'string') return false
+// Returns a public URL for a stored path (e.g. "pos-requests/attachments/abc.jpg")
+const storageUrl = (value) => {
+    if (!value) return null
+    if (typeof value === 'string' && value.startsWith('blob:')) return value
+    
+    let path = typeof value === 'object' ? value.path : value
+    if (typeof path !== 'string') return null
+    
+    return `/storage/${path}`
+}
+
+const isImagePath = (value) => {
+    if (!value) return false
+    if (typeof value === 'string' && value.startsWith('blob:')) return true
+    
+    let path = typeof value === 'object' ? value.path : value
+    if (typeof path !== 'string') return false
+    
     return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(path)
 }
 
-// True when value is an existing stored path (string), not a fresh File object
-const isStoredFile = (value) => typeof value === 'string' && value.length > 0
+// True when value is an existing stored path, not a fresh File object
+const isStoredFile = (value) => {
+    if (!value) return false;
+    if (typeof value === 'string') return value.length > 0 && !value.startsWith('blob:');
+    if (typeof value === 'object' && value.path) return true;
+    return false;
+}
+
+const getSelectedFileNames = (value) => {
+    if (!value) return '';
+    if (value instanceof FileList || Array.isArray(value)) {
+        return Array.from(value).map(f => f.name || (typeof f === 'object' ? f.name : f)).join(', ');
+    }
+    if (value instanceof File) {
+        return value.name;
+    }
+    if (typeof value === 'object' && value.name) return value.name;
+    if (typeof value === 'string' && value.startsWith('blob:')) return 'New image selected';
+    return '';
+};
 </script>
 
 <template>
@@ -335,11 +424,11 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
 
                     <!-- file -->
                     <template v-else-if="field.type === 'file'">
-                        <!-- Existing upload preview -->
-                        <div v-if="isStoredFile(getValue(field.key))" class="mb-2 flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                            <a :href="storageUrl(getValue(field.key))" target="_blank" rel="noopener" class="flex items-center gap-2 min-w-0">
-                                <img v-if="isImagePath(getValue(field.key))"
-                                     :src="storageUrl(getValue(field.key))"
+                        <!-- Existing/New upload preview -->
+                        <div v-if="isStoredFile(getValue(field.key)) || filePreviews[field.key]" class="mb-2 flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                            <div class="flex items-center gap-2 min-w-0 flex-1">
+                                <img v-if="isImagePath(getValue(field.key)) || filePreviews[field.key]"
+                                     :src="filePreviews[field.key] || storageUrl(getValue(field.key))"
                                      class="h-12 w-12 object-cover rounded-lg border border-gray-200 flex-shrink-0"
                                      alt="attachment preview" />
                                 <span v-else class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-indigo-50 rounded-lg border border-indigo-100">
@@ -347,11 +436,18 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
                                     </svg>
                                 </span>
-                                <span class="text-xs font-bold text-indigo-600 hover:underline truncate">
-                                    {{ getValue(field.key).split('/').pop() }}
-                                </span>
-                            </a>
-                            <span class="ml-auto text-[10px] text-gray-400 font-bold uppercase flex-shrink-0">Current</span>
+                                <div class="min-w-0">
+                                    <span class="block text-xs font-bold text-indigo-600 truncate">
+                                        {{ filePreviews[field.key] ? 'New image selected' : getSelectedFileNames(getValue(field.key)) }}
+                                    </span>
+                                    <span class="text-[10px] text-gray-400 font-bold uppercase">
+                                        {{ filePreviews[field.key] ? 'New' : 'Current' }}
+                                    </span>
+                                </div>
+                            </div>
+                            <button type="button" @click="removeFile(field.key)" class="p-2 text-rose-500 hover:bg-rose-100 rounded-xl transition-all" title="Remove attachment">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
                         </div>
                         <input
                             type="file"
@@ -360,6 +456,9 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                             :required="field.required && !isStoredFile(getValue(field.key))"
                             class="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
                         />
+                        <p v-if="!isStoredFile(getValue(field.key)) && !filePreviews[field.key] && getValue(field.key)" class="mt-1 text-xs font-bold text-indigo-600">
+                            Selected: {{ getSelectedFileNames(getValue(field.key)) }}
+                        </p>
                         <p v-if="field.max_file_size" class="mt-1 text-[10px] text-gray-400 italic">Max size: {{ field.max_file_size }}MB</p>
                         <p v-if="isStoredFile(getValue(field.key))" class="mt-1 text-[10px] text-gray-400 italic">Choose a new file to replace the current attachment.</p>
                     </template>
@@ -368,7 +467,7 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                     <p v-if="field.help_text" class="mt-1.5 text-[10px] text-gray-400 font-medium italic ml-1">{{ field.help_text }}</p>
 
                     <!-- error -->
-                    <p v-if="errors[field.key]" class="mt-1.5 text-[10px] text-red-600 font-bold ml-1 uppercase">{{ errors[field.key] }}</p>
+                    <p v-if="getFieldError(field.key)" class="mt-1.5 text-[10px] text-red-600 font-bold ml-1 uppercase">{{ getFieldError(field.key) }}</p>
                 </div>
             </template>
         </div>
@@ -468,11 +567,11 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
 
                             <!-- file -->
                             <template v-else-if="col.type === 'file'">
-                                <!-- Existing upload preview -->
-                                <div v-if="isStoredFile(row[col.key])" class="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-xl border border-gray-200">
-                                    <a :href="storageUrl(row[col.key])" target="_blank" rel="noopener" class="flex items-center gap-2 min-w-0">
-                                        <img v-if="isImagePath(row[col.key])"
-                                             :src="storageUrl(row[col.key])"
+                                <!-- Existing/New upload preview -->
+                                <div v-if="isStoredFile(row[col.key]) || itemFilePreviews[`${rowIdx}_${col.key}`]" class="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-xl border border-gray-200">
+                                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                                        <img v-if="isImagePath(row[col.key]) || itemFilePreviews[`${rowIdx}_${col.key}`]"
+                                             :src="itemFilePreviews[`${rowIdx}_${col.key}`] || storageUrl(row[col.key])"
                                              class="h-10 w-10 object-cover rounded-lg border border-gray-200 flex-shrink-0"
                                              alt="attachment preview" />
                                         <span v-else class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-indigo-50 rounded-lg border border-indigo-100">
@@ -480,11 +579,18 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
                                             </svg>
                                         </span>
-                                        <span class="text-[10px] font-bold text-indigo-600 hover:underline truncate">
-                                            {{ row[col.key].split('/').pop() }}
-                                        </span>
-                                    </a>
-                                    <span class="ml-auto text-[10px] text-gray-400 font-bold uppercase flex-shrink-0">Current</span>
+                                        <div class="min-w-0">
+                                            <span class="block text-[10px] font-bold text-indigo-600 truncate">
+                                                {{ itemFilePreviews[`${rowIdx}_${col.key}`] ? 'New image selected' : getSelectedFileNames(row[col.key]) }}
+                                            </span>
+                                            <span class="text-[9px] text-gray-400 font-bold uppercase">
+                                                {{ itemFilePreviews[`${rowIdx}_${col.key}`] ? 'New' : 'Current' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button type="button" @click="removeItemFile(rowIdx, col.key)" class="p-1 text-rose-500 hover:bg-rose-100 rounded-lg transition-all" title="Remove attachment">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
                                 </div>
                                 <input
                                     type="file"
@@ -492,8 +598,7 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                                     @change="handleItemFileChange(rowIdx, col, $event)"
                                     class="block w-full text-[10px] text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
                                 />
-                                <p v-if="col.max_file_size" class="mt-0.5 text-[10px] text-gray-400 italic">Max size: {{ col.max_file_size }}MB</p>
-                                <p v-if="isStoredFile(row[col.key])" class="mt-0.5 text-[10px] text-gray-400 italic">Choose a new file to replace.</p>
+                                <p v-if="getItemError(rowIdx, col.key)" class="mt-1 text-[10px] text-red-600 font-bold uppercase">{{ getItemError(rowIdx, col.key) }}</p>
                             </template>
 
                             <!-- default: text/number/date/email/tel -->

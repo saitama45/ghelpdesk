@@ -60,6 +60,14 @@ Route::middleware('auth')->group(function () {
     Route::resource('items', \App\Http\Controllers\ItemController::class)->except(['show', 'create', 'edit']);
     Route::resource('request-types', \App\Http\Controllers\RequestTypeController::class)->except(['show', 'create', 'edit']);
     Route::put('request-types/{requestType}/schema', [\App\Http\Controllers\RequestTypeController::class, 'updateSchema'])->name('request-types.schema');
+    Route::resource('table-builder', \App\Http\Controllers\TableBuilderController::class)->except(['show', 'create', 'edit']);
+    Route::put('table-builder/{table_builder}/schema', [\App\Http\Controllers\TableBuilderController::class, 'updateSchema'])->name('table-builder.schema');
+
+    // Dynamic Tables
+    Route::get('tables/{slug}', [\App\Http\Controllers\DynamicTableController::class, 'index'])->name('dynamic-table.index');
+    Route::post('tables/{slug}', [\App\Http\Controllers\DynamicTableController::class, 'store'])->name('dynamic-table.store');
+    Route::put('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'update'])->name('dynamic-table.update');
+    Route::delete('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'destroy'])->name('dynamic-table.destroy');
     Route::resource('pos-requests', \App\Http\Controllers\PosRequestController::class);
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);
@@ -126,6 +134,7 @@ Route::middleware('auth')->group(function () {
 });
 
 // Public Routes (No Auth)
+Route::get('/attachments/download', [App\Http\Controllers\AttachmentController::class, 'download'])->name('attachments.download');
 Route::get('/public/pos-requests/create', [App\Http\Controllers\PublicPosRequestController::class, 'create'])->name('public.pos-requests.create');
 Route::post('/public/pos-requests', [App\Http\Controllers\PublicPosRequestController::class, 'store'])->name('public.pos-requests.store');
 Route::get('/public/sap-requests/create', [App\Http\Controllers\PublicSapRequestController::class, 'create'])->name('public.sap-requests.create');

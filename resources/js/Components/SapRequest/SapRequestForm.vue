@@ -87,7 +87,11 @@ async function submit() {
     if (!confirmed) return
 
     if (props.method === 'put') {
-        form.put(props.submitRoute, {
+        form.transform((data) => ({
+            ...data,
+            _method: 'put',
+        })).post(props.submitRoute, {
+            forceFormData: true,
             onSuccess: () => form.reset(),
         })
     } else {

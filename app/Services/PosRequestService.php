@@ -23,7 +23,7 @@ class PosRequestService
     {
         $data = $this->storeFileUploads($data);
 
-        return DB::transaction(function () use ($data, $userId) {
+        $posRequest = DB::transaction(function () use ($data, $userId) {
             $requestType = RequestType::findOrFail($data['request_type_id']);
             $hasSchema = !empty($requestType->form_schema['fields'] ?? []) || !empty($requestType->form_schema['has_items']);
 
@@ -60,14 +60,19 @@ class PosRequestService
                 $this->processApprovedRequest($posRequest);
             }
 
-            // Send notification to CC emails
-            $this->notifyCcEmails($posRequest, 'created');
-
-            // Send confirmation to requester
-            $this->notifyRequester($posRequest, 'created');
-
             return $posRequest;
         });
+
+        // Refresh relationships to ensure mailable has access to company and requestType
+        $posRequest->load(['company', 'requestType', 'user']);
+
+        // Send notification to CC emails
+        $this->notifyCcEmails($posRequest, 'created');
+
+        // Send confirmation to requester
+        $this->notifyRequester($posRequest, 'created');
+
+        return $posRequest;
     }
 
     /**
@@ -77,7 +82,7 @@ class PosRequestService
     {
         $data = $this->storeFileUploads($data);
 
-        return DB::transaction(function () use ($posRequest, $data) {
+        $posRequest = DB::transaction(function () use ($posRequest, $data) {
             $requestType = RequestType::findOrFail($data['request_type_id']);
             $hasSchema = !empty($requestType->form_schema['fields'] ?? []) || !empty($requestType->form_schema['has_items']);
 
@@ -105,11 +110,17 @@ class PosRequestService
                 }
             }
 
-            // Send notification to CC emails
-            $this->notifyCcEmails($posRequest, 'updated');
-
             return $posRequest;
         });
+
+        // Refresh relationships
+        $posRequest->load(['company', 'requestType', 'user']);
+
+        // Send notification to CC emails
+        $this->notifyCcEmails($posRequest, 'updated');
+        $this->notifyRequester($posRequest, 'updated');
+
+        return $posRequest;
     }
 
     /**
@@ -287,23 +298,61 @@ class PosRequestService
 
         // Regular form_data fields
         foreach ($schema['fields'] ?? [] as $field) {
-            if ($field['type'] === 'file') {
+            if (($field['type'] ?? '') === 'file') {
                 $key = $field['key'];
-                $file = $data['form_data'][$key] ?? null;
-                if ($file instanceof \Illuminate\Http\UploadedFile) {
-                    $data['form_data'][$key] = $file->store('pos-requests/attachments', 'public');
+                $val = $data['form_data'][$key] ?? null;
+                if (!$val) continue;
+
+                if (is_array($val)) {
+                    $paths = [];
+                    foreach ($val as $f) {
+                        if ($f instanceof \Illuminate\Http\UploadedFile) {
+                            $paths[] = [
+                                'path' => $f->store('pos-requests/attachments', 'public'),
+                                'name' => $f->getClientOriginalName(),
+                            ];
+                        } else if (is_string($f) || is_array($f)) {
+                            $paths[] = $f;
+                        }
+                    }
+                    $data['form_data'][$key] = $paths;
+                } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
+                    $data['form_data'][$key] = [
+                        'path' => $val->store('pos-requests/attachments', 'public'),
+                        'name' => $val->getClientOriginalName(),
+                    ];
                 }
             }
         }
 
         // Items line-item columns
-        foreach ($data['details'] ?? [] as $idx => $item) {
-            foreach ($schema['items_columns'] ?? [] as $col) {
-                if ($col['type'] === 'file') {
-                    $key = $col['key'];
-                    $file = $item[$key] ?? null;
-                    if ($file instanceof \Illuminate\Http\UploadedFile) {
-                        $data['details'][$idx][$key] = $file->store('pos-requests/attachments', 'public');
+        if (isset($data['details']) && is_array($data['details'])) {
+            foreach ($data['details'] as $idx => $item) {
+                foreach ($schema['items_columns'] ?? [] as $col) {
+                    if (($col['type'] ?? '') === 'file') {
+                        $key = $col['key'];
+                        $val = $item[$key] ?? null;
+                        if (!$val) continue;
+
+                        if (is_array($val)) {
+                            $paths = [];
+                            foreach ($val as $f) {
+                                if ($f instanceof \Illuminate\Http\UploadedFile) {
+                                    $paths[] = [
+                                        'path' => $f->store('pos-requests/attachments', 'public'),
+                                        'name' => $f->getClientOriginalName(),
+                                    ];
+                                } else if (is_string($f) || is_array($f)) {
+                                    $paths[] = $f;
+                                }
+                            }
+                            $data['details'][$idx][$key] = $paths;
+                        } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
+                            $data['details'][$idx][$key] = [
+                                'path' => $val->store('pos-requests/attachments', 'public'),
+                                'name' => $val->getClientOriginalName(),
+                            ];
+                        }
                     }
                 }
             }
@@ -317,7 +366,36 @@ class PosRequestService
         if ($value === null) return '—';
         if (is_bool($value)) return $value ? 'Yes' : 'No';
 
-        if (!$schema) return is_array($value) ? implode(', ', $value) : (string)$value;
+        // Check if it's a file object or array of file objects
+        if (is_array($value)) {
+            if (isset($value['path']) && isset($value['name'])) {
+                return $value['name'];
+            }
+            
+            // Multiple files or checkbox group
+            $names = [];
+            foreach ($value as $val) {
+                if (is_array($val) && isset($val['name'])) {
+                    $names[] = $val['name'];
+                } else {
+                    $names[] = (string)$val;
+                }
+            }
+
+            // If it's a checkbox group, we might want to map the values to labels
+            if ($schema) {
+                $fields = $schema['items_columns'] ?? [];
+                $field = collect($fields)->firstWhere('key', $key);
+                if ($field && isset($field['options'])) {
+                    $options = collect($field['options']);
+                    return $options->whereIn('value', $value)->pluck('label')->implode(', ');
+                }
+            }
+
+            return implode(', ', $names);
+        }
+
+        if (!$schema) return (string)$value;
 
         // For POS requests, details are in items_columns
         $fields = $schema['items_columns'] ?? [];
@@ -325,15 +403,8 @@ class PosRequestService
 
         if ($field && isset($field['options']) && !empty($field['options'])) {
             $options = collect($field['options']);
-            if (is_array($value)) {
-                return $options->whereIn('value', $value)->pluck('label')->implode(', ');
-            }
             $option = $options->firstWhere('value', $value);
             return $option ? $option['label'] : (string)$value;
-        }
-
-        if (is_array($value)) {
-            return implode(', ', array_map(fn($v) => is_array($v) ? json_encode($v) : (string)$v, $value));
         }
 
         return (string)$value;

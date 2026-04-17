@@ -43,6 +43,7 @@ class RoleService
             'subcategories',
             'items',
             'request_types',
+            'table_builder',
             'pos_requests',
             'sap_requests',
             'stores',

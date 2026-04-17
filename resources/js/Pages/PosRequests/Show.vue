@@ -193,6 +193,46 @@ const getFieldLabel = (key, value) => {
     return value
 }
 
+const isFileField = (key, isItem = false) => {
+    const fields = isItem ? schemaItemsColumns.value : schemaFields.value;
+    const field = fields.find(f => f.key === key);
+    return field && field.type === 'file';
+};
+
+const isFileArray = (value) => {
+    return Array.isArray(value);
+};
+
+const getFileName = (value) => {
+    if (!value) return 'Attachment';
+    if (typeof value === 'object' && value.name) return value.name;
+    if (typeof value !== 'string') return 'Attachment';
+
+    const cleanPath = value.replace(/^public\//, '').replace(/^storage\//, '');
+    return cleanPath.split(/[/\\]/).pop() || 'Attachment';
+};
+
+const getFileUrl = (value) => {
+    if (!value) return '#';
+
+    let path = typeof value === 'object' ? value.path : value;
+    let name = typeof value === 'object' ? value.name : '';
+
+    if (typeof path !== 'string') return '#';
+
+    // If we have a name, use our download route to ensure the filename is correct
+    if (name) {
+        return route('attachments.download', { path, name });
+    }
+
+    let cleanPath = path;
+    if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+    if (cleanPath.startsWith('public/')) cleanPath = cleanPath.substring(7);
+    if (cleanPath.startsWith('storage/')) cleanPath = cleanPath.substring(8);
+    if (!cleanPath) return '#';
+    return `/storage/${cleanPath}`;
+};
+
 const formatDateTime = (dateStr) => {
     if (!dateStr) return ''
     try {
@@ -277,7 +317,24 @@ const formatDateTime = (dateStr) => {
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                 <div v-for="field in schemaFields" :key="field.key" class="bg-gray-50 rounded-2xl p-5">
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{{ field.label }}</label>
-                                    <p class="text-sm font-bold text-gray-900">{{ getFieldLabel(field.key, regularFormData[field.key]) }}</p>
+                                    <div class="text-sm font-bold text-gray-900">
+                                        <template v-if="isFileField(field.key)">
+                                            <div v-if="isFileArray(regularFormData[field.key])" class="flex flex-col gap-1">
+                                                <a v-for="(file, fi) in regularFormData[field.key]" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" :download="getFileName(file)" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
+                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                    {{ getFileName(file) }}
+                                                </a>
+                                            </div>
+                                            <a v-else-if="regularFormData[field.key]" :href="getFileUrl(regularFormData[field.key])" target="_blank" rel="noopener noreferrer" :download="getFileName(regularFormData[field.key])" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                {{ getFileName(regularFormData[field.key]) }}
+                                            </a>
+                                            <span v-else>—</span>
+                                        </template>
+                                        <template v-else>
+                                            {{ getFieldLabel(field.key, regularFormData[field.key]) }}
+                                        </template>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -313,7 +370,22 @@ const formatDateTime = (dateStr) => {
                                             </td>
                                             <td v-for="col in schemaItemsColumns" :key="col.key"
                                                 class="px-4 py-5 last:rounded-r-2xl text-sm font-bold text-gray-700 whitespace-nowrap">
-                                                {{ getCellValue(item, col) }}
+                                                <template v-if="isFileField(col.key, true)">
+                                                    <div v-if="isFileArray(item[col.key])" class="flex flex-col gap-1">
+                                                        <a v-for="(file, fi) in item[col.key]" :key="fi" :href="getFileUrl(file)" target="_blank" :download="getFileName(file)" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
+                                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                            {{ getFileName(file) }}
+                                                        </a>
+                                                    </div>
+                                                    <a v-else-if="item[col.key]" :href="getFileUrl(item[col.key])" target="_blank" :download="getFileName(item[col.key])" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
+                                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                        {{ getFileName(item[col.key]) }}
+                                                    </a>
+                                                    <span v-else>—</span>
+                                                </template>
+                                                <template v-else>
+                                                    {{ getCellValue(item, col) }}
+                                                </template>
                                             </td>
                                         </tr>
                                     </tbody>

@@ -93,7 +93,33 @@ class SapRequestNotification extends Mailable
                 }
             }
 
-            if (!empty($options)) {
+            // Handle File upload fields specially to show as links
+            if ($field && ($field['type'] ?? '') === 'file') {
+                $files = $value;
+                if (!is_array($files) || isset($files['path'])) {
+                    $files = [$files];
+                }
+
+                $displayVal = collect($files)
+                    ->map(function($file) {
+                        if (empty($file)) return '';
+                        
+                        $path = is_array($file) ? ($file['path'] ?? '') : (string)$file;
+                        $name = is_array($file) ? ($file['name'] ?? '') : '';
+                        
+                        if (!$name && $path) {
+                            $name = basename($path);
+                        }
+                        
+                        if (!$path) return '';
+                        
+                        $downloadUrl = route('attachments.download', ['path' => $path, 'name' => $name]);
+                        
+                        return '<a href="' . $downloadUrl . '" style="color: #0f766e; font-weight: 700;">' . ($name ?: 'View File') . '</a>';
+                    })
+                    ->filter()
+                    ->implode(', ');
+            } elseif (!empty($options)) {
                 $optMap = collect($options)->keyBy('value');
                 if (is_array($value)) {
                     $displayVal = collect($value)
