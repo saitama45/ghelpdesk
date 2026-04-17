@@ -143,6 +143,7 @@ const blankField = () => ({
     options: [],
     show_when: null,
     multiple: false,
+    max_file_size: 10,
     depends_on: null,
     option_map: {},
     _showCondition: false,
@@ -287,7 +288,19 @@ const removeOption = (i) => editingField.value.options.splice(i, 1)
 // ── Items columns ─────────────────────────────────────────────────────────────
 const ITEM_COL_TYPES = FIELD_TYPES.map(t => t.value)
 
-const blankItemCol = () => ({ key: '', label: '', type: 'text', required: false, options: [], depends_on: null, option_map: {}, _dependentOptions: false, _dependsOnField: '' })
+const blankItemCol = () => ({ 
+    key: '', 
+    label: '', 
+    type: 'text', 
+    required: false, 
+    multiple: false,
+    max_file_size: 10,
+    options: [], 
+    depends_on: null, 
+    option_map: {}, 
+    _dependentOptions: false, 
+    _dependsOnField: '' 
+})
 const openAddItemCol = () => {
     editingItemCol.value = blankItemCol()
     editingItemColIndex.value = null
@@ -692,6 +705,10 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
                                         <input v-model="editingField.multiple" type="checkbox" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                                         <span class="text-xs font-bold text-gray-700">Multiple files</span>
                                     </label>
+                                    <div v-if="editingField.type === 'file'" class="flex items-center gap-2">
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Max Size (MB)</label>
+                                        <input v-model.number="editingField.max_file_size" type="number" min="1" max="100" class="w-20 rounded-xl border-gray-200 text-xs bg-white focus:ring-indigo-500 focus:border-indigo-500" />
+                                    </div>
                                     <label class="flex items-center gap-2 cursor-pointer select-none">
                                         <input v-model="editingField._showCondition" type="checkbox" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
                                         <span class="text-xs font-bold text-gray-700">Conditional</span>
@@ -845,6 +862,16 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
                                             </div>
                                             <p v-else-if="editingItemCol._dependentOptions && !editingItemCol._dependsOnField" class="text-xs text-gray-400 italic">Select a parent column to configure option buckets.</p>
                                         </template>
+                                    </div>
+                                    <div v-if="editingItemCol.type === 'file'" class="flex flex-wrap gap-4 items-center">
+                                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                                            <input v-model="editingItemCol.multiple" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                                            <span class="text-xs font-bold text-gray-700">Multiple files</span>
+                                        </label>
+                                        <div class="flex items-center gap-2">
+                                            <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Max Size (MB)</label>
+                                            <input v-model.number="editingItemCol.max_file_size" type="number" min="1" max="100" class="w-20 rounded-xl border-gray-200 text-xs bg-white focus:ring-teal-500 focus:border-teal-500" />
+                                        </div>
                                     </div>
                                     <label class="flex items-center gap-2 cursor-pointer select-none">
                                         <input v-model="editingItemCol.required" type="checkbox" class="rounded border-gray-300 text-teal-600 focus:ring-teal-500" />

@@ -15,6 +15,8 @@ class SapRequestService
 {
     public function createRequest(array $data, ?int $userId = null): SapRequest
     {
+        $data = $this->storeFileUploads($data);
+
         return DB::transaction(function () use ($data, $userId) {
             $requestType = RequestType::findOrFail($data['request_type_id']);
             $effectiveApprovalLevels = $this->getEffectiveApprovalLevels($requestType, $data['form_data'] ?? []);
@@ -60,6 +62,8 @@ class SapRequestService
 
     public function updateRequest(SapRequest $sapRequest, array $data): SapRequest
     {
+        $data = $this->storeFileUploads($data);
+
         return DB::transaction(function () use ($sapRequest, $data) {
             $sapRequest->update([
                 'company_id'      => $data['company_id'],
@@ -378,5 +382,39 @@ class SapRequestService
                 ];
             })
             ->all();
+    }
+
+    private function storeFileUploads(array $data): array
+    {
+        $requestType = RequestType::find($data['request_type_id'] ?? null);
+        if (!$requestType) return $data;
+
+        $schema = $requestType->form_schema ?? [];
+
+        // Regular form_data fields
+        foreach ($schema['fields'] ?? [] as $field) {
+            if ($field['type'] === 'file') {
+                $key = $field['key'];
+                $file = $data['form_data'][$key] ?? null;
+                if ($file instanceof \Illuminate\Http\UploadedFile) {
+                    $data['form_data'][$key] = $file->store('sap-requests/attachments', 'public');
+                }
+            }
+        }
+
+        // Items line-item columns
+        foreach ($data['items'] ?? [] as $idx => $item) {
+            foreach ($schema['items_columns'] ?? [] as $col) {
+                if ($col['type'] === 'file') {
+                    $key = $col['key'];
+                    $file = $item[$key] ?? null;
+                    if ($file instanceof \Illuminate\Http\UploadedFile) {
+                        $data['items'][$idx][$key] = $file->store('sap-requests/attachments', 'public');
+                    }
+                }
+            }
+        }
+
+        return $data;
     }
 }

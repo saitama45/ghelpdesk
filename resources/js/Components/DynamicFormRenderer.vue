@@ -16,6 +16,7 @@
  */
 
 import { computed } from 'vue'
+import { useToast } from '@/Composables/useToast'
 
 const props = defineProps({
     fields: { type: Array, default: () => [] },
@@ -33,6 +34,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'update:items'])
+
+const { showError } = useToast()
 
 const gridClass = computed(() => {
     const cols = Number(props.gridColumns)
@@ -176,6 +179,62 @@ const buildBlankRow = () => {
 }
 
 // ── File attachment helpers ───────────────────────────────────────────────────
+const validateFileSize = (file, maxSizeMb) => {
+    if (!file || !maxSizeMb) return true
+    const sizeInMb = file.size / (1024 * 1024)
+    return sizeInMb <= maxSizeMb
+}
+
+const handleFileChange = (field, event) => {
+    const files = event.target.files
+    if (!files.length) return
+
+    const maxSize = field.max_file_size || 10
+    
+    if (field.multiple) {
+        for (let i = 0; i < files.length; i++) {
+            if (!validateFileSize(files[i], maxSize)) {
+                showError(`File "${files[i].name}" exceeds the ${maxSize}MB limit.`)
+                event.target.value = ''
+                return
+            }
+        }
+        setValue(field.key, files)
+    } else {
+        if (!validateFileSize(files[0], maxSize)) {
+            showError(`File "${files[0].name}" exceeds the ${maxSize}MB limit.`)
+            event.target.value = ''
+            return
+        }
+        setValue(field.key, files[0])
+    }
+}
+
+const handleItemFileChange = (rowIdx, col, event) => {
+    const files = event.target.files
+    if (!files.length) return
+
+    const maxSize = col.max_file_size || 10
+    
+    if (col.multiple) {
+        for (let i = 0; i < files.length; i++) {
+            if (!validateFileSize(files[i], maxSize)) {
+                showError(`File "${files[i].name}" exceeds the ${maxSize}MB limit.`)
+                event.target.value = ''
+                return
+            }
+        }
+        setItemCell(rowIdx, col.key, files)
+    } else {
+        if (!validateFileSize(files[0], maxSize)) {
+            showError(`File "${files[0].name}" exceeds the ${maxSize}MB limit.`)
+            event.target.value = ''
+            return
+        }
+        setItemCell(rowIdx, col.key, files[0])
+    }
+}
+
 // Returns a public URL for a stored path (e.g. "pos-requests/attachments/abc.jpg")
 const storageUrl = (path) => path ? `/storage/${path}` : null
 
@@ -297,10 +356,11 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                         <input
                             type="file"
                             :multiple="field.multiple"
-                            @change="setValue(field.key, field.multiple ? $event.target.files : $event.target.files[0])"
+                            @change="handleFileChange(field, $event)"
                             :required="field.required && !isStoredFile(getValue(field.key))"
                             class="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
                         />
+                        <p v-if="field.max_file_size" class="mt-1 text-[10px] text-gray-400 italic">Max size: {{ field.max_file_size }}MB</p>
                         <p v-if="isStoredFile(getValue(field.key))" class="mt-1 text-[10px] text-gray-400 italic">Choose a new file to replace the current attachment.</p>
                     </template>
 
@@ -428,9 +488,11 @@ const isStoredFile = (value) => typeof value === 'string' && value.length > 0
                                 </div>
                                 <input
                                     type="file"
-                                    @change="setItemCell(rowIdx, col.key, $event.target.files[0])"
+                                    :multiple="col.multiple"
+                                    @change="handleItemFileChange(rowIdx, col, $event)"
                                     class="block w-full text-[10px] text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
                                 />
+                                <p v-if="col.max_file_size" class="mt-0.5 text-[10px] text-gray-400 italic">Max size: {{ col.max_file_size }}MB</p>
                                 <p v-if="isStoredFile(row[col.key])" class="mt-0.5 text-[10px] text-gray-400 italic">Choose a new file to replace.</p>
                             </template>
 
