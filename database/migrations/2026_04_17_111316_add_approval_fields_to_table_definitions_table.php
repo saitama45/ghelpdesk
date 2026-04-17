@@ -9,7 +9,7 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function run(): void
+    public function up(): void
     {
         Schema::table('table_definitions', function (Blueprint $blueprint) {
             $blueprint->integer('approval_levels')->default(0);
