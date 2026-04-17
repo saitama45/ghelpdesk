@@ -11,9 +11,9 @@ return new class extends Migration
      */
     public function run(): void
     {
-        Schema::create('table_records', function (Blueprint $blueprint) {
+        Schema::create('dbo.table_records', function (Blueprint $blueprint) {
             $blueprint->id();
-            $blueprint->foreignId('table_definition_id')->constrained('table_definitions')->onDelete('cascade');
+            $blueprint->foreignId('table_definition_id')->constrained('dbo.table_definitions')->onDelete('cascade');
             $blueprint->text('data'); // Using text/nvarchar(max) for SQL Server JSON
             $blueprint->string('status')->default('pending');
             $blueprint->foreignId('created_by')->nullable()->constrained('users');

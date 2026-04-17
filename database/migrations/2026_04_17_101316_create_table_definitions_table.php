@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function run(): void
     {
-        Schema::create('table_definitions', function (Blueprint $blueprint) {
+        Schema::create('dbo.table_definitions', function (Blueprint $blueprint) {
             $blueprint->id();
             $blueprint->string('name');
             $blueprint->string('slug')->unique();
