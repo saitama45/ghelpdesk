@@ -17,7 +17,7 @@ return new class extends Migration
             $blueprint->string('slug')->unique();
             $blueprint->string('description')->nullable();
             $blueprint->string('icon')->default('TableCellsIcon');
-            $blueprint->json('form_schema')->nullable();
+            $blueprint->text('form_schema')->nullable(); // Using text/nvarchar(max) for SQL Server JSON
             $blueprint->boolean('is_active')->default(true);
             $blueprint->timestamps();
         });

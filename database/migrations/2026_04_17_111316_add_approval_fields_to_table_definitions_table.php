@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('table_definitions', function (Blueprint $blueprint) {
             $blueprint->integer('approval_levels')->default(0);
-            $blueprint->json('approver_matrix')->nullable();
+            $blueprint->text('approver_matrix')->nullable(); // Using text/nvarchar(max) for SQL Server JSON
             $blueprint->text('cc_emails')->nullable();
         });
     }

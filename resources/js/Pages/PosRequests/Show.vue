@@ -535,21 +535,6 @@ const formatDateTime = (dateStr) => {
                             <div v-if="canApprove" class="mt-12 pt-10 border-t border-gray-100 relative">
                                 <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">Your Decision</div>
 
-                                <div v-if="currentLevelAssignedApprovers.length > 0" class="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
-                                    <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2">
-                                        Level {{ posRequest.current_approval_level }} Assigned Approvers
-                                    </p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <span
-                                            v-for="approver in currentLevelAssignedApprovers"
-                                            :key="approver.id"
-                                            class="px-3 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold"
-                                        >
-                                            {{ approver.name }}
-                                        </span>
-                                    </div>
-                                </div>
-                                
                                 <!-- Approver Fields -->
                                 <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">
                                     <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
