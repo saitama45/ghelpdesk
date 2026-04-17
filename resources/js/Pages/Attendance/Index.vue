@@ -6,6 +6,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { CameraIcon, MapPinIcon, CheckCircleIcon, ArrowPathIcon, ExclamationCircleIcon, GlobeAsiaAustraliaIcon } from '@heroicons/vue/24/outline';
 import { useConfirm } from '@/Composables/useConfirm';
+import { usePermission } from '@/Composables/usePermission';
 
 const props = defineProps({
     lastLog: Object,
@@ -237,6 +238,7 @@ const startLocationTracking = () => {
             locationAccuracy.value = position.coords.accuracy;
             form.latitude = latitude.value;
             form.longitude = longitude.value;
+            locationError.value = null; // Clear any previous errors on success
 
             updateMap();
 
@@ -248,9 +250,14 @@ const startLocationTracking = () => {
             }
         },
         (err) => {
-            if (isMounted.value) locationError.value = "GPS Error: " + err.message;
+            if (!isMounted.value) return;
+            if (err.code === err.TIMEOUT) {
+                locationError.value = "GPS signal taking too long. Please move to a clearer area or near a window.";
+            } else {
+                locationError.value = "GPS Error: " + err.message;
+            }
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
     );
 };
 
@@ -454,6 +461,7 @@ const getPublicIp = async () => {
 };
 
 const { confirm } = useConfirm();
+const { hasPermission } = usePermission();
 
 const submit = async () => {
     if (!canSave.value) return;
@@ -484,7 +492,8 @@ const submit = async () => {
 };
 
 const canSave = computed(() => {
-    return !!props.todaySchedule &&
+    return hasPermission('attendance.create') &&
+           !!props.todaySchedule &&
            isWithinScheduleWindow.value &&
            !props.isSegmentComplete &&
            !isRecentlyLogged.value &&
@@ -495,6 +504,7 @@ const canSave = computed(() => {
 });
 
 const statusMessage = computed(() => {
+    if (!hasPermission('attendance.create')) return 'You do not have permission to log attendance. Please contact your manager or administrator.';
     if (!props.todaySchedule) return 'No active On-site/Off-site schedule for your current time.';
     if (!isWithinScheduleWindow.value) return scheduleWindowMessage.value;
     if (props.isSegmentComplete) return 'You have already completed Time In and Time Out for this schedule.';
