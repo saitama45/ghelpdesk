@@ -46,6 +46,9 @@ class SapRequestService
                 $this->processApprovedRequest($sapRequest);
             }
 
+            // Refresh relationships to ensure mailable has access to company, requestType and items
+            $sapRequest->load(['company', 'requestType', 'items']);
+
             $this->notifyCcEmails($sapRequest, 'created');
             
             // Send confirmation to requester
@@ -75,6 +78,9 @@ class SapRequestService
                     ]);
                 }
             }
+
+            // Refresh relationships
+            $sapRequest->load(['company', 'requestType', 'items']);
 
             $this->notifyCcEmails($sapRequest, 'updated');
 

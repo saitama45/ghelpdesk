@@ -97,15 +97,24 @@ class SapRequestNotification extends Mailable
                 $optMap = collect($options)->keyBy('value');
                 if (is_array($value)) {
                     $displayVal = collect($value)
-                        ->map(fn($v) => $optMap->get((string)$v)['label'] ?? (string)$v)
+                        ->map(function($v) use ($optMap) {
+                            if (!is_scalar($v)) return json_encode($v);
+                            $opt = $optMap->get((string)$v);
+                            return is_array($opt) ? ($opt['label'] ?? (string)$v) : (string)$v;
+                        })
                         ->implode(', ');
                 } else {
-                    $displayVal = $optMap->get((string)$value)['label'] ?? (string)$value;
+                    if (!is_scalar($value)) {
+                        $displayVal = json_encode($value);
+                    } else {
+                        $opt = $optMap->get((string)$value);
+                        $displayVal = is_array($opt) ? ($opt['label'] ?? (string)$value) : (string)$value;
+                    }
                 }
             } elseif (is_array($value)) {
-                $displayVal = implode(', ', array_map('strval', $value));
+                $displayVal = implode(', ', array_map(fn($v) => is_scalar($v) ? (string)$v : json_encode($v), $value));
             } else {
-                $displayVal = (string)$value;
+                $displayVal = is_scalar($value) ? (string)$value : json_encode($value);
             }
 
             $result[] = ['label' => $label, 'value' => $displayVal ?: '—'];

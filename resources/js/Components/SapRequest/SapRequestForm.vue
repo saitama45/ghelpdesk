@@ -21,6 +21,13 @@ const props = defineProps({
     initialRequestTypeId: { type: [String, Number], default: '' },
 })
 
+// Inline confirmation dialog state
+const showConfirm = ref(false)
+let resolveConfirm = null
+const openConfirm = () => new Promise(resolve => { resolveConfirm = resolve; showConfirm.value = true })
+const onConfirmYes = () => { showConfirm.value = false; resolveConfirm?.(true) }
+const onConfirmNo  = () => { showConfirm.value = false; resolveConfirm?.(false) }
+
 const FORM_MAP = {
     // New Item Creation
     'New Item Request': markRaw(NewItemRequestForm),
@@ -75,7 +82,10 @@ watch(() => form.request_type_id, (newVal, oldVal) => {
     }
 })
 
-function submit() {
+async function submit() {
+    const confirmed = await openConfirm()
+    if (!confirmed) return
+
     if (props.method === 'put') {
         form.put(props.submitRoute, {
             onSuccess: () => form.reset(),
@@ -252,9 +262,40 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                     </svg>
-                    {{ form.processing ? 'Submitting...' : (method === 'put' ? 'Update Request' : 'Submit SAP Request') }}
+                    {{ form.processing ? 'Submitting...' : (method === 'put' ? 'Update Request' : 'Confirm & Submit SAP Request') }}
                 </button>
             </div>
         </form>
+
+        <!-- Inline Confirmation Dialog -->
+        <Teleport to="body">
+            <div v-if="showConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="onConfirmNo"></div>
+                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-12 h-12 bg-teal-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-black text-gray-900">Submit SAP Request</h3>
+                            <p class="text-sm text-gray-500 mt-0.5">Please review all details before confirming.</p>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-8">Are you sure you want to submit this SAP request? Once submitted, it will be sent for processing.</p>
+                    <div class="flex gap-3">
+                        <button type="button" @click="onConfirmNo"
+                                class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all">
+                            Cancel
+                        </button>
+                        <button type="button" @click="onConfirmYes"
+                                class="flex-[2] px-6 py-3 bg-teal-600 text-white text-sm font-black rounded-2xl hover:bg-teal-700 shadow-lg transition-all">
+                            Yes, Submit Request
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
     </div>
 </template>
