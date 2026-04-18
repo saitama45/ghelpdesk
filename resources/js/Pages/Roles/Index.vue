@@ -349,7 +349,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import { useToast } from '@/Composables/useToast'
@@ -361,7 +361,8 @@ import { usePermission } from '@/Composables/usePermission'
 const props = defineProps({
     roles: Object,
     permissions: Object,
-    companies: Array
+    companies: Array,
+    dynamicTables: Array
 })
 
 const { showSuccess, showError } = useToast()
@@ -566,16 +567,27 @@ const toggleAllCompanies = () => {
 const permissionSearch = ref('')
 const activeTab = ref('')
 
-const permissionGroups = [
-    { name: 'Dashboard', categories: ['Dashboard'] },
-    { name: 'Project Tracker', categories: ['Projects'] },
-    { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
-    { name: 'Services', categories: ['Tickets', 'Pos_requests', 'Sap_requests'] },
-    { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Table_builder'] },
-    { name: 'Reports', categories: ['Reports'] },
-    { name: 'User Management', categories: ['Users', 'Roles'] },
-    { name: 'Settings', categories: ['Settings', 'Canned_messages'] }
-]
+const dynamicTables = computed(() => usePage().props.dynamicTables || []);
+
+const permissionGroups = computed(() => {
+    const servicesCategories = ['Tickets', 'Pos_requests', 'Sap_requests'];
+
+    // Add dynamic table names exactly as the backend RoleService does
+    (dynamicTables.value || []).forEach(table => {
+        servicesCategories.push(table.name);
+    });
+
+    return [
+        { name: 'Dashboard', categories: ['Dashboard'] },
+        { name: 'Project Tracker', categories: ['Projects'] },
+        { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
+        { name: 'Services', categories: servicesCategories },
+        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Table_builder'] },
+        { name: 'Reports', categories: ['Reports'] },
+        { name: 'User Management', categories: ['Users', 'Roles'] },
+        { name: 'Settings', categories: ['Settings', 'Canned_messages'] }
+    ];
+});
 
 const groupedPermissions = computed(() => {
     const search = permissionSearch.value.toLowerCase()
@@ -585,7 +597,7 @@ const groupedPermissions = computed(() => {
     const availableCategories = Object.keys(props.permissions || {})
     const mappedKeys = new Set()
 
-    permissionGroups.forEach(group => {
+    permissionGroups.value.forEach(group => {
         const groupCategories = []
 
         group.categories.forEach(catName => {
@@ -710,7 +722,7 @@ const isCategorySelected = (permissionsList) => {
 }
 
 const sortPermissions = (permissions) => {
-    const order = ['view', 'create', 'edit', 'delete'];
+    const order = ['view', 'show', 'create', 'edit', 'delete', 'approve'];
     return permissions.sort((a, b) => {
         const aAction = a.name.split('.')[1];
         const bAction = b.name.split('.')[1];

@@ -33,14 +33,19 @@
                                 >
                                     Kitchen
                                 </button>
-                                <button 
+                                <button
                                     @click="filterByClass('Both')"
                                     :class="[selectedClass === 'Both' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
                                 >
                                     Both
                                 </button>
-                            </nav>
-
+                                <button
+                                    @click="filterByClass('Office')"
+                                    :class="[selectedClass === 'Office' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
+                                >
+                                    Office
+                                </button>
+                                </nav>
                             <button 
                                 v-if="hasPermission('activity_templates.create')"
                                 @click="openCreateModal" 
@@ -80,6 +85,10 @@
                                 <span v-else-if="template.store_class === 'Both'" class="px-2.5 py-1 bg-blue-50 text-blue-700 border-blue-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
                                     <ArrowsPointingOutIcon class="w-3 h-3 mr-1" />
                                     Both
+                                </span>
+                                <span v-else-if="template.store_class === 'Office'" class="px-2.5 py-1 bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                    <BuildingOfficeIcon class="w-3 h-3 mr-1" />
+                                    Office
                                 </span>
                                 <span v-else class="px-2.5 py-1 bg-slate-50 text-slate-600 border-slate-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
                                     <DocumentTextIcon class="w-3 h-3 mr-1" />
@@ -172,6 +181,7 @@
                                 <option value="Regular">Regular Store</option>
                                 <option value="Kitchen">Kitchen Only</option>
                                 <option value="Both">Both (Regular & Kitchen)</option>
+                                <option value="Office">Office Store</option>
                             </select>
                             <InputError :message="form.errors.store_class" class="mt-1" />
                         </div>
@@ -296,7 +306,8 @@ import {
     ClockIcon,
     DocumentTextIcon,
     BeakerIcon,
-    ArrowsPointingOutIcon
+    ArrowsPointingOutIcon,
+    BuildingOfficeIcon
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({

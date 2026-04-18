@@ -66,8 +66,10 @@ Route::middleware('auth')->group(function () {
     // Dynamic Tables
     Route::get('tables/{slug}', [\App\Http\Controllers\DynamicTableController::class, 'index'])->name('dynamic-table.index');
     Route::post('tables/{slug}', [\App\Http\Controllers\DynamicTableController::class, 'store'])->name('dynamic-table.store');
+    Route::get('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'show'])->name('dynamic-table.show');
     Route::put('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'update'])->name('dynamic-table.update');
     Route::delete('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'destroy'])->name('dynamic-table.destroy');
+    Route::post('tables/{slug}/{id}/approve', [\App\Http\Controllers\DynamicTableController::class, 'approve'])->name('dynamic-table.approve');
     Route::resource('pos-requests', \App\Http\Controllers\PosRequestController::class);
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);

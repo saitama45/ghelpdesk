@@ -74,7 +74,7 @@ class StoreController extends Controller implements HasMiddleware
             'sector' => 'required|numeric|min:1|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
-            'class' => 'required|in:Regular,Kitchen',
+            'class' => 'required|in:Regular,Kitchen,Office',
             'cluster_id' => 'required|exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
@@ -104,7 +104,7 @@ class StoreController extends Controller implements HasMiddleware
             'sector' => 'required|numeric|min:1|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
-            'class' => 'required|in:Regular,Kitchen',
+            'class' => 'required|in:Regular,Kitchen,Office',
             'cluster_id' => 'required|exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
@@ -192,7 +192,7 @@ class StoreController extends Controller implements HasMiddleware
                 'sector'        => 'required|integer|min:1|max:8',
                 'area'          => 'required|string|max:255',
                 'brand'         => 'required|string|max:255',
-                'class'         => 'required|in:Regular,Kitchen',
+                'class'         => 'required|in:Regular,Kitchen,Office',
                 'cluster'       => 'required|string|max:255',
                 'cluster_id'    => 'required|exists:clusters,id',
                 'latitude'      => 'nullable|numeric|between:-90,90',
@@ -262,6 +262,7 @@ class StoreController extends Controller implements HasMiddleware
         $listsSheet->setCellValue('A1', 'Class');
         $listsSheet->setCellValue('A2', 'Regular');
         $listsSheet->setCellValue('A3', 'Kitchen');
+        $listsSheet->setCellValue('A4', 'Office');
 
         $listsSheet->setCellValue('B1', 'Available Users (email)');
         foreach ($users as $i => $user) {
@@ -323,7 +324,7 @@ class StoreController extends Controller implements HasMiddleware
             ->setErrorStyle(DataValidation::STYLE_INFORMATION)
             ->setAllowBlank(false)
             ->setShowDropDown(false)
-            ->setFormula1('Lists!$A$2:$A$3')
+            ->setFormula1('Lists!$A$2:$A$4')
             ->setSqref('G2:G1001');
 
         if ($clusters->isNotEmpty()) {

@@ -28,7 +28,19 @@ class RoleService
      */
     public static function getPermissionsByCategory()
     {
-        $permissions = Permission::all();
+        $permissions = Permission::all()->pluck('name')->toArray();
+
+        // Add dynamic table permissions if they don't exist in DB yet
+        $dynamicTables = \App\Models\TableDefinition::all();
+        foreach ($dynamicTables as $table) {
+            foreach (['view', 'show', 'create', 'edit', 'delete', 'approve'] as $action) {
+                $permName = "{$table->slug}.{$action}";
+                if (!in_array($permName, $permissions)) {
+                    $permissions[] = $permName;
+                }
+            }
+        }
+
         $grouped = [];
         $preferredOrder = [
             'dashboard',
@@ -55,10 +67,25 @@ class RoleService
             'projects',
             'presence',
         ];
-        
-        foreach ($permissions as $permission) {
-            $category = explode('.', $permission->name)[0];
-            $grouped[ucfirst($category)][] = $permission;
+
+        foreach ($permissions as $permissionName) {
+            $category = explode('.', $permissionName)[0];
+
+            // Check if this is a dynamic table slug
+            $table = $dynamicTables->firstWhere('slug', $category);
+            
+            // If it's a dynamic table, use its name. Otherwise, capitalize the category.
+            // We use the raw category for keys that are special like 'Pos_requests'
+            $categoryDisplay = $table ? $table->name : (
+                in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'table_builder']) 
+                ? ucfirst($category) 
+                : ucfirst(str_replace('_', ' ', $category))
+            );
+
+            $grouped[$categoryDisplay][] = (object)[
+                'id' => $permissionName,
+                'name' => $permissionName
+            ];
         }
 
         uksort($grouped, function ($a, $b) use ($preferredOrder) {
@@ -70,7 +97,7 @@ class RoleService
 
             return $aIndex <=> $bIndex ?: strcasecmp($a, $b);
         });
-        
+
         return $grouped;
     }
 
@@ -85,6 +112,10 @@ class RoleService
         ]);
         
         if (!empty($permissions)) {
+            // Ensure all permissions exist in DB first
+            foreach ($permissions as $permName) {
+                Permission::firstOrCreate(['name' => $permName, 'guard_name' => 'web']);
+            }
             $role->givePermissionTo($permissions);
         }
         
@@ -97,6 +128,12 @@ class RoleService
     public static function updateRolePermissions($roleId, $permissions)
     {
         $role = Role::findById($roleId);
+        
+        // Ensure all permissions exist in DB first
+        foreach ($permissions as $permName) {
+            Permission::firstOrCreate(['name' => $permName, 'guard_name' => 'web']);
+        }
+        
         $role->syncPermissions($permissions);
         
         return $role;

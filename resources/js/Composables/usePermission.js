@@ -1,12 +1,16 @@
+import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 
 export function usePermission() {
-    const user = usePage().props.auth.user || {};
-    const userRoles = user.roles?.map(r => r.name) || [];
+    const page = usePage();
+    const user = computed(() => page.props.auth?.user || {});
+    const userRoles = computed(() => user.value.roles?.map(r => r.name) || []);
+    const permissions = computed(() => page.props.auth?.permissions || []);
 
     const hasPermission = (name) => {
-        const permissions = usePage().props.auth.permissions || [];
-        return permissions.includes(name);
+        // Super admin bypass
+        if (userRoles.value.includes('Admin')) return true;
+        return permissions.value.includes(name);
     };
 
     const hasAnyPermission = (names) => {
@@ -14,12 +18,12 @@ export function usePermission() {
     };
 
     const hasRole = (name) => {
-        return userRoles.includes(name);
+        return userRoles.value.includes(name);
     };
 
     const hasAnyRole = (names) => {
-        return names.some(name => userRoles.includes(name));
+        return names.some(name => userRoles.value.includes(name));
     };
 
-    return { hasPermission, hasAnyPermission, hasRole, hasAnyRole };
+    return { hasPermission, hasAnyPermission, hasRole, hasAnyRole, user, userRoles };
 }

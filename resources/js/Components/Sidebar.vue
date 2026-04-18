@@ -32,6 +32,11 @@ const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const dynamicTables = computed(() => page.props.dynamicTables || []);
 const { hasPermission } = usePermission();
+
+// Filter tables that the user has permission to view
+const visibleDynamicTables = computed(() => {
+    return dynamicTables.value.filter(table => hasPermission(table.slug + '.view'));
+});
 const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
 
 // For Laravel ziggy route helper if not global
@@ -323,7 +328,7 @@ const canSeeSettings = computed(() => {
                             <span>SAP Requests</span>
                         </Link>
                         <Link
-                            v-for="table in dynamicTables"
+                            v-for="table in visibleDynamicTables"
                             :key="table.slug"
                             :href="route('dynamic-table.index', table.slug)"
                             :class="[

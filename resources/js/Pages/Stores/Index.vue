@@ -83,6 +83,10 @@
                                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                                     Kitchen
                                 </span>
+                                <span v-else-if="store.class === 'Office'" class="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-lg border border-blue-100 flex items-center w-fit">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                    Office
+                                </span>
                                 <span v-else class="px-2 py-1 bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-lg border border-slate-100">
                                     Regular
                                 </span>
@@ -172,7 +176,7 @@
                         <p class="text-sm text-gray-600">
                             Import stores in bulk using an Excel file. Columns: <span class="font-semibold">code</span>, <span class="font-semibold">name</span>, <span class="font-semibold">email</span>,
                             <span class="font-semibold">sector</span> (1–8), <span class="font-semibold">area</span>, <span class="font-semibold">brand</span>,
-                            <span class="font-semibold">class</span> (dropdown: Regular/Kitchen), <span class="font-semibold">cluster</span> (existing cluster code or name),
+                            <span class="font-semibold">class</span> (dropdown: Regular/Kitchen/Office), <span class="font-semibold">cluster</span> (existing cluster code or name),
                             <span class="font-semibold">latitude</span>, <span class="font-semibold">longitude</span>, <span class="font-semibold">radius_meters</span>,
                             <span class="font-semibold">is_active</span> (1 or 0),
                             <span class="font-semibold">users</span> (semicolon-separated emails, e.g. <span class="font-mono text-xs">john@x.com;jane@x.com</span>).
@@ -371,6 +375,7 @@
                                         class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                     <option value="Regular">Regular</option>
                                     <option value="Kitchen">Kitchen</option>
+                                    <option value="Office">Office</option>
                                 </select>
                             </div>
                             <div class="md:col-span-3">

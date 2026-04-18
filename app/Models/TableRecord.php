@@ -10,6 +10,7 @@ class TableRecord extends Model
         'table_definition_id',
         'data',
         'status',
+        'current_approval_level',
         'created_by',
         'updated_by',
     ];
@@ -31,5 +32,10 @@ class TableRecord extends Model
     public function updator()
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function approvals()
+    {
+        return $this->hasMany(TableRecordApproval::class);
     }
 }

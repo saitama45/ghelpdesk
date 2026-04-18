@@ -58,7 +58,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'project_type' => 'required|string|in:NSO,Store Closure,Store Renovation',
-            'store_class' => 'required|in:Regular,Kitchen,Both',
+            'store_class' => 'required|in:Regular,Kitchen,Both,Office',
             'activities' => 'required|array|min:1',
             'activities.*.activity' => 'required|string|max:255',
             'activities.*.milestone' => 'nullable|string|max:255',
@@ -94,7 +94,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'project_type' => 'required|string|in:NSO,Store Closure,Store Renovation',
-            'store_class' => 'required|in:Regular,Kitchen,Both',
+            'store_class' => 'required|in:Regular,Kitchen,Both,Office',
             'activities' => 'required|array|min:1',
             'activities.*.id' => 'nullable|exists:activity_templates,id',
             'activities.*.activity' => 'required|string|max:255',
