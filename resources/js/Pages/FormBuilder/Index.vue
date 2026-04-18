@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { router, Head } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
-import TableFieldBuilderModal from '@/Components/TableBuilder/TableFieldBuilderModal.vue'
+import FormFieldBuilderModal from '@/Components/FormBuilder/FormFieldBuilderModal.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -12,7 +12,7 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    tables: Object,
+    forms: Object,
     users: {
         type: Array,
         default: () => [],
@@ -22,17 +22,31 @@ const props = defineProps({
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy: deleteRequest } = useErrorHandler()
-const pagination = usePagination(props.tables, 'table-builder.index')
+
+// Destructure pagination for cleaner template usage and proper reactivity
+const { 
+    data: paginatedData, 
+    search: paginationSearch, 
+    currentPage, 
+    lastPage, 
+    perPage, 
+    showingText, 
+    isLoading, 
+    goToPage, 
+    changePerPage, 
+    updateData 
+} = usePagination(props.forms, 'form-builder.index')
+
 const { hasPermission } = usePermission()
 
 const showModal = ref(false)
 const isEditing = ref(false)
-const currentTable = ref(null)
+const currentForm = ref(null)
 
 const form = reactive({
     name: '',
     description: '',
-    icon: 'TableCellsIcon',
+    icon: 'DocumentTextIcon',
     approval_levels: 0,
     approver_matrix: [],
     cc_emails: '',
@@ -62,11 +76,11 @@ const syncApproverMatrix = (levels) => {
 }
 
 onMounted(() => {
-    pagination.updateData(props.tables)
+    updateData(props.forms)
 })
 
-watch(() => props.tables, (newTables) => {
-    pagination.updateData(newTables)
+watch(() => props.forms, (newForms) => {
+    updateData(newForms)
 }, { deep: true })
 
 watch(() => form.approval_levels, (newValue) => {
@@ -75,10 +89,10 @@ watch(() => form.approval_levels, (newValue) => {
 
 const openCreateModal = () => {
     isEditing.value = false
-    currentTable.value = null
+    currentForm.value = null
     form.name = ''
     form.description = ''
-    form.icon = 'TableCellsIcon'
+    form.icon = 'DocumentTextIcon'
     form.approval_levels = 0
     form.approver_matrix = []
     form.cc_emails = ''
@@ -86,21 +100,21 @@ const openCreateModal = () => {
     showModal.value = true
 }
 
-const editTable = (table) => {
+const editForm = (formData) => {
     isEditing.value = true
-    currentTable.value = table
-    form.name = table.name
-    form.description = table.description || ''
-    form.icon = table.icon || 'TableCellsIcon'
-    form.approval_levels = table.approval_levels ?? 0
-    form.approver_matrix = Array.isArray(table.approver_matrix)
-        ? table.approver_matrix.map(entry => ({
+    currentForm.value = formData
+    form.name = formData.name
+    form.description = formData.description || ''
+    form.icon = formData.icon || 'DocumentTextIcon'
+    form.approval_levels = formData.approval_levels ?? 0
+    form.approver_matrix = Array.isArray(formData.approver_matrix)
+        ? formData.approver_matrix.map(entry => ({
             level: Number(entry.level),
             user_ids: Array.isArray(entry.user_ids) ? [...entry.user_ids] : [],
         }))
         : []
-    form.cc_emails = table.cc_emails || ''
-    form.is_active = table.is_active
+    form.cc_emails = formData.cc_emails || ''
+    form.is_active = formData.is_active
     syncApproverMatrix(form.approval_levels)
     showModal.value = true
 }
@@ -110,7 +124,7 @@ const closeModal = () => {
 }
 
 const submitForm = () => {
-    const url = isEditing.value ? `/table-builder/${currentTable.value.id}` : '/table-builder'
+    const url = isEditing.value ? `/form-builder/${currentForm.value.id}` : '/form-builder'
     const method = isEditing.value ? 'put' : 'post'
     
     const requestMethod = method === 'put' ? put : post
@@ -118,7 +132,7 @@ const submitForm = () => {
     requestMethod(url, form, {
         onSuccess: () => {
             closeModal()
-            showSuccess(isEditing.value ? 'Table Definition updated successfully' : 'Table Definition created successfully')
+            showSuccess(isEditing.value ? 'Form Definition updated successfully' : 'Form Definition created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -127,17 +141,17 @@ const submitForm = () => {
     })
 }
 
-const deleteTable = async (table) => {
+const deleteForm = async (formData) => {
     const confirmed = await confirm({
-        title: 'Delete Table Definition',
-        message: `Are you sure you want to delete "${table.name}"? This will also delete all associated data.`
+        title: 'Delete Form Definition',
+        message: `Are you sure you want to delete "${formData.name}"? This will also delete all associated data.`
     })
     
     if (confirmed) {
-        deleteRequest(`/table-builder/${table.id}`, {
-            onSuccess: () => showSuccess('Table Definition deleted successfully'),
+        deleteRequest(`/form-builder/${formData.id}`, {
+            onSuccess: () => showSuccess('Form Definition deleted successfully'),
             onError: (errors) => {
-                const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete table definition'
+                const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete form definition'
                 showError(errorMessage)
             }
         })
@@ -148,59 +162,44 @@ const deleteTable = async (table) => {
 const showFieldBuilder = ref(false)
 const fieldBuilderTarget = ref(null)
 
-const openFieldBuilder = (table) => {
-    fieldBuilderTarget.value = table
+const openFieldBuilder = (formData) => {
+    fieldBuilderTarget.value = formData
     showFieldBuilder.value = true
-}
-
-const countCheckboxApprovalOverrides = (table) => {
-    const fields = table?.form_schema?.fields ?? []
-
-    return fields.filter(field => {
-        if (field?.type !== 'checkbox_group' || !field?.has_option_approvers) {
-            return false
-        }
-
-        return (field.options ?? []).some(option =>
-            (Array.isArray(option.approval_matrix) && option.approval_matrix.length > 0) ||
-            (Array.isArray(option.approver_user_ids) && option.approver_user_ids.length > 0)
-        )
-    }).length
 }
 </script>
 
 <template>
-    <Head title="Table Builder" />
+    <Head title="Form Builder" />
 
-    <AppLayout title="Table Builder">
+    <AppLayout title="Form Builder">
         <div class="py-12 bg-gray-50/50 min-h-screen">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 <DataTable
-                    title="Table Builder Management"
-                    subtitle="Build and configure custom tables with dynamic fields and approvals"
+                    title="Form Builder Management"
+                    subtitle="Build and configure custom forms with dynamic fields and approvals"
                     search-placeholder="Search by name or description..."
-                    empty-message="No custom tables found. Create your first one to get started."
-                    :search="pagination.search.value"
-                    :data="pagination.data.value"
-                    :current-page="pagination.currentPage.value"
-                    :last-page="pagination.lastPage.value"
-                    :per-page="pagination.perPage.value"
-                    :showing-text="pagination.showingText.value"
-                    :is-loading="pagination.isLoading.value"
-                    @update:search="pagination.search.value = $event"
-                    @go-to-page="pagination.goToPage"
-                    @change-per-page="pagination.changePerPage"
+                    empty-message="No custom forms found. Create your first one to get started."
+                    :search="paginationSearch"
+                    :data="paginatedData"
+                    :current-page="currentPage"
+                    :last-page="lastPage"
+                    :per-page="perPage"
+                    :showing-text="showingText"
+                    :is-loading="isLoading"
+                    @update:search="paginationSearch = $event"
+                    @go-to-page="goToPage"
+                    @change-per-page="changePerPage"
                 >
                     <template #actions>
                         <button
-                            v-if="hasPermission('table_builder.create')"
+                            v-if="hasPermission('form_builder.create')"
                             @click="openCreateModal"
                             class="group relative inline-flex items-center px-6 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 shadow-md hover:shadow-indigo-200 whitespace-nowrap"
                         >
                             <svg class="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
-                            <span>Add Table</span>
+                            <span>Add Form</span>
                         </button>
                     </template>
 
@@ -215,103 +214,92 @@ const countCheckboxApprovalOverrides = (table) => {
                     </template>
 
                     <template #body="{ data }">
-                        <transition-group
-                            enter-active-class="transition duration-500 ease-out"
-                            enter-from-class="transform translate-y-4 opacity-0"
-                            enter-to-class="transform translate-y-0 opacity-100"
-                            leave-active-class="transition duration-300 ease-in"
-                            leave-from-class="transform translate-y-0 opacity-100"
-                            leave-to-class="transform translate-y-4 opacity-0"
+                        <tr v-for="(formData, index) in data" :key="formData.id" 
+                            class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
                         >
-                            <tr v-for="(table, index) in data" :key="table.id" 
-                                :style="{ transitionDelay: `${index * 50}ms` }"
-                                class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
-                            >
-                                <td class="px-6 py-5 whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <div class="h-10 w-10 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl flex items-center justify-center shadow-sm group-hover:from-indigo-500 group-hover:to-indigo-600 transition-all duration-500">
-                                            <svg class="w-5 h-5 text-indigo-600 group-hover:text-white transition-colors duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                            </svg>
-                                        </div>
-                                        <div class="ml-4">
-                                            <div class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors duration-300">{{ table.name }}</div>
-                                        </div>
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
+                                <div class="flex items-center justify-start">
+                                    <div class="h-10 w-10 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl flex items-center justify-center shadow-sm group-hover:from-indigo-500 group-hover:to-indigo-600 transition-all duration-500">
+                                        <svg class="w-5 h-5 text-indigo-600 group-hover:text-white transition-colors duration-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
                                     </div>
-                                </td>
-                                <td class="px-6 py-5 whitespace-nowrap">
-                                    <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-gray-100 text-gray-700 border border-gray-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-100 transition-colors duration-300">
-                                        {{ table.slug }}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-5 whitespace-nowrap">
-                                    <div class="text-sm text-gray-500 truncate max-w-xs">{{ table.description || 'No description' }}</div>
-                                </td>
-                                <td class="px-6 py-5 whitespace-nowrap">
-                                    <span :class="table.is_active ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'" 
-                                          class="inline-flex items-center px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full shadow-sm">
-                                        <span class="w-1 h-1 rounded-full mr-1.5" :class="table.is_active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
-                                        {{ table.is_active ? 'Active' : 'Inactive' }}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
-                                    <div class="flex justify-end items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                                        <!-- Schema badge -->
-                                        <div class="flex flex-col items-end space-y-1">
-                                            <span v-if="table.form_schema?.fields?.length" class="text-[9px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                                                {{ table.form_schema.fields.length }} fields
-                                            </span>
-                                            <span v-if="table.form_schema?.approver_fields?.length" class="text-[9px] font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                                                {{ table.form_schema.approver_fields.length }} approver fields
-                                            </span>
-                                            <span v-if="table.form_schema?.has_items && table.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                                                {{ table.form_schema.items_columns.length }} line item cols
-                                            </span>
-                                        </div>
-                                        <button
-                                            v-if="hasPermission('table_builder.edit')"
-                                            @click="openFieldBuilder(table)"
-                                            class="p-2 text-teal-600 hover:text-white hover:bg-teal-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-teal-200"
-                                            title="Configure Fields"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            v-if="hasPermission('table_builder.edit')"
-                                            @click="editTable(table)"
-                                            class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-indigo-200"
-                                            title="Edit"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            v-if="hasPermission('table_builder.delete')"
-                                            @click="deleteTable(table)"
-                                            class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-rose-200"
-                                            title="Delete"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors duration-300">{{ formData.name }}</div>
                                     </div>
-                                </td>
-                            </tr>
-                        </transition-group>
+                                </div>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-gray-100 text-gray-700 border border-gray-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-100 transition-colors duration-300">
+                                    {{ formData.slug }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
+                                <div class="text-sm text-gray-500 truncate max-w-xs">{{ formData.description || 'No description' }}</div>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
+                                <span :class="formData.is_active ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'" 
+                                      class="inline-flex items-center px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full shadow-sm">
+                                    <span class="w-1 h-1 rounded-full mr-1.5" :class="formData.is_active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
+                                    {{ formData.is_active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
+                                <div class="flex justify-end items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                                    <div class="flex flex-col items-end space-y-1">
+                                        <span v-if="formData.form_schema?.fields?.length" class="text-[9px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                            {{ formData.form_schema.fields.length }} fields
+                                        </span>
+                                        <span v-if="formData.form_schema?.approver_fields?.length" class="text-[9px] font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                            {{ formData.form_schema.approver_fields.length }} approver fields
+                                        </span>
+                                        <span v-if="formData.form_schema?.has_items && formData.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                            {{ formData.form_schema.items_columns.length }} line item cols
+                                        </span>
+                                    </div>
+                                    <button
+                                        v-if="hasPermission('form_builder.edit')"
+                                        @click="openFieldBuilder(formData)"
+                                        class="p-2 text-teal-600 hover:text-white hover:bg-teal-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-teal-200"
+                                        title="Configure Fields"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="hasPermission('form_builder.edit')"
+                                        @click="editForm(formData)"
+                                        class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-indigo-200"
+                                        title="Edit"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="hasPermission('form_builder.delete')"
+                                        @click="deleteForm(formData)"
+                                        class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm hover:shadow-rose-200"
+                                        title="Delete"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                     </template>
                 </DataTable>
             </div>
         </div>
 
-        <!-- Table Field Builder Modal -->
-        <TableFieldBuilderModal
+        <!-- Form Field Builder Modal -->
+        <FormFieldBuilderModal
             v-if="fieldBuilderTarget"
             :show="showFieldBuilder"
-            :table="fieldBuilderTarget"
+            :form="fieldBuilderTarget"
             :users="props.users"
             @close="showFieldBuilder = false; fieldBuilderTarget = null"
         />
@@ -332,9 +320,9 @@ const countCheckboxApprovalOverrides = (table) => {
                     <div class="flex justify-between items-center mb-8">
                         <div>
                             <h3 class="text-2xl font-black text-gray-900 tracking-tight">
-                                {{ isEditing ? 'Update Table Definition' : 'New Table Definition' }}
+                                {{ isEditing ? 'Update Form Definition' : 'New Form Definition' }}
                             </h3>
-                            <p class="text-sm text-gray-500 mt-1">Configure table name, description and status.</p>
+                            <p class="text-sm text-gray-500 mt-1">Configure form name, description and status.</p>
                         </div>
                         <button @click="closeModal" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -346,7 +334,7 @@ const countCheckboxApprovalOverrides = (table) => {
                     <form @submit.prevent="submitForm" class="space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Table Name</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Form Name</label>
                                 <input v-model="form.name" type="text" required placeholder="e.g. Assets, Employees, Equipment"
                                        class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-bold transition-all duration-300">
                             </div>
@@ -374,7 +362,7 @@ const countCheckboxApprovalOverrides = (table) => {
 
                         <div>
                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Description</label>
-                            <textarea v-model="form.description" rows="2" placeholder="Describe the purpose of this table..."
+                            <textarea v-model="form.description" rows="2" placeholder="Describe the purpose of this form..."
                                       class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300"></textarea>
                         </div>
 
@@ -438,7 +426,7 @@ const countCheckboxApprovalOverrides = (table) => {
                             </button>
                             <button type="submit" 
                                     class="flex-[2] px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200 transform hover:-translate-y-0.5 transition-all duration-300">
-                                {{ isEditing ? 'Update Table Definition' : 'Create Table Definition' }}
+                                {{ isEditing ? 'Update Form Definition' : 'Create Form Definition' }}
                             </button>
                         </div>
                     </form>

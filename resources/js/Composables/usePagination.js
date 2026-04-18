@@ -44,7 +44,26 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
             preserveState: true,
             preserveScroll: true,
             onSuccess: (page) => {
-                const responseData = page.props[routeName.split('.')[0]] || page.props.data
+                // Try to find the data in props using several potential keys
+                const routeParts = routeName.split('.')
+                const potentialKeys = [
+                    routeParts[0],                        // e.g. 'form-builder'
+                    routeParts[0].replace(/-/g, '_'),     // e.g. 'form_builder'
+                    routeParts[0].replace(/s$/, ''),      // e.g. 'form' (if route was forms.index)
+                    'forms',
+                    'records',
+                    'tables',
+                    'data'
+                ]
+
+                let responseData = null
+                for (const key of potentialKeys) {
+                    if (page.props[key]) {
+                        responseData = page.props[key]
+                        break
+                    }
+                }
+
                 if (responseData) {
                     updateData(responseData)
                 }

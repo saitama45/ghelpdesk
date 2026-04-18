@@ -5,7 +5,7 @@ import { useToast } from '@/Composables/useToast'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 
 const props = defineProps({
-    table: { type: Object, required: true },
+    form: { type: Object, required: true },
     show: { type: Boolean, default: false },
     users: { type: Array, default: () => [] },
 })
@@ -80,7 +80,7 @@ const editingItemColIndex = ref(null)
 // Seed from existing schema when modal opens
 watch(() => props.show, (val) => {
     if (!val) return
-    const src = props.table.form_schema || {}
+    const src = props.form.form_schema || {}
     const deepCloneOptionMap = (om) => om
         ? Object.fromEntries(Object.entries(om).map(([k, v]) => [k, v.map(o => ({ ...o }))]))
         : {}
@@ -356,10 +356,10 @@ const saveSchema = () => {
             items_columns: schema.items_columns,
         }
     }
-    router.put(route('table-builder.schema', props.table.id), payload, {
+    router.put(route('form-builder.schema', props.form.id), payload, {
         preserveScroll: true,
         onSuccess: () => { 
-            showSuccess('Table schema saved successfully')
+            showSuccess('Form schema saved successfully')
             emit('close') 
         },
         onError: () => showError('Failed to save schema'),
@@ -421,8 +421,8 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
                     <!-- Header -->
                     <div class="flex items-start justify-between p-7 border-b border-gray-100 shrink-0">
                         <div>
-                            <h2 class="text-xl font-black text-gray-900">Configure Table Fields</h2>
-                            <p class="text-sm text-gray-500 mt-0.5 font-medium">{{ table.name }}</p>
+                            <h2 class="text-xl font-black text-gray-900">Configure Form Fields</h2>
+                            <p class="text-sm text-gray-500 mt-0.5 font-medium">{{ form.name }}</p>
                         </div>
                         <button @click="emit('close')" class="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -672,7 +672,7 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
                                     <template v-else>
                                         <div>
                                             <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Parent Field</label>
-                                            <select v-model="editingField._dependsOnField" class="w-full rounded-xl border-gray-200 text-xs bg-white focus:ring-purple-500 focus:border-purple-500">
+                                            <select v-model="editingField._dependsOnField" class="w-full rounded-xl border-gray-200 text-sm focus:ring-purple-500 focus:border-purple-500 bg-white">
                                                 <option value="">-- select parent field --</option>
                                                 <option v-for="pf in optionFields" :key="pf.key" :value="pf.key">{{ pf.label }} ({{ pf.key }})</option>
                                             </select>
@@ -743,8 +743,8 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
                         <template v-else>
                             <div class="flex items-center justify-between p-4 rounded-2xl bg-teal-50 border border-teal-100">
                                 <div>
-                                    <p class="text-sm font-bold text-teal-900">Enable Line Items Table</p>
-                                    <p class="text-xs text-teal-600 mt-0.5">Add a repeating-row table section (e.g. multiple SKUs, BOM lines)</p>
+                                    <p class="text-sm font-bold text-teal-900">Enable Line Items Section</p>
+                                    <p class="text-xs text-teal-600 mt-0.5">Add a repeating-row section (e.g. multiple SKUs, BOM lines)</p>
                                 </div>
                                 <button type="button" @click="schema.has_items = !schema.has_items"
                                     :class="['relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none', schema.has_items ? 'bg-teal-600' : 'bg-gray-200']">

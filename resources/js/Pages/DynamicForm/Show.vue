@@ -8,7 +8,7 @@ import { useToast } from '@/Composables/useToast'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
 const props = defineProps({
-    table: Object,
+    form: Object,
     record: Object,
     users: {
         type: Array,
@@ -28,12 +28,12 @@ const approvalForm = useForm({
 
 const authUserId = computed(() => page.props.auth.user.id)
 
-const approverFields = computed(() => props.table.form_schema?.approver_fields ?? [])
-const schemaFields = computed(() => props.table.form_schema?.fields ?? [])
-const schemaItemsColumns = computed(() => props.table.form_schema?.items_columns ?? [])
-const hasSchemaItems = computed(() => !!props.table.form_schema?.has_items && schemaItemsColumns.value.length > 0)
+const approverFields = computed(() => props.form.form_schema?.approver_fields ?? [])
+const schemaFields = computed(() => props.form.form_schema?.fields ?? [])
+const schemaItemsColumns = computed(() => props.form.form_schema?.items_columns ?? [])
+const hasSchemaItems = computed(() => !!props.form.form_schema?.has_items && schemaItemsColumns.value.length > 0)
 
-const approverMatrix = computed(() => props.table.approver_matrix ?? [])
+const approverMatrix = computed(() => props.form.approver_matrix ?? [])
 
 const assignedApproversByLevel = computed(() => {
     const users = props.users ?? []
@@ -75,7 +75,7 @@ async function submitApproval() {
     })
 
     if (confirmed) {
-        approvalForm.post(route('dynamic-table.approve', { slug: props.table.slug, id: props.record.id }), {
+        approvalForm.post(route('dynamic-form.approve', { slug: props.form.slug, id: props.record.id }), {
             onSuccess: () => {
                 approvalForm.reset('remarks')
                 showSuccess('Approved successfully')
@@ -97,13 +97,13 @@ const canApprove = computed(() => {
         assignedApprovers.some(user => Number(user.id) === Number(authUserId.value))
 
     return (s === 'Open' || s.startsWith('Approved Level')) &&
-        hasPermission('table_builder.edit') &&
+        hasPermission('form_builder.edit') &&
         currentLevel > 0 &&
         isAssignedApprover &&
         !alreadyApprovedCurrentLevel
 })
 
-const totalLevels = computed(() => Number(props.table.approval_levels ?? 0))
+const totalLevels = computed(() => Number(props.form.approval_levels ?? 0))
 const stages = computed(() => Array.from({ length: totalLevels.value }, (_, i) => i + 1))
 
 function getApprovalForLevel(lvl) {
@@ -176,18 +176,18 @@ const lineItems = computed(() => props.record.data?.items ?? [])
 </script>
 
 <template>
-    <Head :title="`${table.name} #${record.id}`" />
+    <Head :title="`${form.name} #${record.id}`" />
 
-    <AppLayout :title="`${table.name} #${record.id}`">
+    <AppLayout :title="`${form.name} #${record.id}`">
         <div class="py-12 bg-gray-50 min-h-screen">
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
 
                 <!-- Back -->
                 <div class="flex items-center gap-3 mb-6">
-                    <Link :href="route('dynamic-table.index', table.slug)" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all">
+                    <Link :href="route('dynamic-form.index', form.slug)" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
                     </Link>
-                    <span class="text-sm font-bold text-gray-400">Back to {{ table.name }}</span>
+                    <span class="text-sm font-bold text-gray-400">Back to {{ form.name }}</span>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -204,7 +204,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                             </div>
                             <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-8 flex items-center gap-3">
                                 <span class="text-indigo-600">#{{ record.id }}</span>
-                                {{ table.name }}
+                                {{ form.name }}
                             </h1>
                             <div class="grid grid-cols-2 md:grid-cols-3 gap-8">
                                 <div>
@@ -296,7 +296,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                     </div>
 
                     <!-- Right: Approval Sidebar -->
-                    <div class="space-y-8">
+                    <div v-if="totalLevels > 0" class="space-y-8">
                         <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
                             <div class="flex items-center justify-between mb-8">
                                 <h3 class="text-lg font-black text-gray-900">Approval Pulse</h3>

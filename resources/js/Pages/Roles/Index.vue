@@ -47,7 +47,7 @@
                                 <div class="flex items-center">
                                     <div class="h-10 w-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-full flex items-center justify-center shadow-sm">
                                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                                         </svg>
                                     </div>
                                     <div class="ml-4">
@@ -362,7 +362,7 @@ const props = defineProps({
     roles: Object,
     permissions: Object,
     companies: Array,
-    dynamicTables: Array
+    dynamicForms: Array
 })
 
 const { showSuccess, showError } = useToast()
@@ -418,7 +418,7 @@ const landingPageOptions = [
             { label: 'Sub-Categories', value: 'sub-categories.index' },
             { label: 'Items', value: 'items.index' },
             { label: 'Request Types', value: 'request-types.index' },
-            { label: 'Table Builder', value: 'table-builder.index' },
+            { label: 'Form Builder', value: 'form-builder.index' },
         ]
     },
     {
@@ -567,14 +567,14 @@ const toggleAllCompanies = () => {
 const permissionSearch = ref('')
 const activeTab = ref('')
 
-const dynamicTables = computed(() => usePage().props.dynamicTables || []);
+const dynamicForms = computed(() => usePage().props.dynamicForms || []);
 
 const permissionGroups = computed(() => {
     const servicesCategories = ['Tickets', 'Pos_requests', 'Sap_requests'];
 
-    // Add dynamic table names exactly as the backend RoleService does
-    (dynamicTables.value || []).forEach(table => {
-        servicesCategories.push(table.name);
+    // Add dynamic form names exactly as the backend RoleService does
+    (dynamicForms.value || []).forEach(form => {
+        servicesCategories.push(form.name);
     });
 
     return [
@@ -582,7 +582,7 @@ const permissionGroups = computed(() => {
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
         { name: 'Services', categories: servicesCategories },
-        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Table_builder'] },
+        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },
         { name: 'Settings', categories: ['Settings', 'Canned_messages'] }

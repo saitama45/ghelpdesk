@@ -4,10 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class TableRecordApproval extends Model
+class FormRecordApproval extends Model
 {
     protected $fillable = [
-        'table_record_id',
+        'form_record_id',
         'user_id',
         'level',
         'remarks',
@@ -20,7 +20,7 @@ class TableRecordApproval extends Model
 
     public function record()
     {
-        return $this->belongsTo(TableRecord::class, 'table_record_id');
+        return $this->belongsTo(FormRecord::class, 'form_record_id');
     }
 
     public function user()

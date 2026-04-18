@@ -83,11 +83,11 @@ class RolesAndPermissionSeeder extends Seeder
             'request_types.edit' => 'Edit request types',
             'request_types.delete' => 'Delete request types',
 
-            // Table Builder
-            'table_builder.view' => 'View table builder',
-            'table_builder.create' => 'Create custom tables',
-            'table_builder.edit' => 'Edit custom tables',
-            'table_builder.delete' => 'Delete custom tables',
+            // Form Builder
+            'form_builder.view' => 'View form builder',
+            'form_builder.create' => 'Create custom forms',
+            'form_builder.edit' => 'Edit custom forms',
+            'form_builder.delete' => 'Delete custom forms',
 
             // POS Requests
             'pos_requests.view' => 'View POS requests',

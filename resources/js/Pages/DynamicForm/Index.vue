@@ -11,14 +11,28 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    table: Object,
+    form: Object,
     records: Object,
 })
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy: deleteRequest } = useErrorHandler()
-const pagination = usePagination(props.records, 'dynamic-table.index', { slug: props.table.slug })
+
+// Destructure pagination for cleaner template usage
+const { 
+    data: paginatedData, 
+    search: paginationSearch, 
+    currentPage, 
+    lastPage, 
+    perPage, 
+    showingText, 
+    isLoading, 
+    goToPage, 
+    changePerPage, 
+    updateData 
+} = usePagination(props.records, 'dynamic-form.index', { slug: props.form.slug })
+
 const { hasPermission } = usePermission()
 
 const showModal = ref(false)
@@ -26,13 +40,13 @@ const isEditing = ref(false)
 const currentRecord = ref(null)
 
 // Use Inertia useForm for better error handling and file uploads
-const form = useForm({
+const dynamicForm = useForm({
     form_data: {},
     items: [],
 })
 
 const initForm = (record = null) => {
-    const schema = props.table.form_schema || {}
+    const schema = props.form.form_schema || {}
     const fields = schema.fields || []
     
     const initialFormData = {}
@@ -40,16 +54,16 @@ const initForm = (record = null) => {
         initialFormData[field.key] = record?.data ? record.data[field.key] : (field.type === 'checkbox_group' ? [] : '')
     })
     
-    form.form_data = initialFormData
-    form.items = record?.data?.items ? JSON.parse(JSON.stringify(record.data.items)) : (schema.has_items ? [{}] : [])
+    dynamicForm.form_data = initialFormData
+    dynamicForm.items = record?.data?.items ? JSON.parse(JSON.stringify(record.data.items)) : (schema.has_items ? [{}] : [])
 }
 
 onMounted(() => {
-    pagination.updateData(props.records)
+    updateData(props.records)
 })
 
 watch(() => props.records, (newRecords) => {
-    pagination.updateData(newRecords)
+    updateData(newRecords)
 }, { deep: true })
 
 const openCreateModal = () => {
@@ -68,17 +82,17 @@ const editRecord = (record) => {
 
 const closeModal = () => {
     showModal.value = false
-    form.clearErrors()
+    dynamicForm.clearErrors()
 }
 
 const submitForm = () => {
     const url = isEditing.value 
-        ? route('dynamic-table.update', { slug: props.table.slug, id: currentRecord.value.id }) 
-        : route('dynamic-table.store', props.table.slug)
+        ? route('dynamic-form.update', { slug: props.form.slug, id: currentRecord.value.id }) 
+        : route('dynamic-form.store', props.form.slug)
     
     // Use POST with _method spoofing for updates to support multipart/form-data
     if (isEditing.value) {
-        form.transform((data) => ({
+        dynamicForm.transform((data) => ({
             ...data,
             _method: 'put',
         })).post(url, {
@@ -89,7 +103,7 @@ const submitForm = () => {
             },
         })
     } else {
-        form.post(url, {
+        dynamicForm.post(url, {
             onSuccess: () => {
                 closeModal()
                 showSuccess('Record created successfully')
@@ -105,7 +119,7 @@ const deleteRecord = async (record) => {
     })
     
     if (confirmed) {
-        deleteRequest(route('dynamic-table.destroy', { slug: props.table.slug, id: record.id }), {
+        deleteRequest(route('dynamic-form.destroy', { slug: props.form.slug, id: record.id }), {
             onSuccess: () => showSuccess('Record deleted successfully'),
             onError: (errors) => {
                 const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete record'
@@ -115,9 +129,9 @@ const deleteRecord = async (record) => {
     }
 }
 
-const tableColumns = computed(() => {
-    const fields = props.table.form_schema?.fields || []
-    return fields.slice(0, 4) // Show first 4 fields in the table
+const formColumns = computed(() => {
+    const fields = props.form.form_schema?.fields || []
+    return fields.slice(0, 4) // Show first 4 fields in the form table
 })
 
 const getDisplayValue = (record, col) => {
@@ -170,47 +184,47 @@ function statusClass(s) {
 </script>
 
 <template>
-    <Head :title="table.name" />
+    <Head :title="form.name" />
 
-    <AppLayout :title="table.name">
+    <AppLayout :title="form.name">
         <div class="py-12 bg-gray-50/50 min-h-screen">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 <DataTable
-                    :title="table.name"
-                    :subtitle="table.description"
+                    :title="form.name"
+                    :subtitle="form.description"
                     search-placeholder="Search records..."
                     empty-message="Get started by adding your first record."
-                    :search="pagination.search.value"
-                    :data="pagination.data.value"
-                    :current-page="pagination.currentPage.value"
-                    :last-page="pagination.lastPage.value"
-                    :per-page="pagination.perPage.value"
-                    :showing-text="pagination.showingText.value"
-                    :is-loading="pagination.isLoading.value"
-                    @update:search="pagination.search.value = $event"
-                    @go-to-page="pagination.goToPage"
-                    @change-per-page="pagination.changePerPage"
+                    :search="paginationSearch"
+                    :data="paginatedData"
+                    :current-page="currentPage"
+                    :last-page="lastPage"
+                    :per-page="perPage"
+                    :showing-text="showingText"
+                    :is-loading="isLoading"
+                    @update:search="paginationSearch = $event"
+                    @go-to-page="goToPage"
+                    @change-per-page="changePerPage"
                 >
                     <template #actions>
                         <button
-                            v-if="hasPermission(table.slug + '.create')"
+                            v-if="hasPermission(form.slug + '.create')"
                             @click="openCreateModal"
                             class="group relative inline-flex items-center px-6 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 shadow-md hover:shadow-indigo-200 whitespace-nowrap"
                         >
                             <svg class="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                             </svg>
-                            <span>Add {{ table.name }}</span>
+                            <span>Add {{ form.name }}</span>
                         </button>
                     </template>
 
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th v-for="col in tableColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">
+                            <th v-for="col in formColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-left">
                                 {{ col.label }}
                             </th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Status</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Created By</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-left">Status</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-left">Created By</th>
                             <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
                         </tr>
                     </template>
@@ -219,25 +233,25 @@ function statusClass(s) {
                         <tr v-for="record in data" :key="record.id" 
                             class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
                         >
-                            <td v-for="col in tableColumns" :key="col.key" class="px-6 py-5 whitespace-nowrap">
+                            <td v-for="col in formColumns" :key="col.key" class="px-6 py-5 whitespace-nowrap text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     {{ getDisplayValue(record, col) }}
                                 </div>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap">
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
                                 <span :class="statusClass(record.status)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
                                     {{ record.status }}
                                 </span>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap">
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
                                 <div class="text-sm text-gray-500">{{ record.creator?.name || 'System' }}</div>
                                 <div class="text-[10px] text-gray-400">{{ new Date(record.created_at).toLocaleDateString() }}</div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end items-center space-x-2">
                                     <Link
-                                        v-if="hasPermission(table.slug + '.show')"
-                                        :href="route('dynamic-table.show', { slug: table.slug, id: record.id })"
+                                        v-if="hasPermission(form.slug + '.show')"
+                                        :href="route('dynamic-form.show', { slug: form.slug, id: record.id })"
                                         class="p-2 text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="View"
                                     >
@@ -247,7 +261,7 @@ function statusClass(s) {
                                         </svg>
                                     </Link>
                                     <button
-                                        v-if="hasPermission(table.slug + '.edit')"
+                                        v-if="hasPermission(form.slug + '.edit')"
                                         @click="editRecord(record)"
                                         class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="Edit"
@@ -257,7 +271,7 @@ function statusClass(s) {
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission(table.slug + '.delete')"
+                                        v-if="hasPermission(form.slug + '.delete')"
                                         @click="deleteRecord(record)"
                                         class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="Delete"
@@ -290,7 +304,7 @@ function statusClass(s) {
                     <div class="flex justify-between items-center mb-8">
                         <div>
                             <h3 class="text-2xl font-black text-gray-900 tracking-tight">
-                                {{ isEditing ? 'Update ' + table.name : 'New ' + table.name }}
+                                {{ isEditing ? 'Update ' + form.name : 'New ' + form.name }}
                             </h3>
                             <p class="text-sm text-gray-500 mt-1">Fill in the details below.</p>
                         </div>
@@ -303,12 +317,12 @@ function statusClass(s) {
 
                     <form @submit.prevent="submitForm" class="space-y-6">
                         <DynamicFormRenderer
-                            :fields="table.form_schema?.fields"
-                            v-model="form.form_data"
-                            :items-columns="table.form_schema?.items_columns"
-                            v-model:items="form.items"
-                            :has-items="table.form_schema?.has_items"
-                            :errors="form.errors"
+                            :fields="form.form_schema?.fields"
+                            v-model="dynamicForm.form_data"
+                            :items-columns="form.form_schema?.items_columns"
+                            v-model:items="dynamicForm.items"
+                            :has-items="form.form_schema?.has_items"
+                            :errors="dynamicForm.errors"
                             grid-columns="2"
                         />
 
@@ -319,7 +333,7 @@ function statusClass(s) {
                             </button>
                             <button type="submit" 
                                     class="flex-[2] px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200 transform hover:-translate-y-0.5 transition-all duration-300">
-                                {{ isEditing ? 'Update ' + table.name : 'Create ' + table.name }}
+                                {{ isEditing ? 'Update ' + form.name : 'Create ' + form.name }}
                             </button>
                         </div>
                     </form>

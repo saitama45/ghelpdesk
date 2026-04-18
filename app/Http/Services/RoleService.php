@@ -30,11 +30,11 @@ class RoleService
     {
         $permissions = Permission::all()->pluck('name')->toArray();
 
-        // Add dynamic table permissions if they don't exist in DB yet
-        $dynamicTables = \App\Models\TableDefinition::all();
-        foreach ($dynamicTables as $table) {
+        // Add dynamic form permissions if they don't exist in DB yet
+        $dynamicForms = \App\Models\FormDefinition::all();
+        foreach ($dynamicForms as $form) {
             foreach (['view', 'show', 'create', 'edit', 'delete', 'approve'] as $action) {
-                $permName = "{$table->slug}.{$action}";
+                $permName = "{$form->slug}.{$action}";
                 if (!in_array($permName, $permissions)) {
                     $permissions[] = $permName;
                 }
@@ -55,7 +55,7 @@ class RoleService
             'subcategories',
             'items',
             'request_types',
-            'table_builder',
+            'form_builder',
             'pos_requests',
             'sap_requests',
             'stores',
@@ -71,13 +71,13 @@ class RoleService
         foreach ($permissions as $permissionName) {
             $category = explode('.', $permissionName)[0];
 
-            // Check if this is a dynamic table slug
-            $table = $dynamicTables->firstWhere('slug', $category);
+            // Check if this is a dynamic form slug
+            $form = $dynamicForms->firstWhere('slug', $category);
             
-            // If it's a dynamic table, use its name. Otherwise, capitalize the category.
+            // If it's a dynamic form, use its name. Otherwise, capitalize the category.
             // We use the raw category for keys that are special like 'Pos_requests'
-            $categoryDisplay = $table ? $table->name : (
-                in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'table_builder']) 
+            $categoryDisplay = $form ? $form->name : (
+                in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 
                 ? ucfirst($category) 
                 : ucfirst(str_replace('_', ' ', $category))
             );

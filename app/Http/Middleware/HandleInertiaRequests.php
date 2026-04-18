@@ -59,8 +59,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'permissions' => array_values($permissions),
             ],
-            'dynamicTables' => Cache::remember('active_table_definitions', 3600, function() {
-                return \App\Models\TableDefinition::where('is_active', true)->get(['name', 'slug', 'icon'])->toArray();
+            'dynamicForms' => Cache::remember('active_form_definitions', 3600, function() {
+                return \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug', 'icon'])->toArray();
             }),
             'flash' => [
                 'success' => $request->session()->get('success'),

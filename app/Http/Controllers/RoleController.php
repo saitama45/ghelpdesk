@@ -28,7 +28,7 @@ class RoleController extends Controller
             'roles' => $roles,
             'permissions' => $permissions,
             'companies' => $companies,
-            'dynamicTables' => \App\Models\TableDefinition::where('is_active', true)->get(['name', 'slug']),
+            'dynamicForms' => \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug']),
         ]);
     }
 

@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class TableDefinition extends Model
+class FormDefinition extends Model
 {
     protected $fillable = [
         'name',
@@ -23,4 +23,9 @@ class TableDefinition extends Model
         'form_schema' => 'array',
         'is_active' => 'boolean',
     ];
+
+    public function records()
+    {
+        return $this->hasMany(FormRecord::class);
+    }
 }

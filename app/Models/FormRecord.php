@@ -4,10 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class TableRecord extends Model
+class FormRecord extends Model
 {
     protected $fillable = [
-        'table_definition_id',
+        'form_definition_id',
         'data',
         'status',
         'current_approval_level',
@@ -21,7 +21,7 @@ class TableRecord extends Model
 
     public function definition()
     {
-        return $this->belongsTo(TableDefinition::class, 'table_definition_id');
+        return $this->belongsTo(FormDefinition::class, 'form_definition_id');
     }
 
     public function creator()
@@ -36,6 +36,6 @@ class TableRecord extends Model
 
     public function approvals()
     {
-        return $this->hasMany(TableRecordApproval::class);
+        return $this->hasMany(FormRecordApproval::class);
     }
 }

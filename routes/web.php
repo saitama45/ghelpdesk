@@ -60,16 +60,16 @@ Route::middleware('auth')->group(function () {
     Route::resource('items', \App\Http\Controllers\ItemController::class)->except(['show', 'create', 'edit']);
     Route::resource('request-types', \App\Http\Controllers\RequestTypeController::class)->except(['show', 'create', 'edit']);
     Route::put('request-types/{requestType}/schema', [\App\Http\Controllers\RequestTypeController::class, 'updateSchema'])->name('request-types.schema');
-    Route::resource('table-builder', \App\Http\Controllers\TableBuilderController::class)->except(['show', 'create', 'edit']);
-    Route::put('table-builder/{table_builder}/schema', [\App\Http\Controllers\TableBuilderController::class, 'updateSchema'])->name('table-builder.schema');
+    Route::resource('form-builder', \App\Http\Controllers\FormBuilderController::class)->except(['show', 'create', 'edit']);
+    Route::put('form-builder/{form_builder}/schema', [\App\Http\Controllers\FormBuilderController::class, 'updateSchema'])->name('form-builder.schema');
 
-    // Dynamic Tables
-    Route::get('tables/{slug}', [\App\Http\Controllers\DynamicTableController::class, 'index'])->name('dynamic-table.index');
-    Route::post('tables/{slug}', [\App\Http\Controllers\DynamicTableController::class, 'store'])->name('dynamic-table.store');
-    Route::get('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'show'])->name('dynamic-table.show');
-    Route::put('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'update'])->name('dynamic-table.update');
-    Route::delete('tables/{slug}/{id}', [\App\Http\Controllers\DynamicTableController::class, 'destroy'])->name('dynamic-table.destroy');
-    Route::post('tables/{slug}/{id}/approve', [\App\Http\Controllers\DynamicTableController::class, 'approve'])->name('dynamic-table.approve');
+    // Dynamic Forms
+    Route::get('forms/{slug}', [\App\Http\Controllers\DynamicFormController::class, 'index'])->name('dynamic-form.index');
+    Route::post('forms/{slug}', [\App\Http\Controllers\DynamicFormController::class, 'store'])->name('dynamic-form.store');
+    Route::get('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'show'])->name('dynamic-form.show');
+    Route::put('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'update'])->name('dynamic-form.update');
+    Route::delete('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'destroy'])->name('dynamic-form.destroy');
+    Route::post('forms/{slug}/{id}/approve', [\App\Http\Controllers\DynamicFormController::class, 'approve'])->name('dynamic-form.approve');
     Route::resource('pos-requests', \App\Http\Controllers\PosRequestController::class);
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);

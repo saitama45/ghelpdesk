@@ -14,6 +14,7 @@ import {
     QueueListIcon,
     PresentationChartLineIcon,
     BriefcaseIcon,
+    DocumentTextIcon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 import { usePresence } from '@/Composables/usePresence.js';
@@ -30,12 +31,12 @@ const emit = defineEmits(['toggle']);
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
-const dynamicTables = computed(() => page.props.dynamicTables || []);
+const dynamicForms = computed(() => page.props.dynamicForms || []);
 const { hasPermission } = usePermission();
 
-// Filter tables that the user has permission to view
-const visibleDynamicTables = computed(() => {
-    return dynamicTables.value.filter(table => hasPermission(table.slug + '.view'));
+// Filter forms that the user has permission to view
+const visibleDynamicForms = computed(() => {
+    return dynamicForms.value.filter(form => hasPermission(form.slug + '.view'));
 });
 const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
 
@@ -79,10 +80,10 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-table.*')) {
+    if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
-    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('table-builder.*')) {
+    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -111,8 +112,13 @@ const canSeeServices = computed(() => {
     return hasPermission('tickets.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
-           (dynamicTables.value.length > 0 && hasPermission('table_builder.view'));
+           visibleDynamicForms.value.length > 0;
 });
+
+const canSeeForms = computed(() => {
+    return visibleDynamicForms.value.length > 0;
+});
+
 const canSeeReferences = computed(() => {
     return hasPermission('companies.view') ||
            hasPermission('clusters.view') ||
@@ -123,7 +129,7 @@ const canSeeReferences = computed(() => {
            hasPermission('subcategories.view') ||
            hasPermission('items.view') ||
            hasPermission('request_types.view') ||
-           hasPermission('table_builder.view');
+           hasPermission('form_builder.view');
 });
 
 const canSeeUserManagement = computed(() => {
@@ -282,7 +288,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-table.*')) && !openMenus.services
+                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) && !openMenus.services
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -327,16 +333,18 @@ const canSeeSettings = computed(() => {
                         >
                             <span>SAP Requests</span>
                         </Link>
+
+                        <!-- Nested Dynamic Forms -->
                         <Link
-                            v-for="table in visibleDynamicTables"
-                            :key="table.slug"
-                            :href="route('dynamic-table.index', table.slug)"
+                            v-for="form in visibleDynamicForms"
+                            :key="form.slug"
+                            :href="route('dynamic-form.index', form.slug)"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('dynamic-table.*') && page.url.includes('/tables/' + table.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                                route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
-                            <span>{{ table.name }}</span>
+                            <span>{{ form.name }}</span>
                         </Link>
                     </div>
                 </div>
@@ -347,7 +355,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('references')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('categories.*') || route().current('request-types.*') || route().current('table-builder.*')) && !openMenus.references
+                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && !openMenus.references
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -453,14 +461,14 @@ const canSeeSettings = computed(() => {
                             <span>Request Types</span>
                         </Link>
                         <Link
-                            v-if="hasPermission('table_builder.view')"
-                            :href="route('table-builder.index')"
+                            v-if="hasPermission('form_builder.view')"
+                            :href="route('form-builder.index')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('table-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                                route().current('form-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
-                            <span>Table Builder</span>
+                            <span>Form Builder</span>
                         </Link>
                     </div>
                 </div>

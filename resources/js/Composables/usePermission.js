@@ -8,8 +8,6 @@ export function usePermission() {
     const permissions = computed(() => page.props.auth?.permissions || []);
 
     const hasPermission = (name) => {
-        // Super admin bypass
-        if (userRoles.value.includes('Admin')) return true;
         return permissions.value.includes(name);
     };
 

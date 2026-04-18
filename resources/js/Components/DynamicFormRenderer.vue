@@ -7,12 +7,12 @@
  * Props:
  *   fields         – array of field definitions
  *   modelValue     – object of { key: value } for all fields (v-model)
- *   itemsColumns   – array of column defs for the repeating-row table (optional)
- *   items          – array of row objects for the repeating table (v-model:items)
+ *   itemsColumns   – array of column defs for the repeating-row section (optional)
+ *   items          – array of row objects for the repeating section (v-model:items)
  *   itemLabel      – singular label for each row (default: "Row")
  *   errors         – flat error object from Inertia { key: 'message' }
  *   context        – extra context (e.g. { companyName }) for conditional display
- *   hasItems       – whether to show the items table section
+ *   hasItems       – whether to show the items section
  */
 
 import { computed, reactive, onUnmounted } from 'vue'

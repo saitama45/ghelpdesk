@@ -2,22 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TableDefinition;
-use App\Models\TableRecord;
-use App\Models\TableRecordApproval;
+use App\Models\FormDefinition;
+use App\Models\FormRecord;
+use App\Models\FormRecordApproval;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
-class DynamicTableController extends Controller
+class DynamicFormController extends Controller
 {
     public function index(Request $request, $slug)
     {
-        $table = TableDefinition::where('slug', $slug)->firstOrFail();
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
         
-        $query = TableRecord::where('table_definition_id', $table->id);
+        $query = FormRecord::where('form_definition_id', $form->id);
         
         // Basic search in the JSON data column
         if ($request->filled('search')) {
@@ -30,21 +30,21 @@ class DynamicTableController extends Controller
                         ->paginate($request->get('per_page', 10))
                         ->withQueryString();
         
-        return Inertia::render('DynamicTable/Index', [
-            'table' => $table,
+        return Inertia::render('DynamicForm/Index', [
+            'form' => $form,
             'records' => $records,
         ]);
     }
 
     public function show($slug, $id)
     {
-        $table = TableDefinition::where('slug', $slug)->firstOrFail();
-        $record = TableRecord::with(['creator', 'updator', 'approvals.user', 'definition'])
-            ->where('table_definition_id', $table->id)
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition'])
+            ->where('form_definition_id', $form->id)
             ->findOrFail($id);
 
-        return Inertia::render('DynamicTable/Show', [
-            'table' => $table,
+        return Inertia::render('DynamicForm/Show', [
+            'form' => $form,
             'record' => $record,
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
@@ -52,21 +52,21 @@ class DynamicTableController extends Controller
 
     public function store(Request $request, $slug)
     {
-        $table = TableDefinition::where('slug', $slug)->firstOrFail();
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
         
         $data = $request->only(['form_data', 'items']);
-        $data = $this->storeFileUploads($table, $data);
+        $data = $this->storeFileUploads($form, $data);
         
         // Final structure to save in 'data' column
         $saveData = array_merge($data['form_data'] ?? [], [
             'items' => $data['items'] ?? []
         ]);
 
-        $status = $table->approval_levels > 0 ? 'Open' : 'Approved';
-        $currentLevel = $table->approval_levels > 0 ? 1 : 0;
+        $status = $form->approval_levels > 0 ? 'Open' : 'Approved';
+        $currentLevel = $form->approval_levels > 0 ? 1 : 0;
 
-        TableRecord::create([
-            'table_definition_id' => $table->id,
+        FormRecord::create([
+            'form_definition_id' => $form->id,
             'data' => $saveData,
             'status' => $status,
             'current_approval_level' => $currentLevel,
@@ -78,11 +78,11 @@ class DynamicTableController extends Controller
 
     public function update(Request $request, $slug, $id)
     {
-        $table = TableDefinition::where('slug', $slug)->firstOrFail();
-        $record = TableRecord::where('table_definition_id', $table->id)->findOrFail($id);
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
         
         $data = $request->only(['form_data', 'items']);
-        $data = $this->storeFileUploads($table, $data);
+        $data = $this->storeFileUploads($form, $data);
         
         $saveData = array_merge($data['form_data'] ?? [], [
             'items' => $data['items'] ?? []
@@ -98,20 +98,20 @@ class DynamicTableController extends Controller
 
     public function approve(Request $request, $slug, $id)
     {
-        $table = TableDefinition::where('slug', $slug)->firstOrFail();
-        $record = TableRecord::where('table_definition_id', $table->id)->findOrFail($id);
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
 
         $request->validate([
             'remarks' => 'nullable|string',
             'approver_data' => 'nullable|array',
         ]);
 
-        DB::transaction(function () use ($table, $record, $request) {
+        DB::transaction(function () use ($form, $record, $request) {
             $currentLevel = $record->current_approval_level;
             
             // Log approval
-            TableRecordApproval::create([
-                'table_record_id' => $record->id,
+            FormRecordApproval::create([
+                'form_record_id' => $record->id,
                 'user_id' => Auth::id(),
                 'level' => $currentLevel,
                 'remarks' => $request->remarks,
@@ -119,7 +119,7 @@ class DynamicTableController extends Controller
             ]);
 
             $nextLevel = $currentLevel + 1;
-            if ($nextLevel > $table->approval_levels) {
+            if ($nextLevel > $form->approval_levels) {
                 $record->update([
                     'status' => 'Approved',
                     'current_approval_level' => 0,
@@ -135,9 +135,9 @@ class DynamicTableController extends Controller
         return redirect()->back()->with('success', 'Stage approved successfully');
     }
 
-    private function storeFileUploads(TableDefinition $table, array $data): array
+    private function storeFileUploads(FormDefinition $form, array $data): array
     {
-        $schema = $table->form_schema;
+        $schema = $form->form_schema;
         if (!$schema) return $data;
 
         // Process main fields
@@ -152,7 +152,7 @@ class DynamicTableController extends Controller
                     foreach ($val as $f) {
                         if ($f instanceof \Illuminate\Http\UploadedFile) {
                             $paths[] = [
-                                'path' => $f->store('table-records/attachments', 'public'),
+                                'path' => $f->store('form-records/attachments', 'public'),
                                 'name' => $f->getClientOriginalName(),
                             ];
                         } else {
@@ -162,7 +162,7 @@ class DynamicTableController extends Controller
                     $data['form_data'][$key] = $paths;
                 } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
                     $data['form_data'][$key] = [
-                        'path' => $val->store('table-records/attachments', 'public'),
+                        'path' => $val->store('form-records/attachments', 'public'),
                         'name' => $val->getClientOriginalName(),
                     ];
                 }
@@ -183,7 +183,7 @@ class DynamicTableController extends Controller
                             foreach ($val as $f) {
                                 if ($f instanceof \Illuminate\Http\UploadedFile) {
                                     $paths[] = [
-                                        'path' => $f->store('table-records/attachments', 'public'),
+                                        'path' => $f->store('form-records/attachments', 'public'),
                                         'name' => $f->getClientOriginalName(),
                                     ];
                                 } else {
@@ -193,7 +193,7 @@ class DynamicTableController extends Controller
                             $data['items'][$idx][$key] = $paths;
                         } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
                             $data['items'][$idx][$key] = [
-                                'path' => $val->store('table-records/attachments', 'public'),
+                                'path' => $val->store('form-records/attachments', 'public'),
                                 'name' => $val->getClientOriginalName(),
                             ];
                         }
@@ -207,8 +207,8 @@ class DynamicTableController extends Controller
 
     public function destroy($slug, $id)
     {
-        $table = TableDefinition::where('slug', $slug)->firstOrFail();
-        $record = TableRecord::where('table_definition_id', $table->id)->findOrFail($id);
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
         
         $record->delete();
 
