@@ -53,7 +53,7 @@ class ScheduleController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:schedules.view', only: ['index', 'reportData']),
+            new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules']),
             new Middleware('can:schedules.create', only: ['store', 'import']),
             // schedules.edit is checked inside update() to also allow the schedule owner
         ];
@@ -851,5 +851,42 @@ class ScheduleController extends Controller implements HasMiddleware
         });
 
         return response()->json(['imported' => $imported, 'errors' => $errors]);
+    }
+
+    public function missingSchedules(Request $request)
+    {
+        $rangeStart = $request->filled('start')
+            ? Carbon::parse($request->start, 'Asia/Manila')->startOfDay()
+            : now('Asia/Manila')->startOfMonth();
+        $rangeEnd = $request->filled('end')
+            ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
+            : now('Asia/Manila')->endOfMonth();
+
+        $query = User::active();
+
+        if ($request->filled('sub_unit')) {
+            $query->where('sub_unit', $request->sub_unit);
+        }
+
+        if ($request->filled('user_id')) {
+            if ($request->user_id === 'my') {
+                $query->where('id', auth()->id());
+            } else {
+                $query->where('id', $request->user_id);
+            }
+        }
+
+        // Exclude users who have ANY schedule in the range
+        $query->whereNotExists(function ($q) use ($rangeStart, $rangeEnd) {
+            $q->select(DB::raw(1))
+                ->from('schedules')
+                ->whereColumn('schedules.user_id', 'users.id')
+                ->where('start_time', '<=', $rangeEnd)
+                ->where('end_time', '>=', $rangeStart);
+        });
+
+        $users = $query->orderBy('sub_unit')->orderBy('name')->get(['id', 'name', 'sub_unit', 'email']);
+
+        return response()->json($users);
     }
 }

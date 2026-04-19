@@ -21,6 +21,12 @@
                             >
                                 Report View
                             </button>
+                            <button
+                                @click="switchView('missing-schedules')"
+                                :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'missing-schedules' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                            >
+                                Missing Schedules
+                            </button>
                         </div>
 
                         <!-- Action Buttons -->
@@ -32,7 +38,7 @@
                                 <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                                 </svg>
-                                <span>{{ currentView === 'report' ? 'Export Report PDF' : 'Export PDF' }}</span>
+                                <span>{{ currentView === 'report' ? 'Export Report PDF' : (currentView === 'missing-schedules' ? 'Export Missing PDF' : 'Export PDF') }}</span>
                             </button>
                             <button
                                 v-if="hasPermission('schedules.create')"
@@ -83,8 +89,8 @@
                             />
                         </div>
 
-                        <!-- User filter (calendar only) -->
-                        <div class="w-56" v-if="currentView === 'calendar'">
+                        <!-- User filter (calendar and missing schedules) -->
+                        <div class="w-56" v-if="currentView === 'calendar' || currentView === 'missing-schedules'">
                             <Autocomplete
                                 v-model="filterUser"
                                 :options="userFilterOptions"
@@ -93,6 +99,28 @@
                                 placeholder="Filter by user..."
                                 @update:modelValue="applyFilter"
                             />
+                        </div>
+
+                        <!-- Date Range filter (missing schedules only) -->
+                        <div v-if="currentView === 'missing-schedules'" class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">From:</span>
+                                <input 
+                                    v-model="visibleRange.start" 
+                                    type="date" 
+                                    @change="applyFilter"
+                                    class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold text-gray-700"
+                                >
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">To:</span>
+                                <input 
+                                    v-model="visibleRange.end" 
+                                    type="date" 
+                                    @change="applyFilter"
+                                    class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold text-gray-700"
+                                >
+                            </div>
                         </div>
 
                         <!-- Year compare (report only) -->
@@ -185,6 +213,50 @@
                                     <tr v-if="pivotData.length === 0">
                                         <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
                                             No schedule data found for the reporting period.
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Missing Schedules View -->
+                <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900">Missing Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Unscheduled Users</span>
+                    </div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Email</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr v-if="isMissingSchedulesLoading">
+                                    <td colspan="3" class="px-6 py-12 text-center">
+                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                            <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
+                                            </svg>
+                                            Loading unscheduled users...
+                                        </div>
+                                    </td>
+                                </tr>
+                                <template v-else>
+                                    <tr v-for="user in missingSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
+                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ user.sub_unit || '-' }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.email }}</td>
+                                    </tr>
+                                    <tr v-if="missingSchedulesData.length === 0">
+                                        <td colspan="3" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                            All users have schedules for this period.
                                         </td>
                                     </tr>
                                 </template>
@@ -594,9 +666,36 @@ const fetchPivotData = async () => {
     }
 }
 
+// Missing schedules data
+const missingSchedulesData = ref([])
+const isMissingSchedulesLoading = ref(false)
+
+const fetchMissingSchedulesData = async () => {
+    if (isMissingSchedulesLoading.value) return
+    isMissingSchedulesLoading.value = true
+    try {
+        const params = new URLSearchParams()
+        params.set('start', visibleRange.value.start)
+        params.set('end', visibleRange.value.end)
+        if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
+        if (filterUser.value)    params.set('user_id', filterUser.value)
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        const res = await fetch(`/schedules/missing-schedules?${params}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+        })
+        if (res.ok) missingSchedulesData.value = await res.json()
+    } catch (e) {
+        console.error('Failed to load missing schedules data', e)
+    } finally {
+        isMissingSchedulesLoading.value = false
+    }
+}
+
 const switchView = (view) => {
     currentView.value = view
     if (view === 'report') fetchPivotData()
+    if (view === 'missing-schedules') fetchMissingSchedulesData()
 }
 
 const authUser = computed(() => page.props.auth.user)
@@ -672,6 +771,9 @@ const applyFilter = () => {
     if (currentView.value === 'report') {
         fetchPivotData()
     }
+    if (currentView.value === 'missing-schedules') {
+        fetchMissingSchedulesData()
+    }
 }
 
 const handleVisibleRangeChange = (range) => {
@@ -692,6 +794,11 @@ const handleVisibleRangeChange = (range) => {
         preserveState: true,
         preserveScroll: true,
         replace: true,
+        onSuccess: () => {
+            if (currentView.value === 'missing-schedules') {
+                fetchMissingSchedulesData()
+            }
+        }
     })
 }
 
@@ -721,23 +828,33 @@ const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
 
 const exportPdf = () => {
-    const params = currentView.value === 'report'
-        ? {
+    let params = {};
+
+    if (currentView.value === 'report') {
+        params = {
             view: 'report',
             report_years: selectedReportYears.value,
-        }
-        : {
+        };
+    } else if (currentView.value === 'missing-schedules') {
+        params = {
+            view: 'missing-schedules',
+            start: visibleRange.value.start,
+            end: visibleRange.value.end,
+        };
+    } else {
+        params = {
             start: visibleRange.value.start,
             end: visibleRange.value.end,
             status: filterStatus.value.join(','),
             priority: filterPriority.value.join(','),
         };
+    }
 
-    if (currentView.value === 'calendar' && filterUser.value) {
+    if (currentView.value !== 'report' && filterUser.value) {
         params.user_id = filterUser.value;
     }
     if (filterSubUnit.value) params.sub_unit = filterSubUnit.value;
-    if (filterStore.value)   params.store_id = filterStore.value;
+    if (filterStore.value && currentView.value === 'calendar') params.store_id = filterStore.value;
 
     window.open(route('schedules.export.pdf', params), '_blank');
 };
