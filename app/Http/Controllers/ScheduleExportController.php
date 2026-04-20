@@ -133,10 +133,10 @@ class ScheduleExportController extends Controller
 
         // Date range
         if ($request->filled('start') && $request->filled('end')) {
-            $query->whereBetween('start_time', [
-                Carbon::parse($request->start)->startOfDay(),
-                Carbon::parse($request->end)->endOfDay()
-            ]);
+            $start = Carbon::parse($request->start)->startOfDay();
+            $end = Carbon::parse($request->end)->endOfDay();
+            $query->where('start_time', '<=', $end)
+                  ->where('end_time', '>=', $start);
         }
 
         // User filter
@@ -167,30 +167,32 @@ class ScheduleExportController extends Controller
         // Priority filter
         if ($request->filled('priority')) {
             $priorities = is_array($request->priority) ? $request->priority : explode(',', $request->priority);
-            $query->whereHas('scheduleStores.ticket', function($q) use ($priorities) {
-                $q->where(function($sub) use ($priorities) {
-                    // Check if ticket priority is in selected list
-                    $sub->whereIn('priority', $priorities);
-                    
-                    // Special case: if 'low' is selected, also include tickets with null priority (defaulting to low)
-                    if (in_array('low', $priorities)) {
-                        $sub->orWhereNull('priority');
-                    }
-                    
-                    // Also check item priority
-                    $sub->orWhereHas('item', function($iq) use ($priorities) {
-                        $iq->whereIn('priority', $priorities);
+            
+            $query->where(function($q) use ($priorities) {
+                $q->whereHas('scheduleStores.ticket', function($tq) use ($priorities) {
+                    $tq->where(function($sub) use ($priorities) {
+                        // Check if ticket priority is in selected list
+                        $sub->whereIn('priority', $priorities);
+                        
+                        // Special case: if 'low' is selected, also include tickets with null priority (defaulting to low)
                         if (in_array('low', $priorities)) {
-                            $iq->orWhereNull('priority');
+                            $sub->orWhereNull('priority');
                         }
+                        
+                        // Also check item priority
+                        $sub->orWhereHas('item', function($iq) use ($priorities) {
+                            $iq->whereIn('priority', $priorities);
+                            if (in_array('low', $priorities)) {
+                                $iq->orWhereNull('priority');
+                            }
+                        });
                     });
                 });
+
+                if (in_array('none', $priorities)) {
+                    $q->orWhereDoesntHave('scheduleStores.ticket');
+                }
             });
-            
-            // If 'none' is NOT in the selected priorities, only show schedules with tickets
-            if (!in_array('none', $priorities)) {
-                $query->whereHas('scheduleStores.ticket');
-            }
         }
 
         $schedules = $query->get();

@@ -1122,7 +1122,7 @@ const openCreateModal = () => {
 
     const now = new Date()
     const start = new Date(now)
-    start.setHours(8, 0, 0, 0)
+    start.setHours(7, 0, 0, 0)
     const end = new Date(now)
     end.setHours(17, 0, 0, 0)
     form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
@@ -1135,7 +1135,7 @@ const handleDateClick = (date) => {
 
     openCreateModal()
     const start = new Date(date)
-    start.setHours(8, 0, 0, 0)
+    start.setHours(7, 0, 0, 0)
     const end = new Date(date)
     end.setHours(17, 0, 0, 0)
     form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30 }]

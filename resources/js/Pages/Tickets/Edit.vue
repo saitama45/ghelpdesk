@@ -199,10 +199,12 @@ const openChildModal = () => {
     childForm.reset();
     
     // Set default times
-    const now = new Date();
-    childForm.start_time = formatDateForInput(now);
-    const end = new Date();
-    end.setHours(end.getHours() + 8);
+    const start = new Date();
+    start.setHours(7, 0, 0, 0);
+    childForm.start_time = formatDateForInput(start);
+    
+    const end = new Date(start);
+    end.setHours(17, 0, 0, 0);
     childForm.end_time = formatDateForInput(end);
     
     showChildModal.value = true
