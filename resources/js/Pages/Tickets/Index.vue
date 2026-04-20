@@ -237,6 +237,69 @@ const bulkForm = reactive({
 })
 const isBulkSubmitting = ref(false)
 
+const showSplitModal = ref(false);
+const showMergeModal = ref(false);
+
+const splitForm = useForm({
+    original_title: '',
+    new_titles: [''],
+});
+
+const mergeForm = useForm({
+    parent_id: '',
+    ticket_ids: [],
+});
+
+const openSplitModal = () => {
+    if (selectedIds.value.length !== 1) return;
+    const ticket = pagination.data.value.find(t => t.id === selectedIds.value[0]);
+    if (!ticket) return;
+    
+    splitForm.original_title = ticket.title;
+    splitForm.new_titles = [''];
+    showSplitModal.value = true;
+};
+
+const addSplitConcern = () => splitForm.new_titles.push('');
+const removeSplitConcern = (index) => splitForm.new_titles.splice(index, 1);
+
+const submitSplit = () => {
+    const ticketId = selectedIds.value[0];
+    splitForm.transform((data) => ({
+        original_title: data.original_title,
+        new_titles: data.new_titles.filter(t => t.trim() !== ''),
+    })).post(route('tickets.split', ticketId), {
+        onSuccess: () => {
+            showSplitModal.value = false;
+            selectedIds.value = [];
+            showSuccess('Ticket split successfully');
+        },
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Split failed')
+    });
+};
+
+const openMergeModal = () => {
+    if (selectedIds.value.length < 2) return;
+    mergeForm.ticket_ids = [...selectedIds.value];
+    mergeForm.parent_id = selectedIds.value[0];
+    showMergeModal.value = true;
+};
+
+const submitMerge = () => {
+    mergeForm.post(route('tickets.merge'), {
+        onSuccess: () => {
+            showMergeModal.value = false;
+            selectedIds.value = [];
+            showSuccess('Tickets merged successfully');
+        },
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Merge failed')
+    });
+};
+
+const getSelectedTickets = computed(() => {
+    return pagination.data.value.filter(t => selectedIds.value.includes(t.id));
+});
+
 watch(() => selectedIds.value.length > 0, (visible) => {
     if (visible && items.value.length === 0) {
         fetchItems();
@@ -516,6 +579,22 @@ const formatItemName = (item) => {
 
                     <!-- Buttons -->
                     <div class="flex gap-2 self-end ml-auto">
+                        <button v-if="selectedIds.length === 1 && hasPermission('tickets.edit')"
+                                @click="openSplitModal"
+                                class="px-3 py-2 text-sm font-semibold bg-white border border-yellow-300 text-yellow-700 rounded-lg hover:bg-yellow-50 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                            </svg>
+                            Split
+                        </button>
+                        <button v-if="selectedIds.length > 1 && hasPermission('tickets.edit')"
+                                @click="openMergeModal"
+                                class="px-3 py-2 text-sm font-semibold bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Merge
+                        </button>
                         <button @click="selectedIds = []"
                                 class="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
                             Clear
@@ -954,6 +1033,103 @@ const formatItemName = (item) => {
                             Accept Ticket
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Split Ticket Modal -->
+        <div v-if="showSplitModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showSplitModal = false"></div>
+                <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative border border-gray-100">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900">Split Ticket</h3>
+                        <button @click="showSplitModal = false" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="submitSplit" class="space-y-6">
+                        <p class="text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                            Splitting will update the original ticket's title and create new tickets for each additional concern listed below.
+                        </p>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Original Ticket Concern (Current)</label>
+                            <input v-model="splitForm.original_title" type="text" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+
+                        <div class="space-y-4">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Concerns (New Tickets)</label>
+                            <div v-for="(title, index) in splitForm.new_titles" :key="index" class="flex gap-2">
+                                <input v-model="splitForm.new_titles[index]" type="text" placeholder="Enter new ticket subject..." class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <button type="button" @click="removeSplitConcern(index)" class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <button type="button" @click="addSplitConcern" class="text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                Add Another Concern
+                            </button>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
+                            <button type="button" @click="showSplitModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="submit" :disabled="splitForm.processing" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all">
+                                Split into {{ splitForm.new_titles.length + 1 }} Tickets
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Merge Tickets Modal -->
+        <div v-if="showMergeModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showMergeModal = false"></div>
+                <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative border border-gray-100">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900">Merge Tickets</h3>
+                        <button @click="showMergeModal = false" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="submitMerge" class="space-y-6">
+                        <p class="text-sm text-gray-600 bg-purple-50 p-3 rounded-lg border border-purple-100">
+                            Select the **Parent Ticket** to retain. All other tickets will be closed and linked to the parent. Requesters will be notified.
+                        </p>
+
+                        <div class="space-y-3">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Select Parent Ticket</label>
+                            <div v-for="ticket in getSelectedTickets" :key="ticket.id" 
+                                 class="flex items-center p-3 rounded-lg border cursor-pointer transition-all"
+                                 :class="mergeForm.parent_id === ticket.id ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-gray-200 hover:border-gray-300'"
+                                 @click="mergeForm.parent_id = ticket.id">
+                                <input type="radio" :value="ticket.id" v-model="mergeForm.parent_id" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer">
+                                <div class="ml-3 flex-1">
+                                    <div class="text-xs font-bold text-blue-600">{{ ticket.ticket_key }}</div>
+                                    <div class="text-sm font-semibold text-gray-900">{{ ticket.title }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
+                            <button type="button" @click="showMergeModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="submit" :disabled="mergeForm.processing" class="px-6 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 shadow-md disabled:opacity-50 transition-all">
+                                Merge {{ selectedIds.length }} Tickets
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

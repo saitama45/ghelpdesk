@@ -92,7 +92,9 @@ Route::middleware('auth')->group(function () {
     Route::post('tickets/sync', [\App\Http\Controllers\TicketController::class, 'sync'])->name('tickets.sync');
 
     Route::post('tickets/bulk-update', [\App\Http\Controllers\TicketController::class, 'bulkUpdate'])->name('tickets.bulk-update');
+    Route::post('tickets/merge', [\App\Http\Controllers\TicketController::class, 'merge'])->name('tickets.merge');
     Route::resource('tickets', \App\Http\Controllers\TicketController::class);
+    Route::post('tickets/{ticket}/split', [\App\Http\Controllers\TicketController::class, 'split'])->name('tickets.split');
     Route::post('tickets/{ticket}/child', [\App\Http\Controllers\TicketController::class, 'storeChild'])->name('tickets.store-child');
     Route::post('tickets/{ticket}/duplicate', [\App\Http\Controllers\TicketController::class, 'duplicate'])->name('tickets.duplicate');
     Route::post('tickets/{ticket}/comments', [\App\Http\Controllers\TicketController::class, 'storeComment'])->name('tickets.comments.store');

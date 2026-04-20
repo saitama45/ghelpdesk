@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreTicketRequest;
 use App\Http\Requests\UpdateTicketRequest;
 use App\Mail\NewTicketCreated;
+use App\Mail\TicketMergedNotification;
 use App\Mail\TicketAssigned;
 use App\Mail\TicketCommentAdded;
 use App\Models\Ticket;
@@ -874,5 +875,177 @@ class TicketController extends Controller
         $count = Ticket::whereIn('id', $validated['ticket_ids'])->update($updates);
 
         return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
+    }
+
+    /**
+     * Split a ticket into multiple concerns.
+     */
+    public function split(Request $request, Ticket $ticket)
+    {
+        abort_unless($request->user()->can('tickets.edit'), 403);
+
+        $validated = $request->validate([
+            'original_title' => 'required|string|max:255',
+            'new_titles'     => 'required|array',
+            'new_titles.*'   => 'required|string|max:255',
+        ]);
+
+        $newTicketsCount = 0;
+
+        DB::transaction(function () use ($ticket, $validated, &$newTicketsCount) {
+            // 1. Update the original ticket's title
+            $oldTitle = $ticket->title;
+            $ticket->update(['title' => $validated['original_title']]);
+
+            TicketComment::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => auth()->id(),
+                'comment_text' => "Ticket split. Original title was changed from \"{$oldTitle}\" to \"{$validated['original_title']}\".",
+                'is_internal' => true,
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            // 2. Create new tickets for each additional concern
+            foreach ($validated['new_titles'] as $newTitle) {
+                $newTicket = $ticket->replicate();
+                $newTicket->title = $newTitle;
+                $newTicket->status = 'open'; // Reset status for split tickets
+                $newTicket->ticket_key = null; // Let observer generate a new key
+                $newTicket->created_at = now('Asia/Manila');
+                $newTicket->save();
+
+                TicketComment::create([
+                    'ticket_id' => $newTicket->id,
+                    'user_id' => auth()->id(),
+                    'comment_text' => "Split from ticket #{$ticket->ticket_key}.",
+                    'is_internal' => true,
+                    'created_at' => now('Asia/Manila'),
+                ]);
+
+                // Notify requester about the new ticket
+                $this->notifyTicketCreated($newTicket);
+                
+                $newTicketsCount++;
+            }
+        });
+
+        return redirect()->back()->with('success', "Ticket split into " . ($newTicketsCount + 1) . " tickets.");
+    }
+
+    /**
+     * Merge multiple tickets into one.
+     */
+    public function merge(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.edit'), 403);
+
+        $validated = $request->validate([
+            'parent_id'  => 'required|exists:tickets,id',
+            'ticket_ids' => 'required|array|min:2',
+            'ticket_ids.*' => 'exists:tickets,id',
+        ]);
+
+        if (!in_array($validated['parent_id'], $validated['ticket_ids'])) {
+            return redirect()->back()->withErrors(['merge' => 'Parent ticket must be one of the selected tickets.']);
+        }
+
+        $parent = Ticket::find($validated['parent_id']);
+        $childIds = array_diff($validated['ticket_ids'], [$parent->id]);
+        $children = Ticket::whereIn('id', $childIds)->get();
+
+        DB::transaction(function () use ($parent, $children) {
+            $childKeys = $children->pluck('ticket_key')->implode(', ');
+
+            // 1. Update children
+            foreach ($children as $child) {
+                $child->update([
+                    'status' => 'closed',
+                    'parent_id' => $parent->id,
+                ]);
+
+                TicketComment::create([
+                    'ticket_id' => $child->id,
+                    'user_id' => auth()->id(),
+                    'comment_text' => "Ticket merged into #{$parent->ticket_key}.",
+                    'is_internal' => true,
+                    'created_at' => now('Asia/Manila'),
+                ]);
+            }
+
+            // 2. Add comment to parent
+            TicketComment::create([
+                'ticket_id' => $parent->id,
+                'user_id' => auth()->id(),
+                'comment_text' => "Tickets merged into this: {$childKeys}.",
+                'is_internal' => true,
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            // 3. Notify all unique requesters
+            $this->notifyMerge($parent, $children);
+        });
+
+        return redirect()->back()->with('success', "Tickets merged successfully into #{$parent->ticket_key}.");
+    }
+
+    /**
+     * Helper to send merge notification
+     */
+    private function notifyMerge($parent, $children)
+    {
+        $allTickets = collect([$parent])->concat($children);
+        $recipients = collect();
+
+        foreach ($allTickets as $t) {
+            if ($t->reporter && $t->reporter->email) {
+                $recipients->push(['email' => strtolower($t->reporter->email), 'name' => $t->reporter->name]);
+            } elseif ($t->sender_email) {
+                $recipients->push(['email' => strtolower($t->sender_email), 'name' => $t->sender_name ?? 'External User']);
+            }
+        }
+
+        $recipients = $recipients->unique('email');
+
+        foreach ($recipients as $recipient) {
+            Mail::to($recipient['email'])->send(new TicketMergedNotification($parent, $children, $recipient['name']));
+        }
+    }
+
+    /**
+     * Helper to send new ticket notification (reused logic from store)
+     */
+    private function notifyTicketCreated(Ticket $ticket)
+    {
+        $sentTo = [];
+
+        // Notify requester
+        if ($ticket->reporter && $ticket->reporter->email) {
+            Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
+            $sentTo[] = $ticket->reporter->email;
+        } elseif ($ticket->sender_email) {
+            Mail::to($ticket->sender_email)->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
+            $sentTo[] = $ticket->sender_email;
+        }
+
+        // Notify assignee
+        if ($ticket->assignee && $ticket->assignee->email && !in_array($ticket->assignee->email, $sentTo)) {
+            $shouldNotifyAssignee = $ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists();
+            if ($shouldNotifyAssignee) {
+                Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                $sentTo[] = $ticket->assignee->email;
+            }
+        }
+
+        // Notify admins/others
+        $usersToNotify = User::whereHas('roles', function($q) {
+            $q->where('notify_on_ticket_create', true);
+        })->get();
+
+        foreach ($usersToNotify as $userToNotify) {
+            if ($userToNotify->email && !in_array($userToNotify->email, $sentTo)) {
+                Mail::to($userToNotify->email)->send(new NewTicketCreated($ticket, 'Admin'));
+                $sentTo[] = $userToNotify->email;
+            }
+        }
     }
 }
