@@ -1037,7 +1037,7 @@ const scheduleLegend = [
 const form = reactive({
     user_id: null,
     status: 'On-site',
-    stores: [{ store_id: null, start_time: '', end_time: '', grace_period_minutes: 30, remarks: '' }],
+    stores: [{ store_id: null, ticket_id: null, start_time: '', end_time: '', grace_period_minutes: 30, remarks: '' }],
     pickup_start: '',
     pickup_end: '',
     backlogs_start: '',
@@ -1181,6 +1181,7 @@ const handleEventClick = (payload) => {
             const segmentActualTimes = getActualTimesForDate(ss, clickedDateKey)
             return {
                 store_id: ss.store_id,
+                ticket_id: ss.ticket_id || ss.ticket?.id || null,
                 start_time: formatDateForInput(new Date(ss.start_time)),
                 end_time: formatDateForInput(new Date(ss.end_time)),
                 grace_period_minutes: ss.grace_period_minutes ?? 30,
@@ -1194,6 +1195,7 @@ const handleEventClick = (payload) => {
         const scheduleActualTimes = getActualTimesForDate(event, clickedDateKey)
         form.stores = [{
             store_id: event.store_id || null,
+            ticket_id: event.ticket_id || event.ticket?.id || null,
             start_time: formatDateForInput(new Date(event.start_time)),
             end_time: formatDateForInput(new Date(event.end_time)),
             grace_period_minutes: 30,
@@ -1217,6 +1219,7 @@ const addStore = () => {
     const first = form.stores[0]
     form.stores.push({
         store_id: null,
+        ticket_id: null,
         start_time: last?.end_time || '',
         end_time: first?.end_time || '',
         grace_period_minutes: 30,

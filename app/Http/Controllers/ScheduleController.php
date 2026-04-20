@@ -229,6 +229,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
             'stores.*.store_id'                => 'nullable|exists:stores,id',
+            'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
             'stores.*.grace_period_minutes'    => 'nullable|integer|min:0|max:480',
@@ -272,6 +273,7 @@ class ScheduleController extends Controller implements HasMiddleware
         foreach ($this->expandStoreEntries($storeEntries) as $entry) {
             $schedule->scheduleStores()->create([
                 'store_id'             => $entry['store_id'] ?? null,
+                'ticket_id'            => $entry['ticket_id'] ?? null,
                 'start_time'           => $entry['start_time'],
                 'end_time'             => $entry['end_time'],
                 'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
@@ -302,6 +304,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
             'stores.*.store_id'                => 'nullable|exists:stores,id',
+            'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
             'stores.*.grace_period_minutes'    => 'nullable|integer|min:0|max:480',
@@ -348,6 +351,7 @@ class ScheduleController extends Controller implements HasMiddleware
         foreach ($this->expandStoreEntries($storeEntries) as $entry) {
             $schedule->scheduleStores()->create([
                 'store_id'             => $entry['store_id'] ?? null,
+                'ticket_id'            => $entry['ticket_id'] ?? null,
                 'start_time'           => $entry['start_time'],
                 'end_time'             => $entry['end_time'],
                 'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
@@ -378,6 +382,7 @@ class ScheduleController extends Controller implements HasMiddleware
             if ($startDate->eq($endDate)) {
                 $expanded[] = [
                     'store_id'             => $entry['store_id'] ?? null,
+                    'ticket_id'            => $entry['ticket_id'] ?? null,
                     'start_time'           => $start,
                     'end_time'             => $end,
                     'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
@@ -394,6 +399,7 @@ class ScheduleController extends Controller implements HasMiddleware
             while ($current->lte($endDate)) {
                 $expanded[] = [
                     'store_id'             => $entry['store_id'] ?? null,
+                    'ticket_id'            => $entry['ticket_id'] ?? null,
                     'start_time'           => $current->copy()->setTimeFromTimeString($startTimeStr),
                     'end_time'             => $current->copy()->setTimeFromTimeString($endTimeStr),
                     'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
