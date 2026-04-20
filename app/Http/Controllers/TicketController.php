@@ -260,7 +260,11 @@ class TicketController extends Controller
     {
         $ticket->load([
             'comments' => function($query) {
-                $query->with(['user:id,name,profile_photo', 'attachments'])->orderBy('created_at', 'desc');
+                $query->with(['user:id,name,profile_photo', 'attachments']);
+                if (!auth()->user()->can('tickets.edit')) {
+                    $query->where('is_internal', false);
+                }
+                $query->orderBy('created_at', 'desc');
             },
             'histories' => function($query) {
                 $query->with('user:id,name,profile_photo')->orderBy('changed_at', 'desc');
@@ -615,6 +619,7 @@ class TicketController extends Controller
 
         $request->validate([
             'comment_text' => 'required|string|max:65535',
+            'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:51200',
@@ -623,6 +628,7 @@ class TicketController extends Controller
         $comment = TicketComment::create([
             'ticket_id' => $ticket->id,
             'comment_text' => $request->comment_text,
+            'is_internal' => $request->boolean('is_internal', false),
             'user_id' => auth()->id(),
             'created_at' => now('Asia/Manila'),
         ]);
@@ -654,13 +660,39 @@ class TicketController extends Controller
             }
         }
 
-        $metric = $ticket->slaMetric;
-        if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
-            $now = now('Asia/Manila');
-            $metric->update([
-                'first_response_at' => $now,
-                'is_response_breached' => $metric->response_target_at && $now->gt($metric->response_target_at),
-            ]);
+        // --- SLA UPDATE ---
+        // Only update first response if it's NOT an internal note
+        if (!$comment->is_internal) {
+            $metric = $ticket->slaMetric;
+            if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
+                $now = now('Asia/Manila');
+                $metric->update([
+                    'first_response_at' => $now,
+                    'is_response_breached' => $metric->response_target_at && $now->gt($metric->response_target_at),
+                ]);
+            }
+        }
+
+        // --- NOTIFICATIONS ---
+        // Skip all notifications if it's an internal note
+        if ($comment->is_internal) {
+            // Still handle attachments before returning
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $file) {
+                    $fileName = time() . '_' . $file->getClientOriginalName();
+                    $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
+                    
+                    TicketAttachment::create([
+                        'ticket_id' => $ticket->id,
+                        'comment_id' => $comment->id,
+                        'file_name' => $file->getClientOriginalName(),
+                        'file_storage_path' => $filePath,
+                        'file_size_bytes' => $file->getSize(),
+                        'created_at' => now('Asia/Manila'),
+                    ]);
+                }
+            }
+            return redirect()->back()->with('success', 'Internal note added.');
         }
 
         $ticket->load(['reporter', 'assignee', 'comments.user']);

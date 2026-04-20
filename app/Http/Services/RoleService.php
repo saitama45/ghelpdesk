@@ -54,6 +54,7 @@ class RoleService
             'categories',
             'subcategories',
             'items',
+            'assets',
             'request_types',
             'form_builder',
             'pos_requests',

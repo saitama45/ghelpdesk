@@ -417,6 +417,7 @@ const landingPageOptions = [
             { label: 'Categories', value: 'categories.index' },
             { label: 'Sub-Categories', value: 'sub-categories.index' },
             { label: 'Items', value: 'items.index' },
+            { label: 'Assets', value: 'assets.index' },
             { label: 'Request Types', value: 'request-types.index' },
             { label: 'Form Builder', value: 'form-builder.index' },
         ]
@@ -582,7 +583,7 @@ const permissionGroups = computed(() => {
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
         { name: 'Services', categories: servicesCategories },
-        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
+        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Assets', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },
         { name: 'Settings', categories: ['Settings', 'Canned_messages'] }
@@ -722,7 +723,7 @@ const isCategorySelected = (permissionsList) => {
 }
 
 const sortPermissions = (permissions) => {
-    const order = ['view', 'show', 'create', 'edit', 'delete', 'approve'];
+    const order = ['view', 'show', 'create', 'edit', 'delete', 'approve', 'canned_messages', 'internal_notes'];
     return permissions.sort((a, b) => {
         const aAction = a.name.split('.')[1];
         const bAction = b.name.split('.')[1];

@@ -50,6 +50,7 @@ class GlobalSearchController extends Controller
             ['name' => 'Categories', 'url' => route('categories.index', [], false), 'path' => 'References > Categories', 'permission' => 'categories.view'],
             ['name' => 'Sub-Categories', 'url' => route('sub-categories.index', [], false), 'path' => 'References > Sub-Categories', 'permission' => 'subcategories.view'],
             ['name' => 'Items', 'url' => route('items.index', [], false), 'path' => 'References > Items', 'permission' => 'items.view'],
+            ['name' => 'Assets', 'url' => route('assets.index', [], false), 'path' => 'References > Assets', 'permission' => 'assets.view'],
             ['name' => 'Store Health Report', 'url' => route('reports.store-health', [], false), 'path' => 'Reports > Store Health', 'permission' => 'reports.store_health'],
             ['name' => 'SLA Performance Report', 'url' => route('reports.sla-performance', [], false), 'path' => 'Reports > SLA Performance', 'permission' => 'reports.sla_performance'],
             ['name' => 'Users', 'url' => route('users.index', [], false), 'path' => 'User Management > Users', 'permission' => 'users.view'],

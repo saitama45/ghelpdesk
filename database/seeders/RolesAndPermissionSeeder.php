@@ -33,6 +33,8 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.edit' => 'Edit tickets',
             'tickets.assign' => 'Assign tickets',
             'tickets.close' => 'Close tickets',
+            'tickets.canned_messages' => 'Use canned messages',
+            'tickets.internal_notes' => 'Use internal notes',
             
             // Users
             'users.view' => 'View users',
@@ -76,6 +78,12 @@ class RolesAndPermissionSeeder extends Seeder
             'items.view' => 'View items',
             'items.create' => 'Create items',
             'items.edit' => 'Edit items',
+
+            // Assets
+            'assets.view' => 'View assets',
+            'assets.create' => 'Create assets',
+            'assets.edit' => 'Edit assets',
+            'assets.delete' => 'Delete assets',
 
             // Request Types
             'request_types.view' => 'View request types',
@@ -167,7 +175,7 @@ class RolesAndPermissionSeeder extends Seeder
         $techSupport->givePermissionTo([
             'dashboard.view',
             'attendance.view', 'attendance.logs', 'attendance.create',
-            'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close',
+            'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
             'users.view',
             'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance',
             'companies.view',
@@ -175,6 +183,7 @@ class RolesAndPermissionSeeder extends Seeder
             'categories.view',
             'subcategories.view',
             'items.view',
+            'assets.view',
             'request_types.view',
             'pos_requests.view',
             'pos_requests.create',

@@ -11,7 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, DocumentDuplicateIcon, XMarkIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -68,6 +68,74 @@ const applyCannedMessage = (message) => {
     }
     showCannedMessages.value = false;
 };
+
+// Internal Notes State
+const showInternalNotesPopover = ref(false);
+const noteFileInput = ref(null);
+const noteForm = useForm({
+    comment_text: '',
+    is_internal: true,
+    attachments: [],
+});
+
+const handleNoteFileSelect = (event) => {
+    const files = Array.from(event.target.files);
+    const maxSize = 10 * 1024 * 1024; // 10MB for notes
+    const validFiles = [];
+
+    files.forEach(file => {
+        if (isImage(file.name)) {
+            if (file.size <= maxSize) {
+                validFiles.push(createFileObject(file));
+            } else {
+                showError(`File ${file.name} exceeds 10MB limit.`);
+            }
+        } else {
+            showError(`File ${file.name} is not an image.`);
+        }
+    });
+
+    noteForm.attachments = [...noteForm.attachments, ...validFiles];
+    event.target.value = '';
+};
+
+const removeNoteAttachment = (index) => {
+    const attachment = noteForm.attachments[index];
+    if (attachment.preview) URL.revokeObjectURL(attachment.preview);
+    noteForm.attachments.splice(index, 1);
+};
+
+const saveInternalNote = () => {
+    if (!noteForm.comment_text.trim() && noteForm.attachments.length === 0) return;
+
+    const attachmentsToUpload = noteForm.attachments.map(a => a.file);
+
+    post(route('tickets.comments.store', props.ticket.id), {
+        comment_text: noteForm.comment_text,
+        is_internal: true,
+        attachments: attachmentsToUpload
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            noteForm.attachments.forEach(a => {
+                if (a.preview) URL.revokeObjectURL(a.preview);
+            });
+            noteForm.reset();
+            if (noteFileInput.value) noteFileInput.value.value = '';
+            showSuccess('Internal note added.');
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to save note';
+            showError(errorMessage);
+        }
+    });
+};
+
+const internalNotes = computed(() => {
+    return (props.ticket.comments || [])
+        .filter(c => c.is_internal)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+});
 
 // Child Ticket State
 const showChildModal = ref(false);
@@ -277,6 +345,7 @@ onUnmounted(() => {
 const commentForm = useForm({
     comment_text: '',
     status: '',
+    is_internal: false,
     attachments: [],
 });
 
@@ -358,11 +427,13 @@ const handleKeydown = (e) => {
 };
 
 const activities = computed(() => {
-    const comments = (props.ticket.comments || []).map(c => ({
-        ...c,
-        activity_type: 'comment',
-        date: parseDate(c.created_at)
-    }));
+    const comments = (props.ticket.comments || [])
+        .filter(c => !c.is_internal)
+        .map(c => ({
+            ...c,
+            activity_type: 'comment',
+            date: parseDate(c.created_at)
+        }));
 
     const histories = (props.ticket.histories || []).map(h => ({
         ...h,
@@ -370,7 +441,7 @@ const activities = computed(() => {
         date: parseDate(h.changed_at)
     }));
 
-    // Add Description as an activity
+    // ... (Description and children logic)
     const parentSStore = props.ticket.schedule_store || props.ticket.scheduleStore;
     const description = {
         id: 'description-' + props.ticket.id,
@@ -601,6 +672,7 @@ const addComment = () => {
     post(route('tickets.comments.store', props.ticket.id), {
         comment_text: commentForm.comment_text,
         status: commentForm.status,
+        is_internal: commentForm.is_internal,
         attachments: attachmentsToUpload
     }, {
         onSuccess: () => {
@@ -1380,30 +1452,135 @@ const linkify = (text) => {
                                         <div class="flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 border-t border-blue-50 bg-blue-50/50 rounded-b-xl gap-3">
                                             <div class="flex items-center space-x-2">
                                                 <input ref="commentFileInput" type="file" multiple class="hidden" @change="handleCommentFileSelect">
-                                                <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all">
+                                                <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all" title="Attach Files">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                                                 </button>
-                                                <div class="relative">
-                                                    <button v-if="cannedMessages?.length > 0" type="button" @click="showCannedMessages = !showCannedMessages" class="p-1.5 text-orange-600 hover:text-orange-800 rounded-lg hover:bg-orange-100 transition-all">
-                                                        <ChatBubbleBottomCenterTextIcon class="w-5 h-5" />
+                                                
+                                                <!-- Canned Messages -->
+                                                <div v-if="hasPermission('tickets.canned_messages') || hasPermission('tickets.edit')" class="relative">
+                                                    <button 
+                                                        type="button" 
+                                                        @click="showCannedMessages = !showCannedMessages; showInternalNotesPopover = false" 
+                                                        class="p-1.5 text-orange-600 hover:text-orange-800 rounded-lg hover:bg-orange-100 transition-all flex items-center justify-center" 
+                                                        title="Canned Messages"
+                                                    >
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                                        </svg>
                                                     </button>
+                                                    
                                                     <div v-if="showCannedMessages" class="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
                                                         <div class="p-2 border-b bg-gray-50 flex justify-between items-center">
                                                             <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Canned Messages</span>
                                                             <button @click="showCannedMessages = false" class="text-gray-400 hover:text-gray-600">
-                                                                <XMarkIcon class="w-4 h-4" />
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                                             </button>
                                                         </div>
                                                         <div class="max-h-60 overflow-y-auto">
-                                                            <button 
-                                                                v-for="message in cannedMessages" 
-                                                                :key="message.id"
-                                                                @click="applyCannedMessage(message)"
-                                                                class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
-                                                            >
-                                                                <div class="font-bold text-xs text-blue-700 mb-1">{{ message.title }}</div>
-                                                                <div class="text-[10px] text-gray-600 line-clamp-2">{{ message.content }}</div>
+                                                            <template v-if="cannedMessages && cannedMessages.length > 0">
+                                                                <button 
+                                                                    v-for="message in cannedMessages" 
+                                                                    :key="message.id"
+                                                                    @click="applyCannedMessage(message)"
+                                                                    class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                                                                >
+                                                                    <div class="font-bold text-xs text-blue-700 mb-1">{{ message.title }}</div>
+                                                                    <div class="text-[10px] text-gray-600 line-clamp-2">{{ message.content }}</div>
+                                                                </button>
+                                                            </template>
+                                                            <div v-else class="px-4 py-8 text-center text-gray-500 text-xs italic">
+                                                                No canned messages found.
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Internal Notes Popover -->
+                                                <div v-if="hasPermission('tickets.internal_notes') || hasPermission('tickets.edit')" class="relative">
+                                                    <button 
+                                                        type="button" 
+                                                        @click="showInternalNotesPopover = !showInternalNotesPopover; showCannedMessages = false" 
+                                                        :class="[
+                                                            'p-1.5 rounded-lg transition-all border flex items-center justify-center',
+                                                            showInternalNotesPopover ? 'bg-amber-600 text-white border-amber-700' : 'text-amber-600 hover:text-amber-800 border-transparent hover:bg-amber-50'
+                                                        ]"
+                                                        title="Internal Notes"
+                                                    >
+                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                        </svg>
+                                                    </button>
+
+                                                    <div v-if="showInternalNotesPopover" class="absolute bottom-full left-0 mb-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
+                                                        <div class="p-3 border-b bg-amber-50 flex justify-between items-center">
+                                                            <span class="text-xs font-black text-amber-800 uppercase tracking-widest">Internal Notes</span>
+                                                            <button @click="showInternalNotesPopover = false" class="text-amber-400 hover:text-amber-600">
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                                             </button>
+                                                        </div>
+                                                        
+                                                        <!-- Notes List -->
+                                                        <div class="max-h-64 overflow-y-auto p-2 space-y-2 bg-gray-50/30 custom-scrollbar">
+                                                            <div v-for="note in internalNotes" :key="note.id" class="p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm">
+                                                                <div class="flex justify-between items-start mb-1">
+                                                                    <span class="text-[10px] font-black text-gray-700 uppercase">{{ note.user?.name }}</span>
+                                                                    <span class="text-[9px] text-gray-400">{{ formatDate(parseDate(note.created_at)) }}</span>
+                                                                </div>
+                                                                <p class="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{{ note.comment_text }}</p>
+                                                                
+                                                                <!-- Note Attachments (Images Only) -->
+                                                                <div v-if="note.attachments && note.attachments.length > 0" class="mt-2 flex flex-wrap gap-1">
+                                                                    <a 
+                                                                        v-for="attachment in note.attachments" 
+                                                                        :key="attachment.id"
+                                                                        :href="getThumbnailUrl(attachment)"
+                                                                        target="_blank"
+                                                                        class="block w-12 h-12 border border-gray-200 rounded overflow-hidden hover:opacity-80 transition-opacity"
+                                                                    >
+                                                                        <img :src="getThumbnailUrl(attachment)" class="w-full h-full object-cover" :alt="attachment.file_name">
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                            <div v-if="internalNotes.length === 0" class="py-10 text-center text-gray-400 text-xs italic">
+                                                                No internal notes yet.
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Add Note Form -->
+                                                        <div class="p-3 border-t bg-white">
+                                                            <!-- Selected Images Preview -->
+                                                            <div v-if="noteForm.attachments.length > 0" class="flex flex-wrap gap-2 mb-2">
+                                                                <div v-for="(attachment, index) in noteForm.attachments" :key="attachment.id" class="relative group w-12 h-12">
+                                                                    <img :src="attachment.preview" class="w-full h-full object-cover rounded border border-amber-200" :alt="attachment.file_name">
+                                                                    <button type="button" @click="removeNoteAttachment(index)" class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600">
+                                                                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            <textarea 
+                                                                v-model="noteForm.comment_text"
+                                                                rows="2"
+                                                                class="block w-full border-gray-200 rounded-lg text-xs focus:ring-amber-500 focus:border-amber-500 resize-none mb-2"
+                                                                placeholder="Type an internal note..."
+                                                            ></textarea>
+                                                            <div class="flex justify-between items-center">
+                                                                <div class="flex items-center">
+                                                                    <input ref="noteFileInput" type="file" multiple accept="image/*" class="hidden" @change="handleNoteFileSelect">
+                                                                    <button type="button" @click="noteFileInput.click()" class="p-1 text-amber-600 hover:text-amber-800 rounded hover:bg-amber-50 transition-colors" title="Attach Images">
+                                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                        </svg>
+                                                                    </button>
+                                                                </div>
+                                                                <button 
+                                                                    @click="saveInternalNote"
+                                                                    :disabled="noteForm.processing || (!noteForm.comment_text.trim() && noteForm.attachments.length === 0)"
+                                                                    class="px-3 py-1.5 bg-amber-600 text-white text-[10px] font-black rounded-md hover:bg-amber-700 disabled:opacity-50 uppercase tracking-widest transition-colors shadow-sm"
+                                                                >
+                                                                    {{ noteForm.processing ? 'Saving...' : 'Add Note' }}
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

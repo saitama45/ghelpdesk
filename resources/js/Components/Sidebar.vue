@@ -83,7 +83,7 @@ onMounted(() => {
     if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
-    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
+    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -128,6 +128,7 @@ const canSeeReferences = computed(() => {
            hasPermission('categories.view') ||
            hasPermission('subcategories.view') ||
            hasPermission('items.view') ||
+           hasPermission('assets.view') ||
            hasPermission('request_types.view') ||
            hasPermission('form_builder.view');
 });
@@ -355,7 +356,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('references')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && !openMenus.references
+                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && !openMenus.references
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -440,6 +441,7 @@ const canSeeSettings = computed(() => {
                         >
                             <span>Sub-Categories</span>
                         </Link>
+
                         <Link
                             v-if="hasPermission('items.view')"
                             :href="route('items.index')"
@@ -449,6 +451,17 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Items</span>
+                        </Link>
+
+                        <Link
+                            v-if="hasPermission('assets.view')"
+                            :href="route('assets.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Assets</span>
                         </Link>
                         <Link
                             v-if="hasPermission('request_types.view')"

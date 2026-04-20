@@ -12,12 +12,14 @@ class TicketComment extends Model
     protected $fillable = [
         'ticket_id',
         'comment_text',
+        'is_internal',
         'user_id',
         'sender_email',
         'sender_name',
     ];
 
     protected $casts = [
+        'is_internal' => 'boolean',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];

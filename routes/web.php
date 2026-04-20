@@ -88,6 +88,7 @@ Route::middleware('auth')->group(function () {
     Route::get('tickets/data/categories', [\App\Http\Controllers\TicketController::class, 'getCategories'])->name('tickets.data.categories');
     Route::get('tickets/data/subcategories', [\App\Http\Controllers\TicketController::class, 'getSubCategories'])->name('tickets.data.subcategories');
     Route::get('tickets/data/items', [\App\Http\Controllers\TicketController::class, 'getItems'])->name('tickets.data.items');
+    Route::resource('assets', \App\Http\Controllers\AssetController::class)->except(['show', 'create', 'edit']);
     Route::post('tickets/sync', [\App\Http\Controllers\TicketController::class, 'sync'])->name('tickets.sync');
 
     Route::post('tickets/bulk-update', [\App\Http\Controllers\TicketController::class, 'bulkUpdate'])->name('tickets.bulk-update');
