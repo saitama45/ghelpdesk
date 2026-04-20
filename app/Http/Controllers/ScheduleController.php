@@ -18,6 +18,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 class ScheduleController extends Controller implements HasMiddleware
 {
@@ -862,6 +863,14 @@ class ScheduleController extends Controller implements HasMiddleware
             ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
             : now('Asia/Manila')->endOfMonth();
 
+        // Generate all dates in range
+        $allDates = [];
+        $tempDate = $rangeStart->copy();
+        while ($tempDate <= $rangeEnd) {
+            $allDates[] = $tempDate->toDateString();
+            $tempDate->addDay();
+        }
+
         $query = User::active();
 
         if ($request->filled('sub_unit')) {
@@ -876,17 +885,61 @@ class ScheduleController extends Controller implements HasMiddleware
             }
         }
 
-        // Exclude users who have ANY schedule in the range
-        $query->whereNotExists(function ($q) use ($rangeStart, $rangeEnd) {
-            $q->select(DB::raw(1))
-                ->from('schedules')
-                ->whereColumn('schedules.user_id', 'users.id')
-                ->where('start_time', '<=', $rangeEnd)
-                ->where('end_time', '>=', $rangeStart);
-        });
+        $users = $query->orderByRaw("CASE WHEN sub_unit IS NULL OR sub_unit = '' THEN 1 ELSE 0 END")
+            ->orderBy('sub_unit')
+            ->orderBy('name')
+            ->get(['id', 'name', 'sub_unit', 'email']);
+        $userIds = $users->pluck('id');
 
-        $users = $query->orderBy('sub_unit')->orderBy('name')->get(['id', 'name', 'sub_unit', 'email']);
+        // Fetch all schedules for these users in range
+        $schedules = Schedule::whereIn('user_id', $userIds)
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart)
+            ->get(['user_id', 'start_time', 'end_time']);
 
-        return response()->json($users);
+        $userScheduledDates = [];
+        foreach ($schedules as $s) {
+            $sStart = $s->start_time->copy()->timezone('Asia/Manila');
+            $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
+            
+            $curr = $sStart->copy();
+            while ($curr->toDateString() <= $sEnd->toDateString()) {
+                $dateStr = $curr->toDateString();
+                if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                    $userScheduledDates[$s->user_id][$dateStr] = true;
+                }
+                $curr->addDay();
+            }
+        }
+
+        $results = $users->map(function ($user) use ($allDates, $userScheduledDates) {
+            $missing = [];
+            foreach ($allDates as $date) {
+                if (!isset($userScheduledDates[$user->id][$date])) {
+                    $missing[] = Carbon::parse($date)->format('M j');
+                }
+            }
+            
+            if (empty($missing)) return null;
+
+            $user->missing_days = $missing;
+            $user->missing_days_count = count($missing);
+            return $user;
+        })->filter()->values();
+
+        // Manual Pagination
+        $perPage = (int) $request->input('per_page', 10);
+        $page = (int) $request->input('page', 1);
+        $total = $results->count();
+
+        $paginatedResults = new LengthAwarePaginator(
+            $results->forPage($page, $perPage)->values(),
+            $total,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return response()->json($paginatedResults);
     }
 }

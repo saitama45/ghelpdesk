@@ -18,6 +18,7 @@
             border: 1px solid #ddd;
             padding: 10px 8px;
             text-align: left;
+            vertical-align: top;
         }
         th {
             background-color: #f8fafc;
@@ -61,11 +62,22 @@
         .sub-unit-cell {
             font-weight: bold;
             color: #64748b;
-            width: 25%;
+            width: 15%;
         }
         .name-cell {
             font-weight: bold;
             color: #1e293b;
+            width: 20%;
+        }
+        .days-cell {
+            color: #dc2626;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+        .count-cell {
+            font-weight: bold;
+            text-align: center;
+            width: 8%;
         }
     </style>
 </head>
@@ -84,7 +96,8 @@
             <tr>
                 <th>Sub-Unit</th>
                 <th>User Name</th>
-                <th>Email Address</th>
+                <th>Missing Days</th>
+                <th style="text-align: center;">Count</th>
             </tr>
         </thead>
         <tbody>
@@ -92,11 +105,14 @@
                 <tr>
                     <td class="sub-unit-cell">{{ $user->sub_unit ?? '-' }}</td>
                     <td class="name-cell">{{ $user->name }}</td>
-                    <td>{{ $user->email }}</td>
+                    <td class="days-cell">
+                        {{ implode(', ', $user->missing_days) }}
+                    </td>
+                    <td class="count-cell">{{ $user->missing_days_count }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="3" style="text-align: center; padding: 20px; color: #94a3b8; font-style: italic;">
+                    <td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8; font-style: italic;">
                         All users have schedules for this period.
                     </td>
                 </tr>

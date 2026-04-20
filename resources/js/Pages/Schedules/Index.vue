@@ -233,12 +233,13 @@
                                 <tr>
                                     <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
                                     <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Email</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Days</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr v-if="isMissingSchedulesLoading">
-                                    <td colspan="3" class="px-6 py-12 text-center">
+                                    <td colspan="4" class="px-6 py-12 text-center">
                                         <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -252,16 +253,66 @@
                                     <tr v-for="user in missingSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
                                         <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ user.sub_unit || '-' }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.email }}</td>
+                                        <td class="px-6 py-4 text-sm text-red-600 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.missing_days" :key="i" class="bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_days_count }}</td>
                                     </tr>
                                     <tr v-if="missingSchedulesData.length === 0">
-                                        <td colspan="3" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-500 italic">
                                             All users have schedules for this period.
                                         </td>
                                     </tr>
                                 </template>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Pagination Footer -->
+                    <div v-if="missingSchedulesPagination.total > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <div class="text-xs text-gray-500 font-bold uppercase tracking-widest">
+                            Showing {{ (missingSchedulesPagination.current_page - 1) * missingSchedulesPagination.per_page + 1 }} 
+                            to {{ Math.min(missingSchedulesPagination.current_page * missingSchedulesPagination.per_page, missingSchedulesPagination.total) }} 
+                            of {{ missingSchedulesPagination.total }} users
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button 
+                                @click="fetchMissingSchedulesData(missingSchedulesPagination.current_page - 1)"
+                                :disabled="missingSchedulesPagination.current_page === 1"
+                                class="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Previous
+                            </button>
+                            
+                            <!-- Page Numbers (simple logic) -->
+                            <div class="flex items-center space-x-1">
+                                <button 
+                                    v-for="p in missingSchedulesPagination.last_page" 
+                                    :key="p"
+                                    @click="fetchMissingSchedulesData(p)"
+                                    :class="[
+                                        'w-8 h-8 rounded-md text-xs font-bold transition-all',
+                                        missingSchedulesPagination.current_page === p 
+                                            ? 'bg-blue-600 text-white shadow-sm' 
+                                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                    ]"
+                                >
+                                    {{ p }}
+                                </button>
+                            </div>
+
+                            <button 
+                                @click="fetchMissingSchedulesData(missingSchedulesPagination.current_page + 1)"
+                                :disabled="missingSchedulesPagination.current_page === missingSchedulesPagination.last_page"
+                                class="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -668,15 +719,22 @@ const fetchPivotData = async () => {
 
 // Missing schedules data
 const missingSchedulesData = ref([])
+const missingSchedulesPagination = ref({
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+    per_page: 10
+})
 const isMissingSchedulesLoading = ref(false)
 
-const fetchMissingSchedulesData = async () => {
+const fetchMissingSchedulesData = async (page = 1) => {
     if (isMissingSchedulesLoading.value) return
     isMissingSchedulesLoading.value = true
     try {
         const params = new URLSearchParams()
         params.set('start', visibleRange.value.start)
         params.set('end', visibleRange.value.end)
+        params.set('page', page)
         if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
         if (filterUser.value)    params.set('user_id', filterUser.value)
 
@@ -684,7 +742,16 @@ const fetchMissingSchedulesData = async () => {
         const res = await fetch(`/schedules/missing-schedules?${params}`, {
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
         })
-        if (res.ok) missingSchedulesData.value = await res.json()
+        if (res.ok) {
+            const result = await res.json()
+            missingSchedulesData.value = result.data
+            missingSchedulesPagination.value = {
+                current_page: result.current_page,
+                last_page: result.last_page,
+                total: result.total,
+                per_page: result.per_page
+            }
+        }
     } catch (e) {
         console.error('Failed to load missing schedules data', e)
     } finally {
