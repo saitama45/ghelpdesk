@@ -147,29 +147,67 @@ const scheduleWindowMessage = computed(() => {
 });
 let clockInterval;
 
-const loadGoogleMapsScript = () => {
-    const key = window.config?.google_maps_api_key;
-    if (!key) {
-        locationError.value = "Google Maps API Key is missing in .env";
-        return;
-    }
-    
-    if (window.google && window.google.maps) {
-        updateMap();
-        return;
-    }
+let mapsPromise = null;
 
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=marker&loading=async`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
+const loadGoogleMaps = () => {
+    if (mapsPromise) return mapsPromise;
+
+    mapsPromise = new Promise((resolve, reject) => {
+        const key = window.config?.google_maps_api_key;
+        if (!key) {
+            reject(new Error("Google Maps API Key is missing."));
+            return;
+        }
+
+        if (window.google?.maps?.Map) {
+            resolve();
+            return;
+        }
+
+        // Check if script already exists to avoid duplicate tags
+        if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
+            const checkInt = setInterval(() => {
+                if (window.google?.maps?.Map) {
+                    clearInterval(checkInt);
+                    resolve();
+                }
+            }, 100);
+            return;
+        }
+
+        // Use the older but more stable callback approach
+        window.initGoogleMapsCallback = () => {
+            if (window.google?.maps?.Map) {
+                resolve();
+            } else {
+                // Fallback polling if callback fires but Map isn't immediately on the namespace
+                const poll = setInterval(() => {
+                    if (window.google?.maps?.Map) {
+                        clearInterval(poll);
+                        resolve();
+                    }
+                }, 50);
+            }
+        };
+
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&v=weekly&callback=initGoogleMapsCallback&loading=async`;
+        script.async = true;
+        script.defer = true;
+        script.onerror = () => reject(new Error("Failed to load Google Maps script."));
+        document.head.appendChild(script);
+    });
+
+    return mapsPromise;
+};
+
+const loadGoogleMapsScript = async () => {
+    try {
+        await loadGoogleMaps();
         if (isMounted.value) updateMap();
-    };
-    script.onerror = () => {
-        locationError.value = "Failed to load Google Maps script.";
-    };
-    document.head.appendChild(script);
+    } catch (err) {
+        locationError.value = err.message;
+    }
 };
 
 onMounted(() => {
@@ -315,92 +353,49 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 const updateMap = async () => {
     if (!mapElement.value || !latitude.value || !longitude.value) return;
 
-    if (window.google && window.google.maps) {
+    try {
+        await loadGoogleMaps();
+        
+        // Final sanity check for constructor
+        if (!window.google?.maps?.Map) return;
+
         const pos = { lat: latitude.value, lng: longitude.value };
         
-        try {
-            if (!map) {
-                // Try to use Advanced Markers first (requires Map ID)
-                try {
-                    const { Map } = await google.maps.importLibrary("maps");
-                    const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
-                    
-                    if (!mapElement.value) return;
-
-                    map = new Map(mapElement.value, {
-                        center: pos,
-                        zoom: 17,
-                        mapId: 'DTR_MAP_ID',
-                        disableDefaultUI: true,
-                    });
-                    
-                    marker = new AdvancedMarkerElement({
-                        map: map,
-                        position: pos,
-                        title: "You are here",
-                    });
-
-                    // Draw circles for assigned stores
-                    props.assignedStores.forEach(store => {
-                        if (store.latitude && store.longitude) {
-                            const circle = new google.maps.Circle({
-                                strokeColor: "#3B82F6",
-                                strokeOpacity: 0.8,
-                                strokeWeight: 2,
-                                fillColor: "#3B82F6",
-                                fillOpacity: 0.15,
-                                map: map,
-                                center: { lat: store.latitude, lng: store.longitude },
-                                radius: store.radius_meters || 100,
-                            });
-                            geofenceCircles.push(circle);
-                        }
-                    });
-                } catch (advError) {
-                    console.warn("Advanced markers failed, falling back to standard markers", advError);
-                    // Standard Fallback
-                    map = new google.maps.Map(mapElement.value, {
-                        center: pos,
-                        zoom: 17,
-                        disableDefaultUI: true,
-                    });
-                    marker = new google.maps.Marker({
-                        position: pos,
-                        map: map,
-                        title: "You are here"
-                    });
-                    
-                    props.assignedStores.forEach(store => {
-                        if (store.latitude && store.longitude) {
-                            const circle = new google.maps.Circle({
-                                strokeColor: "#3B82F6",
-                                strokeOpacity: 0.8,
-                                strokeWeight: 2,
-                                fillColor: "#3B82F6",
-                                fillOpacity: 0.15,
-                                map: map,
-                                center: { lat: store.latitude, lng: store.longitude },
-                                radius: store.radius_meters || 100,
-                            });
-                            geofenceCircles.push(circle);
-                        }
-                    });
-                }
-            } else {
-                // Map already exists, just update position
-                map.setCenter(pos);
-                if (marker) {
-                    if (typeof marker.setPosition === 'function') {
-                        marker.setPosition(pos);
-                    } else {
-                        marker.position = pos;
+        if (!map) {
+            map = new google.maps.Map(mapElement.value, {
+                center: pos,
+                zoom: 17,
+                disableDefaultUI: true,
+            });
+            
+            marker = new google.maps.Marker({
+                position: pos,
+                map: map,
+                title: "You are here"
+            });
+            
+            if (requiresGeofencing.value) {
+                props.assignedStores.forEach(store => {
+                    if (store.latitude && store.longitude) {
+                        new google.maps.Circle({
+                            strokeColor: "#3B82F6",
+                            strokeOpacity: 0.8,
+                            strokeWeight: 2,
+                            fillColor: "#3B82F6",
+                            fillOpacity: 0.15,
+                            map: map,
+                            center: { lat: store.latitude, lng: store.longitude },
+                            radius: store.radius_meters || 100,
+                        });
                     }
-                }
+                });
             }
-        } catch (globalError) {
-            console.error("Map update failed", globalError);
-            locationError.value = "Map display error. Check API Key restrictions.";
+        } else {
+            map.setCenter(pos);
+            if (marker) marker.setPosition(pos);
         }
+    } catch (globalError) {
+        console.error("Map update failed", globalError);
     }
 };
 
