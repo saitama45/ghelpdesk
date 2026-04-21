@@ -67,6 +67,7 @@ class RoleService
             'canned_messages',
             'projects',
             'presence',
+            'kb articles',
         ];
 
         foreach ($permissions as $permissionName) {
@@ -77,11 +78,15 @@ class RoleService
             
             // If it's a dynamic form, use its name. Otherwise, capitalize the category.
             // We use the raw category for keys that are special like 'Pos_requests'
-            $categoryDisplay = $form ? $form->name : (
-                in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 
-                ? ucfirst($category) 
-                : ucfirst(str_replace('_', ' ', $category))
-            );
+            if ($category === 'kb_articles') {
+                $categoryDisplay = 'KB Articles';
+            } else {
+                $categoryDisplay = $form ? $form->name : (
+                    in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 
+                    ? ucfirst($category) 
+                    : ucfirst(str_replace('_', ' ', $category))
+                );
+            }
 
             $grouped[$categoryDisplay][] = (object)[
                 'id' => $permissionName,

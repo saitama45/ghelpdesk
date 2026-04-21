@@ -152,6 +152,12 @@ class RolesAndPermissionSeeder extends Seeder
 
             // Presence
             'presence.view' => 'View online users and their status history',
+
+            // KB Articles
+            'kb_articles.view' => 'View KB articles',
+            'kb_articles.create' => 'Create KB articles',
+            'kb_articles.edit' => 'Edit KB articles',
+            'kb_articles.delete' => 'Delete KB articles',
         ];
 
         // Create permissions

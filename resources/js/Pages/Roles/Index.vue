@@ -391,6 +391,7 @@ const landingPageOptions = [
             { label: 'Attendance Logs', value: 'attendance.logs' },
             { label: 'Scheduling', value: 'schedules.index' },
             { label: 'Presence', value: 'presence.index' },
+            { label: 'KB Articles', value: 'kb-articles.index' },
         ]
     },
     {
@@ -581,7 +582,7 @@ const permissionGroups = computed(() => {
     return [
         { name: 'Dashboard', categories: ['Dashboard'] },
         { name: 'Project Tracker', categories: ['Projects'] },
-        { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence'] },
+        { name: 'Admin Task', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
         { name: 'Services', categories: servicesCategories },
         { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Assets', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
@@ -602,9 +603,13 @@ const groupedPermissions = computed(() => {
         const groupCategories = []
 
         group.categories.forEach(catName => {
-            // Find match regardless of case
-            const actualKey = availableCategories.find(k => k.toLowerCase() === catName.toLowerCase())
-            if (actualKey) {
+            // Find match regardless of case and underscores/spaces
+            const normalizedCatName = catName.toLowerCase().replace(/[\s_]/g, '')
+            const actualKey = availableCategories.find(k => {
+                const normalizedK = k.toLowerCase().replace(/[\s_]/g, '')
+                return normalizedK === normalizedCatName
+            })
+            if (actualKey && !mappedKeys.has(actualKey)) {
                 const perms = props.permissions[actualKey]
                 if (perms) {
                     const filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search))

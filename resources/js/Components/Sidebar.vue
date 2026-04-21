@@ -77,7 +77,7 @@ const toggleSidebar = () => {
 // Auto-expand menus based on current route
 onMounted(() => {
     initPresence();
-    if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) {
+    if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
     if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
@@ -105,7 +105,8 @@ const canSeeAdminTask = computed(() => {
     return hasPermission('attendance.view') ||
            hasPermission('attendance.logs') ||
            hasPermission('schedules.view') ||
-           hasPermission('presence.view');
+           hasPermission('presence.view') ||
+           hasPermission('kb_articles.view');
 });
 
 const canSeeServices = computed(() => {
@@ -279,6 +280,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Presence</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('kb_articles.view')"
+                            :href="route('kb-articles.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>KB Articles</span>
                         </Link>
                     </div>
                 </div>

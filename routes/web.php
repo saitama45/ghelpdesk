@@ -131,6 +131,20 @@ Route::middleware('auth')->group(function () {
         Route::get('/presence/user-stats/{user}', [\App\Http\Controllers\PresenceController::class, 'getUserStats'])->name('presence.user-stats');
     });
 
+    // Knowledge Base
+    Route::resource('kb-articles', \App\Http\Controllers\KbArticleController::class)->names([
+        'index' => 'kb-articles.index',
+        'create' => 'kb-articles.create',
+        'store' => 'kb-articles.store',
+        'edit' => 'kb-articles.edit',
+        'update' => 'kb-articles.update',
+        'destroy' => 'kb-articles.destroy',
+    ]);
+    Route::get('/kb-categories/search', [\App\Http\Controllers\KbArticleController::class, 'getCategories'])->name('kb-categories.search');
+    Route::get('/knowledge-base', [\App\Http\Controllers\KbArticleController::class, 'portal'])->name('knowledge-base.portal');
+    Route::get('/knowledge-base/{kb_article:slug}', [\App\Http\Controllers\KbArticleController::class, 'show'])->name('knowledge-base.show');
+    Route::post('/knowledge-base/{kb_article}/feedback', [\App\Http\Controllers\KbArticleController::class, 'submitFeedback'])->name('knowledge-base.feedback');
+
     // NSO Project Tracker
     Route::resource('projects', \App\Http\Controllers\ProjectController::class);
     Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->name('projects.apply-templates');
