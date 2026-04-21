@@ -31,7 +31,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Store::with(['users:id,name,email', 'cluster:id,code,name'])
+        $query = Store::with(['users:id,name,email', 'clusters:id,code,name'])
             ->withCount(['tickets' => function($q) {
                 $q->where('tickets.status', 'open');
             }]);
@@ -43,7 +43,7 @@ class StoreController extends Controller implements HasMiddleware
                     ->orWhere('area', 'like', "%{$request->search}%")
                     ->orWhere('brand', 'like', "%{$request->search}%")
                     ->orWhere('email', 'like', "%{$request->search}%")
-                    ->orWhereHas('cluster', function ($clusterQuery) use ($request) {
+                    ->orWhereHas('clusters', function ($clusterQuery) use ($request) {
                         $clusterQuery->where('name', 'like', "%{$request->search}%")
                             ->orWhere('code', 'like', "%{$request->search}%");
                     })
@@ -75,7 +75,8 @@ class StoreController extends Controller implements HasMiddleware
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'required|in:Regular,Kitchen,Office',
-            'cluster_id' => 'required|exists:clusters,id',
+            'cluster_ids' => 'required|array',
+            'cluster_ids.*' => 'exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
@@ -88,6 +89,10 @@ class StoreController extends Controller implements HasMiddleware
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
 
         $store = Store::create($validated);
+
+        if ($request->has('cluster_ids')) {
+            $store->clusters()->sync($request->cluster_ids);
+        }
 
         if ($request->has('user_ids')) {
             $store->users()->sync($request->user_ids);
@@ -105,7 +110,8 @@ class StoreController extends Controller implements HasMiddleware
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'required|in:Regular,Kitchen,Office',
-            'cluster_id' => 'required|exists:clusters,id',
+            'cluster_ids' => 'required|array',
+            'cluster_ids.*' => 'exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
@@ -118,6 +124,10 @@ class StoreController extends Controller implements HasMiddleware
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
 
         $store->update($validated);
+
+        if ($request->has('cluster_ids')) {
+            $store->clusters()->sync($request->cluster_ids);
+        }
 
         if ($request->has('user_ids')) {
             $store->users()->sync($request->user_ids);
@@ -168,8 +178,14 @@ class StoreController extends Controller implements HasMiddleware
             }
 
             $data = array_combine($header, array_map(fn($v) => trim((string) $v), $line));
-            $clusterValue = $data['cluster'] ?? null;
-            $clusterId = $clusterValue ? ($clusterLookup[mb_strtolower(trim($clusterValue))] ?? null) : null;
+            $clusterValues = isset($data['cluster']) ? explode(';', $data['cluster']) : [];
+            $clusterIds = [];
+            foreach ($clusterValues as $cv) {
+                $cv = mb_strtolower(trim($cv));
+                if (isset($clusterLookup[$cv])) {
+                    $clusterIds[] = $clusterLookup[$cv];
+                }
+            }
 
             $validator = \Validator::make([
                 'code'          => $data['code'] ?? null,
@@ -179,8 +195,8 @@ class StoreController extends Controller implements HasMiddleware
                 'area'          => $data['area'] ?? null,
                 'brand'         => $data['brand'] ?? null,
                 'class'         => $data['class'] ?? null,
-                'cluster'       => $clusterValue,
-                'cluster_id'    => $clusterId,
+                'cluster'       => $data['cluster'] ?? null,
+                'cluster_ids'    => $clusterIds,
                 'latitude'      => $data['latitude'] ?: null,
                 'longitude'     => $data['longitude'] ?: null,
                 'radius_meters' => $data['radius_meters'] ?: null,
@@ -194,14 +210,14 @@ class StoreController extends Controller implements HasMiddleware
                 'brand'         => 'required|string|max:255',
                 'class'         => 'required|in:Regular,Kitchen,Office',
                 'cluster'       => 'required|string|max:255',
-                'cluster_id'    => 'required|exists:clusters,id',
+                'cluster_ids'    => 'required|array|min:1',
                 'latitude'      => 'nullable|numeric|between:-90,90',
                 'longitude'     => 'nullable|numeric|between:-180,180',
                 'radius_meters' => 'nullable|integer|min:10|max:5000',
                 'is_active'     => 'nullable|in:0,1',
             ], [
-                'cluster_id.required' => 'The selected cluster does not exist. Use a valid cluster code or name.',
-                'cluster_id.exists' => 'The selected cluster does not exist. Use a valid cluster code or name.',
+                'cluster_ids.required' => 'At least one valid cluster is required.',
+                'cluster_ids.min' => 'At least one valid cluster is required.',
             ]);
 
             if ($validator->fails()) {
@@ -217,12 +233,15 @@ class StoreController extends Controller implements HasMiddleware
                 'area'          => $data['area'],
                 'brand'         => $data['brand'],
                 'class'         => $data['class'],
-                'cluster_id'    => $clusterId,
                 'latitude'      => $data['latitude'] !== '' ? $data['latitude'] : null,
                 'longitude'     => $data['longitude'] !== '' ? $data['longitude'] : null,
                 'radius_meters' => !empty($data['radius_meters']) ? (int) $data['radius_meters'] : 150,
                 'is_active'     => isset($data['is_active']) ? (bool) $data['is_active'] : true,
             ]);
+
+            if ($clusterIds) {
+                $store->clusters()->sync($clusterIds);
+            }
 
             // Resolve user emails → IDs and sync
             $userIds = [];

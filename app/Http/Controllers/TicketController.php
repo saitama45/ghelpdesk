@@ -637,7 +637,7 @@ class TicketController extends Controller
             'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'attachments' => 'nullable|array',
-            'attachments.*' => 'file|max:51200',
+            'attachments.*' => 'file|max:1024000',
         ]);
 
         $comment = TicketComment::create([

@@ -26,9 +26,13 @@ chmod -R 775 /home/site/wwwroot/bootstrap/cache
 sed -i 's/^pm.max_children = .*/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
 
 # 4.1 Increase PHP upload limits
-echo "post_max_size = 1024M" >> /usr/local/etc/php/conf.d/uploads.ini
-echo "upload_max_filesize = 1024M" >> /usr/local/etc/php/conf.d/uploads.ini
-echo "memory_limit = 1024M" >> /usr/local/etc/php/conf.d/uploads.ini
+cat <<EOF > /usr/local/etc/php/conf.d/uploads.ini
+post_max_size = 1024M
+upload_max_filesize = 1024M
+memory_limit = 1024M
+max_execution_time = 600
+max_input_time = 600
+EOF
 
 # 5. Clear Application Caches
 # We do NOT run config:cache because we need dynamic DB settings in AppServiceProvider.

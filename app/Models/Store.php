@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Store extends Model
@@ -19,7 +19,6 @@ class Store extends Model
         'area',
         'brand',
         'class',
-        'cluster_id',
         'email',
         'latitude',
         'longitude',
@@ -40,9 +39,9 @@ class Store extends Model
         return $this->belongsToMany(User::class)->withTimestamps();
     }
 
-    public function cluster(): BelongsTo
+    public function clusters(): BelongsToMany
     {
-        return $this->belongsTo(Cluster::class);
+        return $this->belongsToMany(Cluster::class)->withTimestamps();
     }
 
     public function schedules(): HasMany
@@ -60,8 +59,8 @@ class Store extends Model
         return $this->hasMany(Ticket::class);
     }
 
-    public function getClusterNameAttribute(): ?string
+    public function getClusterNameAttribute(): string
     {
-        return $this->cluster?->name;
+        return $this->clusters->pluck('name')->implode(', ');
     }
 }

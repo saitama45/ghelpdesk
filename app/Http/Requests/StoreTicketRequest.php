@@ -41,7 +41,7 @@ class StoreTicketRequest extends FormRequest
             'item_id' => 'nullable|exists:items,id',
             'vendor_id' => 'nullable|exists:vendors,id',
             'attachments' => 'nullable|array',
-            'attachments.*' => 'file|max:51200',
+            'attachments.*' => 'file|max:1024000',
         ];
     }
 }

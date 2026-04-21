@@ -23,7 +23,7 @@ class ClusterController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Cluster::with(['stores:id,code,name,cluster_id']);
+        $query = Cluster::with(['stores:id,code,name']);
 
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
@@ -36,9 +36,9 @@ class ClusterController extends Controller implements HasMiddleware
 
         return Inertia::render('Clusters/Index', [
             'clusters' => $clusters,
-            'stores' => Store::with('cluster:id,name')
+            'stores' => Store::with('clusters:id,name')
                 ->orderBy('name')
-                ->get(['id', 'code', 'name', 'cluster_id']),
+                ->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -73,9 +73,9 @@ class ClusterController extends Controller implements HasMiddleware
             'store_ids.*' => 'exists:stores,id',
         ]);
 
-        Store::whereIn('id', $validated['store_ids'])->update([
-            'cluster_id' => $cluster->id,
-        ]);
+        // Use syncWithoutDetaching to fulfill requirement:
+        // "if the store was already assign to a cluster, it should still be assign to another clusters"
+        $cluster->stores()->syncWithoutDetaching($validated['store_ids']);
 
         return redirect()->back()->with('success', 'Stores assigned successfully');
     }

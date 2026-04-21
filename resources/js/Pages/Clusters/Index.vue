@@ -130,7 +130,7 @@
                                 placeholder="Select one or more stores..."
                             />
                             <p class="mt-2 text-xs text-gray-500">
-                                Selected stores will be moved to this cluster and their `cluster_name` value will reflect this cluster.
+                                Selected stores will be added to this cluster. Stores can belong to multiple clusters simultaneously.
                             </p>
                         </div>
 
@@ -252,10 +252,13 @@ const assignStoresForm = reactive({
 })
 
 const storeOptions = computed(() => {
-    return props.stores.map(store => ({
-        id: store.id,
-        name: `${store.name} (${store.code})${store.cluster?.name ? ` - ${store.cluster.name}` : ''}`,
-    }))
+    return props.stores.map(store => {
+        const clusterNames = store.clusters?.map(c => c.name).join(', ') || '';
+        return {
+            id: store.id,
+            name: `${store.name} (${store.code})${clusterNames ? ` - ${clusterNames}` : ''}`,
+        };
+    })
 })
 
 onMounted(() => {

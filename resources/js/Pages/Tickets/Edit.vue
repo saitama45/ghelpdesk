@@ -81,18 +81,18 @@ const noteForm = useForm({
 
 const handleNoteFileSelect = (event) => {
     const files = Array.from(event.target.files);
-    const maxSize = 10 * 1024 * 1024; // 10MB for notes
+    const maxSize = 1000 * 1024 * 1024; // 1GB for notes
     const validFiles = [];
 
     files.forEach(file => {
-        if (isImage(file.name)) {
+        if (isMedia(file.name)) {
             if (file.size <= maxSize) {
                 validFiles.push(createFileObject(file));
             } else {
-                showError(`File ${file.name} exceeds 10MB limit.`);
+                showError(`File ${file.name} exceeds 1GB limit.`);
             }
         } else {
-            showError(`File ${file.name} is not an image.`);
+            showError(`File ${file.name} is not an image or video.`);
         }
     });
 
@@ -264,13 +264,21 @@ const isImage = (filename) => {
     return /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(filename);
 };
 
+const isVideo = (filename) => {
+    return /\.(mp4|webm|ogg|mov)$/i.test(filename);
+};
+
+const isMedia = (filename) => {
+    return isImage(filename) || isVideo(filename);
+};
+
 const createFileObject = (file) => {
     return {
         id: 'local-' + Date.now() + '-' + Math.random(),
         file: file,
         file_name: file.name,
         file_size_bytes: file.size,
-        preview: isImage(file.name) ? URL.createObjectURL(file) : null,
+        preview: isMedia(file.name) ? URL.createObjectURL(file) : null,
         is_local: true
     };
 };
@@ -381,41 +389,41 @@ const availableStatuses = computed(() => {
     });
 });
 
-// Image Navigation
-const allImages = computed(() => {
-    const images = [];
+// Media Navigation
+const allMedia = computed(() => {
+    const media = [];
     
     // Add description attachments
-    const descAttachments = (props.ticket.attachments || []).filter(a => !a.comment_id && isImage(a.file_name));
-    images.push(...descAttachments);
+    const descAttachments = (props.ticket.attachments || []).filter(a => !a.comment_id && isMedia(a.file_name));
+    media.push(...descAttachments);
 
     // Add comment attachments
     if (props.ticket.comments) {
         props.ticket.comments.forEach(comment => {
             if (comment.attachments) {
-                images.push(...comment.attachments.filter(a => isImage(a.file_name)));
+                media.push(...comment.attachments.filter(a => isMedia(a.file_name)));
             }
         });
     }
 
-    return images;
+    return media;
 });
 
 const currentIndex = computed(() => {
     if (!currentImage.value) return -1;
-    return allImages.value.findIndex(img => img.id === currentImage.value.id);
+    return allMedia.value.findIndex(m => m.id === currentImage.value.id);
 });
 
-const navigateImage = (direction) => {
-    if (currentIndex.value === -1 || allImages.value.length <= 1) return;
+const navigateMedia = (direction) => {
+    if (currentIndex.value === -1 || allMedia.value.length <= 1) return;
     
     let newIndex = currentIndex.value + direction;
     
     // Loop
-    if (newIndex < 0) newIndex = allImages.value.length - 1;
-    if (newIndex >= allImages.value.length) newIndex = 0;
+    if (newIndex < 0) newIndex = allMedia.value.length - 1;
+    if (newIndex >= allMedia.value.length) newIndex = 0;
     
-    currentImage.value = allImages.value[newIndex];
+    currentImage.value = allMedia.value[newIndex];
     zoomLevel.value = 1;
     panOffset.value = { x: 0, y: 0 };
 };
@@ -423,8 +431,8 @@ const navigateImage = (direction) => {
 const handleKeydown = (e) => {
     if (!showImageViewer.value) return;
     
-    if (e.key === 'ArrowLeft') navigateImage(-1);
-    if (e.key === 'ArrowRight') navigateImage(1);
+    if (e.key === 'ArrowLeft') navigateMedia(-1);
+    if (e.key === 'ArrowRight') navigateMedia(1);
     if (e.key === 'Escape') closeImageViewer();
 };
 
@@ -693,7 +701,7 @@ const addComment = () => {
 
 const handleCommentFileSelect = (event) => {
     const files = Array.from(event.target.files);
-    const maxSize = 50 * 1024 * 1024; // 50MB
+    const maxSize = 1000 * 1024 * 1024; // 1GB
     const validFiles = [];
     const oversizedFiles = [];
 
@@ -706,7 +714,7 @@ const handleCommentFileSelect = (event) => {
     });
 
     if (oversizedFiles.length > 0) {
-        showError(`The following files exceed the 50MB limit and were not added: ${oversizedFiles.join(', ')}`);
+        showError(`The following files exceed the 1GB limit and were not added: ${oversizedFiles.join(', ')}`);
     }
 
     commentForm.attachments = [...commentForm.attachments, ...validFiles];
@@ -715,17 +723,18 @@ const handleCommentFileSelect = (event) => {
 
 const handlePaste = (event) => {
     const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-    const maxSize = 50 * 1024 * 1024; // 50MB
+    const maxSize = 1000 * 1024 * 1024; // 1GB
 
     for (const item of items) {
-        if (item.type.indexOf('image') !== -1) {
+        if (item.type.indexOf('image') !== -1 || item.type.indexOf('video') !== -1) {
             const blob = item.getAsFile();
             if (blob) {
                 if (blob.size > maxSize) {
-                    showError(`Pasted image exceeds the 50MB limit.`);
+                    showError(`Pasted media exceeds the 1GB limit.`);
                     continue;
                 }
-                const file = new File([blob], `screenshot-${Date.now()}.png`, { type: blob.type });
+                const ext = item.type.split('/')[1] || 'png';
+                const file = new File([blob], `screenshot-${Date.now()}.${ext}`, { type: blob.type });
                 commentForm.attachments.push(createFileObject(file));
             }
         }
@@ -1278,13 +1287,21 @@ const linkify = (text) => {
                                     <!-- Description Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
-                                            <div v-if="isImage(attachment.file_name) && !failedImages.has(attachment.id)" 
+                                            <div v-if="isMedia(attachment.file_name) && !failedImages.has(attachment.id)" 
                                                  class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
                                                  @click="openImageViewer(attachment)">
-                                                <img :src="getThumbnailUrl(attachment)" 
+                                                <video v-if="isVideo(attachment.file_name)" 
+                                                       :src="getThumbnailUrl(attachment)" 
+                                                       class="object-cover w-full h-24 sm:h-32" 
+                                                       muted></video>
+                                                <img v-else :src="getThumbnailUrl(attachment)" 
                                                      class="object-cover w-full h-24 sm:h-32" 
                                                      :alt="attachment.file_name"
                                                      @error="handleImageError(attachment.id)">
+                                                <!-- Video Play Icon Overlay -->
+                                                <div v-if="isVideo(attachment.file_name)" class="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
+                                                    <svg class="w-8 h-8 text-white drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
+                                                </div>
                                             </div>
                                             <div v-else class="h-24 sm:h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
                                                 <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
@@ -1316,13 +1333,21 @@ const linkify = (text) => {
                                     <!-- Comment Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
-                                            <div v-if="isImage(attachment.file_name) && !failedImages.has(attachment.id)" 
+                                            <div v-if="isMedia(attachment.file_name) && !failedImages.has(attachment.id)" 
                                                  class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
                                                  @click="openImageViewer(attachment)">
-                                                <img :src="getThumbnailUrl(attachment)" 
+                                                <video v-if="isVideo(attachment.file_name)" 
+                                                       :src="getThumbnailUrl(attachment)" 
+                                                       class="object-cover w-full h-24 sm:h-32" 
+                                                       muted></video>
+                                                <img v-else :src="getThumbnailUrl(attachment)" 
                                                      class="object-cover w-full h-24 sm:h-32" 
                                                      :alt="attachment.file_name"
                                                      @error="handleImageError(attachment.id)">
+                                                <!-- Video Play Icon Overlay -->
+                                                <div v-if="isVideo(attachment.file_name)" class="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
+                                                    <svg class="w-8 h-8 text-white drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
+                                                </div>
                                             </div>
                                             <div v-else class="h-24 sm:h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
                                                 <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
@@ -1438,10 +1463,18 @@ const linkify = (text) => {
                                         <!-- Attachment Preview -->
                                         <div v-if="commentForm.attachments.length > 0" class="px-3 pb-3 flex flex-nowrap overflow-x-auto gap-3 border-t border-blue-50 pt-3 custom-scrollbar scrollbar-hide">
                                             <div v-for="(attachment, index) in commentForm.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white flex-shrink-0 w-24">
-                                                <div v-if="isImage(attachment.file_name) && attachment.preview" 
+                                                <div v-if="isMedia(attachment.file_name) && attachment.preview" 
                                                      class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
                                                      @click="openImageViewer(attachment)">
-                                                    <img :src="attachment.preview" class="object-cover w-full h-24" :alt="attachment.file_name">
+                                                    <video v-if="isVideo(attachment.file_name)" 
+                                                           :src="attachment.preview" 
+                                                           class="object-cover w-full h-24" 
+                                                           muted></video>
+                                                    <img v-else :src="attachment.preview" class="object-cover w-full h-24" :alt="attachment.file_name">
+                                                    <!-- Video Play Icon Overlay -->
+                                                    <div v-if="isVideo(attachment.file_name)" class="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
+                                                        <svg class="w-6 h-6 text-white drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
+                                                    </div>
                                                 </div>
                                                 <div v-else class="h-24 flex flex-col items-center justify-center p-2 bg-gray-50">
                                                     <svg class="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
@@ -1455,8 +1488,8 @@ const linkify = (text) => {
 
                                         <div class="flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 border-t border-blue-50 bg-blue-50/50 rounded-b-xl gap-3">
                                             <div class="flex items-center space-x-2">
-                                                <input ref="commentFileInput" type="file" multiple class="hidden" @change="handleCommentFileSelect">
-                                                <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all" title="Attach Files">
+                                                <input ref="commentFileInput" type="file" multiple accept="image/*,video/*" class="hidden" @change="handleCommentFileSelect">
+                                                <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all" title="Attach Media">
                                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                                                 </button>
                                                 
@@ -1559,7 +1592,15 @@ const linkify = (text) => {
                                                             <!-- Selected Images Preview -->
                                                             <div v-if="noteForm.attachments.length > 0" class="flex flex-wrap gap-2 mb-2">
                                                                 <div v-for="(attachment, index) in noteForm.attachments" :key="attachment.id" class="relative group w-12 h-12">
-                                                                    <img :src="attachment.preview" class="w-full h-full object-cover rounded border border-amber-200" :alt="attachment.file_name">
+                                                                    <video v-if="isVideo(attachment.file_name)" 
+                                                                           :src="attachment.preview" 
+                                                                           class="w-full h-full object-cover rounded border border-amber-200" 
+                                                                           muted></video>
+                                                                    <img v-else :src="attachment.preview" class="w-full h-full object-cover rounded border border-amber-200" :alt="attachment.file_name">
+                                                                    <!-- Video Play Icon Overlay (Mini) -->
+                                                                    <div v-if="isVideo(attachment.file_name)" class="absolute inset-0 flex items-center justify-center bg-black/10 rounded">
+                                                                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
+                                                                    </div>
                                                                     <button type="button" @click="removeNoteAttachment(index)" class="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-sm hover:bg-red-600">
                                                                         <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                                                     </button>
@@ -1576,8 +1617,8 @@ const linkify = (text) => {
                                                             <div class="flex flex-col gap-3">
                                                                 <div class="flex items-center justify-between">
                                                                     <div class="flex items-center">
-                                                                        <input ref="noteFileInput" type="file" multiple accept="image/*" class="hidden" @change="handleNoteFileSelect">
-                                                                        <button type="button" @click="noteFileInput.click()" class="p-1.5 text-amber-600 hover:text-amber-800 rounded-lg hover:bg-amber-50 transition-colors border border-transparent" title="Attach Images">
+                                                                        <input ref="noteFileInput" type="file" multiple accept="image/*,video/*" class="hidden" @change="handleNoteFileSelect">
+                                                                        <button type="button" @click="noteFileInput.click()" class="p-1.5 text-amber-600 hover:text-amber-800 rounded-lg hover:bg-amber-50 transition-colors border border-transparent" title="Attach Media">
                                                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                                             </svg>
@@ -1749,14 +1790,25 @@ const linkify = (text) => {
                      @wheel.prevent="handleWheel">
                     
                     <!-- Navigation Arrows -->
-                    <button v-if="allImages.length > 1" @click.stop="navigateImage(-1)" class="absolute left-2 sm:left-4 top-1/2 transform -translate-y-1/2 p-2 sm:p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-sm transition-all z-20">
+                    <button v-if="allMedia.length > 1" @click.stop="navigateMedia(-1)" class="absolute left-2 sm:left-4 top-1/2 transform -translate-y-1/2 p-2 sm:p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-sm transition-all z-20">
                         <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
                     </button>
-                    <button v-if="allImages.length > 1" @click.stop="navigateImage(1)" class="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 p-2 sm:p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-sm transition-all z-20">
+                    <button v-if="allMedia.length > 1" @click.stop="navigateMedia(1)" class="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 p-2 sm:p-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-sm transition-all z-20">
                         <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                     </button>
 
-                    <img v-if="currentImage" :src="getThumbnailUrl(currentImage)" class="transition-transform duration-100 ease-linear transform origin-center max-w-none shadow-2xl" :style="{ transform: `scale(${zoomLevel}) translate(${panOffset.x / zoomLevel}px, ${panOffset.y / zoomLevel}px)` }" draggable="false">
+                    <template v-if="currentImage">
+                        <video v-if="isVideo(currentImage.file_name)" 
+                               :src="getThumbnailUrl(currentImage)" 
+                               controls 
+                               class="max-h-full max-w-full shadow-2xl"
+                               @click.stop></video>
+                        <img v-else 
+                             :src="getThumbnailUrl(currentImage)" 
+                             class="transition-transform duration-100 ease-linear transform origin-center max-w-none shadow-2xl" 
+                             :style="{ transform: `scale(${zoomLevel}) translate(${panOffset.x / zoomLevel}px, ${panOffset.y / zoomLevel}px)` }" 
+                             draggable="false">
+                    </template>
                 </div>
             </div>
         </Modal>

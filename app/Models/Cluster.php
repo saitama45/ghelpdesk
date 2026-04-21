@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Cluster extends Model
 {
@@ -12,8 +12,8 @@ class Cluster extends Model
         'name',
     ];
 
-    public function stores(): HasMany
+    public function stores(): BelongsToMany
     {
-        return $this->hasMany(Store::class);
+        return $this->belongsToMany(Store::class)->withTimestamps();
     }
 }
