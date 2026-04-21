@@ -141,6 +141,7 @@ Route::middleware('auth')->group(function () {
         'destroy' => 'kb-articles.destroy',
     ]);
     Route::get('/kb-categories/search', [\App\Http\Controllers\KbArticleController::class, 'getCategories'])->name('kb-categories.search');
+    Route::delete('/kb-categories/{kb_category}', [\App\Http\Controllers\KbArticleController::class, 'destroyCategory'])->name('kb-categories.destroy');
     Route::get('/knowledge-base', [\App\Http\Controllers\KbArticleController::class, 'portal'])->name('knowledge-base.portal');
     Route::get('/knowledge-base/{kb_article:slug}', [\App\Http\Controllers\KbArticleController::class, 'show'])->name('knowledge-base.show');
     Route::post('/knowledge-base/{kb_article}/feedback', [\App\Http\Controllers\KbArticleController::class, 'submitFeedback'])->name('knowledge-base.feedback');

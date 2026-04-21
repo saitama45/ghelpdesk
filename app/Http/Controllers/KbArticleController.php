@@ -216,6 +216,20 @@ class KbArticleController extends Controller
     }
 
     /**
+     * Remove the specified category.
+     */
+    public function destroyCategory(KbCategory $kbCategory)
+    {
+        if ($kbCategory->articles()->count() > 0) {
+            return redirect()->back()->with('error', 'Cannot delete category that has articles assigned to it. Please move or delete the articles first.');
+        }
+
+        $kbCategory->delete();
+
+        return redirect()->back()->with('success', 'Category deleted successfully.');
+    }
+
+    /**
      * Get categories for autocomplete.
      */
     public function getCategories(Request $request)
