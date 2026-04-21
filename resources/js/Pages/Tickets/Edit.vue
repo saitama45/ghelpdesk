@@ -29,6 +29,8 @@ const { put, destroy, post } = useErrorHandler();
 const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
 const { formatDate, parseDate } = useDateFormatter();
+const authUser = computed(() => page.props.auth.user);
+const isManager = computed(() => !!authUser.value?.is_manager);
 
 // Computed property for available companies based on user roles
 const availableCompanies = computed(() => {
@@ -140,7 +142,8 @@ const internalNotes = computed(() => {
 // Child Ticket State
 const showChildModal = ref(false);
 const childForm = useForm({
-    user_id: null,
+    user_id: isManager.value ? authUser.value?.id ?? null : null,
+    store_id: props.ticket.store_id || props.ticket.schedule_store?.store_id || props.ticket.scheduleStore?.store_id || '',
     status: 'On-site',
     start_time: '',
     end_time: '',
@@ -210,11 +213,18 @@ const openChildModal = () => {
     const end = new Date(start);
     end.setHours(17, 0, 0, 0);
     childForm.end_time = formatDateForInput(end);
+    childForm.user_id = isManager.value ? authUser.value?.id ?? null : null;
+    childForm.store_id = props.ticket.store_id || props.ticket.schedule_store?.store_id || props.ticket.scheduleStore?.store_id || '';
     
     showChildModal.value = true
 };
 
 const submitChildTicket = () => {
+    if (!childForm.store_id) {
+        showError('Store is required before creating a child ticket.');
+        return;
+    }
+
     childForm.post(route('tickets.store-child', props.ticket.id), {
         onSuccess: () => {
             showChildModal.value = false;
@@ -1825,14 +1835,24 @@ const linkify = (text) => {
                             <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                         </div>
                         <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                            <Autocomplete
+                                v-model="childForm.store_id"
+                                :options="storesWithLabel"
+                                label-key="display_name"
+                                value-key="id"
+                                placeholder="Select store..."
+                            />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Schedule Status</label>
                             <select v-model="childForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                                 <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
                             </select>
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
                             <input v-model="childForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">

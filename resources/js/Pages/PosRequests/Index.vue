@@ -82,6 +82,33 @@ const getStatusClass = (request) => {
         default: return 'bg-amber-100 text-amber-800 border-amber-200'
     }
 }
+
+const getStageDisplay = (request) => {
+    const requestStatus = request.status ?? ''
+    const totalLevels = Number(request.request_type?.approval_levels ?? 0)
+
+    if (requestStatus === 'Rejected') {
+        return { label: 'Rejected', class: 'text-[10px] font-black text-red-600 uppercase tracking-widest' }
+    }
+
+    if (requestStatus === 'Cancelled') {
+        return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest' }
+    }
+
+    if (requestStatus === 'Approved' || request.ticket) {
+        return { label: 'Completed', class: 'text-[10px] font-black text-emerald-600 uppercase tracking-widest' }
+    }
+
+    if (totalLevels > 0) {
+        return {
+            label: `${Number(request.current_approval_level ?? 0)} / ${totalLevels}`,
+            class: 'text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100',
+            isBadge: true,
+        }
+    }
+
+    return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase' }
+}
 </script>
 
 <template>
@@ -186,15 +213,14 @@ const getStatusClass = (request) => {
                                 <span class="text-sm font-mono font-bold text-gray-900">{{ request.launch_date }}</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
-                                <span v-if="request.status === 'Approved'" class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Completed</span>
-                                <span v-else-if="request.status === 'Rejected'" class="text-[10px] font-black text-red-600 uppercase tracking-widest">Rejected</span>
-                                <span v-else-if="request.status === 'Cancelled'" class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Cancelled</span>
-                                <div v-else-if="request.request_type.approval_levels > 0" class="inline-flex flex-col">
-                                    <span class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100">
-                                        {{ request.current_approval_level }} / {{ request.request_type.approval_levels }}
+                                <span v-if="!getStageDisplay(request).isBadge" :class="getStageDisplay(request).class">
+                                    {{ getStageDisplay(request).label }}
+                                </span>
+                                <div v-else class="inline-flex flex-col">
+                                    <span :class="getStageDisplay(request).class">
+                                        {{ getStageDisplay(request).label }}
                                     </span>
                                 </div>
-                                <span v-else class="text-[10px] font-black text-gray-300 uppercase">N/A</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
                                 <span :class="getStatusClass(request)" class="inline-flex items-center px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm">

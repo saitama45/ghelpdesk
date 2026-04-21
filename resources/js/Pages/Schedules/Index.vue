@@ -510,7 +510,7 @@
                                 <!-- Row 1: Store | Start | End -->
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-500 mb-1">Store (Optional)</label>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Store</label>
                                         <Autocomplete
                                             v-model="entry.store_id"
                                             :options="storeSelectOptions"
@@ -1035,7 +1035,7 @@ const scheduleLegend = [
 ]
 
 const form = reactive({
-    user_id: null,
+    user_id: authUser.value?.id ?? null,
     status: 'On-site',
     stores: [{ store_id: null, ticket_id: null, start_time: '', end_time: '', grace_period_minutes: 30, remarks: '' }],
     pickup_start: '',
@@ -1113,7 +1113,7 @@ const openCreateModal = () => {
     currentActualTimeIn.value  = null
     currentActualTimeOut.value = null
 
-    form.user_id = isManager.value ? null : authUser.value.id
+    form.user_id = authUser.value?.id ?? null
     form.status = 'On-site'
     form.pickup_start = ''
     form.pickup_end = ''
@@ -1231,7 +1231,20 @@ const removeStore = (index) => {
     form.stores.splice(index, 1)
 }
 
+const validateScheduleStores = () => {
+    const missingStore = form.stores.some(entry => !entry.store_id)
+
+    if (missingStore) {
+        showError('Store is required for every schedule entry.')
+        return false
+    }
+
+    return true
+}
+
 const submitForm = () => {
+    if (!validateScheduleStores()) return
+
     const url = isEditing.value ? `/schedules/${currentScheduleId.value}` : '/schedules'
     const requestMethod = isEditing.value ? put : post
     

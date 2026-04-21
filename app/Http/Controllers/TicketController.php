@@ -487,6 +487,7 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
+            'store_id' => 'required|exists:stores,id',
             'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'start_time' => 'required|date',
             'end_time' => 'required|date|after_or_equal:start_time',
@@ -504,8 +505,8 @@ class TicketController extends Controller
         $conflict = Schedule::where('user_id', $validated['user_id'])
             ->where('start_time', '<', $newEnd)
             ->where('end_time', '>', $newStart)
-            ->whereHas('scheduleStores', function($q) use ($ticket) {
-                $q->where('store_id', $ticket->store_id);
+            ->whereHas('scheduleStores', function($q) use ($validated) {
+                $q->where('store_id', $validated['store_id']);
             })
             ->first();
 
@@ -542,7 +543,7 @@ class TicketController extends Controller
                 'reporter_id' => auth()->id(),
                 'assignee_id' => $validated['user_id'],
                 'company_id' => $ticket->company_id,
-                'store_id' => $ticket->store_id,
+                'store_id' => $validated['store_id'],
                 'category_id' => $ticket->category_id,
                 'sub_category_id' => $ticket->sub_category_id,
                 'item_id' => $ticket->item_id,
@@ -566,7 +567,7 @@ class TicketController extends Controller
 
             // Always create a scheduleStore entry for child tickets so the ticket_id link is preserved
             $schedule->scheduleStores()->create([
-                'store_id' => $ticket->store_id,
+                'store_id' => $validated['store_id'],
                 'ticket_id' => $childTicket->id,
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],
