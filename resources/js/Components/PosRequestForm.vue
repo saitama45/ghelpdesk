@@ -93,11 +93,16 @@ const selectedCluster = ref('')
 const selectedBrand = ref('')
 
 const clusterOptions = computed(() => {
-    return [...new Set(
-        (props.stores ?? [])
-            .map(store => store.cluster?.name || store.cluster_name || '')
-            .filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b))
+    const clusters = new Set();
+    (props.stores ?? []).forEach(store => {
+        if (store.clusters && store.clusters.length > 0) {
+            store.clusters.forEach(c => clusters.add(c.name));
+        } else if (store.cluster_name) {
+            // Fallback for when cluster_name is already a string
+            store.cluster_name.split(',').forEach(c => clusters.add(c.trim()));
+        }
+    });
+    return [...clusters].filter(Boolean).sort((a, b) => a.localeCompare(b));
 })
 
 const brandOptions = computed(() => {
@@ -112,14 +117,19 @@ const filteredStores = computed(() => {
     const search = storeSearch.value.trim().toLowerCase()
 
     return (props.stores ?? []).filter(store => {
-        const clusterName = store.cluster?.name || store.cluster_name || ''
+        const storeClusterNames = (store.clusters || []).map(c => c.name);
+        // Also handle the accessor string just in case
+        if (storeClusterNames.length === 0 && store.cluster_name) {
+            store.cluster_name.split(',').forEach(c => storeClusterNames.push(c.trim()));
+        }
+
         const brandName = store.brand || ''
-        const matchesCluster = !selectedCluster.value || clusterName === selectedCluster.value
+        const matchesCluster = !selectedCluster.value || storeClusterNames.includes(selectedCluster.value)
         const matchesBrand = !selectedBrand.value || brandName === selectedBrand.value
         const matchesSearch = !search
             || store.code.toLowerCase().includes(search)
             || store.name.toLowerCase().includes(search)
-            || clusterName.toLowerCase().includes(search)
+            || storeClusterNames.some(cn => cn.toLowerCase().includes(search))
             || brandName.toLowerCase().includes(search)
 
         return matchesCluster && matchesBrand && matchesSearch

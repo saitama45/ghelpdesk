@@ -838,14 +838,20 @@ const formatFileSize = (bytes) => {
 
 const linkify = (text) => {
     if (!text) return '';
-    const escaped = text
+    let escaped = text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
     
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // Support markdown style links: [filename](url)
+    const markdownRegex = /\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g;
+    escaped = escaped.replace(markdownRegex, (match, label, url) => {
+        return `<a href="${url}" target="_blank" class="text-blue-600 font-bold hover:underline break-all">${label}</a>`;
+    });
+
+    const urlRegex = /(?<!href=")(https?:\/\/[^\s<]+)/g;
     return escaped.replace(urlRegex, (url) => {
         return `<a href="${url}" target="_blank" class="text-blue-600 hover:underline break-all">${url}</a>`;
     });

@@ -80,6 +80,29 @@ const submitApproval = async () => {
     }
 }
 
+const submitReject = async () => {
+    if (!approvalForm.remarks.trim()) {
+        showError('Remarks are required when rejecting a request.');
+        return;
+    }
+
+    const confirmed = await confirm({
+        title: 'Confirm Rejection',
+        message: `Are you sure you want to reject Stage ${props.posRequest.current_approval_level}? This will cancel the entire request.`,
+        confirmLabel: 'Reject Request',
+        variant: 'danger'
+    })
+
+    if (confirmed) {
+        approvalForm.post(route('pos-requests.reject', props.posRequest.id), {
+            onSuccess: () => {
+                approvalForm.reset()
+            },
+            onError: () => showError('Rejection failed')
+        })
+    }
+}
+
 const canApprove = computed(() => {
     const status = props.posRequest.status || ''
     const currentLevel = Number(props.posRequest.current_approval_level)
@@ -104,6 +127,7 @@ const getStatusBadgeClass = (status) => {
     switch (status) {
         case 'Approved': return 'bg-emerald-500 text-white shadow-emerald-200'
         case 'Open': return 'bg-blue-500 text-white shadow-blue-200'
+        case 'Rejected': return 'bg-rose-500 text-white shadow-rose-200'
         case 'Cancelled': return 'bg-rose-500 text-white shadow-rose-200'
         default: return 'bg-amber-500 text-white shadow-amber-200'
     }
@@ -549,17 +573,20 @@ const formatDateTime = (dateStr) => {
                                 </div>
 
                                 <div class="mb-6">
-                                    <label class="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3 ml-1">Approval Remarks (Optional)</label>
-                                    <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add comments for this level..." 
+                                    <label class="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3 ml-1">Approval/Rejection Remarks</label>
+                                    <textarea v-model="approvalForm.remarks" rows="3" :placeholder="`Add comments for Stage ${posRequest.current_approval_level}...`" 
                                               class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 text-sm font-medium focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all shadow-inner text-gray-900"></textarea>
                                 </div>
-                                <button @click="submitApproval" :disabled="approvalForm.processing"
-                                        class="w-full py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transform hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center">
-                                    <span>Release Level {{ posRequest.current_approval_level }}</span>
-                                    <svg class="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
+                                <div class="flex flex-col sm:flex-row gap-4">
+                                    <button @click="submitReject" :disabled="approvalForm.processing"
+                                            class="flex-1 py-4 bg-white text-red-600 border-2 border-red-100 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-red-50 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center">
+                                        Reject Request
+                                    </button>
+                                    <button @click="submitApproval" :disabled="approvalForm.processing"
+                                            class="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-100 hover:bg-indigo-700 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center">
+                                        Release Level {{ posRequest.current_approval_level }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

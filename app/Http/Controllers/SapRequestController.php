@@ -30,7 +30,7 @@ class SapRequestController extends Controller implements HasMiddleware
             new Middleware('can:sap_requests.create', only: ['create', 'store']),
             new Middleware('can:sap_requests.edit', only: ['edit', 'update']),
             new Middleware('can:sap_requests.delete', only: ['destroy']),
-            new Middleware('can:sap_requests.approve', only: ['approve']),
+            new Middleware('can:sap_requests.approve', only: ['approve', 'reject']),
         ];
     }
 
@@ -48,7 +48,14 @@ class SapRequestController extends Controller implements HasMiddleware
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $status = $request->status;
+            $ticketStatus = strtolower(str_replace(' ', '_', $status));
+            $query->where(function ($q) use ($status, $ticketStatus) {
+                $q->where('status', $status)
+                  ->orWhereHas('ticket', function ($tq) use ($ticketStatus) {
+                      $tq->where('status', $ticketStatus);
+                  });
+            });
         }
 
         $sapRequests = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
@@ -194,6 +201,38 @@ class SapRequestController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Request approved successfully.');
+    }
+
+    public function reject(Request $request, SapRequest $sapRequest)
+    {
+        $request->validate([
+            'remarks' => 'required|string|max:1000',
+        ]);
+
+        $requestType = $sapRequest->requestType;
+        $currentLevel = (int) $sapRequest->current_approval_level;
+        $authUserId = (int) auth()->id();
+
+        if ($currentLevel <= 0 || !$this->canUserApproveLevel($requestType, $sapRequest->form_data ?? [], $currentLevel, $authUserId)) {
+            return redirect()->back()->with('error', 'You are not assigned as an approver for this approval level.');
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($request, $sapRequest) {
+            \App\Models\SapRequestApproval::create([
+                'sap_request_id' => $sapRequest->id,
+                'user_id'        => auth()->id(),
+                'level'          => $sapRequest->current_approval_level,
+                'status'         => 'rejected',
+                'remarks'        => $request->remarks,
+            ]);
+
+            $sapRequest->update([
+                'status'                => 'Rejected',
+                'current_approval_level'=> 0,
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Request rejected successfully');
     }
 
     private function canUserApproveLevel(RequestType $requestType, array $formData, int $level, int $userId): bool

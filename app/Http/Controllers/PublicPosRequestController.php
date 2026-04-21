@@ -25,10 +25,10 @@ class PublicPosRequestController extends Controller
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
-            'stores' => Store::with('cluster:id,name')
+            'stores' => Store::with('clusters:id,name')
                 ->where('is_active', true)
                 ->orderBy('name')
-                ->get(['id', 'code', 'name', 'brand', 'cluster_id']),
+                ->get(['id', 'code', 'name', 'brand']),
             'priceTypes' => [
                 'In-Store', 
                 'Delivery (GF, FP, Pickaroo)', 

@@ -72,8 +72,10 @@ Route::middleware('auth')->group(function () {
     Route::post('forms/{slug}/{id}/approve', [\App\Http\Controllers\DynamicFormController::class, 'approve'])->name('dynamic-form.approve');
     Route::resource('pos-requests', \App\Http\Controllers\PosRequestController::class);
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
+    Route::post('pos-requests/{pos_request}/reject', [\App\Http\Controllers\PosRequestController::class, 'reject'])->name('pos-requests.reject');
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);
     Route::post('sap-requests/{sap_request}/approve', [\App\Http\Controllers\SapRequestController::class, 'approve'])->name('sap-requests.approve');
+    Route::post('sap-requests/{sap_request}/reject', [\App\Http\Controllers\SapRequestController::class, 'reject'])->name('sap-requests.reject');
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);

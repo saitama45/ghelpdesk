@@ -156,6 +156,29 @@ async function submitApproval() {
     }
 }
 
+async function submitReject() {
+    if (!approvalForm.remarks.trim()) {
+        showError('Remarks are required when rejecting a request.');
+        return;
+    }
+
+    const confirmed = await confirm({
+        title: 'Confirm Rejection',
+        message: `Are you sure you want to reject Stage ${props.sapRequest.current_approval_level}? This will cancel the entire request.`,
+        confirmLabel: 'Reject Request',
+        variant: 'danger'
+    })
+
+    if (confirmed) {
+        approvalForm.post(route('sap-requests.reject', props.sapRequest.id), {
+            onSuccess: () => {
+                approvalForm.reset()
+            },
+            onError: () => showError('Rejection failed')
+        })
+    }
+}
+
 const canApprove = computed(() => {
     const s = props.sapRequest.status ?? ''
     const currentLevel = Number(props.sapRequest.current_approval_level)
@@ -186,7 +209,12 @@ function getApprovalForLevel(lvl) {
 function statusClass(s) {
     if (!s) return 'bg-gray-500 text-white'
     if (s.startsWith('Approved Level')) return 'bg-indigo-500 text-white shadow-indigo-200'
-    const map = { 'Approved': 'bg-emerald-500 text-white shadow-emerald-200', 'Open': 'bg-blue-500 text-white shadow-blue-200', 'Cancelled': 'bg-rose-500 text-white shadow-rose-200' }
+    const map = { 
+        'Approved': 'bg-emerald-500 text-white shadow-emerald-200', 
+        'Open': 'bg-blue-500 text-white shadow-blue-200', 
+        'Rejected': 'bg-red-500 text-white shadow-red-200',
+        'Cancelled': 'bg-rose-500 text-white shadow-rose-200' 
+    }
     return map[s] ?? 'bg-amber-500 text-white shadow-amber-200'
 }
 
@@ -488,13 +516,19 @@ const getFileUrl = (value) => {
                                     />
                                 </div>
 
-                                <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add approval remarks (optional)..."
+                                <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add approval/rejection remarks..."
                                     class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-4 text-sm font-medium focus:bg-white focus:border-teal-500 focus:ring-0 transition-all mb-4"></textarea>
-                                <button @click="submitApproval" :disabled="approvalForm.processing"
-                                    class="w-full py-4 bg-teal-600 text-white rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-teal-200 hover:bg-teal-700 transform hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                                    <span>Release Level {{ sapRequest.current_approval_level }}</span>
-                                    <svg class="w-5 h-5 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                </button>
+                                
+                                <div class="flex flex-col sm:flex-row gap-4">
+                                    <button @click="submitReject" :disabled="approvalForm.processing"
+                                        class="flex-1 py-4 bg-white text-red-600 border-2 border-red-100 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-red-50 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center">
+                                        Reject Request
+                                    </button>
+                                    <button @click="submitApproval" :disabled="approvalForm.processing"
+                                        class="flex-1 py-4 bg-teal-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-teal-200 hover:bg-teal-700 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center">
+                                        Release Level {{ sapRequest.current_approval_level }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -34,7 +34,7 @@ class PosRequestController extends Controller implements HasMiddleware
             new Middleware('can:pos_requests.create', only: ['create', 'store']),
             new Middleware('can:pos_requests.edit', only: ['edit', 'update']),
             new Middleware('can:pos_requests.delete', only: ['destroy']),
-            new Middleware('can:pos_requests.approve', only: ['approve']),
+            new Middleware('can:pos_requests.approve', only: ['approve', 'reject']),
         ];
     }
 
@@ -43,10 +43,23 @@ class PosRequestController extends Controller implements HasMiddleware
         $query = PosRequest::with(['company', 'requestType', 'user', 'ticket']);
         
         if ($request->filled('search')) {
-            $query->whereHas('requestType', function($q) use ($request) {
-                $q->where('name', 'like', "%{$request->search}%");
-            })->orWhereHas('company', function($q) use ($request) {
-                $q->where('name', 'like', "%{$request->search}%");
+            $query->where(function ($q) use ($request) {
+                $q->whereHas('requestType', function($qr) use ($request) {
+                    $qr->where('name', 'like', "%{$request->search}%");
+                })->orWhereHas('company', function($qr) use ($request) {
+                    $qr->where('name', 'like', "%{$request->search}%");
+                });
+            });
+        }
+
+        if ($request->filled('status')) {
+            $status = $request->status;
+            $ticketStatus = strtolower(str_replace(' ', '_', $status));
+            $query->where(function ($q) use ($status, $ticketStatus) {
+                $q->where('status', $status)
+                  ->orWhereHas('ticket', function ($tq) use ($ticketStatus) {
+                      $tq->where('status', $ticketStatus);
+                  });
             });
         }
         
@@ -54,6 +67,7 @@ class PosRequestController extends Controller implements HasMiddleware
         
         return Inertia::render('PosRequests/Index', [
             'posRequests' => $posRequests,
+            'filters' => $request->only(['search', 'status', 'per_page']),
         ]);
     }
 
@@ -64,10 +78,10 @@ class PosRequestController extends Controller implements HasMiddleware
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
-            'stores' => Store::with('cluster:id,name')
+            'stores' => Store::with('clusters:id,name')
                 ->where('is_active', true)
                 ->orderBy('name')
-                ->get(['id', 'code', 'name', 'brand', 'cluster_id']),
+                ->get(['id', 'code', 'name', 'brand']),
             'priceTypes' => [
                 'In-Store', 
                 'Delivery (GF, FP, Pickaroo)', 
@@ -121,10 +135,10 @@ class PosRequestController extends Controller implements HasMiddleware
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
-            'stores' => Store::with('cluster:id,name')
+            'stores' => Store::with('clusters:id,name')
                 ->where('is_active', true)
                 ->orderBy('name')
-                ->get(['id', 'code', 'name', 'brand', 'cluster_id']),
+                ->get(['id', 'code', 'name', 'brand']),
             'priceTypes' => [
                 'In-Store', 
                 'Delivery (GF, FP, Pickaroo)', 
@@ -218,6 +232,38 @@ class PosRequestController extends Controller implements HasMiddleware
         $posRequest->load(['approvals.user', 'requestType', 'company', 'user', 'details']);
 
         return redirect()->back()->with('success', 'Request approved successfully');
+    }
+
+    public function reject(Request $request, PosRequest $posRequest)
+    {
+        $request->validate([
+            'remarks' => 'required|string|max:1000',
+        ]);
+
+        $requestType = $posRequest->requestType;
+        $currentLevel = (int) $posRequest->current_approval_level;
+        $authUserId = (int) auth()->id();
+
+        if ($currentLevel <= 0 || !$this->canUserApproveLevel($requestType, $currentLevel, $authUserId)) {
+            return redirect()->back()->with('error', 'You are not assigned as an approver for this approval level.');
+        }
+
+        DB::transaction(function () use ($request, $posRequest) {
+            PosRequestApproval::create([
+                'pos_request_id' => $posRequest->id,
+                'user_id' => auth()->id(),
+                'level' => $posRequest->current_approval_level,
+                'status' => 'rejected',
+                'remarks' => $request->remarks,
+            ]);
+
+            $posRequest->update([
+                'status' => 'Rejected',
+                'current_approval_level' => 0,
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Request rejected successfully');
     }
 
     private function canUserApproveLevel(RequestType $requestType, int $level, int $userId): bool

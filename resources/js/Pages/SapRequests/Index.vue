@@ -41,14 +41,42 @@ async function deleteRequest(id) {
 const STATUS_COLORS = {
     'Open': 'bg-blue-100 text-blue-700',
     'Approved': 'bg-emerald-100 text-emerald-700',
+    'Rejected': 'bg-red-100 text-red-700',
     'Cancelled': 'bg-rose-100 text-rose-700',
     'In Progress': 'bg-amber-100 text-amber-700',
     'Resolved': 'bg-gray-100 text-gray-600',
 }
-function statusClass(s) {
+
+function getStatusLabel(request) {
+    const status = request.ticket ? request.ticket.status : request.status
+    switch (status) {
+        case 'open': return 'Ticket: Open'
+        case 'for_schedule': return 'For Schedule'
+        case 'in_progress': return 'In Progress'
+        case 'resolved': return 'Resolved'
+        case 'closed': return 'Closed'
+        case 'waiting_service_provider': return 'Waiting for SP'
+        case 'waiting_client_feedback': return 'Waiting for Client'
+        default: return status.replace('_', ' ')
+    }
+}
+
+function statusClass(request) {
+    const s = request.ticket ? request.ticket.status : request.status
     if (!s) return 'bg-gray-100 text-gray-500'
     if (s.startsWith('Approved Level')) return 'bg-indigo-100 text-indigo-700'
-    return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500'
+    
+    const ticketColors = {
+        'open': 'bg-blue-100 text-blue-700',
+        'for_schedule': 'bg-teal-100 text-teal-700',
+        'in_progress': 'bg-purple-100 text-purple-700',
+        'resolved': 'bg-green-100 text-green-700',
+        'closed': 'bg-gray-100 text-gray-600',
+        'waiting_service_provider': 'bg-orange-100 text-orange-700',
+        'waiting_client_feedback': 'bg-blue-100 text-blue-700'
+    }
+
+    return ticketColors[s] ?? STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500'
 }
 </script>
 
@@ -93,18 +121,20 @@ function statusClass(s) {
                     </div>
                 </div>
 
-                <!-- Filters -->
                 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6 flex flex-wrap gap-4">
                     <input v-model="search" @keyup.enter="applyFilter" type="text" placeholder="Search by request type, company, or requester..."
                         class="flex-1 min-w-[220px] border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
                     <select v-model="status" @change="applyFilter"
                         class="border-2 border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
                         <option value="">All Statuses</option>
-                        <option>Open</option>
-                        <option>Approved</option>
-                        <option>In Progress</option>
-                        <option>Resolved</option>
-                        <option>Cancelled</option>
+                        <option value="Open">Open</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Cancelled">Cancelled</option>
+                        <option value="for_schedule">For Schedule</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
                     </select>
                     <button @click="applyFilter" class="px-5 py-2.5 bg-teal-600 text-white rounded-xl font-bold text-sm hover:bg-teal-700 transition-all">
                         Search
@@ -121,6 +151,7 @@ function statusClass(s) {
                                     <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Request Type</th>
                                     <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Entity</th>
                                     <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Requester</th>
+                                    <th class="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Stage</th>
                                     <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
                                     <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Ticket</th>
                                     <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Submitted</th>
@@ -141,9 +172,20 @@ function statusClass(s) {
                                         <div class="text-sm font-bold text-gray-800">{{ r.user?.name ?? r.requester_name }}</div>
                                         <div class="text-xs text-gray-400 font-medium">{{ r.user?.email ?? r.requester_email }}</div>
                                     </td>
+                                    <td class="px-6 py-4 text-center whitespace-nowrap">
+                                        <span v-if="r.status === 'Approved'" class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Completed</span>
+                                        <span v-else-if="r.status === 'Rejected'" class="text-[10px] font-black text-red-600 uppercase tracking-widest">Rejected</span>
+                                        <span v-else-if="r.status === 'Cancelled'" class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Cancelled</span>
+                                        <div v-else-if="r.request_type?.approval_levels > 0" class="inline-flex flex-col">
+                                            <span class="text-xs font-black text-teal-600 bg-teal-50 px-3 py-0.5 rounded-full border border-teal-100">
+                                                {{ r.current_approval_level }} / {{ r.request_type.approval_levels }}
+                                            </span>
+                                        </div>
+                                        <span v-else class="text-[10px] font-black text-gray-300 uppercase">N/A</span>
+                                    </td>
                                     <td class="px-6 py-4">
-                                        <span :class="statusClass(r.status)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
-                                            {{ r.status }}
+                                        <span :class="statusClass(r)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
+                                            {{ getStatusLabel(r) }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">

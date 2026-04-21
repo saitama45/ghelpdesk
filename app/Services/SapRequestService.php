@@ -212,14 +212,20 @@ class SapRequestService
         // Check if it's a file object or array of file objects
         if (is_array($value)) {
             if (isset($value['path']) && isset($value['name'])) {
-                return $value['name'];
+                $url = route('attachments.download', ['path' => $value['path'], 'name' => $value['name']]);
+                return "[{$value['name']}]({$url})";
             }
             
             // Multiple files
             $names = [];
             foreach ($value as $val) {
                 if (is_array($val) && isset($val['name'])) {
-                    $names[] = $val['name'];
+                    if (isset($val['path'])) {
+                        $url = route('attachments.download', ['path' => $val['path'], 'name' => $val['name']]);
+                        $names[] = "[{$val['name']}]({$url})";
+                    } else {
+                        $names[] = $val['name'];
+                    }
                 } else {
                     $names[] = (string)$val;
                 }

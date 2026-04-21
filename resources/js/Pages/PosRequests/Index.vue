@@ -10,17 +10,25 @@ import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
 
 const props = defineProps({
-    posRequests: Object
+    posRequests: Object,
+    filters: Object,
 })
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { destroy: performDelete } = useErrorHandler()
-const pagination = usePagination(props.posRequests, 'pos-requests.index')
+const status = ref(props.filters?.status ?? '')
+const pagination = usePagination(props.posRequests, 'pos-requests.index', () => ({
+    status: status.value
+}))
 const { hasPermission } = usePermission()
 
 onMounted(() => {
     pagination.updateData(props.posRequests)
+})
+
+watch(status, () => {
+    pagination.goToPage(1)
 })
 
 watch(() => props.posRequests, (newVal) => {
@@ -41,12 +49,36 @@ const deleteRequest = async (request) => {
     }
 }
 
-const getStatusClass = (status) => {
+const getStatusLabel = (request) => {
+    const status = request.ticket ? request.ticket.status : request.status
+    switch (status) {
+        case 'open': return 'Ticket: Open'
+        case 'for_schedule': return 'For Schedule'
+        case 'in_progress': return 'In Progress'
+        case 'resolved': return 'Resolved'
+        case 'closed': return 'Closed'
+        case 'waiting_service_provider': return 'Waiting for SP'
+        case 'waiting_client_feedback': return 'Waiting for Client'
+        default: return status.replace('_', ' ')
+    }
+}
+
+const getStatusClass = (request) => {
+    const status = request.ticket ? request.ticket.status : request.status
     if (status.startsWith('Approved Level')) return 'bg-blue-50 text-blue-700 border-blue-100'
+    
     switch (status) {
         case 'Approved': return 'bg-emerald-100 text-emerald-800 border-emerald-200'
-        case 'Open': return 'bg-blue-100 text-blue-800 border-blue-200'
+        case 'Open': 
+        case 'open': return 'bg-blue-100 text-blue-800 border-blue-200'
+        case 'Rejected': return 'bg-red-100 text-red-800 border-red-200'
         case 'Cancelled': return 'bg-rose-100 text-rose-800 border-rose-200'
+        case 'for_schedule': return 'bg-teal-50 text-teal-700 border-teal-100'
+        case 'in_progress': return 'bg-purple-50 text-purple-700 border-purple-100'
+        case 'resolved': return 'bg-green-100 text-green-800 border-green-200'
+        case 'closed': return 'bg-gray-100 text-gray-600 border-gray-200'
+        case 'waiting_service_provider': return 'bg-orange-50 text-orange-700 border-orange-100'
+        case 'waiting_client_feedback': return 'bg-blue-50 text-blue-700 border-blue-100'
         default: return 'bg-amber-100 text-amber-800 border-amber-200'
     }
 }
@@ -72,16 +104,30 @@ const getStatusClass = (status) => {
                     @change-per-page="pagination.changePerPage"
                 >
                     <template #actions>
-                        <Link
-                            v-if="hasPermission('pos_requests.create')"
-                            :href="route('pos-requests.create')"
-                            class="group relative inline-flex items-center px-6 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all duration-300 shadow-md hover:shadow-indigo-200 whitespace-nowrap"
-                        >
-                            <svg class="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <span>New POS Request</span>
-                        </Link>
+                        <div class="flex items-center space-x-4">
+                            <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
+                                <option value="">All Statuses</option>
+                                <option value="Open">Open</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Rejected">Rejected</option>
+                                <option value="Cancelled">Cancelled</option>
+                                <option value="for_schedule">For Schedule</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="resolved">Resolved</option>
+                                <option value="closed">Closed</option>
+                            </select>
+
+                            <Link
+                                v-if="hasPermission('pos_requests.create')"
+                                :href="route('pos-requests.create')"
+                                class="group relative inline-flex items-center px-6 py-2.5 bg-indigo-600 text-white text-sm font-black rounded-xl hover:bg-indigo-700 transition-all duration-300 shadow-md hover:shadow-indigo-200 whitespace-nowrap"
+                            >
+                                <svg class="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                <span>New POS Request</span>
+                            </Link>
+                        </div>
                     </template>
 
                     <template #header>
@@ -92,7 +138,7 @@ const getStatusClass = (status) => {
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Company</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Requested Date</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Launch Date</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Approval</th>
+                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Stage</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
                             <th class="px-6 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
                         </tr>
@@ -140,17 +186,19 @@ const getStatusClass = (status) => {
                                 <span class="text-sm font-mono font-bold text-gray-900">{{ request.launch_date }}</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
-                                <div v-if="request.status !== 'Approved' && request.request_type.approval_levels > 0" class="inline-flex flex-col">
-                                    <span class="text-[10px] font-black text-gray-400 uppercase mb-1">Level</span>
-                                    <span class="text-sm font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100">
+                                <span v-if="request.status === 'Approved'" class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Completed</span>
+                                <span v-else-if="request.status === 'Rejected'" class="text-[10px] font-black text-red-600 uppercase tracking-widest">Rejected</span>
+                                <span v-else-if="request.status === 'Cancelled'" class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Cancelled</span>
+                                <div v-else-if="request.request_type.approval_levels > 0" class="inline-flex flex-col">
+                                    <span class="text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100">
                                         {{ request.current_approval_level }} / {{ request.request_type.approval_levels }}
                                     </span>
                                 </div>
-                                <span v-else class="text-[10px] font-black text-emerald-600 uppercase">Completed</span>
+                                <span v-else class="text-[10px] font-black text-gray-300 uppercase">N/A</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
-                                <span :class="getStatusClass(request.status)" class="inline-flex items-center px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm">
-                                    {{ request.status }}
+                                <span :class="getStatusClass(request)" class="inline-flex items-center px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm">
+                                    {{ getStatusLabel(request) }}
                                 </span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-right">
