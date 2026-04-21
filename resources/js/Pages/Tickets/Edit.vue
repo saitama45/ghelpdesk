@@ -196,6 +196,10 @@ const buildScheduleContext = (activity = {}) => {
 };
 
 const openChildModal = () => {
+    if (!validateResolutionDetails('creating a child ticket')) {
+        return;
+    }
+
     childForm.reset();
     
     // Set default times
@@ -362,6 +366,7 @@ const commentForm = useForm({
 });
 
 const showStatusDropdown = ref(false);
+const syncingTicketState = ref(false);
 
 const selectedItem = computed(() => {
     return items.value.find(item => String(item.id) === String(editForm.item_id))
@@ -371,26 +376,38 @@ const selectedItem = computed(() => {
 
 const canResolveTicket = computed(() => availableStatuses.value.includes('resolved'));
 const requiresRcaOnResolve = computed(() => !!selectedItem.value?.requires_rca_on_resolve);
+const requiresResolutionDetails = (targetStatus) => ['resolved', 'closed'].includes(targetStatus);
 
-const validateResolutionBeforeSubmit = (newStatus) => {
-    if (newStatus !== 'resolved') return true;
-
-    if (!commentForm.comment_text.trim()) {
-        showError('Response is required before resolving the ticket.');
-        return false;
-    }
-
+const validateResolutionDetails = (contextLabel = 'continue') => {
     if (!commentForm.action_taken.trim()) {
-        showError('Action Taken is required before resolving the ticket.');
+        showError(`Action Taken is required before ${contextLabel}.`);
         return false;
     }
 
     if (requiresRcaOnResolve.value && !commentForm.root_cause_analysis.trim()) {
-        showError('Root Cause Analysis (RCA) is required for the selected item before resolving the ticket.');
+        showError(`Root Cause Analysis (RCA) is required for the selected item before ${contextLabel}.`);
         return false;
     }
 
     return true;
+};
+
+const validateResolutionBeforeSubmit = (newStatus) => {
+    if (!requiresResolutionDetails(newStatus)) return true;
+
+    return validateResolutionDetails(`setting the ticket to ${getStatusLabel(newStatus)}`);
+};
+
+const canSubmitCurrentComment = () => {
+    if (commentForm.comment_text.trim() || commentForm.attachments.length > 0) {
+        return true;
+    }
+
+    if (requiresResolutionDetails(commentForm.status)) {
+        return validateResolutionBeforeSubmit(commentForm.status);
+    }
+
+    return false;
 };
 
 const submitWithStatus = (newStatus) => {
@@ -610,6 +627,7 @@ const debouncedUpdate = debounce(() => {
 
 // Watch for ticket changes to sync form state (important after status changes from comments)
 watch(() => props.ticket, (newTicket) => {
+    syncingTicketState.value = true;
     editForm.status = newTicket.status;
     editForm.priority = newTicket.priority ? String(newTicket.priority).toLowerCase() : '';
     editForm.severity = newTicket.severity;
@@ -623,18 +641,47 @@ watch(() => props.ticket, (newTicket) => {
     editForm.sender_email = newTicket.sender_email || '';
     editForm.department = newTicket.department || '';
     editForm.defaults(editForm.data()); // Reset dirty state
+    nextTick(() => {
+        syncingTicketState.value = false;
+    });
 }, { deep: true });
 
 // Watchers for select/toggle fields (save immediately on change)
 watch(() => [
     editForm.company_id,
     editForm.store_id,
-    editForm.status,
     editForm.priority,
     editForm.severity,
     editForm.type,
     editForm.assignee_id,
 ], () => {
+    updateTicket({ preserveScroll: true });
+});
+
+watch(() => editForm.status, (newStatus, oldStatus) => {
+    if (syncingTicketState.value || oldStatus === undefined || newStatus === oldStatus) return;
+
+    if (requiresResolutionDetails(newStatus)) {
+        if (!validateResolutionBeforeSubmit(newStatus)) {
+            syncingTicketState.value = true;
+            editForm.status = oldStatus;
+            nextTick(() => {
+                syncingTicketState.value = false;
+            });
+            return;
+        }
+
+        syncingTicketState.value = true;
+        editForm.status = oldStatus;
+        nextTick(() => {
+            syncingTicketState.value = false;
+        });
+
+        commentForm.status = newStatus;
+        addComment();
+        return;
+    }
+
     updateTicket({ preserveScroll: true });
 });
 
@@ -712,7 +759,7 @@ const cancelDescriptionEdit = () => {
 };
 
 const addComment = () => {
-    if (!commentForm.comment_text.trim() && commentForm.attachments.length === 0) return;
+    if (!canSubmitCurrentComment()) return;
     
     const attachmentsToUpload = commentForm.attachments.map(a => a.file);
     
@@ -1721,7 +1768,7 @@ const linkify = (text) => {
                                             </div>
                                             <div class="flex items-center w-full sm:w-auto">
                                                 <div class="inline-flex rounded-lg shadow-md divide-x divide-blue-500 w-full sm:w-auto">
-                                                    <button 
+                                                        <button 
                                                         type="button" 
                                                         @click="submitWithStatus('')" 
                                                         :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"

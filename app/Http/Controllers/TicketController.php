@@ -625,25 +625,28 @@ class TicketController extends Controller
         }
 
         $ticket->loadMissing('item');
-        $isResolving = $request->input('status') === 'resolved';
+        $isTerminalStatusChange = in_array($request->input('status'), ['resolved', 'closed'], true);
         $requiresRcaOnResolve = (bool) $ticket->item?->requires_rca_on_resolve;
 
         $request->validate([
-            'comment_text' => 'required|string|max:65535',
+            'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange), 'nullable', 'string', 'max:65535'],
             'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
-            'action_taken' => [Rule::requiredIf($isResolving), 'nullable', 'string', 'max:65535'],
-            'root_cause_analysis' => [Rule::requiredIf($isResolving && $requiresRcaOnResolve), 'nullable', 'string', 'max:65535'],
+            'action_taken' => [Rule::requiredIf($isTerminalStatusChange), 'nullable', 'string', 'max:65535'],
+            'root_cause_analysis' => [Rule::requiredIf($isTerminalStatusChange && $requiresRcaOnResolve), 'nullable', 'string', 'max:65535'],
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
         ]);
 
         $commentText = trim((string) $request->comment_text);
-        if ($isResolving) {
-            $commentText .= "\n\nAction Taken:\n" . trim((string) $request->input('action_taken'));
+        $actionTaken = trim((string) $request->input('action_taken'));
+        $rootCauseAnalysis = trim((string) $request->input('root_cause_analysis'));
 
-            if ($request->filled('root_cause_analysis')) {
-                $commentText .= "\n\nRoot Cause Analysis (RCA):\n" . trim((string) $request->input('root_cause_analysis'));
+        if ($isTerminalStatusChange) {
+            $commentText .= ($commentText !== '' ? "\n\n" : '') . "Action Taken:\n" . $actionTaken;
+
+            if ($rootCauseAnalysis !== '') {
+                $commentText .= "\n\nRoot Cause Analysis (RCA):\n" . $rootCauseAnalysis;
             }
         }
 
@@ -652,8 +655,8 @@ class TicketController extends Controller
             'comment_text' => $commentText,
             'is_internal' => $request->boolean('is_internal', false),
             'user_id' => auth()->id(),
-            'action_taken' => $request->input('action_taken'),
-            'root_cause_analysis' => $request->input('root_cause_analysis'),
+            'action_taken' => $actionTaken !== '' ? $actionTaken : null,
+            'root_cause_analysis' => $rootCauseAnalysis !== '' ? $rootCauseAnalysis : null,
             'created_at' => now('Asia/Manila'),
         ]);
 
