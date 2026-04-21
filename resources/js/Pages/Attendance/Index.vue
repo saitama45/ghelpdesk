@@ -89,6 +89,10 @@ const isRecentlyLogged = computed(() => {
     return (loggedAt + 5 * 60 * 1000) > nowMs.value;
 });
 
+const requiresGeofencing = computed(() => {
+    return props.todaySchedule?.status !== 'WFH';
+});
+
 // Remaining cooldown as a "m:ss" string, e.g. "3:42"
 const recentLogCooldownLabel = computed(() => {
     if (!props.lastLog?.created_at) return '';
@@ -124,7 +128,7 @@ const isWithinScheduleWindow = computed(() => {
 });
 
 const scheduleWindowMessage = computed(() => {
-    if (!scheduleWindow.value) return 'No active On-site/Off-site schedule for your current time.';
+    if (!scheduleWindow.value) return 'No active On-site, Off-site, or WFH schedule for your current time.';
     if (isTimeOutFlow.value && props.todaySchedule && props.lastLog?.type === 'time_in') return '';
 
     if (nowMs.value < scheduleWindow.value.graceStart.getTime()) {
@@ -288,6 +292,7 @@ const stopLocationTracking = () => {
 
 // Geofencing logic
 const isWithinStoreVicinity = computed(() => {
+    if (!requiresGeofencing.value) return true;
     if (!latitude.value || !longitude.value || !props.assignedStores?.length) return false;
     
     return props.assignedStores.some(store => {
@@ -467,11 +472,11 @@ const submit = async () => {
     if (!canSave.value) return;
 
     const action = nextAction.value; // 'Time In' or 'Time Out'
-    const store  = props.todaySchedule?.store?.name ?? 'your assigned store';
+    const locationName = props.todaySchedule?.status === 'WFH' ? 'Work From Home' : (props.todaySchedule?.store?.name ?? 'your assigned store');
 
     const ok = await confirm({
         title: `Confirm ${action}`,
-        message: `You are about to record ${action} at ${store}. Continue?`,
+        message: `You are about to record ${action} at ${locationName}. Continue?`,
         confirmLabel: action,
         cancelLabel: 'Cancel',
         variant: 'primary',
@@ -505,15 +510,15 @@ const canSave = computed(() => {
 
 const statusMessage = computed(() => {
     if (!hasPermission('attendance.create')) return 'You do not have permission to log attendance. Please contact your manager or administrator.';
-    if (!props.todaySchedule) return 'No active On-site/Off-site schedule for your current time.';
+    if (!props.todaySchedule) return 'No active On-site, Off-site, or WFH schedule for your current time.';
     if (!isWithinScheduleWindow.value) return scheduleWindowMessage.value;
     if (props.isSegmentComplete) return 'You have already completed Time In and Time Out for this schedule.';
     if (isRecentlyLogged.value) return `A log was already recorded recently. Please wait ${recentLogCooldownLabel.value} before logging again.`;
-    if (props.assignedStores.length === 0) return 'No assigned work sites found.';
+    if (requiresGeofencing.value && props.assignedStores.length === 0) return 'No assigned work sites found.';
     if (!capturedImage.value) return 'Please take a selfie first.';
     if (!latitude.value) return 'Acquiring GPS...';
     if (!isLocationStable.value) return 'Waiting for location to stabilize...';
-    if (!isWithinStoreVicinity.value) return 'You are outside the office vicinity.';
+    if (requiresGeofencing.value && !isWithinStoreVicinity.value) return 'You are outside the office vicinity.';
     return `Ready to ${nextAction.value}`;
 });
 
@@ -621,7 +626,10 @@ const statusMessage = computed(() => {
                             <span v-if="isLocationStable" class="text-[10px] font-bold text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded">
                                 <CheckCircleIcon class="w-3 h-3" /> STABLE
                             </span>
-                            <span v-if="isWithinStoreVicinity" class="text-[10px] font-bold text-blue-600 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
+                            <span v-if="!requiresGeofencing" class="text-[10px] font-bold text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
+                                <GlobeAsiaAustraliaIcon class="w-3 h-3" /> WFH MODE
+                            </span>
+                            <span v-else-if="isWithinStoreVicinity" class="text-[10px] font-bold text-blue-600 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
                                 <GlobeAsiaAustraliaIcon class="w-3 h-3" /> IN VICINITY
                             </span>
                         </div>

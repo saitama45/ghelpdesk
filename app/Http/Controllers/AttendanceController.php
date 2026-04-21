@@ -153,59 +153,59 @@ class AttendanceController extends Controller implements HasMiddleware
             'photo' => 'required|string', // Base64 encoded image
         ]);
 
-        // GEOFENCING VALIDATION
-        $userLat = $request->latitude;
-        $userLng = $request->longitude;
-
-        $assignedStores = $user->stores()
-            ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->where('is_active', true)
-            ->get();
-
-        // Fallback for Admins/Devs
-        if ($assignedStores->isEmpty() && $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
-            $assignedStores = Store::whereNotNull('latitude')
-                ->whereNotNull('longitude')
-                ->where('is_active', true)
-                ->get();
-        }
-
-        if ($assignedStores->isEmpty()) {
-            return back()->with('error', 'No active work site assigned to your account. Please contact HR.');
-        }
-
-        $isWithinVicinity = false;
-        $closestDistance = null;
-
-        foreach ($assignedStores as $store) {
-            $distance = $this->calculateDistance($userLat, $userLng, $store->latitude, $store->longitude);
-            if ($distance <= $store->radius_meters) {
-                $isWithinVicinity = true;
-                break;
-            }
-            if ($closestDistance === null || $distance < $closestDistance) {
-                $closestDistance = $distance;
-            }
-        }
-
-        if (!$isWithinVicinity) {
-            return back()->with('error', "You are outside the allowed vicinity. (Closest site: " . round($closestDistance) . "m away)");
-        }
-
         $throttleKey = 'attendance-log:' . $user->id;
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             return back()->with('error', 'Too many attempts. Please try again in ' . RateLimiter::availableIn($throttleKey) . ' seconds.');
         }
 
-        // Find the active On-site/Off-site schedule for this user right now.
-        // Grace period is per schedule_store; query with a generous max window then filter in PHP.
+        // Find the active schedule for this user right now.
         $now = now('Asia/Manila');
-
         [$schedule, $activeStoreEntry] = $this->resolveScheduleForAttendance($user->id, $now);
 
         if (!$schedule) {
-            return back()->with('error', 'No active On-site or Off-site schedule found for your current time. Please contact your supervisor.');
+            return back()->with('error', 'No active On-site, Off-site, or WFH schedule found for your current time. Please contact your supervisor.');
+        }
+
+        // GEOFENCING VALIDATION (Skip if WFH)
+        if ($schedule->status !== 'WFH') {
+            $userLat = $request->latitude;
+            $userLng = $request->longitude;
+
+            $assignedStores = $user->stores()
+                ->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->where('is_active', true)
+                ->get();
+
+            // Fallback for Admins/Devs
+            if ($assignedStores->isEmpty() && $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
+                $assignedStores = Store::whereNotNull('latitude')
+                    ->whereNotNull('longitude')
+                    ->where('is_active', true)
+                    ->get();
+            }
+
+            if ($assignedStores->isEmpty()) {
+                return back()->with('error', 'No active work site assigned to your account. Please contact HR.');
+            }
+
+            $isWithinVicinity = false;
+            $closestDistance = null;
+
+            foreach ($assignedStores as $store) {
+                $distance = $this->calculateDistance($userLat, $userLng, $store->latitude, $store->longitude);
+                if ($distance <= $store->radius_meters) {
+                    $isWithinVicinity = true;
+                    break;
+                }
+                if ($closestDistance === null || $distance < $closestDistance) {
+                    $closestDistance = $distance;
+                }
+            }
+
+            if (!$isWithinVicinity) {
+                return back()->with('error', "You are outside the allowed vicinity. (Closest site: " . round($closestDistance) . "m away)");
+            }
         }
 
         // Determine type per-segment if possible, otherwise per-schedule
@@ -296,7 +296,7 @@ class AttendanceController extends Controller implements HasMiddleware
     private function resolveScheduleForAttendance(int $userId, $now): array
     {
         $schedule = Schedule::where('user_id', $userId)
-            ->whereIn('status', ['On-site', 'Off-site'])
+            ->whereIn('status', ['On-site', 'Off-site', 'WFH'])
             ->where('start_time', '<=', $now->copy()->addMinutes(480))
             ->where('end_time', '>=', $now)
             ->with(['scheduleStores.store'])
@@ -326,7 +326,7 @@ class AttendanceController extends Controller implements HasMiddleware
 
         $schedule = $lastOpenLog->schedule;
 
-        if (!in_array($schedule->status, ['On-site', 'Off-site'], true)) {
+        if (!in_array($schedule->status, ['On-site', 'Off-site', 'WFH'], true)) {
             return [null, null];
         }
 
