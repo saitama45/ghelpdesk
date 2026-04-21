@@ -239,16 +239,7 @@ class TicketController extends Controller
             }
         }
 
-        $usersToNotify = User::whereHas('roles', function($q) {
-            $q->where('notify_on_ticket_create', true);
-        })->get();
-
-        foreach ($usersToNotify as $userToNotify) {
-            if ($userToNotify->email && !in_array($userToNotify->email, $sentTo)) {
-                Mail::to($userToNotify->email)->send(new NewTicketCreated($ticket, 'Admin'));
-                $sentTo[] = $userToNotify->email;
-            }
-        }
+        $this->notifyTicketCreationWatchers($ticket, $sentTo);
 
         if (strtolower($ticket->priority) === 'urgent') {
             $urgentWatchers = User::whereHas('roles', function ($q) {
@@ -759,17 +750,6 @@ class TicketController extends Controller
             ]);
         }
 
-        // 4. Add previous commenters
-        foreach ($ticket->comments as $prevComment) {
-            if ($prevComment->user && $prevComment->user->email) {
-                $recipients->push([
-                    'email' => strtolower($prevComment->user->email),
-                    'name' => $prevComment->user->name,
-                    'id' => $prevComment->user->id
-                ]);
-            }
-        }
-
         // Filter out the person who just commented and ensure email exists
         $recipients = $recipients->filter(function ($r) use ($commenterId) {
             return ($r['id'] != $commenterId) && !empty($r['email']);
@@ -1158,15 +1138,62 @@ class TicketController extends Controller
         }
 
         // Notify admins/others
-        $usersToNotify = User::whereHas('roles', function($q) {
-            $q->where('notify_on_ticket_create', true);
-        })->get();
+        $this->notifyTicketCreationWatchers($ticket, $sentTo);
+    }
+
+    private function notifyTicketCreationWatchers(Ticket $ticket, array &$sentTo): void
+    {
+        $ticket->loadMissing('company');
+
+        $usersToNotify = User::active()
+            ->whereHas('roles', function ($q) {
+                $q->where('notify_on_ticket_create', true);
+            })
+            ->with('roles.companies')
+            ->get();
 
         foreach ($usersToNotify as $userToNotify) {
-            if ($userToNotify->email && !in_array($userToNotify->email, $sentTo)) {
-                Mail::to($userToNotify->email)->send(new NewTicketCreated($ticket, 'Admin'));
-                $sentTo[] = $userToNotify->email;
+            $email = strtolower((string) $userToNotify->email);
+
+            if (!$email || in_array($email, $sentTo, true)) {
+                continue;
+            }
+
+            if (!$this->userCanReceiveTicketCreationNotification($userToNotify, $ticket)) {
+                continue;
+            }
+
+            Mail::to($email)->send(new NewTicketCreated($ticket, $userToNotify->name));
+            $sentTo[] = $email;
+        }
+    }
+
+    private function userCanReceiveTicketCreationNotification(User $user, Ticket $ticket): bool
+    {
+        if (!$user->email || !$user->is_active) {
+            return false;
+        }
+
+        if ($user->hasRole('Admin')) {
+            return true;
+        }
+
+        if ($user->id === $ticket->reporter_id || $user->id === $ticket->assignee_id) {
+            return false;
+        }
+
+        $allowedCompanyIds = collect();
+
+        foreach ($user->roles as $role) {
+            if ($role->companies) {
+                $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
             }
         }
+
+        if ($user->company_id) {
+            $allowedCompanyIds->push($user->company_id);
+        }
+
+        return $allowedCompanyIds->unique()->contains($ticket->company_id);
     }
 }
