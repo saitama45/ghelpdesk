@@ -84,13 +84,13 @@ class ItemController extends Controller implements HasMiddleware
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Items');
 
-        $headers = ['Name', 'Description', 'Concern Type', 'Category', 'Sub-Category', 'Priority', 'Status'];
+        $headers = ['Name', 'Description', 'Concern Type', 'Category', 'Sub-Category', 'Priority', 'Requires RCA On Resolve', 'Status'];
         foreach ($headers as $i => $h) {
             $sheet->setCellValue(chr(65 + $i) . '1', $h);
         }
 
-        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:G1')->getFill()
+        $sheet->getStyle('A1:H1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:H1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
@@ -102,11 +102,12 @@ class ItemController extends Controller implements HasMiddleware
             $sheet->setCellValue('D' . $row, $item->category?->name);
             $sheet->setCellValue('E' . $row, $item->subCategory?->name);
             $sheet->setCellValue('F' . $row, $item->priority);
-            $sheet->setCellValue('G' . $row, $item->is_active ? 'Active' : 'Inactive');
+            $sheet->setCellValue('G' . $row, $item->requires_rca_on_resolve ? '1' : '0');
+            $sheet->setCellValue('H' . $row, $item->is_active ? 'Active' : 'Inactive');
             $row++;
         }
 
-        foreach (range('A', 'G') as $col) {
+        foreach (range('A', 'H') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -139,6 +140,7 @@ class ItemController extends Controller implements HasMiddleware
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
             'concern_type' => 'required|in:Incident,Service Request',
+            'requires_rca_on_resolve' => 'boolean',
             'is_active' => 'boolean',
         ]);
 
@@ -163,6 +165,7 @@ class ItemController extends Controller implements HasMiddleware
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
             'concern_type' => 'required|in:Incident,Service Request',
+            'requires_rca_on_resolve' => 'boolean',
             'is_active' => 'boolean',
         ]);
 
@@ -236,6 +239,7 @@ class ItemController extends Controller implements HasMiddleware
                 'concern_type'    => $data['concern_type'] ?? 'Incident',
                 'category_id'     => $categoryId,
                 'sub_category_id' => $subCategoryId,
+                'requires_rca_on_resolve' => $data['requires_rca_on_resolve'] ?? '0',
                 'is_active'       => $data['is_active'] ?? '1',
             ], [
                 'name'            => 'required|string|max:255',
@@ -244,6 +248,7 @@ class ItemController extends Controller implements HasMiddleware
                 'concern_type'    => 'required|in:Incident,Service Request',
                 'category_id'     => 'nullable|exists:categories,id',
                 'sub_category_id' => 'nullable|exists:sub_categories,id',
+                'requires_rca_on_resolve' => 'nullable|in:0,1',
                 'is_active'       => 'nullable|in:0,1',
             ]);
 
@@ -271,6 +276,7 @@ class ItemController extends Controller implements HasMiddleware
                 'concern_type'    => $data['concern_type'] ?? 'Incident',
                 'category_id'     => $categoryId,
                 'sub_category_id' => $subCategoryId,
+                'requires_rca_on_resolve' => isset($data['requires_rca_on_resolve']) ? (bool) $data['requires_rca_on_resolve'] : false,
                 'is_active'       => isset($data['is_active']) ? (bool) $data['is_active'] : true,
             ]);
             $imported++;
@@ -318,7 +324,7 @@ class ItemController extends Controller implements HasMiddleware
         $sheet->setTitle('Import Template');
 
         // Headers
-        $headers = ['name', 'description', 'priority', 'concern_type', 'category', 'sub_category', 'is_active'];
+        $headers = ['name', 'description', 'priority', 'concern_type', 'category', 'sub_category', 'requires_rca_on_resolve', 'is_active'];
         foreach ($headers as $i => $h) {
             $col = chr(65 + $i); // A–G
             $sheet->setCellValue("{$col}1", $h);
@@ -331,16 +337,17 @@ class ItemController extends Controller implements HasMiddleware
         $sheet->setCellValue('D2', 'Incident');
         $sheet->setCellValue('E2', $categories->first()?->name ?? '');
         $sheet->setCellValue('F2', $subCategories->first()?->name ?? '');
-        $sheet->setCellValue('G2', '1');
+        $sheet->setCellValue('G2', '0');
+        $sheet->setCellValue('H2', '1');
 
         // Header styling
-        $sheet->getStyle('A1:G1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:G1')->getFill()
+        $sheet->getStyle('A1:H1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:H1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
         // Auto-size columns A–G
-        foreach (range('A', 'G') as $col) {
+        foreach (range('A', 'H') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -387,6 +394,14 @@ class ItemController extends Controller implements HasMiddleware
                 ->setFormula1('Lists!$B$2:$B$' . ($subCount + 1))
                 ->setSqref('F2:F1001');
         }
+
+        $binaryValidation = $sheet->getCell('G2')->getDataValidation();
+        $binaryValidation->setType(DataValidation::TYPE_LIST)
+            ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+            ->setAllowBlank(false)
+            ->setShowDropDown(false)
+            ->setFormula1('"0,1"')
+            ->setSqref('G2:H1001');
 
         $spreadsheet->setActiveSheetIndex(0);
 

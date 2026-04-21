@@ -356,12 +356,49 @@ const commentForm = useForm({
     comment_text: '',
     status: '',
     is_internal: false,
+    action_taken: '',
+    root_cause_analysis: '',
     attachments: [],
 });
 
 const showStatusDropdown = ref(false);
 
+const selectedItem = computed(() => {
+    return items.value.find(item => String(item.id) === String(editForm.item_id))
+        || props.ticket.item
+        || null;
+});
+
+const canResolveTicket = computed(() => availableStatuses.value.includes('resolved'));
+const requiresRcaOnResolve = computed(() => !!selectedItem.value?.requires_rca_on_resolve);
+
+const validateResolutionBeforeSubmit = (newStatus) => {
+    if (newStatus !== 'resolved') return true;
+
+    if (!commentForm.comment_text.trim()) {
+        showError('Response is required before resolving the ticket.');
+        return false;
+    }
+
+    if (!commentForm.action_taken.trim()) {
+        showError('Action Taken is required before resolving the ticket.');
+        return false;
+    }
+
+    if (requiresRcaOnResolve.value && !commentForm.root_cause_analysis.trim()) {
+        showError('Root Cause Analysis (RCA) is required for the selected item before resolving the ticket.');
+        return false;
+    }
+
+    return true;
+};
+
 const submitWithStatus = (newStatus) => {
+    if (!validateResolutionBeforeSubmit(newStatus)) {
+        showStatusDropdown.value = false;
+        return;
+    }
+
     commentForm.status = newStatus;
     addComment();
     showStatusDropdown.value = false;
@@ -683,6 +720,8 @@ const addComment = () => {
         comment_text: commentForm.comment_text,
         status: commentForm.status,
         is_internal: commentForm.is_internal,
+        action_taken: commentForm.action_taken,
+        root_cause_analysis: commentForm.root_cause_analysis,
         attachments: attachmentsToUpload
     }, {
         onSuccess: () => {
@@ -1489,6 +1528,36 @@ const linkify = (text) => {
                                                 <button type="button" @click="removeCommentAttachment(index)" class="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full shadow-sm hover:bg-red-600">
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                                 </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="canResolveTicket" class="border-t border-blue-50 px-3 py-3 bg-slate-50/80 space-y-3">
+                                            <div class="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-700">Resolution Details</p>
+                                                    <p class="text-[11px] text-slate-500">Required only when sending this response as resolved.</p>
+                                                </div>
+                                                <span v-if="requiresRcaOnResolve" class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                                                    RCA Required
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Action Taken</label>
+                                                <textarea
+                                                    v-model="commentForm.action_taken"
+                                                    rows="2"
+                                                    class="block w-full rounded-lg border border-slate-200 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
+                                                    placeholder="Describe what was done to resolve the issue."
+                                                ></textarea>
+                                            </div>
+                                            <div v-if="requiresRcaOnResolve">
+                                                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Root Cause Analysis (RCA)</label>
+                                                <textarea
+                                                    v-model="commentForm.root_cause_analysis"
+                                                    rows="2"
+                                                    class="block w-full rounded-lg border border-slate-200 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
+                                                    placeholder="Explain the root cause for this issue."
+                                                ></textarea>
                                             </div>
                                         </div>
 

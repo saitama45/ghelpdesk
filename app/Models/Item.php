@@ -13,10 +13,12 @@ class Item extends Model
         'description',
         'priority',
         'concern_type',
+        'requires_rca_on_resolve',
         'is_active',
     ];
 
     protected $casts = [
+        'requires_rca_on_resolve' => 'boolean',
         'is_active' => 'boolean',
     ];
 

@@ -333,6 +333,15 @@
                             <textarea v-model="form.description" rows="3"
                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
                         </div>
+                        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <label class="flex items-start gap-3">
+                                <input v-model="form.requires_rca_on_resolve" type="checkbox" class="mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500">
+                                <span>
+                                    <span class="block text-sm font-semibold text-amber-900">Require RCA before resolving</span>
+                                    <span class="block text-xs text-amber-700">Tickets using this item will require Root Cause Analysis when the responder sets the status to resolved.</span>
+                                </span>
+                            </label>
+                        </div>
                         <div v-if="isEditing" class="flex items-center">
                             <input v-model="form.is_active" type="checkbox" id="is_active_item" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                             <label for="is_active_item" class="ml-2 text-sm font-medium text-gray-700">Active Item</label>
@@ -426,6 +435,7 @@ const form = reactive({
     description: '',
     priority: 'Medium',
     concern_type: 'Incident',
+    requires_rca_on_resolve: false,
     is_active: true
 })
 
@@ -510,6 +520,7 @@ const openCreateModal = () => {
     form.description = ''
     form.priority = 'Medium'
     form.concern_type = 'Incident'
+    form.requires_rca_on_resolve = false
     form.is_active = true
     showModal.value = true
 }
@@ -523,6 +534,7 @@ const editItem = (item) => {
     form.description = item.description || ''
     form.priority = item.priority || 'Medium'
     form.concern_type = item.concern_type || 'Incident'
+    form.requires_rca_on_resolve = !!item.requires_rca_on_resolve
     form.is_active = item.is_active
     showModal.value = true
 }
@@ -535,6 +547,7 @@ const closeModal = () => {
     form.description = ''
     form.priority = 'Medium'
     form.concern_type = 'Incident'
+    form.requires_rca_on_resolve = false
     form.is_active = true
 }
 

@@ -16,6 +16,8 @@ class TicketComment extends Model
         'user_id',
         'sender_email',
         'sender_name',
+        'action_taken',
+        'root_cause_analysis',
     ];
 
     protected $casts = [

@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class TicketController extends Controller
@@ -632,19 +633,36 @@ class TicketController extends Controller
             return redirect()->back()->withErrors(['error' => 'This ticket is already closed and cannot accept new comments.']);
         }
 
+        $ticket->loadMissing('item');
+        $isResolving = $request->input('status') === 'resolved';
+        $requiresRcaOnResolve = (bool) $ticket->item?->requires_rca_on_resolve;
+
         $request->validate([
             'comment_text' => 'required|string|max:65535',
             'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
+            'action_taken' => [Rule::requiredIf($isResolving), 'nullable', 'string', 'max:65535'],
+            'root_cause_analysis' => [Rule::requiredIf($isResolving && $requiresRcaOnResolve), 'nullable', 'string', 'max:65535'],
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
         ]);
 
+        $commentText = trim((string) $request->comment_text);
+        if ($isResolving) {
+            $commentText .= "\n\nAction Taken:\n" . trim((string) $request->input('action_taken'));
+
+            if ($request->filled('root_cause_analysis')) {
+                $commentText .= "\n\nRoot Cause Analysis (RCA):\n" . trim((string) $request->input('root_cause_analysis'));
+            }
+        }
+
         $comment = TicketComment::create([
             'ticket_id' => $ticket->id,
-            'comment_text' => $request->comment_text,
+            'comment_text' => $commentText,
             'is_internal' => $request->boolean('is_internal', false),
             'user_id' => auth()->id(),
+            'action_taken' => $request->input('action_taken'),
+            'root_cause_analysis' => $request->input('root_cause_analysis'),
             'created_at' => now('Asia/Manila'),
         ]);
 
