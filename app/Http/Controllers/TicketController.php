@@ -96,6 +96,20 @@ class TicketController extends Controller
             }
         }
 
+        // Apply Sub-Unit filter
+        if ($request->filled('sub_unit')) {
+            $query->whereHas('assignee', function($q) use ($request) {
+                $q->where('sub_unit', $request->sub_unit);
+            });
+        }
+
+        // Apply Date Range filter
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
+            $end = \Carbon\Carbon::parse($request->end_date)->endOfDay();
+            $query->whereBetween('created_at', [$start, $end]);
+        }
+
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
                 $q->where('title', 'like', "%{$request->search}%")
@@ -119,10 +133,11 @@ class TicketController extends Controller
         $tickets = $query->paginate($request->get('per_page', 10))->withQueryString();
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name')->get();
+        })->select('id', 'name', 'sub_unit')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
+        $subUnits = User::whereNotNull('sub_unit')->distinct()->orderBy('sub_unit')->pluck('sub_unit');
 
         $vendors = collect([['id' => null, 'name' => 'None']])
             ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
@@ -134,9 +149,13 @@ class TicketController extends Controller
             'stores' => $stores,
             'vendors' => $vendors,
             'departments' => $departments,
+            'sub_units' => $subUnits,
             'filters' => [
                 'status' => $statusFilter,
-                'search' => $request->search
+                'search' => $request->search,
+                'sub_unit' => $request->sub_unit,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date,
             ],
         ]);
     }
@@ -295,7 +314,7 @@ class TicketController extends Controller
 
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name')->get();
+        })->select('id', 'name', 'sub_unit')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();

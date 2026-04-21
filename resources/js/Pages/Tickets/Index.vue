@@ -20,6 +20,7 @@ const props = defineProps({
     vendors: Array,
     filters: Object,
     departments: Array,
+    sub_units: Array,
 });
 
 const page = usePage();
@@ -105,7 +106,9 @@ const defaultCompanyId = computed(() => {
 });
 
 const filterStatus = ref(props.filters?.status || (isUserRole.value ? 'all' : 'open'));
-const pagination = usePagination(props.tickets, 'tickets.index', () => ({ status: filterStatus.value }));
+const filterSubUnit = ref(props.filters?.sub_unit || '');
+const filterStartDate = ref(props.filters?.start_date || '');
+const filterEndDate = ref(props.filters?.end_date || '');
 
 const filterOptions = [
     { value: 'all', label: 'All' },
@@ -120,9 +123,23 @@ const filterOptions = [
     { value: 'unassigned', label: 'Unassigned' },
 ];
 
+const pagination = usePagination(props.tickets, 'tickets.index', () => ({ 
+    status: filterStatus.value,
+    sub_unit: filterSubUnit.value,
+    start_date: filterStartDate.value,
+    end_date: filterEndDate.value,
+}));
+
+const subUnits = computed(() => {
+    return props.sub_units || [];
+});
+
 const applyFilter = () => {
     router.get(route('tickets.index'), {
         status: filterStatus.value,
+        sub_unit: filterSubUnit.value,
+        start_date: filterStartDate.value,
+        end_date: filterEndDate.value,
         search: pagination.search.value
     }, {
         preserveState: true,
@@ -131,6 +148,15 @@ const applyFilter = () => {
             pagination.updateData(page.props.tickets);
         }
     });
+};
+
+const clearFilters = () => {
+    filterStatus.value = isUserRole.value ? 'all' : 'open';
+    filterSubUnit.value = '';
+    filterStartDate.value = '';
+    filterEndDate.value = '';
+    pagination.search.value = '';
+    applyFilter();
 };
 
 watch(() => props.tickets, (newTickets) => {
@@ -680,6 +706,57 @@ const formatItemName = (item) => {
                 </div>
             </Transition>
 
+            <!-- Filters Toolbar -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap items-end gap-4">
+                <div class="flex flex-col gap-1 w-48">
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</label>
+                    <select v-model="filterStatus" @change="applyFilter"
+                            class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        <option v-for="option in filterOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                </div>
+
+                <div v-if="subUnits.length > 0" class="flex flex-col gap-1 w-48">
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sub-Unit</label>
+                    <select v-model="filterSubUnit" @change="applyFilter"
+                            class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        <option value="">All Sub-Units</option>
+                        <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
+                    </select>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">From</label>
+                    <input v-model="filterStartDate" type="date" @change="applyFilter"
+                           class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[38px]">
+                </div>
+
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">To</label>
+                    <input v-model="filterEndDate" type="date" @change="applyFilter"
+                           class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[38px]">
+                </div>
+
+                <button @click="clearFilters"
+                        class="px-4 h-[38px] text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200">
+                    Reset
+                </button>
+
+                <div class="ml-auto">
+                    <button v-if="hasPermission('tickets.create')"
+                            @click="showCreateModal = true"
+                            class="bg-blue-600 text-white px-4 h-[38px] rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-bold shadow-md whitespace-nowrap"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <span>Create Ticket</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Data Table -->
             <DataTable
                 title="Ticket Management"
@@ -698,25 +775,7 @@ const formatItemName = (item) => {
                 @change-per-page="pagination.changePerPage"
             >
                 <template #actions>
-                    <select 
-                        v-model="filterStatus" 
-                        @change="applyFilter"
-                        class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    >
-                        <option v-for="option in filterOptions" :key="option.value" :value="option.value">
-                            {{ option.label }}
-                        </option>
-                    </select>
-                    <button
-                        v-if="hasPermission('tickets.create')"
-                        @click="showCreateModal = true"
-                        class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm whitespace-nowrap"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        <span>Create Ticket</span>
-                    </button>
+                    <!-- Status select removed from here as it's moved to filters toolbar -->
                 </template>
 
                 <template #header>
