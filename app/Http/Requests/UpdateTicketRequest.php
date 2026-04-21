@@ -30,7 +30,7 @@ class UpdateTicketRequest extends FormRequest
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:65535',
             'type' => 'nullable|in:bug,feature,task,spike',
-            'status' => 'required|in:open,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
+            'status' => 'required|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'priority' => 'nullable|in:low,medium,high,urgent',
             'severity' => 'nullable|in:critical,major,minor,cosmetic',
             'assignee_id' => 'nullable|exists:users,id',

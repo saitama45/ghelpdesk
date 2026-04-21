@@ -74,6 +74,7 @@ const showInternalNotesPopover = ref(false);
 const noteFileInput = ref(null);
 const noteForm = useForm({
     comment_text: '',
+    status: '',
     is_internal: true,
     attachments: [],
 });
@@ -110,11 +111,10 @@ const saveInternalNote = () => {
 
     const attachmentsToUpload = noteForm.attachments.map(a => a.file);
 
-    post(route('tickets.comments.store', props.ticket.id), {
-        comment_text: noteForm.comment_text,
-        is_internal: true,
+    noteForm.transform((data) => ({
+        ...data,
         attachments: attachmentsToUpload
-    }, {
+    })).post(route('tickets.comments.store', props.ticket.id), {
         preserveScroll: true,
         onSuccess: () => {
             noteForm.attachments.forEach(a => {
@@ -1430,7 +1430,7 @@ const linkify = (text) => {
                                             v-model="commentForm.comment_text" 
                                             rows="2" 
                                             maxlength="65535"
-                                            class="block w-full border-0 focus:ring-0 resize-y bg-transparent p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400" 
+                                            class="block w-full border-0 focus:ring-0 resize-y bg-transparent p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400 transition-all duration-300 ease-in-out focus:min-h-[50vh]" 
                                             placeholder="Write your response..."
                                             @paste="handlePaste"
                                         ></textarea>
@@ -1505,7 +1505,7 @@ const linkify = (text) => {
                                                         type="button" 
                                                         @click="showInternalNotesPopover = !showInternalNotesPopover; showCannedMessages = false" 
                                                         :class="[
-                                                            'p-1.5 rounded-lg transition-all border flex items-center justify-center',
+                                                            'p-1.5 rounded-lg transition-all border flex items-center justify-center relative',
                                                             showInternalNotesPopover ? 'bg-amber-600 text-white border-amber-700' : 'text-amber-600 hover:text-amber-800 border-transparent hover:bg-amber-50'
                                                         ]"
                                                         title="Internal Notes"
@@ -1513,18 +1513,22 @@ const linkify = (text) => {
                                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                         </svg>
+                                                        <!-- Notification Badge -->
+                                                        <span v-if="internalNotes.length > 0" class="absolute -top-1.5 -right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white shadow-sm ring-2 ring-white animate-bounce-short">
+                                                            {{ internalNotes.length }}
+                                                        </span>
                                                     </button>
 
                                                     <div v-if="showInternalNotesPopover" class="absolute bottom-full left-0 mb-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
-                                                        <div class="p-3 border-b bg-amber-50 flex justify-between items-center">
+                                                        <div class="p-3 border-b bg-amber-50 flex justify-between items-center shrink-0">
                                                             <span class="text-xs font-black text-amber-800 uppercase tracking-widest">Internal Notes</span>
                                                             <button @click="showInternalNotesPopover = false" class="text-amber-400 hover:text-amber-600">
                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                                             </button>
                                                         </div>
                                                         
-                                                        <!-- Notes List -->
-                                                        <div class="max-h-64 overflow-y-auto p-2 space-y-2 bg-gray-50/30 custom-scrollbar">
+                                                        <!-- Notes List (Resizable) -->
+                                                        <div class="resize-y overflow-y-auto min-h-[200px] max-h-[60vh] p-2 space-y-2 bg-gray-50/30 custom-scrollbar">
                                                             <div v-for="note in internalNotes" :key="note.id" class="p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm">
                                                                 <div class="flex justify-between items-start mb-1">
                                                                     <span class="text-[10px] font-black text-gray-700 uppercase">{{ note.user?.name }}</span>
@@ -1565,24 +1569,34 @@ const linkify = (text) => {
                                                             <textarea 
                                                                 v-model="noteForm.comment_text"
                                                                 rows="2"
-                                                                class="block w-full border-gray-200 rounded-lg text-xs focus:ring-amber-500 focus:border-amber-500 resize-none mb-2"
+                                                                class="block w-full border-gray-200 rounded-lg text-xs focus:ring-amber-500 focus:border-amber-500 resize-none mb-3"
                                                                 placeholder="Type an internal note..."
                                                             ></textarea>
-                                                            <div class="flex justify-between items-center">
-                                                                <div class="flex items-center">
-                                                                    <input ref="noteFileInput" type="file" multiple accept="image/*" class="hidden" @change="handleNoteFileSelect">
-                                                                    <button type="button" @click="noteFileInput.click()" class="p-1 text-amber-600 hover:text-amber-800 rounded hover:bg-amber-50 transition-colors" title="Attach Images">
-                                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                                        </svg>
-                                                                    </button>
+
+                                                            <div class="flex flex-col gap-3">
+                                                                <div class="flex items-center justify-between">
+                                                                    <div class="flex items-center">
+                                                                        <input ref="noteFileInput" type="file" multiple accept="image/*" class="hidden" @change="handleNoteFileSelect">
+                                                                        <button type="button" @click="noteFileInput.click()" class="p-1.5 text-amber-600 hover:text-amber-800 rounded-lg hover:bg-amber-50 transition-colors border border-transparent" title="Attach Images">
+                                                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
+
                                                                 <button 
                                                                     @click="saveInternalNote"
                                                                     :disabled="noteForm.processing || (!noteForm.comment_text.trim() && noteForm.attachments.length === 0)"
-                                                                    class="px-3 py-1.5 bg-amber-600 text-white text-[10px] font-black rounded-md hover:bg-amber-700 disabled:opacity-50 uppercase tracking-widest transition-colors shadow-sm"
+                                                                    class="w-full py-2 bg-amber-600 text-white text-[11px] font-black rounded-lg hover:bg-amber-700 disabled:opacity-50 uppercase tracking-widest transition-all shadow-md active:scale-95"
                                                                 >
-                                                                    {{ noteForm.processing ? 'Saving...' : 'Add Note' }}
+                                                                    <template v-if="noteForm.processing">
+                                                                        <svg class="animate-spin -ml-1 mr-2 h-3 w-3 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                                                        Saving...
+                                                                    </template>
+                                                                    <template v-else>
+                                                                        Add Note
+                                                                    </template>
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1752,4 +1766,12 @@ const linkify = (text) => {
 <style scoped>
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes bounce-short {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.animate-bounce-short {
+  animation: bounce-short 1s ease-in-out infinite;
+}
 </style>

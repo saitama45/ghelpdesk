@@ -635,7 +635,7 @@ class TicketController extends Controller
         $request->validate([
             'comment_text' => 'required|string|max:65535',
             'is_internal' => 'nullable|boolean',
-            'status' => 'required|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
+            'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:51200',
         ]);
