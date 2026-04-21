@@ -67,11 +67,15 @@ class TicketObserver
         $now = Carbon::now();
         $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->sub_unit : null;
         
-        TicketSlaMetric::create([
+        $metric = TicketSlaMetric::create([
             'ticket_id' => $ticket->id,
             'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $subUnit),
             'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $subUnit),
         ]);
+
+        if (in_array($ticket->status, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule'])) {
+            $metric->update(['paused_at' => $now]);
+        }
     }
 
     /**
@@ -107,11 +111,11 @@ class TicketObserver
             }
 
             // 3. Handle Pausing (Waiting factors)
-            if (in_array($newStatus, ['waiting_service_provider', 'waiting_client_feedback'])) {
+            if (in_array($newStatus, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule'])) {
                 $metric->update(['paused_at' => Carbon::now()]);
             } 
             // Resume SLA
-            elseif (in_array($oldStatus, ['waiting_service_provider', 'waiting_client_feedback']) && $metric->paused_at) {
+            elseif (in_array($oldStatus, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule']) && $metric->paused_at) {
                 $pausedSeconds = (int) $metric->paused_at->diffInSeconds(Carbon::now());
                 
                 $data = [
@@ -146,6 +150,7 @@ class TicketObserver
             if ($posRequest) {
                 $statusMap = [
                     'open' => 'Approved',
+                    'for_schedule' => 'In Progress',
                     'in_progress' => 'In Progress',
                     'resolved' => 'Resolved',
                     'closed' => 'Resolved',
@@ -156,6 +161,11 @@ class TicketObserver
                 if (isset($statusMap[$newStatus])) {
                     $posRequest->update(['status' => $statusMap[$newStatus]]);
                 }
+            }
+
+            // --- Parent Ticket Status Sync ---
+            if ($ticket->parent_id) {
+                $this->syncParentStatus($ticket->parent_id, $newStatus);
             }
         }
 
@@ -172,6 +182,32 @@ class TicketObserver
             if (!empty($updates)) {
                 $metric->update($updates);
             }
+        }
+    }
+
+    /**
+     * Internal helper to sync parent status based on children.
+     */
+    private function syncParentStatus($parentId, $triggeredStatus)
+    {
+        $parent = Ticket::find($parentId);
+        if (!$parent) return;
+
+        $allChildren = Ticket::where('parent_id', $parentId)->get();
+        
+        if (in_array($triggeredStatus, ['resolved', 'closed'])) {
+            // Check if ALL children are terminal (resolved or closed)
+            $allDone = $allChildren->every(function($child) {
+                return in_array($child->status, ['resolved', 'closed']);
+            });
+
+            if ($allDone) {
+                // If all are terminal, set parent to the triggered status (resolved or closed)
+                $parent->update(['status' => $triggeredStatus]);
+            }
+        } else {
+            // If any child is updated to an active status, parent reflects it
+            $parent->update(['status' => $triggeredStatus]);
         }
     }
 }

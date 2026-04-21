@@ -368,7 +368,7 @@ const titleInput = ref(null);
 const descriptionInput = ref(null);
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
+const statuses = ['open', 'for_schedule', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
 
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
@@ -800,6 +800,7 @@ const getPriorityColor = (priority) => {
 const getStatusColor = (status) => {
     switch (status) {
         case 'open': return 'text-blue-800 bg-blue-100';
+        case 'for_schedule': return 'text-teal-800 bg-teal-100';
         case 'in_progress': return 'text-purple-800 bg-purple-100';
         case 'resolved': return 'text-green-800 bg-green-100';
         case 'closed': return 'text-gray-600 bg-gray-200';
@@ -811,6 +812,7 @@ const getStatusColor = (status) => {
 
 const getStatusLabel = (status) => {
     switch (status) {
+        case 'for_schedule': return 'For Schedule';
         case 'waiting_service_provider': return 'Waiting for service provider';
         case 'waiting_client_feedback': return 'Waiting for clients feedback?';
         default: return status.replace('_', ' ');

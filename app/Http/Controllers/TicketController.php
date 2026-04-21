@@ -394,11 +394,6 @@ class TicketController extends Controller
             $newStatus = $ticket->status;
             $ticket->save();
 
-            // SYNC STATUS TO PARENT AS A WHOLE
-            if ($statusChanged && $ticket->parent_id) {
-                $this->syncParentStatus($ticket->parent_id, $newStatus);
-            }
-
             $alreadyNotified = [];
 
             // Skip notifications if specifically requested
@@ -530,7 +525,7 @@ class TicketController extends Controller
                 'title' => "Child: {$ticket->title}",
                 'description' => "Child of {$ticket->ticket_key}. Remarks: " . ($validated['remarks'] ?? ''),
                 'type' => $ticket->type,
-                'status' => 'open',
+                'status' => 'for_schedule',
                 'priority' => $ticket->priority,
                 'severity' => $ticket->severity,
                 'reporter_id' => auth()->id(),
@@ -568,8 +563,8 @@ class TicketController extends Controller
                 'remarks' => $validated['remarks'],
             ]);
 
-            // Set parent to Open when a new child is added
-            $ticket->update(['status' => 'open']);
+            // Set parent to For Schedule when a new child is added
+            $ticket->update(['status' => 'for_schedule']);
 
             return $childTicket;
         });
@@ -621,7 +616,7 @@ class TicketController extends Controller
         $request->validate([
             'comment_text' => 'required|string|max:65535',
             'is_internal' => 'nullable|boolean',
-            'status' => 'nullable|string|in:open,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
+            'status' => 'required|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:51200',
         ]);

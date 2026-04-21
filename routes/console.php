@@ -14,4 +14,5 @@ Schedule::command('tickets:fetch-emails')
     ->withoutOverlapping()
     ->runInBackground();
 Schedule::command('tickets:auto-close')->hourly();
+Schedule::command('tickets:process-scheduled')->everyMinute();
 Schedule::command('presence:update-stale')->everyMinute();
