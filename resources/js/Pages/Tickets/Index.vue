@@ -240,6 +240,64 @@ const isBulkSubmitting = ref(false)
 
 const showSplitModal = ref(false);
 const showMergeModal = ref(false);
+const showBulkChildModal = ref(false);
+
+const bulkChildForm = useForm({
+    tickets: [], // Array of individual ticket schedule data
+});
+
+const openBulkChildModal = () => {
+    if (selectedIds.value.length === 0) return;
+    bulkChildForm.reset();
+    
+    // Set default times
+    const start = new Date();
+    start.setHours(7, 0, 0, 0);
+    const startTimeStr = formatDateForInput(start);
+    
+    const end = new Date(start);
+    end.setHours(17, 0, 0, 0);
+    const endTimeStr = formatDateForInput(end);
+
+    const selectedTickets = pagination.data.value.filter(t => selectedIds.value.includes(t.id));
+    
+    bulkChildForm.tickets = selectedTickets.map(t => ({
+        parent_id: t.id,
+        ticket_key: t.ticket_key,
+        title: t.title,
+        user_id: '',
+        status: 'On-site',
+        start_time: startTimeStr,
+        end_time: endTimeStr,
+        pickup_start: '',
+        pickup_end: '',
+        backlogs_start: '',
+        backlogs_end: '',
+        remarks: '',
+    }));
+    
+    showBulkChildModal.value = true;
+};
+
+const submitBulkChild = () => {
+    bulkChildForm.post(route('tickets.bulk-child'), {
+        onSuccess: () => {
+            showBulkChildModal.value = false;
+            selectedIds.value = [];
+            showSuccess('Bulk child tickets and schedules created successfully');
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Bulk child creation failed';
+            showError(errorMessage);
+        }
+    });
+};
+
+const formatDateForInput = (date) => {
+    const d = new Date(date);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+};
 
 const splitForm = useForm({
     original_title: '',
@@ -582,6 +640,14 @@ const formatItemName = (item) => {
 
                     <!-- Buttons -->
                     <div class="flex gap-2 self-end ml-auto">
+                        <button v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
+                                @click="openBulkChildModal"
+                                class="px-3 py-2 text-sm font-semibold bg-white border border-teal-300 text-teal-700 rounded-lg hover:bg-teal-50 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            Create Child Tickets
+                        </button>
                         <button v-if="selectedIds.length === 1 && hasPermission('tickets.edit')"
                                 @click="openSplitModal"
                                 class="px-3 py-2 text-sm font-semibold bg-white border border-yellow-300 text-yellow-700 rounded-lg hover:bg-yellow-50 transition-colors flex items-center gap-2">
@@ -1036,6 +1102,100 @@ const formatItemName = (item) => {
                             Accept Ticket
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Create Child Tickets Modal -->
+        <div v-if="showBulkChildModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-8">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showBulkChildModal = false"></div>
+                <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 relative border border-gray-100 max-h-[90vh] flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900 uppercase tracking-widest">Bulk Create Child Tickets</h3>
+                        <button @click="showBulkChildModal = false" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <p class="text-sm text-gray-600 bg-teal-50 p-3 rounded-lg border border-teal-100 mb-6 shrink-0">
+                        Set individual schedules for **{{ selectedIds.length }}** parent tickets. Child tickets will be created and both parent and child will be set to "For Schedule".
+                    </p>
+
+                    <form @submit.prevent="submitBulkChild" class="space-y-8 overflow-y-auto px-1 custom-scrollbar">
+                        <div v-for="(ticketForm, index) in bulkChildForm.tickets" :key="ticketForm.parent_id" 
+                             class="p-5 border border-gray-200 rounded-xl space-y-5 bg-gray-50/50 hover:border-teal-200 transition-colors">
+                            
+                            <!-- Header with Ticket Info -->
+                            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                                <div class="flex items-center gap-3">
+                                    <span class="px-2 py-1 bg-teal-600 text-white text-[10px] font-black rounded uppercase shadow-sm">{{ ticketForm.ticket_key }}</span>
+                                    <span class="text-sm font-bold text-gray-900 truncate max-w-[500px]">{{ ticketForm.title }}</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Assigned User</label>
+                                    <Autocomplete v-model="bulkChildForm.tickets[index].user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." size="sm" />
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Schedule Status</label>
+                                    <select v-model="bulkChildForm.tickets[index].status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                        <option v-for="status in ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday']" :key="status" :value="status">{{ status }}</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Start Time</label>
+                                    <input v-model="bulkChildForm.tickets[index].start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">End Time</label>
+                                    <input v-model="bulkChildForm.tickets[index].end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                </div>
+                            </div>
+
+                            <!-- Additional Times (Collapsible or always visible) -->
+                            <div v-if="ticketForm.status === 'On-site' || ticketForm.status === 'WFH'" class="p-4 bg-white rounded-lg border border-gray-100 space-y-4 shadow-sm">
+                                <h4 class="text-[10px] font-black text-teal-600 uppercase tracking-widest">Additional Activity Windows</h4>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="space-y-2">
+                                        <label class="block text-[10px] font-bold text-gray-600 uppercase">Pickup Time</label>
+                                        <div class="flex items-center space-x-2">
+                                            <input v-model="bulkChildForm.tickets[index].pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
+                                            <span class="text-gray-400">-</span>
+                                            <input v-model="bulkChildForm.tickets[index].pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
+                                        </div>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <label class="block text-[10px] font-bold text-gray-600 uppercase">Backlogs Time</label>
+                                        <div class="flex items-center space-x-2">
+                                            <input v-model="bulkChildForm.tickets[index].backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
+                                            <span class="text-gray-400">-</span>
+                                            <input v-model="bulkChildForm.tickets[index].backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Remarks</label>
+                                <textarea v-model="bulkChildForm.tickets[index].remarks" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white" placeholder="Specific activity details for this child ticket..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 pt-6 border-t mt-8 sticky bottom-0 bg-white pb-2">
+                            <button type="button" @click="showBulkChildModal = false" class="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="submit" :disabled="bulkChildForm.processing" class="px-8 py-2.5 bg-teal-600 text-white text-sm font-black rounded-lg hover:bg-teal-700 shadow-lg disabled:opacity-50 transition-all uppercase tracking-widest">
+                                Create {{ selectedIds.length }} Child Tickets
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

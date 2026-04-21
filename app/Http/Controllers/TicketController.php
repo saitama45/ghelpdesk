@@ -873,6 +873,95 @@ class TicketController extends Controller
     }
 
     /**
+     * Bulk create child tickets for multiple parent tickets.
+     */
+    public function bulkStoreChild(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.edit'), 403);
+
+        $validated = $request->validate([
+            'tickets'                     => 'required|array|min:1',
+            'tickets.*.parent_id'         => 'required|exists:tickets,id',
+            'tickets.*.user_id'           => 'required|exists:users,id',
+            'tickets.*.status'            => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'tickets.*.start_time'        => 'required|date',
+            'tickets.*.end_time'          => 'required|date|after_or_equal:tickets.*.start_time',
+            'tickets.*.pickup_start'      => 'nullable|string',
+            'tickets.*.pickup_end'        => 'nullable|string',
+            'tickets.*.backlogs_start'    => 'nullable|string',
+            'tickets.*.backlogs_end'      => 'nullable|string',
+            'tickets.*.remarks'           => 'nullable|string',
+        ]);
+
+        DB::transaction(function () use ($validated) {
+            foreach ($validated['tickets'] as $entry) {
+                $parentTicket = Ticket::findOrFail($entry['parent_id']);
+                
+                // Check for schedule conflicts (optional but recommended)
+                $newStart = \Carbon\Carbon::parse($entry['start_time']);
+                $newEnd   = \Carbon\Carbon::parse($entry['end_time']);
+                
+                // We'll proceed with creation; conflict check can be added if strictness is needed across all entries
+
+                $schedule = Schedule::create([
+                    'user_id'        => $entry['user_id'],
+                    'status'         => $entry['status'],
+                    'start_time'     => $entry['start_time'],
+                    'end_time'       => $entry['end_time'],
+                    'pickup_start'   => $entry['pickup_start'] ?? null,
+                    'pickup_end'     => $entry['pickup_end'] ?? null,
+                    'backlogs_start' => $entry['backlogs_start'] ?? null,
+                    'backlogs_end'   => $entry['backlogs_end'] ?? null,
+                    'remarks'        => $entry['remarks'] ?? null,
+                    'created_at'     => now('Asia/Manila'),
+                ]);
+
+                // Generate Ticket Key
+                $companyCode = $parentTicket->company->code;
+                $maxNumber = Ticket::withTrashed()
+                    ->where('ticket_key', 'LIKE', "{$companyCode}-%")
+                    ->selectRaw('MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num', [$companyCode])
+                    ->value('max_num');
+                $nextNumber = ($maxNumber ?? 0) + 1;
+
+                $childTicket = Ticket::create([
+                    'ticket_key'      => "{$companyCode}-{$nextNumber}",
+                    'title'           => "Child: {$parentTicket->title}",
+                    'description'     => "Child of {$parentTicket->ticket_key}. Bulk scheduled. Remarks: " . ($entry['remarks'] ?? ''),
+                    'type'            => $parentTicket->type,
+                    'status'          => 'for_schedule',
+                    'priority'        => $parentTicket->priority,
+                    'severity'        => $parentTicket->severity,
+                    'reporter_id'     => auth()->id(),
+                    'assignee_id'     => $entry['user_id'],
+                    'company_id'      => $parentTicket->company_id,
+                    'store_id'        => $parentTicket->store_id,
+                    'category_id'     => $parentTicket->category_id,
+                    'sub_category_id' => $parentTicket->sub_category_id,
+                    'item_id'         => $parentTicket->item_id,
+                    'department'      => $parentTicket->department,
+                    'parent_id'       => $parentTicket->id,
+                    'created_at'      => now('Asia/Manila'),
+                ]);
+
+                $schedule->scheduleStores()->create([
+                    'store_id'             => $parentTicket->store_id,
+                    'ticket_id'            => $childTicket->id,
+                    'start_time'           => $entry['start_time'],
+                    'end_time'             => $entry['end_time'],
+                    'grace_period_minutes' => 30,
+                    'remarks'              => $entry['remarks'],
+                ]);
+
+                // Set parent to For Schedule
+                $parentTicket->update(['status' => 'for_schedule']);
+            }
+        });
+
+        return redirect()->back()->with('success', count($validated['tickets']) . ' child tickets and schedules created successfully.');
+    }
+
+    /**
      * Split a ticket into multiple concerns.
      */
     public function split(Request $request, Ticket $ticket)
