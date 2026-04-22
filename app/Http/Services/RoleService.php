@@ -42,6 +42,7 @@ class RoleService
         }
 
         $grouped = [];
+        // Administrative modules stay grouped together in the role manager UI.
         $preferredOrder = [
             'dashboard',
             'attendance',

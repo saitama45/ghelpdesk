@@ -22,7 +22,7 @@ class RolesAndPermissionSeeder extends Seeder
             // Dashboard
             'dashboard.view' => 'View dashboard',
 
-            // Attendance
+            // Administrative - Attendance
             'attendance.view' => 'View DTR',
             'attendance.logs' => 'View attendance logs',
             'attendance.create' => 'Can log attendance',
@@ -128,7 +128,7 @@ class RolesAndPermissionSeeder extends Seeder
             'activity_templates.edit' => 'Edit activity templates',
             'activity_templates.delete' => 'Delete activity templates',
 
-            // Schedules
+            // Administrative - Schedules
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',
             'schedules.edit' => 'Edit schedules',
@@ -150,10 +150,10 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.manage_tasks' => 'Manage project tasks',
             'projects.manage_assets' => 'Manage project assets',
 
-            // Presence
+            // Administrative - Presence
             'presence.view' => 'View online users and their status history',
 
-            // KB Articles
+            // Administrative - KB Articles
             'kb_articles.view' => 'View KB articles',
             'kb_articles.create' => 'Create KB articles',
             'kb_articles.edit' => 'Edit KB articles',

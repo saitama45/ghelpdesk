@@ -1835,7 +1835,7 @@ const linkify = (text) => {
                             <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location</label>
                             <Autocomplete
                                 v-model="childForm.store_id"
                                 :options="storesWithLabel"

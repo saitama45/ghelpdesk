@@ -295,6 +295,23 @@ const getEventsForDate = (date) => {
     return eventsByDate.value.get(toDateKey(date)) ?? [];
 };
 
+const getActualTimesForDate = (event, date) => {
+    if (!event || !date) {
+        return { actual_time_in: null, actual_time_out: null };
+    }
+
+    const dateKey = toDateKey(date);
+
+    if (event.actual_times_by_date?.[dateKey]) {
+        return event.actual_times_by_date[dateKey];
+    }
+
+    return {
+        actual_time_in: event.actual_time_in && toDateKey(event.actual_time_in) === dateKey ? event.actual_time_in : null,
+        actual_time_out: event.actual_time_out && toDateKey(event.actual_time_out) === dateKey ? event.actual_time_out : null,
+    };
+};
+
 const getEventStatus = (event, date) => {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
@@ -747,6 +764,15 @@ const formatDateLong = (date) => {
                                         {{ event.status }}<span v-if="event.ticket" class="ml-1 text-gray-400">[{{ event.ticket.ticket_key }}]</span>
                                     </p>
                                     <p v-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
+                                    <div v-if="getActualTimesForDate(event, selectedDayDate).actual_time_in || getActualTimesForDate(event, selectedDayDate).actual_time_out"
+                                         class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold">
+                                        <span v-if="getActualTimesForDate(event, selectedDayDate).actual_time_in" class="text-emerald-600">
+                                            Actual In: {{ formatTime(getActualTimesForDate(event, selectedDayDate).actual_time_in) }}
+                                        </span>
+                                        <span v-if="getActualTimesForDate(event, selectedDayDate).actual_time_out" class="text-orange-500">
+                                            Actual Out: {{ formatTime(getActualTimesForDate(event, selectedDayDate).actual_time_out) }}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -491,11 +491,11 @@
                         <!-- Store Entries Repeater -->
                         <div class="space-y-2">
                             <div class="flex items-center justify-between mb-1">
-                                <label class="block text-sm font-medium text-gray-700">Store Visits</label>
+                                <label class="block text-sm font-medium text-gray-700">Location Visits</label>
                                 <button v-if="!isViewingOnly" type="button" @click="addStore"
                                         class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                                    Add Store
+                                    Add Location
                                 </button>
                             </div>
 
@@ -510,7 +510,7 @@
                                 <!-- Row 1: Store | Start | End -->
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-500 mb-1">Store</label>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Location</label>
                                         <Autocomplete
                                             v-model="entry.store_id"
                                             :options="storeSelectOptions"
@@ -574,7 +574,7 @@
                                         <label class="block text-xs font-medium text-gray-500 mb-1">Off-site Remarks / Other Activities</label>
                                         <textarea v-model="entry.remarks" rows="2" :disabled="isViewingOnly"
                                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                                  placeholder="Remarks for this store visit..."></textarea>
+                                                  placeholder="Remarks for this location visit..."></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -603,7 +603,27 @@
                             </div>
                         </div>
 
-                        <div class="flex justify-end items-center pt-4 border-t">
+                        <div class="pt-4 border-t space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Created By</div>
+                                    <div class="mt-1 font-medium text-gray-700">{{ modalAudit.createdBy }}</div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Created At</div>
+                                    <div class="mt-1 font-medium text-gray-700">{{ modalAudit.createdAt }}</div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Updated By</div>
+                                    <div class="mt-1 font-medium text-gray-700">{{ modalAudit.updatedBy }}</div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Updated At</div>
+                                    <div class="mt-1 font-medium text-gray-700">{{ modalAudit.updatedAt }}</div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end items-center">
                             <div class="flex space-x-3">
                                 <button type="button" @click="closeModal" 
                                         class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
@@ -614,6 +634,7 @@
                                     {{ isEditing ? 'Save Changes' : 'Create Schedule' }}
                                 </button>
                             </div>
+                        </div>
                         </div>
                     </form>
                 </div>
@@ -1011,6 +1032,10 @@ const canEditSchedule = ref(false)
 const currentScheduleId    = ref(null)
 const currentActualTimeIn  = ref(null)
 const currentActualTimeOut = ref(null)
+const currentCreatedBy     = ref(null)
+const currentCreatedAt     = ref(null)
+const currentUpdatedBy     = ref(null)
+const currentUpdatedAt     = ref(null)
 
 const statuses = [
     'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
@@ -1042,6 +1067,44 @@ const form = reactive({
     pickup_end: '',
     backlogs_start: '',
     backlogs_end: '',
+})
+
+const formatAuditDateTime = (value) => {
+    if (!value) return '-'
+
+    const normalizedValue = typeof value === 'string' && value.includes(' ') ? value.replace(' ', 'T') : value
+    const date = new Date(normalizedValue)
+
+    if (Number.isNaN(date.getTime())) {
+        return '-'
+    }
+
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    })
+}
+
+const modalAudit = computed(() => {
+    if (!isEditing.value) {
+        return {
+            createdBy: authUser.value?.name || '-',
+            createdAt: 'Not saved yet',
+            updatedBy: authUser.value?.name || '-',
+            updatedAt: '-',
+        }
+    }
+
+    return {
+        createdBy: currentCreatedBy.value || '-',
+        createdAt: formatAuditDateTime(currentCreatedAt.value),
+        updatedBy: currentUpdatedBy.value || '-',
+        updatedAt: formatAuditDateTime(currentUpdatedAt.value),
+    }
 })
 
 const formatTime = (isoString) => {
@@ -1112,6 +1175,10 @@ const openCreateModal = () => {
     currentScheduleId.value = null
     currentActualTimeIn.value  = null
     currentActualTimeOut.value = null
+    currentCreatedBy.value = authUser.value?.name || null
+    currentCreatedAt.value = null
+    currentUpdatedBy.value = authUser.value?.name || null
+    currentUpdatedAt.value = null
 
     form.user_id = authUser.value?.id ?? null
     form.status = 'On-site'
@@ -1164,6 +1231,10 @@ const handleEventClick = (payload) => {
     const eventActualTimes = getActualTimesForDate(event, clickedDateKey)
     currentActualTimeIn.value  = eventActualTimes.actual_time_in
     currentActualTimeOut.value = eventActualTimes.actual_time_out
+    currentCreatedBy.value = event.created_by_name || null
+    currentCreatedAt.value = event.created_at || null
+    currentUpdatedBy.value = event.updated_by_name || null
+    currentUpdatedAt.value = event.updated_at || null
 
     form.user_id = event.user_id
     form.status = event.status
@@ -1212,6 +1283,10 @@ const handleEventClick = (payload) => {
 const closeModal = () => {
     showModal.value = false;
     isViewingOnly.value = false;
+    currentCreatedBy.value = null;
+    currentCreatedAt.value = null;
+    currentUpdatedBy.value = null;
+    currentUpdatedAt.value = null;
 }
 
 const addStore = () => {

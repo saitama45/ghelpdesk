@@ -220,7 +220,7 @@ const canSeeSettings = computed(() => {
                     </div>
                 </Link>
 
-                <!-- Admin Task Section -->
+                <!-- Administrative Section -->
                 <div v-if="canSeeAdminTask" class="space-y-1 pt-2">
                     <button
                         @click="toggleMenu('adminTask')"
@@ -232,11 +232,11 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <BriefcaseIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Admin Task</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Administrative</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.adminTask" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.adminTask" class="w-4 h-4 ml-2" />
                         <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Admin Task
+                            Administrative
                         </div>
                     </button>
 

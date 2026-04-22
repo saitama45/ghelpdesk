@@ -69,7 +69,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
             : now('Asia/Manila')->endOfMonth();
 
-        $query = Schedule::with(['user', 'scheduleStores.store', 'scheduleStores.ticket.item']);
+        $query = Schedule::with(['user', 'creator', 'updater', 'scheduleStores.store', 'scheduleStores.ticket.item']);
 
         $query->where('start_time', '<=', $rangeEnd)
             ->where('end_time', '>=', $rangeStart);
@@ -140,6 +140,12 @@ class ScheduleController extends Controller implements HasMiddleware
                 'backlogs_start'  => $schedule->backlogs_start ? substr($schedule->backlogs_start, 0, 5) : null,
                 'backlogs_end'    => $schedule->backlogs_end   ? substr($schedule->backlogs_end,   0, 5) : null,
                 'remarks'         => $schedule->remarks,
+                'created_by'      => $schedule->created_by,
+                'created_by_name' => $schedule->creator?->name,
+                'updated_by'      => $schedule->updated_by,
+                'updated_by_name' => $schedule->updater?->name,
+                'created_at'      => $schedule->created_at?->toIso8601String(),
+                'updated_at'      => $schedule->updated_at?->toIso8601String(),
                 'actual_time_in'  => $actualTimeIn,
                 'actual_time_out' => $actualTimeOut,
                 'actual_times_by_date' => $actualTimesByDate,
@@ -260,12 +266,14 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         $schedule = Schedule::create([
-            'user_id'      => $request->user_id,
-            'status'       => $request->status,
-            'start_time'   => $startTime,
-            'end_time'     => $endTime,
-            'pickup_start' => $request->pickup_start,
-            'pickup_end'   => $request->pickup_end,
+            'user_id'        => $request->user_id,
+            'created_by'     => auth()->id(),
+            'updated_by'     => auth()->id(),
+            'status'         => $request->status,
+            'start_time'     => $startTime,
+            'end_time'       => $endTime,
+            'pickup_start'   => $request->pickup_start,
+            'pickup_end'     => $request->pickup_end,
             'backlogs_start' => $request->backlogs_start,
             'backlogs_end'   => $request->backlogs_end,
         ]);
@@ -337,6 +345,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
         $schedule->update([
             'user_id'        => $request->user_id,
+            'updated_by'     => auth()->id(),
             'status'         => $request->status,
             'start_time'     => $startTime,
             'end_time'       => $endTime,
