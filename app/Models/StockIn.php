@@ -15,6 +15,8 @@ class StockIn extends Model
         'asset_id',
         'quantity',
         'serial_no',
+        'barcode',
+        'qrcode',
         'warranty_months',
         'warranty_date',
         'eol_months',
@@ -28,6 +30,8 @@ class StockIn extends Model
         'receive_date' => 'date',
         'warranty_date' => 'date',
         'eol_date' => 'date',
+        'warranty_months' => 'integer',
+        'eol_months' => 'integer',
         'cost' => 'decimal:2',
         'price' => 'decimal:2',
     ];

@@ -80,7 +80,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
+    if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
     if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
@@ -113,6 +113,7 @@ const canSeeServices = computed(() => {
     return hasPermission('tickets.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
+           hasPermission('stock_ins.view') ||
            visibleDynamicForms.value.length > 0;
 });
 
@@ -300,7 +301,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) && !openMenus.services
+                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) && !openMenus.services
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
