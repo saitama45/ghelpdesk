@@ -346,6 +346,17 @@ const canSeeSettings = computed(() => {
                             <span>SAP Requests</span>
                         </Link>
 
+                        <Link
+                            v-if="hasPermission('stock_ins.view')"
+                            :href="route('stock-ins.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Stock In</span>
+                        </Link>
+
                         <!-- Nested Dynamic Forms -->
                         <Link
                             v-for="form in visibleDynamicForms"

@@ -400,6 +400,7 @@ const landingPageOptions = [
             { label: 'Tickets', value: 'tickets.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
             { label: 'SAP Requests', value: 'sap-requests.index' },
+            { label: 'Stock In', value: 'stock-ins.index' },
         ]
     },
     {
@@ -572,7 +573,7 @@ const activeTab = ref('')
 const dynamicForms = computed(() => usePage().props.dynamicForms || []);
 
 const permissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Pos_requests', 'Sap_requests'];
+    const servicesCategories = ['Tickets', 'Pos_requests', 'Sap_requests', 'Stock_in'];
 
     // Add dynamic form names exactly as the backend RoleService does
     (dynamicForms.value || []).forEach(form => {

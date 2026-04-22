@@ -111,6 +111,12 @@ class RolesAndPermissionSeeder extends Seeder
             'sap_requests.delete' => 'Delete SAP requests',
             'sap_requests.approve' => 'Approve SAP requests',
 
+            // Stock In
+            'stock_ins.view' => 'View Stock In',
+            'stock_ins.create' => 'Create Stock In',
+            'stock_ins.edit' => 'Edit Stock In',
+            'stock_ins.delete' => 'Delete Stock In',
+
             // Stores
             'stores.view' => 'View stores',
             'stores.create' => 'Create stores',
@@ -197,6 +203,10 @@ class RolesAndPermissionSeeder extends Seeder
             'sap_requests.view',
             'sap_requests.create',
             'sap_requests.approve',
+            'stock_ins.view',
+            'stock_ins.create',
+            'stock_ins.edit',
+            'stock_ins.delete',
             'stores.view',
             'schedules.view',
             'canned_messages.view',

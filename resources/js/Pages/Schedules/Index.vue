@@ -334,11 +334,12 @@
                     <div class="space-y-4">
                         <!-- Format description -->
                         <div class="rounded-lg bg-blue-50 border border-blue-100 p-3 text-xs text-blue-800 space-y-1">
-                            <p class="font-bold">Format: wide (one row per user, one column per date)</p>
+                            <p class="font-bold">Format: wide (one row per user, three columns per date)</p>
                             <ul class="list-disc list-inside space-y-0.5 text-blue-700">
                                 <li><span class="font-semibold">user_id</span> — numeric user ID (column A)</li>
                                 <li><span class="font-semibold">user_name</span> — reference only, not imported (column B)</li>
-                                <li><span class="font-semibold">YYYY-MM-DD columns</span> — one per day; set status or leave <span class="font-semibold">NA</span> / blank for no schedule</li>
+                                <li><span class="font-semibold">Per Date Triples</span> — set <span class="font-semibold">Status</span>, <span class="font-semibold">Store</span> (optional), and <span class="font-semibold">Remarks</span> (optional)</li>
+                                <li>Leave status <span class="font-semibold">NA</span> or blank for no schedule</li>
                             </ul>
                             <p class="text-blue-600 mt-1">Default schedule time: <span class="font-semibold">07:00 – 17:00</span></p>
                         </div>

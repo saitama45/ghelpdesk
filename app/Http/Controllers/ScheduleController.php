@@ -522,6 +522,7 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         $users    = User::active()->orderBy('name')->get(['id', 'name']);
+        $stores   = Store::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
         $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
 
         $spreadsheet = new Spreadsheet();
@@ -530,34 +531,78 @@ class ScheduleController extends Controller implements HasMiddleware
         $listsSheet = $spreadsheet->createSheet(1);
         $listsSheet->setTitle('Lists');
         $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+        
+        // Status List
         $listsSheet->setCellValue('A1', 'Status');
         foreach ($statuses as $i => $s) {
             $listsSheet->setCellValue('A' . ($i + 2), $s);
         }
         $listsSheet->setCellValue('A' . (count($statuses) + 2), 'NA');
 
+        // Store List
+        $listsSheet->setCellValue('B1', 'Stores');
+        $firstStoreValue = '';
+        foreach ($stores as $i => $s) {
+            $val = $s->code . ' - ' . $s->name;
+            if ($i === 0) $firstStoreValue = $val;
+            $listsSheet->setCellValue('B' . ($i + 2), $val);
+        }
+
         // -- Import Template sheet ---------------------------------------
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
-        // Layout: A=user_id, B=user_name, then per date: [YYYY-MM-DD | YYYY-MM-DD_remarks] pairs
+        // Layout: A=user_id, B=user_name, then per date: [YYYY-MM-DD | YYYY-MM-DD_store | YYYY-MM-DD_remarks] triples
         $sheet->setCellValue('A1', 'user_id');
         $sheet->setCellValue('B1', 'user_name');
 
         foreach ($dates as $i => $date) {
-            // Each date occupies 2 columns: status then remarks
-            $statusColIdx  = ($i * 2) + 3;                // col C, E, G, ...
-            $remarksColIdx = ($i * 2) + 4;                // col D, F, H, ...
+            // Each date occupies 3 columns: status, store, then remarks
+            $statusColIdx  = ($i * 3) + 3;                // col C, F, I, ...
+            $storeColIdx   = ($i * 3) + 4;                // col D, G, J, ...
+            $remarksColIdx = ($i * 3) + 5;                // col E, H, K, ...
+            
             $statusCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
+            $storeCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($storeColIdx);
             $remarksCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($remarksColIdx);
+            
             $sheet->setCellValue("{$statusCol}1",  $date);
+            $sheet->setCellValue("{$storeCol}1",   "{$date}_store");
             $sheet->setCellValue("{$remarksCol}1", "{$date}_remarks");
         }
 
+        // Add Sample Row at index 2 (row 2)
+        $sheet->setCellValue('A2', '0');
+        $sheet->setCellValue('B2', 'SAMPLE ROW (DELETE OR OVERWRITE)');
+        foreach ($dates as $i => $date) {
+            if ($i >= count($statuses)) break;
+            
+            $status = $statuses[$i];
+            $statusColIdx  = ($i * 3) + 3;
+            $storeColIdx   = ($i * 3) + 4;
+            $remarksColIdx = ($i * 3) + 5;
+            
+            $sCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
+            $stCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($storeColIdx);
+            $rCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($remarksColIdx);
+            
+            $sheet->setCellValue("{$sCol}2", $status);
+            $sheet->setCellValue("{$rCol}2", "Sample {$status} entry");
+            
+            if (in_array($status, ['On-site', 'Off-site']) && $firstStoreValue) {
+                $sheet->setCellValue("{$stCol}2", $firstStoreValue);
+            }
+        }
+        // Grey out the sample row
+        $sheet->getStyle('A2:B2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFCE4D6');
+        $totalSampleCols = 2 + (min(count($dates), count($statuses)) * 3);
+        $lastSampleColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalSampleCols);
+        $sheet->getStyle("C2:{$lastSampleColLetter}2")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFCE4D6');
+
         // Fill user rows
-        $lastUserRow = count($users) + 1;
+        $lastUserRow = count($users) + 2;
         foreach ($users as $rowIdx => $user) {
-            $row = $rowIdx + 2;
+            $row = $rowIdx + 3;
             $sheet->setCellValue("A{$row}", $user->id);
             $sheet->setCellValue("B{$row}", $user->name);
         }
@@ -570,37 +615,53 @@ class ScheduleController extends Controller implements HasMiddleware
             ->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('FF9CA3AF'));
 
         // Header styling across all columns
-        $totalCols     = 2 + (count($dates) * 2);
+        $totalCols     = 2 + (count($dates) * 3);
         $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols);
         $sheet->getStyle("A1:{$lastColLetter}1")->getFont()->setBold(true);
         $sheet->getStyle("A1:{$lastColLetter}1")->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
-        // Status dropdown for every status column; remarks columns stay free-text
+        // Dropdowns
         $statusFormula   = 'Lists!$A$2:$A$' . (count($statuses) + 2);
+        $storeFormula    = 'Lists!$B$2:$B$' . (count($stores) + 1);
         $dropdownLastRow = max($lastUserRow, 2);
 
         foreach ($dates as $i => $date) {
-            $statusColIdx = ($i * 2) + 3;
-            $col   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
-            $sqref = "{$col}2:{$col}{$dropdownLastRow}";
-            $v = $sheet->getCell("{$col}2")->getDataValidation();
-            $v->setType(DataValidation::TYPE_LIST)
+            // Status Dropdown
+            $statusColIdx = ($i * 3) + 3;
+            $sCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
+            $sSqref = "{$sCol}2:{$sCol}{$dropdownLastRow}";
+            $sv = $sheet->getCell("{$sCol}2")->getDataValidation();
+            $sv->setType(DataValidation::TYPE_LIST)
               ->setErrorStyle(DataValidation::STYLE_INFORMATION)
               ->setAllowBlank(true)
               ->setShowDropDown(false)
               ->setFormula1($statusFormula)
-              ->setSqref($sqref);
+              ->setSqref($sSqref);
+
+            // Store Dropdown
+            $storeColIdx = ($i * 3) + 4;
+            $stCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($storeColIdx);
+            $stSqref = "{$stCol}2:{$stCol}{$dropdownLastRow}";
+            $stv = $sheet->getCell("{$stCol}2")->getDataValidation();
+            $stv->setType(DataValidation::TYPE_LIST)
+              ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+              ->setAllowBlank(true)
+              ->setShowDropDown(false)
+              ->setFormula1($storeFormula)
+              ->setSqref($stSqref);
         }
 
         // Column widths
         $sheet->getColumnDimension('A')->setWidth(10);
         $sheet->getColumnDimension('B')->setAutoSize(true);
         foreach ($dates as $i => $date) {
-            $sCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 2) + 3);
-            $rCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 2) + 4);
+            $sCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 3);
+            $stCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 4);
+            $rCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 5);
             $sheet->getColumnDimension($sCol)->setWidth(12);
+            $sheet->getColumnDimension($stCol)->setWidth(25);
             $sheet->getColumnDimension($rCol)->setWidth(18);
         }
 
@@ -649,13 +710,20 @@ class ScheduleController extends Controller implements HasMiddleware
 
         // Build lookup: user_id (int) → exists
         $validUserIds = User::pluck('id')->flip()->toArray(); // [id => 0]
+        
+        // Build Store Lookup (Code or "Code - Name")
+        $storeLookup = [];
+        foreach (Store::where('is_active', true)->get(['id', 'code', 'name']) as $s) {
+            $storeLookup[strtoupper($s->code)] = $s->id;
+            $storeLookup[strtoupper($s->code . ' - ' . $s->name)] = $s->id;
+        }
 
         $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
 
         // Build date-column map from header:
-        //   dateStr => [ 'statusIdx' => int, 'remarksIdx' => int|null ]
+        //   dateStr => [ 'statusIdx' => int, 'storeIdx' => int|null, 'remarksIdx' => int|null ]
         // Header format: col 0 = user_id, col 1 = user_name,
-        //   then pairs: YYYY-MM-DD  |  YYYY-MM-DD_remarks  |  ...
+        //   then pairs: YYYY-MM-DD  |  YYYY-MM-DD_store | YYYY-MM-DD_remarks  |  ...
         $dateCols = [];
         foreach ($header as $idx => $h) {
             if ($idx < 2) continue;
@@ -664,9 +732,14 @@ class ScheduleController extends Controller implements HasMiddleware
                 if (isset($dateCols[$m[1]])) {
                     $dateCols[$m[1]]['remarksIdx'] = $idx;
                 }
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})_store$/', $h, $m)) {
+                // Store column — attach to the already-registered date entry
+                if (isset($dateCols[$m[1]])) {
+                    $dateCols[$m[1]]['storeIdx'] = $idx;
+                }
             } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $h)) {
                 // Status column for this date
-                $dateCols[$h] = ['statusIdx' => $idx, 'remarksIdx' => null];
+                $dateCols[$h] = ['statusIdx' => $idx, 'storeIdx' => null, 'remarksIdx' => null];
             }
         }
 
@@ -701,6 +774,9 @@ class ScheduleController extends Controller implements HasMiddleware
             // Process each date pair
             foreach ($dateCols as $dateStr => $cols) {
                 $rawValue   = isset($line[$cols['statusIdx']]) ? trim((string) $line[$cols['statusIdx']]) : '';
+                $rawStore   = ($cols['storeIdx'] !== null && isset($line[$cols['storeIdx']]))
+                    ? trim((string) $line[$cols['storeIdx']])
+                    : '';
                 $rawRemarks = ($cols['remarksIdx'] !== null && isset($line[$cols['remarksIdx']]))
                     ? trim((string) $line[$cols['remarksIdx']])
                     : '';
@@ -715,6 +791,17 @@ class ScheduleController extends Controller implements HasMiddleware
                     continue;
                 }
 
+                // Resolve Store if provided
+                $resolvedStoreId = null;
+                if ($rawStore !== '') {
+                    $storeKey = strtoupper($rawStore);
+                    if (isset($storeLookup[$storeKey])) {
+                        $resolvedStoreId = $storeLookup[$storeKey];
+                    } else {
+                        $errors[] = "Row {$rowNum}, {$dateStr}: Store '{$rawStore}' not recognized. Proceeding without store link.";
+                    }
+                }
+
                 $importKey = $userId . '|' . $dateStr;
                 if (isset($seenImportDates[$importKey])) {
                     $errors[] = "Row {$rowNum}, {$dateStr}: duplicate import entry for user ID {$userId}, skipped.";
@@ -726,6 +813,7 @@ class ScheduleController extends Controller implements HasMiddleware
                     'user_id' => $userId,
                     'date' => $dateStr,
                     'status' => $rawValue,
+                    'store_id' => $resolvedStoreId,
                     'remarks' => $rawRemarks ?: null,
                     'row_num' => $rowNum,
                 ];
@@ -804,6 +892,7 @@ class ScheduleController extends Controller implements HasMiddleware
                     $onSiteDateKeys[$candidate['user_id'] . '|' . $candidate['date']] = [
                         'start_time' => $startTime->toDateTimeString(),
                         'end_time'   => $endTime->toDateTimeString(),
+                        'store_id'   => $candidate['store_id'],
                         'remarks'    => $candidate['remarks'],
                     ];
                 }
@@ -850,7 +939,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
                     $storeRows[] = [
                         'schedule_id'          => $sched->id,
-                        'store_id'             => null,
+                        'store_id'             => $times['store_id'],
                         'start_time'           => $times['start_time'],
                         'end_time'             => $times['end_time'],
                         'grace_period_minutes' => 30,

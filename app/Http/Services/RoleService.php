@@ -60,6 +60,7 @@ class RoleService
             'form_builder',
             'pos_requests',
             'sap_requests',
+            'stock in',
             'stores',
             'vendors',
             'activity_templates',
@@ -81,6 +82,8 @@ class RoleService
             // We use the raw category for keys that are special like 'Pos_requests'
             if ($category === 'kb_articles') {
                 $categoryDisplay = 'KB Articles';
+            } elseif ($category === 'stock_ins') {
+                $categoryDisplay = 'Stock In';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 
