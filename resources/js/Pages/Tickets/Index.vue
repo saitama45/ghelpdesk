@@ -107,6 +107,7 @@ const defaultCompanyId = computed(() => {
 
 const filterStatus = ref(props.filters?.status || (isUserRole.value ? 'all' : 'open'));
 const filterSubUnit = ref(props.filters?.sub_unit || '');
+const filterAssignee = ref(props.filters?.assignee_id || '');
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 
@@ -123,9 +124,28 @@ const filterOptions = [
     { value: 'unassigned', label: 'Unassigned' },
 ];
 
+const statusOptions = computed(() => {
+    return filterOptions.map(opt => ({ id: opt.value, name: opt.label }));
+});
+
+const subUnitOptions = computed(() => {
+    return [
+        { id: '', name: 'All Sub-Units' },
+        ...(props.sub_units || []).map(u => ({ id: u, name: u }))
+    ];
+});
+
+const assigneeOptions = computed(() => {
+    return [
+        { id: '', name: 'All Assignees' },
+        ...(props.staff || []).map(s => ({ id: s.id, name: s.name }))
+    ];
+});
+
 const pagination = usePagination(props.tickets, 'tickets.index', () => ({ 
     status: filterStatus.value,
     sub_unit: filterSubUnit.value,
+    assignee_id: filterAssignee.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
 }));
@@ -138,6 +158,7 @@ const applyFilter = () => {
     router.get(route('tickets.index'), {
         status: filterStatus.value,
         sub_unit: filterSubUnit.value,
+        assignee_id: filterAssignee.value,
         start_date: filterStartDate.value,
         end_date: filterEndDate.value,
         search: pagination.search.value
@@ -153,6 +174,7 @@ const applyFilter = () => {
 const clearFilters = () => {
     filterStatus.value = isUserRole.value ? 'all' : 'open';
     filterSubUnit.value = '';
+    filterAssignee.value = '';
     filterStartDate.value = '';
     filterEndDate.value = '';
     pagination.search.value = '';
@@ -710,21 +732,38 @@ const formatItemName = (item) => {
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap items-end gap-4">
                 <div class="flex flex-col gap-1 w-48">
                     <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</label>
-                    <select v-model="filterStatus" @change="applyFilter"
-                            class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                        <option v-for="option in filterOptions" :key="option.value" :value="option.value">
-                            {{ option.label }}
-                        </option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterStatus"
+                        :options="statusOptions"
+                        label-key="name"
+                        value-key="id"
+                        placeholder="Filter by status..."
+                        @update:modelValue="applyFilter"
+                    />
                 </div>
 
-                <div v-if="subUnits.length > 0" class="flex flex-col gap-1 w-48">
+                <div v-if="subUnitOptions.length > 1" class="flex flex-col gap-1 w-48">
                     <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sub-Unit</label>
-                    <select v-model="filterSubUnit" @change="applyFilter"
-                            class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                        <option value="">All Sub-Units</option>
-                        <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterSubUnit"
+                        :options="subUnitOptions"
+                        label-key="name"
+                        value-key="id"
+                        placeholder="Filter by sub-unit..."
+                        @update:modelValue="applyFilter"
+                    />
+                </div>
+
+                <div class="flex flex-col gap-1 w-48">
+                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Assignee</label>
+                    <Autocomplete
+                        v-model="filterAssignee"
+                        :options="assigneeOptions"
+                        label-key="name"
+                        value-key="id"
+                        placeholder="Filter by assignee..."
+                        @update:modelValue="applyFilter"
+                    />
                 </div>
 
                 <div class="flex flex-col gap-1">
@@ -1220,7 +1259,7 @@ const formatItemName = (item) => {
                             </div>
 
                             <!-- Additional Times (Collapsible or always visible) -->
-                            <div v-if="ticketForm.status === 'On-site' || ticketForm.status === 'WFH'" class="p-4 bg-white rounded-lg border border-gray-100 space-y-4 shadow-sm">
+                            <div class="p-4 bg-white rounded-lg border border-gray-100 space-y-4 shadow-sm">
                                 <h4 class="text-[10px] font-black text-teal-600 uppercase tracking-widest">Additional Activity Windows</h4>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div class="space-y-2">

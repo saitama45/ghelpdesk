@@ -1863,7 +1863,7 @@ const linkify = (text) => {
                         </div>
                     </div>
 
-                    <div v-if="childForm.status === 'On-site' || childForm.status === 'WFH'" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
+                    <div class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
                         <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Times</h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-2">

@@ -104,6 +104,11 @@ class TicketController extends Controller
             });
         }
 
+        // Apply Assignee filter
+        if ($request->filled('assignee_id')) {
+            $query->where('assignee_id', $request->assignee_id);
+        }
+
         // Apply Date Range filter
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
@@ -155,6 +160,7 @@ class TicketController extends Controller
                 'status' => $statusFilter,
                 'search' => $request->search,
                 'sub_unit' => $request->sub_unit,
+                'assignee_id' => $request->assignee_id,
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
             ],
