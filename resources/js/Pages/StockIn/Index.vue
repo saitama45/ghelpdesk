@@ -19,7 +19,7 @@
                 >
                     <template #actions>
                         <button 
-                            v-if="permissions.create"
+                            v-if="hasPermission('stock_ins.create')"
                             @click="openCreateModal" 
                             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                         >
@@ -75,14 +75,34 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
+                                    <button
+                                        v-if="hasPermission('stock_ins.post') && item.status !== 'Posted'"
+                                        @click="postHeaderItem(item)"
+                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
+                                        title="Post"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </button>
                                     <button 
-                                        v-if="permissions.edit" 
+                                        v-if="hasPermission('stock_ins.edit')" 
                                         @click="editHeaderItem(item)" 
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="hasPermission('stock_ins.delete')"
+                                        @click="deleteItem(item)"
+                                        class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
+                                        title="Delete"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
                                 </div>
@@ -98,100 +118,106 @@
             <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-900 mb-4">{{ isEditing ? 'Edit Stock In' : 'Add Stock In' }}</h3>
                 <form @submit.prevent="submitForm()" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Receive Date</label>
-                            <input type="date" v-model="form.receive_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <h4 class="text-sm font-semibold text-gray-900">Header Details</h4>
+                            <p class="text-xs text-gray-500">Capture delivery reference, source, and receiver information before adding unit-level details.</p>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">DR No</label>
-                            <input type="text" v-model="form.dr_no" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">DR Date</label>
-                            <input type="date" v-model="form.dr_date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Vendor</label>
-                            <Autocomplete
-                                v-model="form.vendor"
-                                :options="vendorOptions"
-                                label-key="name"
-                                value-key="value"
-                                placeholder="Select Vendor"
-                            />
-                        </div>
-                    </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Origin Location</label>
-                            <Autocomplete
-                                v-model="form.origin_location"
-                                :options="storeOptions"
-                                label-key="name"
-                                value-key="value"
-                                placeholder="Select Origin Store"
-                            />
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Receive Date</label>
+                                <input type="date" v-model="form.receive_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">DR No</label>
+                                <input type="text" v-model="form.dr_no" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">DR Date</label>
+                                <input type="date" v-model="form.dr_date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Received By</label>
+                                <input type="text" v-model="form.received_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Received by</label>
-                            <input type="text" v-model="form.received_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Posted by</label>
-                            <input type="text" v-model="form.posted_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        </div>
-                    </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Brand</label>
-                            <Autocomplete
-                                v-model="form.brand"
-                                :options="brandOptions"
-                                label-key="name"
-                                value-key="value"
-                                placeholder="Select Brand"
-                                @update:modelValue="onBrandChange"
-                            />
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Vendor</label>
+                                <Autocomplete
+                                    v-model="form.vendor"
+                                    :options="vendorOptions"
+                                    label-key="name"
+                                    value-key="value"
+                                    placeholder="Select Vendor"
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Origin Location</label>
+                                <Autocomplete
+                                    v-model="form.origin_location"
+                                    :options="storeOptions"
+                                    label-key="name"
+                                    value-key="value"
+                                    placeholder="Select Origin Store"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Model</label>
-                            <Autocomplete
-                                v-model="form.model"
-                                :options="modelOptions"
-                                label-key="name"
-                                value-key="value"
-                                placeholder="Select Model"
-                                :disabled="!form.brand"
-                                @update:modelValue="onModelChange"
-                            />
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Brand</label>
+                                <Autocomplete
+                                    v-model="form.brand"
+                                    :options="brandOptions"
+                                    label-key="name"
+                                    value-key="value"
+                                    placeholder="Select Brand"
+                                    @update:modelValue="onBrandChange"
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Model</label>
+                                <Autocomplete
+                                    v-model="form.model"
+                                    :options="modelOptions"
+                                    label-key="name"
+                                    value-key="value"
+                                    placeholder="Select Model"
+                                    :disabled="!form.brand"
+                                    @update:modelValue="onModelChange"
+                                />
+                            </div>
+                            <div class="xl:col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">Asset Item</label>
+                                <Autocomplete
+                                    v-model="form.asset_id"
+                                    :options="assetOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select Asset Item"
+                                    :disabled="!form.brand || !form.model"
+                                    @update:modelValue="onAssetChange"
+                                />
+                            </div>
                         </div>
-                        <div class="md:col-span-2">
-                            <label class="block text-sm font-medium text-gray-700">Asset Item</label>
-                            <Autocomplete
-                                v-model="form.asset_id"
-                                :options="assetOptions"
-                                label-key="name"
-                                value-key="id"
-                                placeholder="Select Asset Item"
-                                :disabled="!form.brand || !form.model"
-                                @update:modelValue="onAssetChange"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Qty</label>
-                            <input
-                                type="number"
-                                v-model.number="form.quantity"
-                                required
-                                min="1"
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            >
-                            <p class="mt-1 text-[11px] text-gray-500">
-                                {{ isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.' }}
-                            </p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Qty</label>
+                                <input
+                                    type="number"
+                                    v-model.number="form.quantity"
+                                    required
+                                    min="1"
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                >
+                                <p class="mt-1 text-[11px] text-gray-500">
+                                    {{ isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.' }}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -295,14 +321,6 @@
 
                     <div class="flex justify-end space-x-3 mt-6">
                         <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-                        <button
-                            v-if="permissions.post"
-                            type="button"
-                            @click="submitForm('Posted')"
-                            class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-md shadow-sm hover:bg-emerald-700"
-                        >
-                            Post
-                        </button>
                         <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700">
                             {{ isEditing ? 'Update' : 'Save' }}
                         </button>
@@ -368,7 +386,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { router } from '@inertiajs/vue3'
+import { router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
@@ -377,18 +395,21 @@ import { PlusIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
+import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
     stockIns: Object,
     assets: Array,
     stores: Array,
-    vendors: Array,
-    permissions: Object
+    vendors: Array
 })
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const pagination = usePagination(props.stockIns, 'stock-ins.index')
+const { hasPermission } = usePermission()
+const page = usePage()
+const authUserName = computed(() => page.props.auth?.user?.name || '')
 
 const normalizedAssets = computed(() => {
     return (props.assets || []).map(asset => ({
@@ -458,8 +479,7 @@ const form = reactive({
     dr_date: getToday(),
     vendor: '',
     origin_location: '',
-    received_by: '',
-    posted_by: '',
+    received_by: authUserName.value,
     status: 'For Posting',
     brand: '',
     model: '',
@@ -597,26 +617,61 @@ const generateQrcode = (index) => {
         `Description: ${asset.description || 'N/A'}`,
         `Brand: ${asset.brand || 'N/A'}`,
         `Model: ${asset.model || 'N/A'}`,
+        `Vendor: ${form.vendor || 'N/A'}`,
+        `Received Date: ${formatDateNumeric(form.receive_date)}`,
+        `DR No: ${form.dr_no || 'N/A'}`,
+        `DR Date: ${formatDateNumeric(form.dr_date)}`,
+        `Received By: ${form.received_by || 'N/A'}`,
         `Serial No: ${entry?.serial_no || 'N/A'}`,
         `Barcode: ${entry?.barcode || 'N/A'}`,
-        `Warranty: ${computedWarrantyDate(entry)}`,
-        `EOL: ${computedEolDate(entry)}`,
-        `Destination: ${entry?.destination_location || 'N/A'}`
+        `Destination Location: ${entry?.destination_location || 'N/A'}`,
+        `Warranty Until: ${formatDateNumeric(addMonths(form.receive_date, entry?.warranty_months))}`,
+        `EOL: ${formatDateNumeric(addMonths(form.receive_date, entry?.eol_months))}`
     ]
     
     entry.qrcode = details.join('\n')
 }
 
+const parseDateOnly = (value) => {
+    if (!value) return null
+    if (value instanceof Date) return new Date(value.getTime())
+
+    const normalized = String(value).trim()
+    const datePart = normalized.includes('T') ? normalized.split('T')[0] : normalized
+    const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+
+    if (match) {
+        const [, year, month, day] = match
+        return new Date(Number(year), Number(month) - 1, Number(day))
+    }
+
+    const parsed = new Date(normalized)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
 const addMonths = (dateStr, months) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr);
-    date.setMonth(date.getMonth() + parseInt(months));
-    return date;
+    const date = parseDateOnly(dateStr)
+    if (!date) return null
+
+    const result = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    result.setMonth(result.getMonth() + parseInt(months || 0, 10))
+    return result
 }
 
 const formatDate = (date) => {
-    if (!date) return '-';
-    return new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(new Date(date));
+    const parsed = parseDateOnly(date)
+    if (!parsed) return '-';
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).format(parsed);
+}
+
+const formatDateNumeric = (date) => {
+    const parsed = parseDateOnly(date)
+    if (!parsed) return 'N/A';
+    return new Intl.DateTimeFormat('en-US', {
+        month: '2-digit',
+        day: '2-digit',
+        year: 'numeric',
+    }).format(parsed);
 }
 
 const computedWarrantyDate = (entry) => {
@@ -636,8 +691,7 @@ const resetForm = () => {
         dr_date: getToday(),
         vendor: '',
         origin_location: '',
-        received_by: '',
-        posted_by: '',
+        received_by: authUserName.value,
         status: 'For Posting',
         brand: '',
         model: '',
@@ -669,8 +723,7 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
         dr_date: toDateKey(item.dr_date),
         vendor: item.vendor || '',
         origin_location: normalizeLocationValue(item.origin_location),
-        received_by: item.received_by || '',
-        posted_by: item.posted_by || '',
+        received_by: item.received_by || authUserName.value,
         status: item.status || 'For Posting',
         brand: asset?.brand || '',
         model: asset?.model || '',
@@ -694,6 +747,24 @@ const closeModal = () => {
     showModal.value = false
 }
 
+const postHeaderItem = (item) => {
+    confirm({
+        title: 'Post Stock In',
+        message: `Post stock-in header ${item.asset?.item_code || ''}${item.dr_no ? ` with DR No. ${item.dr_no}` : ''}?`,
+        onConfirm: () => {
+            router.post(route('stock-ins.post', item.id), {}, {
+                onSuccess: () => {
+                    showSuccess('Stock In posted successfully')
+                },
+                onError: (errors) => {
+                    const errorMessage = Object.values(errors).flat().join(', ') || 'Unable to post stock in'
+                    showError(errorMessage)
+                }
+            })
+        }
+    })
+}
+
 const submitForm = (statusOverride = form.status || 'For Posting') => {
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
     const method = isEditing.value ? 'put' : 'post'
@@ -704,7 +775,6 @@ const submitForm = (statusOverride = form.status || 'For Posting') => {
         vendor: form.vendor,
         origin_location: form.origin_location || null,
         received_by: form.received_by,
-        posted_by: form.posted_by,
         status: statusOverride,
         brand: form.brand,
         model: form.model,

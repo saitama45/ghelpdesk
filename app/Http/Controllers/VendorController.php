@@ -46,6 +46,7 @@ class VendorController extends Controller implements HasMiddleware
         $request->validate([
             'code'           => 'nullable|string|max:50',
             'name'           => 'required|string|max:255|unique:vendors,name',
+            'vendor_type'    => 'required|string|in:Supplier,Service Provider',
             'contact_person' => 'nullable|string|max:255',
             'email'          => 'nullable|email|max:255',
             'phone'          => 'nullable|string|max:50',
@@ -55,6 +56,7 @@ class VendorController extends Controller implements HasMiddleware
         Vendor::create([
             'code'           => $request->code,
             'name'           => $request->name,
+            'vendor_type'    => $request->vendor_type,
             'contact_person' => $request->contact_person,
             'email'          => $request->email,
             'phone'          => $request->phone,
@@ -70,6 +72,7 @@ class VendorController extends Controller implements HasMiddleware
         $request->validate([
             'code'           => 'nullable|string|max:50',
             'name'           => 'required|string|max:255|unique:vendors,name,' . $vendor->id,
+            'vendor_type'    => 'required|string|in:Supplier,Service Provider',
             'contact_person' => 'nullable|string|max:255',
             'email'          => 'nullable|email|max:255',
             'phone'          => 'nullable|string|max:50',
@@ -80,6 +83,7 @@ class VendorController extends Controller implements HasMiddleware
         $vendor->update([
             'code'           => $request->code,
             'name'           => $request->name,
+            'vendor_type'    => $request->vendor_type,
             'contact_person' => $request->contact_person,
             'email'          => $request->email,
             'phone'          => $request->phone,

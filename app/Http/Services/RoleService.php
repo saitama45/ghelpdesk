@@ -4,9 +4,12 @@ namespace App\Http\Services;
 
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
 
 class RoleService
 {
+    protected const ACTION_ORDER = ['view', 'show', 'create', 'edit', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
+
     /**
      * Get all roles with their permissions
      */
@@ -98,6 +101,21 @@ class RoleService
             ];
         }
 
+        foreach ($grouped as &$categoryPermissions) {
+            usort($categoryPermissions, function ($a, $b) {
+                $aAction = explode('.', $a->name)[1] ?? '';
+                $bAction = explode('.', $b->name)[1] ?? '';
+                $aIndex = array_search($aAction, self::ACTION_ORDER, true);
+                $bIndex = array_search($bAction, self::ACTION_ORDER, true);
+
+                $aIndex = $aIndex === false ? PHP_INT_MAX : $aIndex;
+                $bIndex = $bIndex === false ? PHP_INT_MAX : $bIndex;
+
+                return $aIndex <=> $bIndex ?: strcmp($a->name, $b->name);
+            });
+        }
+        unset($categoryPermissions);
+
         uksort($grouped, function ($a, $b) use ($preferredOrder) {
             $aIndex = array_search(strtolower($a), $preferredOrder, true);
             $bIndex = array_search(strtolower($b), $preferredOrder, true);
@@ -128,6 +146,8 @@ class RoleService
             }
             $role->givePermissionTo($permissions);
         }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
         
         return $role;
     }
@@ -145,6 +165,7 @@ class RoleService
         }
         
         $role->syncPermissions($permissions);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
         
         return $role;
     }

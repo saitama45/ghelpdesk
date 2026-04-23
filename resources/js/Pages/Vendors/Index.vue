@@ -4,7 +4,7 @@
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 <DataTable
                     title="Vendor Management"
-                    subtitle="Manage vendor and supplier records"
+                    subtitle="Manage supplier and service provider records"
                     search-placeholder="Search by name, code, contact person or email..."
                     empty-message="No vendors found. Create your first vendor to get started."
                     :search="pagination.search.value"
@@ -34,7 +34,7 @@
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type / Contact</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -52,16 +52,17 @@
                                     </div>
                                     <div class="ml-4">
                                         <div class="text-sm font-medium text-gray-900">{{ vendor.name }}</div>
-                                        <div class="text-xs text-gray-500">{{ vendor.code || '—' }}</div>
+                                        <div class="text-xs text-gray-500">{{ vendor.code || '-' }}</div>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900">{{ vendor.contact_person || '—' }}</div>
+                                <div class="text-xs font-semibold uppercase tracking-wider text-emerald-700">{{ vendor.vendor_type || 'Supplier' }}</div>
+                                <div class="text-sm text-gray-900 mt-1">{{ vendor.contact_person || '-' }}</div>
                                 <div class="text-xs text-gray-500">{{ vendor.email || '' }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                {{ vendor.phone || '—' }}
+                                {{ vendor.phone || '-' }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span :class="vendor.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
@@ -99,7 +100,6 @@
             </div>
         </div>
 
-        <!-- Create/Edit Modal -->
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
@@ -128,6 +128,15 @@
                                 <input v-model="form.name" type="text" required maxlength="255"
                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Vendor Type <span class="text-red-500">*</span></label>
+                            <select v-model="form.vendor_type"
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <option value="Supplier">Supplier</option>
+                                <option value="Service Provider">Service Provider</option>
+                            </select>
                         </div>
 
                         <div>
@@ -205,6 +214,7 @@ const currentVendor = ref(null)
 const form = reactive({
     code: '',
     name: '',
+    vendor_type: 'Supplier',
     contact_person: '',
     email: '',
     phone: '',
@@ -225,6 +235,7 @@ const openCreateModal = () => {
     currentVendor.value = null
     form.code = ''
     form.name = ''
+    form.vendor_type = 'Supplier'
     form.contact_person = ''
     form.email = ''
     form.phone = ''
@@ -238,6 +249,7 @@ const editVendor = (vendor) => {
     currentVendor.value = vendor
     form.code = vendor.code || ''
     form.name = vendor.name
+    form.vendor_type = vendor.vendor_type || 'Supplier'
     form.contact_person = vendor.contact_person || ''
     form.email = vendor.email || ''
     form.phone = vendor.phone || ''

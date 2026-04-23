@@ -729,7 +729,7 @@ const isCategorySelected = (permissionsList) => {
 }
 
 const sortPermissions = (permissions) => {
-    const order = ['view', 'show', 'create', 'edit', 'delete', 'approve', 'canned_messages', 'internal_notes'];
+    const order = ['view', 'show', 'create', 'edit', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
     return permissions.sort((a, b) => {
         const aAction = a.name.split('.')[1];
         const bAction = b.name.split('.')[1];

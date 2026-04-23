@@ -7,11 +7,24 @@ use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use App\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
 use App\Models\Company;
 use App\Http\Services\RoleService;
 
 class RoleController extends Controller
 {
+    protected function bumpPermissionsVersion(): void
+    {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        if (!Cache::has('permissions_version')) {
+            Cache::forever('permissions_version', 1);
+            return;
+        }
+
+        Cache::increment('permissions_version');
+    }
+
     public function index(Request $request)
     {
         $query = Role::with('permissions:id,name', 'companies:id,name');
@@ -62,8 +75,7 @@ class RoleController extends Controller
             $role->companies()->sync($request->companies);
         }
 
-        // Bump the global permissions version so all cached user permission arrays are invalidated
-        Cache::put('permissions_version', now()->timestamp);
+        $this->bumpPermissionsVersion();
 
         return redirect()->back()->with('success', 'Role created successfully');
     }
@@ -93,8 +105,7 @@ class RoleController extends Controller
         
         $role->companies()->sync($request->companies ?? []);
 
-        // Bump the global permissions version so all cached user permission arrays are invalidated
-        Cache::put('permissions_version', now()->timestamp);
+        $this->bumpPermissionsVersion();
 
         return redirect()->back()->with('success', 'Role updated successfully');
     }
@@ -106,7 +117,7 @@ class RoleController extends Controller
         }
 
         $role->delete();
-        Cache::put('permissions_version', now()->timestamp);
+        $this->bumpPermissionsVersion();
         return redirect()->back()->with('success', 'Role deleted successfully');
     }
 }

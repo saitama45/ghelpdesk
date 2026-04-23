@@ -115,6 +115,7 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_ins.view' => 'View Stock In',
             'stock_ins.create' => 'Create Stock In',
             'stock_ins.edit' => 'Edit Stock In',
+            'stock_ins.post' => 'Post Stock In',
             'stock_ins.delete' => 'Delete Stock In',
 
             // Stores
@@ -206,6 +207,7 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_ins.view',
             'stock_ins.create',
             'stock_ins.edit',
+            'stock_ins.post',
             'stock_ins.delete',
             'stores.view',
             'schedules.view',

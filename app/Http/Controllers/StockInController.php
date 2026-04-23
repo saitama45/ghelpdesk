@@ -19,12 +19,6 @@ class StockInController extends Controller
             'assets' => Asset::all(),
             'stores' => Store::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'vendors' => Vendor::active()->orderBy('name')->get(['id', 'code', 'name']),
-            'permissions' => [
-                'create' => auth()->user()->can('stock_ins.create'),
-                'edit' => auth()->user()->can('stock_ins.edit'),
-                'delete' => auth()->user()->can('stock_ins.delete'),
-                'post' => auth()->user()->can('stock_ins.post'),
-            ]
         ]);
     }
 
@@ -129,6 +123,20 @@ class StockInController extends Controller
         $stockIn->delete();
 
         return redirect()->back()->with('success', 'Stock In deleted successfully');
+    }
+
+    public function post(Request $request, StockIn $stockIn)
+    {
+        abort_unless($request->user()->can('stock_ins.post'), 403);
+
+        StockIn::where('asset_id', $stockIn->asset_id)
+            ->whereDate('receive_date', $stockIn->receive_date)
+            ->update([
+                'status' => 'Posted',
+                'posted_by' => $request->user()->name,
+            ]);
+
+        return redirect()->back()->with('success', 'Stock In posted successfully');
     }
 
     protected function syncGroupedEntries(StockIn $stockIn, array $validated): void

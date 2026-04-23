@@ -76,6 +76,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);
     Route::post('sap-requests/{sap_request}/approve', [\App\Http\Controllers\SapRequestController::class, 'approve'])->name('sap-requests.approve');
     Route::post('sap-requests/{sap_request}/reject', [\App\Http\Controllers\SapRequestController::class, 'reject'])->name('sap-requests.reject');
+    Route::post('stock-ins/{stock_in}/post', [\App\Http\Controllers\StockInController::class, 'post'])->name('stock-ins.post');
     Route::resource('stock-ins', \App\Http\Controllers\StockInController::class);
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');

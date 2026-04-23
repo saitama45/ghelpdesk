@@ -30,9 +30,9 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
-        // Implicitly grant "Admin", "Dev", and "Solutions Admin" roles all permissions
+        // Implicitly grant top-level administrator roles all permissions
         Gate::before(function ($user, $ability) {
-            return $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) ? true : null;
+            return $user->hasAnyRole(['Admin', 'Solutions Admin']) ? true : null;
         });
 
         \App\Models\Ticket::observe(\App\Observers\TicketObserver::class);
