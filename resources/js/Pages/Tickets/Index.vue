@@ -568,35 +568,28 @@ const getPriorityLabel = (priority) => {
 const getPriorityColor = (priority) => {
     const p = String(priority || '').toLowerCase();
     switch (p) {
-        case 'urgent': return 'text-red-900 bg-red-200';
-        case 'high': return 'text-red-800 bg-red-100';
-        case 'medium': return 'text-yellow-900 bg-yellow-200';
-        case 'low': return 'text-green-900 bg-green-200';
-        default: return 'text-gray-800 bg-gray-100';
+        case 'urgent': return 'border-red-500 text-black bg-white';
+        case 'high': return 'border-orange-400 text-black bg-white';
+        case 'medium': return 'border-yellow-400 text-black bg-white';
+        case 'low': return 'border-green-500 text-black bg-white';
+        default: return 'border-slate-300 text-black bg-white';
     }
 };
 
 const getPriorityBorder = (priority) => {
-    const p = String(priority || '').toLowerCase();
-    switch (p) {
-        case 'urgent': return 'border-l-red-600';
-        case 'high': return 'border-l-red-400';
-        case 'medium': return 'border-l-yellow-400';
-        case 'low': return 'border-l-green-400';
-        default: return 'border-l-gray-200';
-    }
+    return 'border-l-transparent';
 };
 
 const getStatusColor = (status) => {
     switch (status) {
-        case 'open': return 'text-blue-800 bg-blue-100';
-        case 'for_schedule': return 'text-teal-800 bg-teal-100';
-        case 'in_progress': return 'text-purple-800 bg-purple-100';
-        case 'resolved': return 'text-green-800 bg-green-100';
-        case 'closed': return 'text-gray-600 bg-gray-200';
-        case 'waiting_service_provider': return 'text-orange-800 bg-orange-100';
-        case 'waiting_client_feedback': return 'text-blue-800 bg-blue-100';
-        default: return 'text-gray-800 bg-gray-100';
+        case 'open': return 'border-blue-500 text-black bg-white';
+        case 'for_schedule': return 'border-teal-500 text-black bg-white';
+        case 'in_progress': return 'border-violet-500 text-black bg-white';
+        case 'resolved': return 'border-green-500 text-black bg-white';
+        case 'closed': return 'border-slate-400 text-black bg-white';
+        case 'waiting_service_provider': return 'border-orange-400 text-black bg-white';
+        case 'waiting_client_feedback': return 'border-sky-500 text-black bg-white';
+        default: return 'border-slate-300 text-black bg-white';
     }
 };
 
@@ -610,24 +603,17 @@ const getStatusLabel = (status) => {
 };
 
 const getSlaRowClass = (ticket) => {
-    if (!ticket.sla_metric) return 'border-l-gray-200 hover:bg-gray-50';
+    if (!ticket.sla_metric) return 'border-l-transparent hover:bg-slate-50';
     
     const isBreached = ticket.sla_metric.is_response_breached || ticket.sla_metric.is_resolution_breached;
     const isAllMet = ticket.sla_metric.first_response_at && ticket.sla_metric.resolved_at;
     
-    if (isBreached) return 'border-l-red-600 !bg-red-50 hover:!bg-red-100/50';
-    if (isAllMet) return 'border-l-green-500 !bg-green-50 hover:!bg-green-100/50';
-    
-    // Default/Active based on item priority background
-    const priority = ticket.item?.priority?.toLowerCase() || ticket.priority?.toLowerCase();
-    let bgClass = 'hover:bg-gray-50';
-    
-    if (priority === 'urgent') bgClass = '!bg-red-50 hover:!bg-red-100/50';
-    else if (priority === 'high') bgClass = '!bg-orange-50 hover:!bg-orange-100/50';
-    else if (priority === 'medium') bgClass = '!bg-yellow-50 hover:!bg-yellow-100/50';
-    else if (priority === 'low') bgClass = '!bg-green-50 hover:!bg-green-100/50';
+    if (isBreached) return 'border-l-transparent hover:bg-slate-50';
+    if (isAllMet) return 'border-l-transparent hover:bg-slate-50';
 
-    return getPriorityBorder(priority) + ' ' + bgClass;
+    const priority = ticket.item?.priority?.toLowerCase() || ticket.priority?.toLowerCase();
+
+    return getPriorityBorder(priority) + ' hover:bg-slate-50';
 };
 
 const formatItemName = (item) => {
@@ -818,7 +804,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'No Target',
-            toneClass: 'border-gray-200 bg-gray-50 text-gray-500',
+            toneClass: 'border-gray-300 bg-white text-black',
             dotClass: 'bg-gray-300',
         };
     }
@@ -827,7 +813,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'Breached',
-            toneClass: 'border-red-200 bg-red-50 text-red-700',
+            toneClass: 'border-red-500 bg-white text-black',
             dotClass: 'bg-red-500',
         };
     }
@@ -836,7 +822,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'Met',
-            toneClass: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+            toneClass: 'border-emerald-500 bg-white text-black',
             dotClass: 'bg-emerald-500',
         };
     }
@@ -845,7 +831,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'Due Soon',
-            toneClass: 'border-amber-200 bg-amber-50 text-amber-700',
+            toneClass: 'border-amber-500 bg-white text-black',
             dotClass: 'bg-amber-500',
         };
     }
@@ -853,7 +839,7 @@ const getSlaState = (ticket, type) => {
     return {
         label: isResponse ? 'Response' : 'Resolution',
         value: 'Pending',
-        toneClass: 'border-blue-200 bg-blue-50 text-blue-700',
+        toneClass: 'border-blue-500 bg-white text-black',
         dotClass: 'bg-blue-500',
     };
 };
@@ -1168,10 +1154,9 @@ watch(activeDashboardFilter, () => {
                             >
                         </th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Queue Detail</th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Health</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Requester</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</th>
                     </tr>
                 </template>
@@ -1185,7 +1170,7 @@ watch(activeDashboardFilter, () => {
                         :class="[
                             getSlaRowClass(ticket),
                             hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed',
-                            selectedIds.includes(ticket.id) ? '!bg-blue-50 ring-1 ring-inset ring-blue-100' : ''
+                            selectedIds.includes(ticket.id) ? 'ring-1 ring-inset ring-blue-300' : ''
                         ]"
                     >
                         <td class="px-4 py-5 w-10 align-top" @click.stop>
@@ -1197,12 +1182,12 @@ watch(activeDashboardFilter, () => {
                             >
                         </td>
                         <td class="px-4 py-5 align-top">
-                            <div class="min-w-[260px] space-y-3">
+                            <div class="min-w-[240px] max-w-[360px] space-y-3">
                                 <div class="flex flex-wrap items-start gap-2">
-                                    <span class="inline-flex rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-black tracking-wide text-white shadow-sm">
+                                    <span class="inline-flex rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black tracking-wide text-black shadow-sm">
                                         {{ ticket.ticket_key }}
                                     </span>
-                                    <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
+                                    <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
                                         {{ getPriorityLabel(ticket.item?.priority || ticket.priority) }}
                                     </span>
                                     <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize" :class="getStatusColor(ticket.status)">
@@ -1211,23 +1196,38 @@ watch(activeDashboardFilter, () => {
                                 </div>
 
                                 <div class="space-y-1.5">
-                                    <div class="text-sm font-bold leading-5 text-slate-900 transition-colors group-hover:text-blue-700">
+                                    <div class="break-words text-sm font-bold leading-5 text-black">
                                         {{ ticket.title }}
                                     </div>
-                                    <p class="max-w-xl overflow-hidden text-xs leading-5 text-slate-500 max-h-10">
+                                    <p class="max-h-10 overflow-hidden break-words text-xs leading-5 text-black">
                                         {{ ticket.description || 'No description provided.' }}
                                     </p>
                                 </div>
 
-                                <div v-if="ticket.children?.length" class="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
-                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Child Tickets</div>
+                                <div class="rounded-xl border border-slate-300 bg-white p-3">
+                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black">Requester</div>
+                                    <div v-if="ticket.reporter" class="flex items-center gap-2 text-sm">
+                                        <div v-if="ticket.reporter.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
+                                            <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
+                                        </div>
+                                        <div v-else class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-black">
+                                            {{ ticket.reporter.name.charAt(0) }}
+                                        </div>
+                                        <span class="break-words font-semibold text-black">{{ ticket.reporter.name }}</span>
+                                    </div>
+                                    <div v-else class="break-words text-sm font-semibold text-black">{{ getReporterLabel(ticket) }}</div>
+                                    <div v-if="ticket.sender_email" class="mt-1 break-all text-[11px] text-black">{{ ticket.sender_email }}</div>
+                                </div>
+
+                                <div v-if="ticket.children?.length" class="rounded-xl border border-blue-300 bg-white p-3">
+                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black">Child Tickets</div>
                                     <div class="space-y-2">
                                         <div v-for="child in ticket.children" :key="child.id" class="flex items-start justify-between gap-3 text-xs">
                                             <div class="min-w-0">
-                                                <div class="font-bold text-blue-900">{{ child.ticket_key }}</div>
-                                                <div class="truncate text-blue-700">{{ child.title }}</div>
+                                                <div class="font-bold text-black">{{ child.ticket_key }}</div>
+                                                <div class="break-words text-black">{{ child.title }}</div>
                                             </div>
-                                            <div class="shrink-0 text-right text-[11px] text-blue-700">
+                                            <div class="shrink-0 text-right text-[11px] text-black">
                                                 {{ child.assignee?.name || 'Unassigned' }}
                                             </div>
                                         </div>
@@ -1236,19 +1236,45 @@ watch(activeDashboardFilter, () => {
                             </div>
                         </td>
                         <td class="px-4 py-5 align-top">
-                            <div class="min-w-[220px] space-y-3 text-sm">
-                                <div>
-                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Store</div>
-                                    <div class="mt-1 font-semibold text-slate-800">{{ ticket.store ? ticket.store.name : '-' }}</div>
+                            <div class="min-w-[160px] max-w-[220px] space-y-2">
+                                <div v-if="ticket.assignee" class="flex items-center gap-2">
+                                    <div v-if="ticket.assignee.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
+                                        <img :src="'/serve-storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
+                                    </div>
+                                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">
+                                        {{ ticket.assignee.name.charAt(0) }}
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-black">{{ ticket.assignee.name }}</div>
+                                        <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assigned</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Item</div>
-                                    <div class="mt-1 text-xs leading-5 text-slate-600">{{ formatItemName(ticket.item) }}</div>
+                                <button
+                                    v-else-if="hasPermission('tickets.assign')"
+                                    @click="acceptTicket(ticket)"
+                                    class="inline-flex items-center rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-xs font-bold text-blue-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white focus:outline-none"
+                                >
+                                    Accept Ticket
+                                </button>
+                                <div v-else class="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black">
+                                    Unassigned
                                 </div>
                             </div>
                         </td>
                         <td class="px-4 py-5 align-top">
-                            <div v-if="ticket.sla_metric" class="min-w-[180px] space-y-2">
+                            <div class="min-w-[180px] max-w-[240px] space-y-3 text-sm">
+                                <div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Store</div>
+                                    <div class="mt-1 break-words font-semibold text-black">{{ ticket.store ? ticket.store.name : '-' }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Item</div>
+                                    <div class="mt-1 break-words text-xs leading-5 text-black">{{ formatItemName(ticket.item) }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-5 align-top">
+                            <div v-if="ticket.sla_metric" class="min-w-[160px] max-w-[220px] space-y-2">
                                 <div
                                     v-for="sla in [getSlaState(ticket, 'response'), getSlaState(ticket, 'resolution')]"
                                     :key="sla.label"
@@ -1264,64 +1290,13 @@ watch(activeDashboardFilter, () => {
                                     </div>
                                 </div>
                             </div>
-                            <div v-else class="inline-flex rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                            <div v-else class="inline-flex rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-black">
                                 No SLA target
                             </div>
                         </td>
-                        <td class="px-4 py-5 align-top text-sm">
-                            <div class="min-w-[170px] space-y-1.5">
-                                <div v-if="ticket.reporter" class="flex items-center gap-2">
-                                    <div v-if="ticket.reporter.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
-                                        <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
-                                    </div>
-                                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-[10px] font-bold text-blue-600">
-                                        {{ ticket.reporter.name.charAt(0) }}
-                                    </div>
-                                    <span class="font-semibold text-slate-700">{{ ticket.reporter.name }}</span>
-                                </div>
-                                <div v-else class="font-semibold text-slate-700">{{ getReporterLabel(ticket) }}</div>
-                                <div v-if="ticket.sender_email" class="truncate text-[11px] text-slate-400">{{ ticket.sender_email }}</div>
-                                <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Requester</div>
-                            </div>
-                        </td>
-                        <td class="px-4 py-5 align-top text-sm" @click.stop>
-                            <div class="min-w-[180px] space-y-2">
-                                <div v-if="ticket.assignee" class="flex items-center gap-2">
-                                    <div v-if="ticket.assignee.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
-                                        <img :src="'/serve-storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
-                                    </div>
-                                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">
-                                        {{ ticket.assignee.name.charAt(0) }}
-                                    </div>
-                                    <div>
-                                        <div class="font-semibold text-slate-800">{{ ticket.assignee.name }}</div>
-                                        <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assigned</div>
-                                    </div>
-                                </div>
-                                <button
-                                    v-else-if="hasPermission('tickets.assign')"
-                                    @click="acceptTicket(ticket)"
-                                    class="inline-flex items-center rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-xs font-bold text-blue-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white focus:outline-none"
-                                >
-                                    Accept Ticket
-                                </button>
-                                <div v-else class="inline-flex rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
-                                    Unassigned
-                                </div>
-                            </div>
-                        </td>
-                        <td class="px-4 py-5 align-top text-sm text-slate-500">
-                            <div class="min-w-[150px] space-y-2">
-                                <div class="font-medium text-slate-700">{{ formatDate(ticket.created_at) }}</div>
-                                <div
-                                    v-if="hasPermission('tickets.edit')"
-                                    class="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-600"
-                                >
-                                    <span>Open</span>
-                                    <svg class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                    </svg>
-                                </div>
+                        <td class="px-4 py-5 align-top text-sm text-black">
+                            <div class="min-w-[132px]">
+                                <div class="font-medium text-black">{{ formatDate(ticket.created_at) }}</div>
                             </div>
                         </td>
                     </tr>

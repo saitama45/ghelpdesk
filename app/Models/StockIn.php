@@ -12,6 +12,14 @@ class StockIn extends Model
 
     protected $fillable = [
         'receive_date',
+        'dr_no',
+        'dr_date',
+        'vendor',
+        'origin_location',
+        'destination_location',
+        'received_by',
+        'posted_by',
+        'status',
         'asset_id',
         'quantity',
         'serial_no',
@@ -23,11 +31,11 @@ class StockIn extends Model
         'eol_date',
         'cost',
         'price',
-        'location',
     ];
 
     protected $casts = [
         'receive_date' => 'date',
+        'dr_date' => 'date',
         'warranty_date' => 'date',
         'eol_date' => 'date',
         'warranty_months' => 'integer',

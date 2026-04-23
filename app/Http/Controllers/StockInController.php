@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Asset;
 use App\Models\StockIn;
+use App\Models\Store;
+use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Inertia\Inertia;
@@ -15,10 +17,13 @@ class StockInController extends Controller
         return Inertia::render('StockIn/Index', [
             'stockIns' => StockIn::with('asset')->latest()->paginate(10),
             'assets' => Asset::all(),
+            'stores' => Store::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'vendors' => Vendor::active()->orderBy('name')->get(['id', 'code', 'name']),
             'permissions' => [
                 'create' => auth()->user()->can('stock_ins.create'),
                 'edit' => auth()->user()->can('stock_ins.edit'),
                 'delete' => auth()->user()->can('stock_ins.delete'),
+                'post' => auth()->user()->can('stock_ins.post'),
             ]
         ]);
     }
@@ -27,6 +32,13 @@ class StockInController extends Controller
     {
         $validated = $request->validate([
             'receive_date' => 'required|date',
+            'dr_no' => 'nullable|string|max:255',
+            'dr_date' => 'nullable|date',
+            'vendor' => 'nullable|string|max:255',
+            'origin_location' => 'nullable|string|max:255',
+            'received_by' => 'nullable|string|max:255',
+            'posted_by' => 'nullable|string|max:255',
+            'status' => 'required|in:For Posting,Posted',
             'asset_id' => 'required|exists:assets,id',
             'quantity' => 'required|integer|min:1',
             'entries' => 'required|array|min:1',
@@ -37,15 +49,22 @@ class StockInController extends Controller
             'entries.*.eol_months' => 'required|integer|min:0',
             'entries.*.cost' => 'required|numeric|min:0',
             'entries.*.price' => 'required|numeric|min:0',
-            'entries.*.location' => 'nullable|string',
+            'entries.*.destination_location' => 'nullable|string|max:255',
         ]);
 
         foreach ($validated['entries'] as $entry) {
             StockIn::create([
                 'receive_date' => $validated['receive_date'],
+                'dr_no' => $validated['dr_no'] ?? null,
+                'dr_date' => $validated['dr_date'] ?? null,
+                'vendor' => $validated['vendor'] ?? null,
+                'origin_location' => $this->normalizeStoreCode($validated['origin_location'] ?? null),
+                'received_by' => $validated['received_by'] ?? null,
+                'posted_by' => $validated['posted_by'] ?? null,
+                'status' => $validated['status'],
                 'asset_id' => $validated['asset_id'],
                 'quantity' => 1,
-                ...Arr::only($entry, [
+                ...$this->normalizeStockEntry(Arr::only($entry, [
                     'serial_no',
                     'barcode',
                     'qrcode',
@@ -53,8 +72,8 @@ class StockInController extends Controller
                     'eol_months',
                     'cost',
                     'price',
-                    'location',
-                ]),
+                    'destination_location',
+                ])),
             ]);
         }
 
@@ -65,6 +84,13 @@ class StockInController extends Controller
     {
         $validated = $request->validate([
             'receive_date' => 'required|date',
+            'dr_no' => 'nullable|string|max:255',
+            'dr_date' => 'nullable|date',
+            'vendor' => 'nullable|string|max:255',
+            'origin_location' => 'nullable|string|max:255',
+            'received_by' => 'nullable|string|max:255',
+            'posted_by' => 'nullable|string|max:255',
+            'status' => 'required|in:For Posting,Posted',
             'asset_id' => 'required|exists:assets,id',
             'quantity' => 'required|integer|min:1',
             'header_mode' => 'nullable|boolean',
@@ -76,15 +102,15 @@ class StockInController extends Controller
             'entries.*.eol_months' => 'required_with:entries|integer|min:0',
             'entries.*.cost' => 'required_with:entries|numeric|min:0',
             'entries.*.price' => 'required_with:entries|numeric|min:0',
-            'entries.*.location' => 'nullable|string',
+            'entries.*.destination_location' => 'nullable|string|max:255',
             'serial_no' => 'nullable|string',
             'barcode' => 'nullable|string',
             'qrcode' => 'nullable|string',
-            'warranty_months' => 'required|integer|min:0',
-            'eol_months' => 'required|integer|min:0',
-            'cost' => 'required|numeric|min:0',
-            'price' => 'required|numeric|min:0',
-            'location' => 'nullable|string',
+            'warranty_months' => 'required_without:entries|integer|min:0',
+            'eol_months' => 'required_without:entries|integer|min:0',
+            'cost' => 'required_without:entries|numeric|min:0',
+            'price' => 'required_without:entries|numeric|min:0',
+            'destination_location' => 'nullable|string|max:255',
         ]);
 
         if (!empty($validated['header_mode'])) {
@@ -93,7 +119,7 @@ class StockInController extends Controller
             return redirect()->back()->with('success', 'Stock In updated successfully');
         }
 
-        $stockIn->update(Arr::except($validated, ['header_mode']));
+        $stockIn->update($this->normalizeStockEntry(Arr::except($validated, ['header_mode'])));
 
         return redirect()->back()->with('success', 'Stock In updated successfully');
     }
@@ -115,7 +141,7 @@ class StockInController extends Controller
             'eol_months' => $validated['eol_months'],
             'cost' => $validated['cost'],
             'price' => $validated['price'],
-            'location' => $validated['location'] ?? null,
+            'destination_location' => $validated['destination_location'] ?? null,
         ]];
 
         $relatedRows = StockIn::where('asset_id', $stockIn->asset_id)
@@ -126,9 +152,16 @@ class StockInController extends Controller
         foreach (array_values($entries) as $index => $entry) {
             $payload = [
                 'receive_date' => $validated['receive_date'],
+                'dr_no' => $validated['dr_no'] ?? null,
+                'dr_date' => $validated['dr_date'] ?? null,
+                'vendor' => $validated['vendor'] ?? null,
+                'origin_location' => $this->normalizeStoreCode($validated['origin_location'] ?? null),
+                'received_by' => $validated['received_by'] ?? null,
+                'posted_by' => $validated['posted_by'] ?? null,
+                'status' => $validated['status'],
                 'asset_id' => $validated['asset_id'],
                 'quantity' => 1,
-                ...Arr::only($entry, [
+                ...$this->normalizeStockEntry(Arr::only($entry, [
                     'serial_no',
                     'barcode',
                     'qrcode',
@@ -136,8 +169,8 @@ class StockInController extends Controller
                     'eol_months',
                     'cost',
                     'price',
-                    'location',
-                ]),
+                    'destination_location',
+                ])),
             ];
 
             if (isset($relatedRows[$index])) {
@@ -150,5 +183,32 @@ class StockInController extends Controller
         foreach ($relatedRows->slice(count($entries)) as $extraRow) {
             $extraRow->delete();
         }
+    }
+
+    protected function normalizeStockEntry(array $entry): array
+    {
+        if (array_key_exists('origin_location', $entry)) {
+            $entry['origin_location'] = $this->normalizeStoreCode($entry['origin_location']);
+        }
+
+        if (array_key_exists('destination_location', $entry)) {
+            $entry['destination_location'] = $this->normalizeStoreCode($entry['destination_location']);
+        }
+
+        return $entry;
+    }
+
+    protected function normalizeStoreCode(?string $value): ?string
+    {
+        if (!$value) {
+            return $value;
+        }
+
+        $store = Store::query()
+            ->where('code', $value)
+            ->orWhere('name', $value)
+            ->first(['code']);
+
+        return $store?->code ?? $value;
     }
 }

@@ -31,6 +31,7 @@
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Receive Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">DR / Status</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item Code</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Header Record</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
@@ -41,6 +42,15 @@
                     <template #body="{ data }">
                         <tr v-for="item in data" :key="item.id" class="hover:bg-gray-50">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(item.receive_date) }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <div class="flex flex-col">
+                                    <span class="font-semibold text-gray-900">{{ item.dr_no || '-' }}</span>
+                                    <span class="mt-1 inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                                          :class="item.status === 'Posted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                                        {{ item.status || 'For Posting' }}
+                                    </span>
+                                </div>
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">{{ item.asset?.item_code }}</td>
                             <td class="px-6 py-4 text-sm text-gray-900">
                                 <div class="flex flex-col">
@@ -49,6 +59,9 @@
                                     </div>
                                     <div class="text-xs text-gray-500 max-w-md truncate" :title="item.asset?.description">
                                         {{ item.asset?.description || 'No description' }}
+                                    </div>
+                                    <div class="mt-1 text-[11px] text-gray-500">
+                                        Vendor: {{ item.vendor || '-' }} | Origin: {{ item.origin_location || '-' }} | Destination: {{ item.destination_location || item.location || '-' }}
                                     </div>
                                     <div class="mt-2 text-[11px] text-gray-500">
                                         {{ item.record_count }} row<span v-if="item.record_count !== 1">s</span> grouped in this header
@@ -84,12 +97,54 @@
         <Modal :show="showModal" @close="closeModal" max-width="4xl">
             <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-900 mb-4">{{ isEditing ? 'Edit Stock In' : 'Add Stock In' }}</h3>
-                <form @submit.prevent="submitForm" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form @submit.prevent="submitForm()" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Receive Date</label>
                             <input type="date" v-model="form.receive_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">DR No</label>
+                            <input type="text" v-model="form.dr_no" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">DR Date</label>
+                            <input type="date" v-model="form.dr_date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Vendor</label>
+                            <Autocomplete
+                                v-model="form.vendor"
+                                :options="vendorOptions"
+                                label-key="name"
+                                value-key="value"
+                                placeholder="Select Vendor"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Origin Location</label>
+                            <Autocomplete
+                                v-model="form.origin_location"
+                                :options="storeOptions"
+                                label-key="name"
+                                value-key="value"
+                                placeholder="Select Origin Store"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Received by</label>
+                            <input type="text" v-model="form.received_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Posted by</label>
+                            <input type="text" v-model="form.posted_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Brand</label>
                             <Autocomplete
@@ -101,9 +156,6 @@
                                 @update:modelValue="onBrandChange"
                             />
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Model</label>
                             <Autocomplete
@@ -135,11 +187,10 @@
                                 v-model.number="form.quantity"
                                 required
                                 min="1"
-                                :disabled="isEditing"
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100 disabled:text-gray-500"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                             >
                             <p class="mt-1 text-[11px] text-gray-500">
-                                {{ isEditing ? 'Edit mode updates this single stock-in record.' : 'Qty controls how many detail rows are prepared below.' }}
+                                {{ isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.' }}
                             </p>
                         </div>
                     </div>
@@ -180,8 +231,15 @@
                                         <input type="text" v-model="entry.serial_no" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location</label>
-                                        <input type="text" v-model="entry.location" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination Location</label>
+                                        <Autocomplete
+                                            v-model="entry.destination_location"
+                                            :options="storeOptions"
+                                            label-key="name"
+                                            value-key="value"
+                                            placeholder="Select Destination Store"
+                                            size="sm"
+                                        />
                                     </div>
                                 </div>
 
@@ -237,6 +295,14 @@
 
                     <div class="flex justify-end space-x-3 mt-6">
                         <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
+                        <button
+                            v-if="permissions.post"
+                            type="button"
+                            @click="submitForm('Posted')"
+                            class="px-4 py-2 text-sm font-medium text-white bg-emerald-600 border border-transparent rounded-md shadow-sm hover:bg-emerald-700"
+                        >
+                            Post
+                        </button>
                         <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700">
                             {{ isEditing ? 'Update' : 'Save' }}
                         </button>
@@ -315,6 +381,8 @@ import { useConfirm } from '@/Composables/useConfirm'
 const props = defineProps({
     stockIns: Object,
     assets: Array,
+    stores: Array,
+    vendors: Array,
     permissions: Object
 })
 
@@ -355,6 +423,29 @@ const assetOptions = computed(() => {
         }))
 })
 
+const storeOptions = computed(() => {
+    return (props.stores || []).map(store => ({
+        value: store.code,
+        name: [store.code, store.name].filter(Boolean).join(' - ')
+    }))
+})
+const vendorOptions = computed(() => {
+    return (props.vendors || []).map(vendor => ({
+        value: vendor.name,
+        name: [vendor.code, vendor.name].filter(Boolean).join(' - ')
+    }))
+})
+
+const normalizeLocationValue = (value) => {
+    if (!value) return ''
+
+    const matchedStore = (props.stores || []).find(store =>
+        store.code === value || store.name === value
+    )
+
+    return matchedStore?.code || value
+}
+
 const showModal = ref(false)
 const isEditing = ref(false)
 const currentId = ref(null)
@@ -363,6 +454,13 @@ const getToday = () => new Date().toISOString().split('T')[0]
 
 const form = reactive({
     receive_date: getToday(),
+    dr_no: '',
+    dr_date: getToday(),
+    vendor: '',
+    origin_location: '',
+    received_by: '',
+    posted_by: '',
+    status: 'For Posting',
     brand: '',
     model: '',
     asset_id: '',
@@ -381,7 +479,7 @@ const createEntry = (overrides = {}) => ({
     eol_months: 60,
     cost: 0,
     price: 0,
-    location: '',
+    destination_location: '',
     ...overrides
 })
 
@@ -428,13 +526,10 @@ const groupedStockIns = computed(() => {
 
 const syncEntriesToQuantity = (quantity) => {
     const target = Math.max(1, parseInt(quantity || 1, 10))
+    form.quantity = target
 
-    if (isEditing.value) {
-        form.quantity = target
-        if (!form.entries.length) {
-            form.entries = [createEntry()]
-        }
-        return
+    if (!form.entries.length) {
+        form.entries = [createEntry(isEditing.value ? {} : getEntryDefaults())]
     }
 
     while (form.entries.length < target) {
@@ -506,7 +601,7 @@ const generateQrcode = (index) => {
         `Barcode: ${entry?.barcode || 'N/A'}`,
         `Warranty: ${computedWarrantyDate(entry)}`,
         `EOL: ${computedEolDate(entry)}`,
-        `Location: ${entry?.location || 'N/A'}`
+        `Destination: ${entry?.destination_location || 'N/A'}`
     ]
     
     entry.qrcode = details.join('\n')
@@ -537,6 +632,13 @@ const computedEolDate = (entry) => {
 const resetForm = () => {
     Object.assign(form, {
         receive_date: getToday(),
+        dr_no: '',
+        dr_date: getToday(),
+        vendor: '',
+        origin_location: '',
+        received_by: '',
+        posted_by: '',
+        status: 'For Posting',
         brand: '',
         model: '',
         asset_id: '',
@@ -563,6 +665,13 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
     currentId.value = item.id
     Object.assign(form, {
         receive_date: toDateKey(item.receive_date),
+        dr_no: item.dr_no || '',
+        dr_date: toDateKey(item.dr_date),
+        vendor: item.vendor || '',
+        origin_location: normalizeLocationValue(item.origin_location),
+        received_by: item.received_by || '',
+        posted_by: item.posted_by || '',
+        status: item.status || 'For Posting',
         brand: asset?.brand || '',
         model: asset?.model || '',
         asset_id: item.asset_id,
@@ -575,7 +684,7 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
             eol_months: row.eol_months,
             cost: Number(row.cost || 0),
             price: Number(row.price || 0),
-            location: row.location || '',
+            destination_location: normalizeLocationValue(row.destination_location || row.location),
         }))
     })
     showModal.value = true
@@ -585,11 +694,18 @@ const closeModal = () => {
     showModal.value = false
 }
 
-const submitForm = () => {
+const submitForm = (statusOverride = form.status || 'For Posting') => {
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
     const method = isEditing.value ? 'put' : 'post'
     const payload = {
         receive_date: form.receive_date,
+        dr_no: form.dr_no,
+        dr_date: form.dr_date || null,
+        vendor: form.vendor,
+        origin_location: form.origin_location || null,
+        received_by: form.received_by,
+        posted_by: form.posted_by,
+        status: statusOverride,
         brand: form.brand,
         model: form.model,
         asset_id: form.asset_id,
