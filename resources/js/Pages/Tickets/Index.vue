@@ -262,14 +262,15 @@ watch(defaultCompanyId, (newId) => {
 
 // ── Bulk Selection ────────────────────────────────────────────────────────
 const selectedIds = ref([])
+const activeDashboardFilter = ref('all')
 
 const allSelected = computed(() =>
-    pagination.data.value.length > 0 &&
-    pagination.data.value.every(t => selectedIds.value.includes(t.id))
+    displayedTickets.value.length > 0 &&
+    displayedTickets.value.every(t => selectedIds.value.includes(t.id))
 )
 
 const toggleAll = () => {
-    selectedIds.value = allSelected.value ? [] : pagination.data.value.map(t => t.id)
+    selectedIds.value = allSelected.value ? [] : displayedTickets.value.map(t => t.id)
 }
 
 watch(() => [pagination.currentPage.value, pagination.search.value], () => {
@@ -604,7 +605,7 @@ const getStatusLabel = (status) => {
         case 'for_schedule': return 'For Schedule';
         case 'waiting_service_provider': return 'Waiting for service provider';
         case 'waiting_client_feedback': return 'Waiting for clients feedback?';
-        default: return status.replace('_', ' ');
+        default: return String(status || '').replace(/_/g, ' ');
     }
 };
 
@@ -635,6 +636,231 @@ const formatItemName = (item) => {
     const sub = item.sub_category?.name ?? 'N/A';
     return `${cat} | ${sub} | ${item.name}`;
 };
+
+const getReporterLabel = (ticket) => {
+    if (ticket.reporter?.name) return ticket.reporter.name;
+    if (ticket.sender_name) return ticket.sender_name;
+    if (ticket.sender_email) return ticket.sender_email;
+    return 'Unknown';
+};
+
+const hasBreachedSla = (ticket) => {
+    return Boolean(ticket.sla_metric && (ticket.sla_metric.is_response_breached || ticket.sla_metric.is_resolution_breached));
+};
+
+const isTicketNearlyDue = (ticket) => {
+    if (!ticket.sla_metric) return false;
+
+    const responseNearlyDue = Boolean(
+        ticket.sla_metric.response_target_at &&
+        !ticket.sla_metric.first_response_at &&
+        !ticket.sla_metric.is_response_breached &&
+        isNearlyDue(ticket.sla_metric.response_target_at)
+    );
+
+    const resolutionNearlyDue = Boolean(
+        ticket.sla_metric.resolution_target_at &&
+        !ticket.sla_metric.resolved_at &&
+        !ticket.sla_metric.is_resolution_breached &&
+        isNearlyDue(ticket.sla_metric.resolution_target_at)
+    );
+
+    return responseNearlyDue || resolutionNearlyDue;
+};
+
+const summaryCards = computed(() => {
+    const data = pagination.data.value || [];
+
+    return [
+        {
+            key: 'visible',
+            filterKey: 'all',
+            label: 'Visible Tickets',
+            value: data.length,
+            hint: pagination.showingText.value || 'Current page results',
+            shellClass: 'border-slate-200 bg-slate-50/80',
+            valueClass: 'text-slate-900',
+            accentClass: 'bg-slate-700',
+        },
+        {
+            key: 'unassigned',
+            filterKey: 'unassigned',
+            label: 'Unassigned',
+            value: data.filter(ticket => !ticket.assignee).length,
+            hint: 'Tickets waiting for ownership',
+            shellClass: 'border-blue-200 bg-blue-50/80',
+            valueClass: 'text-blue-900',
+            accentClass: 'bg-blue-600',
+        },
+        {
+            key: 'breached',
+            filterKey: 'breached',
+            label: 'SLA Breached',
+            value: data.filter(hasBreachedSla).length,
+            hint: 'Immediate follow-up required',
+            shellClass: 'border-red-200 bg-red-50/80',
+            valueClass: 'text-red-900',
+            accentClass: 'bg-red-600',
+        },
+        {
+            key: 'nearly_due',
+            filterKey: 'due_soon',
+            label: 'Due Soon',
+            value: data.filter(isTicketNearlyDue).length,
+            hint: 'Targets due within one hour',
+            shellClass: 'border-amber-200 bg-amber-50/80',
+            valueClass: 'text-amber-900',
+            accentClass: 'bg-amber-500',
+        },
+        {
+            key: 'in_progress',
+            filterKey: 'in_progress',
+            label: 'In Progress',
+            value: data.filter(ticket => ticket.status === 'in_progress').length,
+            hint: 'Actively being worked on',
+            shellClass: 'border-violet-200 bg-violet-50/80',
+            valueClass: 'text-violet-900',
+            accentClass: 'bg-violet-600',
+        },
+    ];
+});
+
+const displayedTickets = computed(() => {
+    const data = pagination.data.value || [];
+
+    switch (activeDashboardFilter.value) {
+        case 'unassigned':
+            return data.filter(ticket => !ticket.assignee);
+        case 'breached':
+            return data.filter(hasBreachedSla);
+        case 'due_soon':
+            return data.filter(isTicketNearlyDue);
+        case 'in_progress':
+            return data.filter(ticket => ticket.status === 'in_progress');
+        case 'all':
+        default:
+            return data;
+    }
+});
+
+const getDashboardFilterLabel = (filterKey) => {
+    switch (filterKey) {
+        case 'unassigned': return 'Quick Filter: Unassigned';
+        case 'breached': return 'Quick Filter: SLA Breached';
+        case 'due_soon': return 'Quick Filter: Due Soon';
+        case 'in_progress': return 'Quick Filter: In Progress';
+        default: return '';
+    }
+};
+
+const toggleDashboardFilter = (filterKey) => {
+    activeDashboardFilter.value = activeDashboardFilter.value === filterKey ? 'all' : filterKey;
+};
+
+const activeFilterBadges = computed(() => {
+    const badges = [];
+
+    if (filterStatus.value && filterStatus.value !== 'all') {
+        badges.push(`Status: ${getStatusLabel(filterStatus.value)}`);
+    }
+    if (filterSubUnit.value) {
+        badges.push(`Sub-Unit: ${filterSubUnit.value}`);
+    }
+    if (filterAssignee.value) {
+        const assignee = props.staff?.find(staff => String(staff.id) === String(filterAssignee.value));
+        badges.push(`Assignee: ${assignee?.name || filterAssignee.value}`);
+    }
+    if (filterStartDate.value) {
+        badges.push(`From: ${filterStartDate.value}`);
+    }
+    if (filterEndDate.value) {
+        badges.push(`To: ${filterEndDate.value}`);
+    }
+    if (pagination.search.value) {
+        badges.push(`Search: ${pagination.search.value}`);
+    }
+    if (activeDashboardFilter.value !== 'all') {
+        badges.push(getDashboardFilterLabel(activeDashboardFilter.value));
+    }
+
+    return badges;
+});
+
+const hasActiveFilters = computed(() => activeFilterBadges.value.length > 0);
+
+const tableSubtitle = computed(() => {
+    const visibleCount = displayedTickets.value?.length || 0;
+    if (hasActiveFilters.value) {
+        return `Focused monitoring for ${visibleCount} visible ticket${visibleCount === 1 ? '' : 's'}. Click a row to open details.`;
+    }
+
+    return 'Monitor queue health, SLA pressure, ownership, and ticket hierarchy. Click a row to open details.';
+});
+
+const emptyStateMessage = computed(() => {
+    if (hasActiveFilters.value) {
+        return 'No tickets match the current search or filters. Adjust the monitoring controls and try again.';
+    }
+
+    return 'No tickets are visible right now. Create a new ticket to start monitoring the queue.';
+});
+
+const getSlaState = (ticket, type) => {
+    const metric = ticket.sla_metric;
+    if (!metric) return null;
+
+    const isResponse = type === 'response';
+    const targetAt = isResponse ? metric.response_target_at : metric.resolution_target_at;
+    const completedAt = isResponse ? metric.first_response_at : metric.resolved_at;
+    const isBreached = isResponse ? metric.is_response_breached : metric.is_resolution_breached;
+
+    if (!targetAt) {
+        return {
+            label: isResponse ? 'Response' : 'Resolution',
+            value: 'No Target',
+            toneClass: 'border-gray-200 bg-gray-50 text-gray-500',
+            dotClass: 'bg-gray-300',
+        };
+    }
+
+    if (isBreached) {
+        return {
+            label: isResponse ? 'Response' : 'Resolution',
+            value: 'Breached',
+            toneClass: 'border-red-200 bg-red-50 text-red-700',
+            dotClass: 'bg-red-500',
+        };
+    }
+
+    if (completedAt) {
+        return {
+            label: isResponse ? 'Response' : 'Resolution',
+            value: 'Met',
+            toneClass: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+            dotClass: 'bg-emerald-500',
+        };
+    }
+
+    if (isNearlyDue(targetAt)) {
+        return {
+            label: isResponse ? 'Response' : 'Resolution',
+            value: 'Due Soon',
+            toneClass: 'border-amber-200 bg-amber-50 text-amber-700',
+            dotClass: 'bg-amber-500',
+        };
+    }
+
+    return {
+        label: isResponse ? 'Response' : 'Resolution',
+        value: 'Pending',
+        toneClass: 'border-blue-200 bg-blue-50 text-blue-700',
+        dotClass: 'bg-blue-500',
+    };
+};
+
+watch(activeDashboardFilter, () => {
+    selectedIds.value = [];
+});
 </script>
 
 <template>
@@ -646,164 +872,282 @@ const formatItemName = (item) => {
         </template>
 
         <div class="space-y-6">
-            <!-- Bulk Action Toolbar -->
-            <Transition
-                enter-active-class="transition ease-out duration-200"
-                enter-from-class="opacity-0 -translate-y-2"
-                enter-to-class="opacity-100 translate-y-0"
-                leave-active-class="transition ease-in duration-150"
-                leave-from-class="opacity-100 translate-y-0"
-                leave-to-class="opacity-0 -translate-y-2"
-            >
-                <div v-if="selectedIds.length > 0"
-                     class="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-wrap items-end gap-3 shadow-sm">
-
-                    <div class="text-sm font-bold text-blue-700 self-center whitespace-nowrap mr-2">
-                        {{ selectedIds.length }} ticket(s) selected
+            <section class="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-5 py-6 text-white shadow-xl sm:px-6">
+                <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
+                <div class="relative flex flex-col gap-6">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="max-w-3xl space-y-3">
+                            <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-blue-100">
+                                Ticket Monitoring Console
+                            </div>
+                            <div class="space-y-2">
+                                <h2 class="text-2xl font-black tracking-tight sm:text-3xl">Operate the queue around urgency, ownership, and SLA pressure.</h2>
+                                <p class="max-w-2xl text-sm leading-6 text-slate-200 sm:text-[15px]">
+                                    Use the controls below to isolate risk quickly, then act from the table without losing visibility of assignment gaps or approaching deadlines.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
+                            <div class="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Monitoring Focus</div>
+                                <div class="mt-2 text-lg font-bold text-white">Live queue triage</div>
+                                <div class="mt-1 text-xs text-slate-300">Prioritize breached, due soon, and unassigned tickets first.</div>
+                            </div>
+                            <div class="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Current Scope</div>
+                                <div class="mt-2 text-lg font-bold text-white">{{ pagination.showingText.value }}</div>
+                                <div class="mt-1 text-xs text-slate-300">Metrics below reflect the currently visible page results.</div>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Store -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Store</label>
-                        <Autocomplete v-model="bulkForm.store_id" :options="storesWithLabel"
-                                      label-key="display_name" value-key="id" placeholder="Unchanged..." />
-                    </div>
-
-                    <!-- Item -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Item</label>
-                        <Autocomplete v-model="bulkForm.item_id" :options="items"
-                                      label-key="display_name" value-key="id" placeholder="Unchanged..." size="sm" />
-                    </div>
-
-                    <!-- Assignee -->
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Assignee</label>
-                        <select v-model="bulkForm.assignee_id"
-                                class="border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 min-w-[140px] py-2 px-3">
-                            <option value="">— Unchanged —</option>
-                            <option v-for="p in staff" :key="p.id" :value="p.id">{{ p.name }}</option>
-                        </select>
-                    </div>
-
-                    <!-- Buttons -->
-                    <div class="flex gap-2 self-end ml-auto">
-                        <button v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
-                                @click="openBulkChildModal"
-                                class="px-3 py-2 text-sm font-semibold bg-white border border-teal-300 text-teal-700 rounded-lg hover:bg-teal-50 transition-colors flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            Create Child Tickets
-                        </button>
-                        <button v-if="selectedIds.length === 1 && hasPermission('tickets.edit')"
-                                @click="openSplitModal"
-                                class="px-3 py-2 text-sm font-semibold bg-white border border-yellow-300 text-yellow-700 rounded-lg hover:bg-yellow-50 transition-colors flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                            </svg>
-                            Split
-                        </button>
-                        <button v-if="selectedIds.length > 1 && hasPermission('tickets.edit')"
-                                @click="openMergeModal"
-                                class="px-3 py-2 text-sm font-semibold bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                            Merge
-                        </button>
-                        <button @click="selectedIds = []"
-                                class="px-3 py-2 text-sm font-semibold bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
-                            Clear
-                        </button>
-                        <button @click="submitBulk" :disabled="isBulkSubmitting"
-                                class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm disabled:opacity-50 transition-colors flex items-center gap-2">
-                            <svg v-if="isBulkSubmitting" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Apply to {{ selectedIds.length }}
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                        <button
+                            v-for="card in summaryCards"
+                            :key="card.key"
+                            type="button"
+                            class="rounded-2xl border px-4 py-4 text-left shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:shadow-md"
+                            :class="[
+                                card.shellClass,
+                                activeDashboardFilter === card.filterKey ? 'ring-2 ring-offset-2 ring-blue-500 ring-offset-slate-950' : ''
+                            ]"
+                            @click="toggleDashboardFilter(card.filterKey)"
+                        >
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{{ card.label }}</div>
+                                    <div class="mt-3 text-3xl font-black tracking-tight" :class="card.valueClass">{{ card.value }}</div>
+                                    <div class="mt-2 text-xs text-slate-500">
+                                        {{ activeDashboardFilter === card.filterKey ? 'Showing matching tickets below' : card.hint }}
+                                    </div>
+                                </div>
+                                <span class="mt-1 h-3 w-3 rounded-full shadow-sm" :class="card.accentClass"></span>
+                            </div>
                         </button>
                     </div>
                 </div>
-            </Transition>
+            </section>
 
-            <!-- Filters Toolbar -->
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap items-end gap-4">
-                <div class="flex flex-col gap-1 w-48">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</label>
-                    <Autocomplete
-                        v-model="filterStatus"
-                        :options="statusOptions"
-                        label-key="name"
-                        value-key="id"
-                        placeholder="Filter by status..."
-                        @update:modelValue="applyFilter"
-                    />
+            <div class="sticky top-4 z-20 space-y-4">
+                <div class="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
+                    <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
+                        <div class="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
+                                <Autocomplete
+                                    v-model="filterStatus"
+                                    :options="statusOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Filter by status..."
+                                    @update:modelValue="applyFilter"
+                                />
+                            </div>
+
+                            <div v-if="subUnitOptions.length > 1" class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Sub-Unit</label>
+                                <Autocomplete
+                                    v-model="filterSubUnit"
+                                    :options="subUnitOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Filter by sub-unit..."
+                                    @update:modelValue="applyFilter"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Assignee</label>
+                                <Autocomplete
+                                    v-model="filterAssignee"
+                                    :options="assigneeOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Filter by assignee..."
+                                    @update:modelValue="applyFilter"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">From</label>
+                                <input
+                                    v-model="filterStartDate"
+                                    type="date"
+                                    @change="applyFilter"
+                                    class="h-[38px] rounded-lg border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                >
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">To</label>
+                                <input
+                                    v-model="filterEndDate"
+                                    type="date"
+                                    @change="applyFilter"
+                                    class="h-[38px] rounded-lg border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2 xl:justify-end">
+                            <button
+                                @click="clearFilters"
+                                class="inline-flex h-[38px] items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
+                            >
+                                Reset
+                            </button>
+
+                            <button
+                                v-if="hasPermission('tickets.create')"
+                                @click="showCreateModal = true"
+                                class="inline-flex h-[38px] items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-blue-700"
+                            >
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                <span>Create Ticket</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="flex flex-wrap gap-2">
+                            <span
+                                v-if="!hasActiveFilters"
+                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600"
+                            >
+                                No active monitoring filters
+                            </span>
+                            <span
+                                v-for="badge in activeFilterBadges"
+                                :key="badge"
+                                class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700"
+                            >
+                                {{ badge }}
+                            </span>
+                        </div>
+                        <div class="text-xs font-medium text-slate-500">
+                            Filters apply without changing existing ticket logic or workflow behavior.
+                        </div>
+                    </div>
                 </div>
 
-                <div v-if="subUnitOptions.length > 1" class="flex flex-col gap-1 w-48">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sub-Unit</label>
-                    <Autocomplete
-                        v-model="filterSubUnit"
-                        :options="subUnitOptions"
-                        label-key="name"
-                        value-key="id"
-                        placeholder="Filter by sub-unit..."
-                        @update:modelValue="applyFilter"
-                    />
-                </div>
-
-                <div class="flex flex-col gap-1 w-48">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Assignee</label>
-                    <Autocomplete
-                        v-model="filterAssignee"
-                        :options="assigneeOptions"
-                        label-key="name"
-                        value-key="id"
-                        placeholder="Filter by assignee..."
-                        @update:modelValue="applyFilter"
-                    />
-                </div>
-
-                <div class="flex flex-col gap-1">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">From</label>
-                    <input v-model="filterStartDate" type="date" @change="applyFilter"
-                           class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[38px]">
-                </div>
-
-                <div class="flex flex-col gap-1">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">To</label>
-                    <input v-model="filterEndDate" type="date" @change="applyFilter"
-                           class="border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[38px]">
-                </div>
-
-                <button @click="clearFilters"
-                        class="px-4 h-[38px] text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200">
-                    Reset
-                </button>
-
-                <div class="ml-auto">
-                    <button v-if="hasPermission('tickets.create')"
-                            @click="showCreateModal = true"
-                            class="bg-blue-600 text-white px-4 h-[38px] rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-bold shadow-md whitespace-nowrap"
+                <Transition
+                    enter-active-class="transition ease-out duration-200"
+                    enter-from-class="opacity-0 -translate-y-2"
+                    enter-to-class="opacity-100 translate-y-0"
+                    leave-active-class="transition ease-in duration-150"
+                    leave-from-class="opacity-100 translate-y-0"
+                    leave-to-class="opacity-0 -translate-y-2"
+                >
+                    <div
+                        v-if="selectedIds.length > 0"
+                        class="rounded-2xl border border-blue-200 bg-blue-50/95 p-4 shadow-lg shadow-blue-100/60 backdrop-blur supports-[backdrop-filter]:bg-blue-50/90"
                     >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        <span>Create Ticket</span>
-                    </button>
-                </div>
+                        <div class="grid grid-cols-1 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_auto] xl:items-end">
+                            <div class="rounded-2xl border border-blue-200 bg-white/80 px-4 py-3 h-full">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Bulk Selection</div>
+                                <div class="mt-2 text-2xl font-black text-blue-900">{{ selectedIds.length }}</div>
+                                <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for update, split, merge, or child creation.</div>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Store</label>
+                                    <Autocomplete
+                                        v-model="bulkForm.store_id"
+                                        :options="storesWithLabel"
+                                        label-key="display_name"
+                                        value-key="id"
+                                        placeholder="Unchanged..."
+                                    />
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Item</label>
+                                    <Autocomplete
+                                        v-model="bulkForm.item_id"
+                                        :options="items"
+                                        label-key="display_name"
+                                        value-key="id"
+                                        placeholder="Unchanged..."
+                                        size="sm"
+                                    />
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Assignee</label>
+                                    <select
+                                        v-model="bulkForm.assignee_id"
+                                        class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                    >
+                                        <option value="">-- Unchanged --</option>
+                                        <option v-for="p in staff" :key="p.id" :value="p.id">{{ p.name }}</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:w-[340px]">
+                                <button
+                                    v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
+                                    @click="openBulkChildModal"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50"
+                                >
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    Create Child Tickets
+                                </button>
+                                <button
+                                    v-if="selectedIds.length === 1 && hasPermission('tickets.edit')"
+                                    @click="openSplitModal"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50"
+                                >
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                    </svg>
+                                    Split
+                                </button>
+                                <button
+                                    v-if="selectedIds.length > 1 && hasPermission('tickets.edit')"
+                                    @click="openMergeModal"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                                >
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                    </svg>
+                                    Merge
+                                </button>
+                                <button
+                                    @click="selectedIds = []"
+                                    class="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                                >
+                                    Clear
+                                </button>
+                                <button
+                                    @click="submitBulk"
+                                    :disabled="isBulkSubmitting"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50 sm:col-span-2"
+                                >
+                                    <svg v-if="isBulkSubmitting" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Apply to {{ selectedIds.length }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </Transition>
             </div>
 
-            <!-- Data Table -->
             <DataTable
-                title="Ticket Management"
-                subtitle="Manage support tickets (Click a row to edit)"
-                search-placeholder="Search by key, title, or description..."
-                empty-message="No tickets found. Create your first ticket to get started."
+                title="Ticket Monitoring Board"
+                :subtitle="tableSubtitle"
+                search-placeholder="Search by key, title, description, reporter, or assignee..."
+                :empty-message="emptyStateMessage"
                 :search="pagination.search.value"
-                :data="pagination.data.value"
+                :data="displayedTickets"
                 :current-page="pagination.currentPage.value"
                 :last-page="pagination.lastPage.value"
                 :per-page="pagination.perPage.value"
@@ -813,26 +1157,22 @@ const formatItemName = (item) => {
                 @go-to-page="pagination.goToPage"
                 @change-per-page="pagination.changePerPage"
             >
-                <template #actions>
-                    <!-- Status select removed from here as it's moved to filters toolbar -->
-                </template>
-
                 <template #header>
                     <tr>
                         <th class="px-4 py-3 w-10">
-                            <input type="checkbox" :checked="allSelected" @change="toggleAll"
-                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                :checked="allSelected"
+                                @change="toggleAll"
+                                class="cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            >
                         </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creator</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Queue Detail</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Health</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Requester</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</th>
                     </tr>
                 </template>
 
@@ -841,136 +1181,153 @@ const formatItemName = (item) => {
                         v-for="ticket in data"
                         :key="ticket.id"
                         @click="editTicket(ticket)"
-                        class="group transition-all border-l-4"
+                        class="group border-l-4 align-top transition-all"
                         :class="[
                             getSlaRowClass(ticket),
                             hasPermission('tickets.edit') ? 'cursor-pointer' : 'cursor-not-allowed',
-                            selectedIds.includes(ticket.id) ? '!bg-blue-50' : ''
+                            selectedIds.includes(ticket.id) ? '!bg-blue-50 ring-1 ring-inset ring-blue-100' : ''
                         ]"
                     >
-                        <td class="px-4 py-4 w-10" @click.stop>
-                            <input type="checkbox" :value="ticket.id" v-model="selectedIds"
-                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
-                            <div>{{ ticket.ticket_key }}</div>
-                            <div v-for="child in ticket.children" :key="child.id" class="text-[10px] text-blue-600 mt-1">
-                                {{ child.ticket_key }}
-                            </div>
-                        </td>
-                        <td class="px-6 py-4">
-                            <div class="flex flex-col">
-                                <div class="text-sm font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">{{ ticket.title }}</div>
-                                <div class="text-xs text-gray-500 truncate max-w-xs">{{ ticket.description }}</div>
-                                <!-- Child Tickets -->
-                                <div v-for="child in ticket.children" :key="child.id" class="text-[10px] text-blue-500 italic mt-1 font-medium">
-                                    ↳ {{ child.title }}
-                                </div>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {{ ticket.store ? ticket.store.name : '-' }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-600 font-medium">
-                            {{ formatItemName(ticket.item) }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
-                                {{ getPriorityLabel(ticket.item?.priority || ticket.priority) }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize border" :class="getStatusColor(ticket.status)">
-                                {{ getStatusLabel(ticket.status) }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div v-if="ticket.sla_metric" class="flex flex-col space-y-1">
-                                <!-- Response SLA -->
-                                <span v-if="ticket.sla_metric.response_target_at" 
-                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border items-center shadow-sm"
-                                      :class="[
-                                          ticket.sla_metric.is_response_breached ? 'bg-red-100 text-red-700 border-red-200 animate-pulse-red' : 
-                                          (ticket.sla_metric.first_response_at ? 'bg-green-100 text-green-700 border-green-200' : 
-                                          (isNearlyDue(ticket.sla_metric.response_target_at) ? 'bg-yellow-100 text-yellow-700 border-yellow-300 animate-pulse-yellow' : 'bg-blue-50 text-blue-700 border-blue-100'))
-                                      ]">
-                                    <svg v-if="ticket.sla_metric.is_response_breached" class="w-2 h-2 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                                    <svg v-else-if="isNearlyDue(ticket.sla_metric.response_target_at) && !ticket.sla_metric.first_response_at" class="w-2 h-2 mr-1 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                                    RES: {{ ticket.sla_metric.is_response_breached ? 'BREACH' : (ticket.sla_metric.first_response_at ? 'MET' : 'OK') }}
-                                </span>
-                                <!-- Resolution SLA -->
-                                <span v-if="ticket.sla_metric.resolution_target_at" 
-                                      class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase border items-center shadow-sm"
-                                      :class="[
-                                          ticket.sla_metric.is_resolution_breached ? 'bg-red-100 text-red-700 border-red-200 animate-pulse-red' : 
-                                          (ticket.sla_metric.resolved_at ? 'bg-green-100 text-green-700 border-green-200' : 
-                                          (isNearlyDue(ticket.sla_metric.resolution_target_at) ? 'bg-yellow-100 text-yellow-700 border-yellow-300 animate-pulse-yellow' : 'bg-blue-50 text-blue-700 border-blue-100'))
-                                      ]">
-                                    <svg v-if="ticket.sla_metric.is_resolution_breached" class="w-2 h-2 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                                    <svg v-else-if="isNearlyDue(ticket.sla_metric.resolution_target_at) && !ticket.sla_metric.resolved_at" class="w-2 h-2 mr-1 text-yellow-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                                    SLV: {{ ticket.sla_metric.is_resolution_breached ? 'BREACH' : (ticket.sla_metric.resolved_at ? 'MET' : 'OK') }}
-                                </span>
-                            </div>
-                            <span v-else class="text-[10px] text-gray-400 italic">No SLA</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm">
-                            <div v-if="ticket.reporter" class="flex items-center space-x-2">
-                                <div v-if="ticket.reporter.profile_photo" class="h-6 w-6 rounded-full overflow-hidden border border-gray-200">
-                                    <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
-                                </div>
-                                <div v-else class="h-6 w-6 rounded-full bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-600 border border-blue-100">
-                                    {{ ticket.reporter.name.charAt(0) }}
-                                </div>
-                                <span class="text-gray-700 font-medium">{{ ticket.reporter.name }}</span>
-                            </div>
-                            <div v-else-if="ticket.sender_email" class="flex flex-col">
-                                <span class="text-gray-700 font-medium">{{ ticket.sender_name || 'External User' }}</span>
-                                <span class="text-[10px] text-gray-400 truncate max-w-[150px]">{{ ticket.sender_email }}</span>
-                            </div>
-                            <span v-else class="text-gray-400 italic">Unknown</span>
-                        </td>
-                         <td class="px-6 py-4 whitespace-nowrap text-sm" @click.stop>
-                            <div v-if="ticket.assignee" class="flex items-center space-x-2">
-                                <div v-if="ticket.assignee.profile_photo" class="h-6 w-6 rounded-full overflow-hidden border border-gray-200">
-                                    <img :src="'/serve-storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
-                                </div>
-                                <div v-else class="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-600">
-                                    {{ ticket.assignee.name.charAt(0) }}
-                                </div>
-                                <span class="text-gray-700 font-medium">{{ ticket.assignee.name }}</span>
-                            </div>
-                            <button 
-                                v-else-if="hasPermission('tickets.assign')"
-                                @click="acceptTicket(ticket)"
-                                class="inline-flex items-center px-3 py-1 border border-blue-600 text-xs font-bold rounded-md text-blue-600 bg-white hover:bg-blue-600 hover:text-white transition-all focus:outline-none shadow-sm"
+                        <td class="px-4 py-5 w-10 align-top" @click.stop>
+                            <input
+                                type="checkbox"
+                                :value="ticket.id"
+                                v-model="selectedIds"
+                                class="mt-1 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             >
-                                Accept Ticket
-                            </button>
-                            <!-- Child Assignees -->
-                            <div v-for="child in ticket.children" :key="child.id" class="mt-2 ml-4">
-                                <div v-if="child.assignee" class="flex items-center space-x-2">
-                                    <div v-if="child.assignee.profile_photo" class="h-4 w-4 rounded-full overflow-hidden border border-gray-200">
-                                        <img :src="'/serve-storage/' + child.assignee.profile_photo" class="h-full w-full object-cover" :alt="child.assignee.name">
+                        </td>
+                        <td class="px-4 py-5 align-top">
+                            <div class="min-w-[260px] space-y-3">
+                                <div class="flex flex-wrap items-start gap-2">
+                                    <span class="inline-flex rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-black tracking-wide text-white shadow-sm">
+                                        {{ ticket.ticket_key }}
+                                    </span>
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
+                                        {{ getPriorityLabel(ticket.item?.priority || ticket.priority) }}
+                                    </span>
+                                    <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize" :class="getStatusColor(ticket.status)">
+                                        {{ getStatusLabel(ticket.status) }}
+                                    </span>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <div class="text-sm font-bold leading-5 text-slate-900 transition-colors group-hover:text-blue-700">
+                                        {{ ticket.title }}
                                     </div>
-                                    <div v-else class="h-4 w-4 rounded-full bg-blue-50 flex items-center justify-center text-[8px] font-bold text-blue-600">
-                                        {{ child.assignee.name.charAt(0) }}
+                                    <p class="max-w-xl overflow-hidden text-xs leading-5 text-slate-500 max-h-10">
+                                        {{ ticket.description || 'No description provided.' }}
+                                    </p>
+                                </div>
+
+                                <div v-if="ticket.children?.length" class="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
+                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">Child Tickets</div>
+                                    <div class="space-y-2">
+                                        <div v-for="child in ticket.children" :key="child.id" class="flex items-start justify-between gap-3 text-xs">
+                                            <div class="min-w-0">
+                                                <div class="font-bold text-blue-900">{{ child.ticket_key }}</div>
+                                                <div class="truncate text-blue-700">{{ child.title }}</div>
+                                            </div>
+                                            <div class="shrink-0 text-right text-[11px] text-blue-700">
+                                                {{ child.assignee?.name || 'Unassigned' }}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <span class="text-[10px] text-blue-600 font-medium italic">↳ {{ child.assignee.name }}</span>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 relative">
-                            <span>{{ formatDate(ticket.created_at) }}</span>
-                            <!-- Hover instruction -->
-                            <div v-if="hasPermission('tickets.edit')" class="absolute inset-y-0 right-4 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-100 px-2 py-1 rounded">View Details</span>
+                        <td class="px-4 py-5 align-top">
+                            <div class="min-w-[220px] space-y-3 text-sm">
+                                <div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Store</div>
+                                    <div class="mt-1 font-semibold text-slate-800">{{ ticket.store ? ticket.store.name : '-' }}</div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Item</div>
+                                    <div class="mt-1 text-xs leading-5 text-slate-600">{{ formatItemName(ticket.item) }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-5 align-top">
+                            <div v-if="ticket.sla_metric" class="min-w-[180px] space-y-2">
+                                <div
+                                    v-for="sla in [getSlaState(ticket, 'response'), getSlaState(ticket, 'resolution')]"
+                                    :key="sla.label"
+                                    class="rounded-xl border px-3 py-2"
+                                    :class="sla.toneClass"
+                                >
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div class="flex items-center gap-2">
+                                            <span class="h-2.5 w-2.5 rounded-full" :class="sla.dotClass"></span>
+                                            <span class="text-[10px] font-black uppercase tracking-[0.2em]">{{ sla.label }}</span>
+                                        </div>
+                                        <span class="text-xs font-bold">{{ sla.value }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else class="inline-flex rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                                No SLA target
+                            </div>
+                        </td>
+                        <td class="px-4 py-5 align-top text-sm">
+                            <div class="min-w-[170px] space-y-1.5">
+                                <div v-if="ticket.reporter" class="flex items-center gap-2">
+                                    <div v-if="ticket.reporter.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
+                                        <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
+                                    </div>
+                                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-[10px] font-bold text-blue-600">
+                                        {{ ticket.reporter.name.charAt(0) }}
+                                    </div>
+                                    <span class="font-semibold text-slate-700">{{ ticket.reporter.name }}</span>
+                                </div>
+                                <div v-else class="font-semibold text-slate-700">{{ getReporterLabel(ticket) }}</div>
+                                <div v-if="ticket.sender_email" class="truncate text-[11px] text-slate-400">{{ ticket.sender_email }}</div>
+                                <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Requester</div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-5 align-top text-sm" @click.stop>
+                            <div class="min-w-[180px] space-y-2">
+                                <div v-if="ticket.assignee" class="flex items-center gap-2">
+                                    <div v-if="ticket.assignee.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
+                                        <img :src="'/serve-storage/' + ticket.assignee.profile_photo" class="h-full w-full object-cover" :alt="ticket.assignee.name">
+                                    </div>
+                                    <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">
+                                        {{ ticket.assignee.name.charAt(0) }}
+                                    </div>
+                                    <div>
+                                        <div class="font-semibold text-slate-800">{{ ticket.assignee.name }}</div>
+                                        <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assigned</div>
+                                    </div>
+                                </div>
+                                <button
+                                    v-else-if="hasPermission('tickets.assign')"
+                                    @click="acceptTicket(ticket)"
+                                    class="inline-flex items-center rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-xs font-bold text-blue-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white focus:outline-none"
+                                >
+                                    Accept Ticket
+                                </button>
+                                <div v-else class="inline-flex rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500">
+                                    Unassigned
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-5 align-top text-sm text-slate-500">
+                            <div class="min-w-[150px] space-y-2">
+                                <div class="font-medium text-slate-700">{{ formatDate(ticket.created_at) }}</div>
+                                <div
+                                    v-if="hasPermission('tickets.edit')"
+                                    class="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-blue-600"
+                                >
+                                    <span>Open</span>
+                                    <svg class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
                             </div>
                         </td>
                     </tr>
                 </template>
             </DataTable>
         </div>
-
         <!-- Create Ticket Modal -->
         <div v-if="showCreateModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
