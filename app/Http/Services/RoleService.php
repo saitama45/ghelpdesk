@@ -45,11 +45,17 @@ class RoleService
         }
 
         $grouped = [];
-        // Administrative modules stay grouped together in the role manager UI.
+        // Keep Services ahead of Administrative in role-related UIs.
         $preferredOrder = [
             'dashboard',
-            'attendance',
             'tickets',
+            'pos_requests',
+            'sap_requests',
+            'stock in',
+            'attendance',
+            'schedules',
+            'presence',
+            'kb articles',
             'users',
             'roles',
             'reports',
@@ -61,18 +67,12 @@ class RoleService
             'assets',
             'request_types',
             'form_builder',
-            'pos_requests',
-            'sap_requests',
-            'stock in',
             'stores',
             'vendors',
             'activity_templates',
-            'schedules',
             'settings',
             'canned_messages',
             'projects',
-            'presence',
-            'kb articles',
         ];
 
         foreach ($permissions as $permissionName) {

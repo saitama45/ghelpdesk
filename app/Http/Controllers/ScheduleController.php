@@ -234,7 +234,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'user_id'                          => 'required|exists:users,id',
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
-            'stores.*.store_id'                => 'required|exists:stores,id',
+            'stores.*.store_id'                => 'required_unless:status,Restday|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
@@ -244,6 +244,8 @@ class ScheduleController extends Controller implements HasMiddleware
             'pickup_end'                       => 'nullable|string',
             'backlogs_start'                   => 'nullable|string',
             'backlogs_end'                     => 'nullable|string',
+        ], [
+            'stores.*.store_id.required_unless' => 'Location is required for every schedule entry.',
         ]);
 
         $storeEntries = $request->input('stores');
@@ -311,7 +313,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'user_id'                          => 'required|exists:users,id',
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
-            'stores.*.store_id'                => 'required|exists:stores,id',
+            'stores.*.store_id'                => 'required_unless:status,Restday|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
@@ -321,6 +323,8 @@ class ScheduleController extends Controller implements HasMiddleware
             'pickup_end'                       => 'nullable|string',
             'backlogs_start'                   => 'nullable|string',
             'backlogs_end'                     => 'nullable|string',
+        ], [
+            'stores.*.store_id.required_unless' => 'Location is required for every schedule entry.',
         ]);
 
         $storeEntries = $request->input('stores');
@@ -996,12 +1000,14 @@ class ScheduleController extends Controller implements HasMiddleware
         $userIds = $users->pluck('id');
 
         // Fetch all schedules for these users in range
-        $schedules = Schedule::whereIn('user_id', $userIds)
+        $schedules = Schedule::with(['scheduleStores:id,schedule_id,store_id,start_time,end_time'])
+            ->whereIn('user_id', $userIds)
             ->where('start_time', '<=', $rangeEnd)
             ->where('end_time', '>=', $rangeStart)
-            ->get(['user_id', 'start_time', 'end_time']);
+            ->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
 
         $userScheduledDates = [];
+        $userMissingLocationDates = [];
         foreach ($schedules as $s) {
             $sStart = $s->start_time->copy()->timezone('Asia/Manila');
             $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
@@ -1014,20 +1020,63 @@ class ScheduleController extends Controller implements HasMiddleware
                 }
                 $curr->addDay();
             }
+
+            if ($s->status === 'Restday') {
+                continue;
+            }
+
+            if ($s->scheduleStores->isEmpty()) {
+                $curr = $sStart->copy();
+                while ($curr->toDateString() <= $sEnd->toDateString()) {
+                    $dateStr = $curr->toDateString();
+                    if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                        $userMissingLocationDates[$s->user_id][$dateStr] = true;
+                    }
+                    $curr->addDay();
+                }
+
+                continue;
+            }
+
+            foreach ($s->scheduleStores as $scheduleStore) {
+                if ($scheduleStore->store_id) {
+                    continue;
+                }
+
+                $segmentStart = ($scheduleStore->start_time ?? $s->start_time)->copy()->timezone('Asia/Manila');
+                $segmentEnd = ($scheduleStore->end_time ?? $s->end_time)->copy()->timezone('Asia/Manila');
+
+                $curr = $segmentStart->copy();
+                while ($curr->toDateString() <= $segmentEnd->toDateString()) {
+                    $dateStr = $curr->toDateString();
+                    if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                        $userMissingLocationDates[$s->user_id][$dateStr] = true;
+                    }
+                    $curr->addDay();
+                }
+            }
         }
 
-        $results = $users->map(function ($user) use ($allDates, $userScheduledDates) {
+        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $userMissingLocationDates) {
             $missing = [];
+            $missingLocations = [];
             foreach ($allDates as $date) {
                 if (!isset($userScheduledDates[$user->id][$date])) {
                     $missing[] = Carbon::parse($date)->format('M j');
                 }
+
+                if (isset($userMissingLocationDates[$user->id][$date])) {
+                    $missingLocations[] = Carbon::parse($date)->format('M j');
+                }
             }
             
-            if (empty($missing)) return null;
+            if (empty($missing) && empty($missingLocations)) return null;
 
             $user->missing_days = $missing;
             $user->missing_days_count = count($missing);
+            $user->missing_locations = $missingLocations;
+            $user->missing_location_count = count($missingLocations);
+            $user->missing_total_count = count($missing) + count($missingLocations);
             return $user;
         })->filter()->values();
 

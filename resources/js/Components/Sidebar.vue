@@ -221,82 +221,8 @@ const canSeeSettings = computed(() => {
                     </div>
                 </Link>
 
-                <!-- Administrative Section -->
-                <div v-if="canSeeAdminTask" class="space-y-1 pt-2">
-                    <button
-                        @click="toggleMenu('adminTask')"
-                        :class="[
-                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) && !openMenus.adminTask
-                                ? 'bg-gray-800 text-blue-400'
-                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        ]"
-                    >
-                        <BriefcaseIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Administrative</span>
-                        <ChevronDownIcon v-if="!isCollapsed && openMenus.adminTask" class="w-4 h-4 ml-2" />
-                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.adminTask" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Administrative
-                        </div>
-                    </button>
-
-                    <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 space-y-1 mt-1 transition-all duration-300">
-                        <Link
-                            v-if="hasPermission('attendance.view')"
-                            :href="route('attendance.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>DTR</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('attendance.logs')"
-                            :href="route('attendance.logs')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Attendance Logs</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('schedules.view')"
-                            :href="route('schedules.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Scheduling</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('presence.view')"
-                            :href="route('presence.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Presence</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('kb_articles.view')"
-                            :href="route('kb-articles.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>KB Articles</span>
-                        </Link>
-                    </div>
-                </div>
-
                 <!-- Services Section -->
-                <div v-if="canSeeServices" class="space-y-1 pt-1">
+                <div v-if="canSeeServices" class="space-y-1 pt-2">
                     <button
                         @click="toggleMenu('services')"
                         :class="[
@@ -369,6 +295,80 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>{{ form.name }}</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Administrative Section -->
+                <div v-if="canSeeAdminTask" class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('adminTask')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) && !openMenus.adminTask
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <BriefcaseIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Administrative</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.adminTask" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.adminTask" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Administrative
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 space-y-1 mt-1 transition-all duration-300">
+                        <Link
+                            v-if="hasPermission('attendance.view')"
+                            :href="route('attendance.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>DTR</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('attendance.logs')"
+                            :href="route('attendance.logs')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Attendance Logs</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('schedules.view')"
+                            :href="route('schedules.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Scheduling</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('presence.view')"
+                            :href="route('presence.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Presence</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('kb_articles.view')"
+                            :href="route('kb-articles.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>KB Articles</span>
                         </Link>
                     </div>
                 </div>

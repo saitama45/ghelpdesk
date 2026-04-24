@@ -133,6 +133,29 @@ const getStatusBadgeClass = (status) => {
     }
 }
 
+const storesCoveredDisplayLimit = 12
+const showStoresCoveredModal = ref(false)
+
+const storesCovered = computed(() => {
+    return Array.isArray(props.posRequest.stores_covered)
+        ? props.posRequest.stores_covered.filter(Boolean)
+        : []
+})
+
+const coversAllStores = computed(() => storesCovered.value.includes('all'))
+const visibleStoresCovered = computed(() => coversAllStores.value ? [] : storesCovered.value.slice(0, storesCoveredDisplayLimit))
+const hiddenStoresCovered = computed(() => coversAllStores.value ? [] : storesCovered.value.slice(storesCoveredDisplayLimit))
+const hiddenStoresCoveredCount = computed(() => hiddenStoresCovered.value.length)
+
+const openStoresCoveredModal = () => {
+    if (!hiddenStoresCoveredCount.value) return
+    showStoresCoveredModal.value = true
+}
+
+const closeStoresCoveredModal = () => {
+    showStoresCoveredModal.value = false
+}
+
 const totalLevels = computed(() => Number(props.posRequest.request_type?.approval_levels || 0))
 const stages = computed(() => Array.from({ length: totalLevels.value }, (_, i) => i + 1))
 
@@ -322,13 +345,21 @@ const formatDateTime = (dateStr) => {
                             <div class="mt-10 pt-10 border-t border-gray-100">
                                 <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Stores Covered</label>
                                 <div class="flex flex-wrap gap-2">
-                                    <template v-if="posRequest.stores_covered.includes('all')">
+                                    <template v-if="coversAllStores">
                                         <span class="px-6 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase italic tracking-widest shadow-lg shadow-indigo-100">All Stores</span>
                                     </template>
                                     <template v-else>
-                                        <span v-for="code in posRequest.stores_covered" :key="code" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200">
+                                        <span v-for="code in visibleStoresCovered" :key="code" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200">
                                             {{ code }}
                                         </span>
+                                        <button
+                                            v-if="hiddenStoresCoveredCount > 0"
+                                            type="button"
+                                            @click="openStoresCoveredModal"
+                                            class="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-black border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                                        >
+                                            {{ hiddenStoresCoveredCount }}+ more
+                                        </button>
                                     </template>
                                 </div>
                             </div>
@@ -588,6 +619,35 @@ const formatDateTime = (dateStr) => {
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="showStoresCoveredModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeStoresCoveredModal"></div>
+                <div class="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl p-8 border border-gray-100">
+                    <div class="flex items-start justify-between gap-4 mb-6">
+                        <div>
+                            <h3 class="text-2xl font-black text-gray-900">Stores Covered</h3>
+                            <p class="mt-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+                                {{ storesCovered.length }} {{ storesCovered.length === 1 ? 'Store' : 'Stores' }}
+                            </p>
+                        </div>
+                        <button @click="closeStoresCoveredModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="max-h-[60vh] overflow-y-auto pr-1">
+                        <div class="flex flex-wrap gap-2">
+                            <span v-for="code in storesCovered" :key="`modal-${code}`" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200">
+                                {{ code }}
+                            </span>
                         </div>
                     </div>
                 </div>

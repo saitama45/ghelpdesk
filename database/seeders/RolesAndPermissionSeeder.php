@@ -22,11 +22,6 @@ class RolesAndPermissionSeeder extends Seeder
             // Dashboard
             'dashboard.view' => 'View dashboard',
 
-            // Administrative - Attendance
-            'attendance.view' => 'View DTR',
-            'attendance.logs' => 'View attendance logs',
-            'attendance.create' => 'Can log attendance',
-            
             // Tickets
             'tickets.view' => 'View tickets',
             'tickets.create' => 'Create tickets',
@@ -118,6 +113,25 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_ins.post' => 'Post Stock In',
             'stock_ins.delete' => 'Delete Stock In',
 
+            // Administrative - Attendance
+            'attendance.view' => 'View DTR',
+            'attendance.logs' => 'View attendance logs',
+            'attendance.create' => 'Can log attendance',
+
+            // Administrative - Schedules
+            'schedules.view' => 'View schedules',
+            'schedules.create' => 'Create schedules',
+            'schedules.edit' => 'Edit schedules',
+
+            // Administrative - Presence
+            'presence.view' => 'View online users and their status history',
+
+            // Administrative - KB Articles
+            'kb_articles.view' => 'View KB articles',
+            'kb_articles.create' => 'Create KB articles',
+            'kb_articles.edit' => 'Edit KB articles',
+            'kb_articles.delete' => 'Delete KB articles',
+
             // Stores
             'stores.view' => 'View stores',
             'stores.create' => 'Create stores',
@@ -134,11 +148,6 @@ class RolesAndPermissionSeeder extends Seeder
             'activity_templates.create' => 'Create activity templates',
             'activity_templates.edit' => 'Edit activity templates',
             'activity_templates.delete' => 'Delete activity templates',
-
-            // Administrative - Schedules
-            'schedules.view' => 'View schedules',
-            'schedules.create' => 'Create schedules',
-            'schedules.edit' => 'Edit schedules',
 
             // Settings
             'settings.view' => 'View system settings',
@@ -157,14 +166,6 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.manage_tasks' => 'Manage project tasks',
             'projects.manage_assets' => 'Manage project assets',
 
-            // Administrative - Presence
-            'presence.view' => 'View online users and their status history',
-
-            // Administrative - KB Articles
-            'kb_articles.view' => 'View KB articles',
-            'kb_articles.create' => 'Create KB articles',
-            'kb_articles.edit' => 'Edit KB articles',
-            'kb_articles.delete' => 'Delete KB articles',
         ];
 
         // Create permissions
@@ -187,8 +188,8 @@ class RolesAndPermissionSeeder extends Seeder
         
         $techSupport->givePermissionTo([
             'dashboard.view',
-            'attendance.view', 'attendance.logs', 'attendance.create',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
+            'attendance.view', 'attendance.logs', 'attendance.create',
             'users.view',
             'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance',
             'companies.view',
@@ -221,8 +222,8 @@ class RolesAndPermissionSeeder extends Seeder
         
         $user->givePermissionTo([
             'dashboard.view',
-            'attendance.view', 'attendance.create',
             'tickets.view', 'tickets.create',
+            'attendance.view', 'attendance.create',
         ]);
 
         // Create default users

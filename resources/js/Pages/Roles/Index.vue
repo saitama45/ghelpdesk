@@ -385,6 +385,15 @@ const landingPageOptions = [
         ]
     },
     {
+        group: 'Services',
+        options: [
+            { label: 'Tickets', value: 'tickets.index' },
+            { label: 'POS Requests', value: 'pos-requests.index' },
+            { label: 'SAP Requests', value: 'sap-requests.index' },
+            { label: 'Stock In', value: 'stock-ins.index' },
+        ]
+    },
+    {
         group: 'Administrative',
         options: [
             { label: 'DTR (Attendance)', value: 'attendance.index' },
@@ -392,15 +401,6 @@ const landingPageOptions = [
             { label: 'Scheduling', value: 'schedules.index' },
             { label: 'Presence', value: 'presence.index' },
             { label: 'KB Articles', value: 'kb-articles.index' },
-        ]
-    },
-    {
-        group: 'Services',
-        options: [
-            { label: 'Tickets', value: 'tickets.index' },
-            { label: 'POS Requests', value: 'pos-requests.index' },
-            { label: 'SAP Requests', value: 'sap-requests.index' },
-            { label: 'Stock In', value: 'stock-ins.index' },
         ]
     },
     {
@@ -583,8 +583,8 @@ const permissionGroups = computed(() => {
     return [
         { name: 'Dashboard', categories: ['Dashboard'] },
         { name: 'Project Tracker', categories: ['Projects'] },
-        { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
         { name: 'Services', categories: servicesCategories },
+        { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
         { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Assets', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },

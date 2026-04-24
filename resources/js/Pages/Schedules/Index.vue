@@ -225,7 +225,7 @@
                 <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                         <h3 class="text-lg font-bold text-gray-900">Missing Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Unscheduled Users</span>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Missing Days / Location</span>
                     </div>
                     <div class="overflow-x-auto custom-scrollbar">
                         <table class="min-w-full divide-y divide-gray-200">
@@ -234,12 +234,13 @@
                                     <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
                                     <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
                                     <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Days</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Location</th>
                                     <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr v-if="isMissingSchedulesLoading">
-                                    <td colspan="4" class="px-6 py-12 text-center">
+                                    <td colspan="5" class="px-6 py-12 text-center">
                                         <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -258,13 +259,22 @@
                                                 <span v-for="(day, i) in user.missing_days" :key="i" class="bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[10px] whitespace-nowrap">
                                                     {{ day }}
                                                 </span>
+                                                <span v-if="!user.missing_days?.length" class="text-gray-300 text-xs">-</span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_days_count }}</td>
+                                        <td class="px-6 py-4 text-sm text-amber-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.missing_locations" :key="i" class="bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.missing_locations?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_total_count ?? user.missing_days_count }}</td>
                                     </tr>
                                     <tr v-if="missingSchedulesData.length === 0">
-                                        <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-500 italic">
-                                            All users have schedules for this period.
+                                        <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                            All users have schedules and locations for this period.
                                         </td>
                                     </tr>
                                 </template>
@@ -511,13 +521,13 @@
                                 <!-- Row 1: Store | Start | End -->
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div>
-                                        <label class="block text-xs font-medium text-gray-500 mb-1">Location</label>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">Location{{ isLocationRequired ? '' : ' (Optional)' }}</label>
                                         <Autocomplete
                                             v-model="entry.store_id"
                                             :options="storeSelectOptions"
                                             label-key="name"
                                             value-key="id"
-                                            placeholder="Select store..."
+                                            :placeholder="isLocationRequired ? 'Select store...' : 'Select store if needed...'"
                                             :disabled="isViewingOnly"
                                         />
                                     </div>
@@ -1108,6 +1118,8 @@ const modalAudit = computed(() => {
     }
 })
 
+const isLocationRequired = computed(() => form.status !== 'Restday')
+
 const formatTime = (isoString) => {
     if (!isoString) return '-'
     return new Date(isoString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -1308,10 +1320,14 @@ const removeStore = (index) => {
 }
 
 const validateScheduleStores = () => {
+    if (!isLocationRequired.value) {
+        return true
+    }
+
     const missingStore = form.stores.some(entry => !entry.store_id)
 
     if (missingStore) {
-        showError('Store is required for every schedule entry.')
+        showError('Location is required for every schedule entry.')
         return false
     }
 
