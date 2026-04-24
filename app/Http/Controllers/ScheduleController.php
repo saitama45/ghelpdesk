@@ -234,7 +234,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'user_id'                          => 'required|exists:users,id',
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
-            'stores.*.store_id'                => 'required_unless:status,Restday|nullable|exists:stores,id',
+            'stores.*.store_id'                => 'required_unless:status,Restday,Holiday|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
@@ -313,7 +313,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'user_id'                          => 'required|exists:users,id',
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
-            'stores.*.store_id'                => 'required_unless:status,Restday|nullable|exists:stores,id',
+            'stores.*.store_id'                => 'required_unless:status,Restday,Holiday|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
@@ -1007,7 +1007,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
 
         $userScheduledDates = [];
-        $userMissingLocationDates = [];
+        $userMissingLocationEntries = [];
         foreach ($schedules as $s) {
             $sStart = $s->start_time->copy()->timezone('Asia/Manila');
             $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
@@ -1030,7 +1030,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 while ($curr->toDateString() <= $sEnd->toDateString()) {
                     $dateStr = $curr->toDateString();
                     if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
-                        $userMissingLocationDates[$s->user_id][$dateStr] = true;
+                        $userMissingLocationEntries[$s->user_id][$dateStr][$s->status] = true;
                     }
                     $curr->addDay();
                 }
@@ -1050,14 +1050,14 @@ class ScheduleController extends Controller implements HasMiddleware
                 while ($curr->toDateString() <= $segmentEnd->toDateString()) {
                     $dateStr = $curr->toDateString();
                     if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
-                        $userMissingLocationDates[$s->user_id][$dateStr] = true;
+                        $userMissingLocationEntries[$s->user_id][$dateStr][$s->status] = true;
                     }
                     $curr->addDay();
                 }
             }
         }
 
-        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $userMissingLocationDates) {
+        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $userMissingLocationEntries) {
             $missing = [];
             $missingLocations = [];
             foreach ($allDates as $date) {
@@ -1065,8 +1065,17 @@ class ScheduleController extends Controller implements HasMiddleware
                     $missing[] = Carbon::parse($date)->format('M j');
                 }
 
-                if (isset($userMissingLocationDates[$user->id][$date])) {
-                    $missingLocations[] = Carbon::parse($date)->format('M j');
+                if (isset($userMissingLocationEntries[$user->id][$date])) {
+                    $statuses = array_keys($userMissingLocationEntries[$user->id][$date]);
+                    sort($statuses);
+
+                    foreach ($statuses as $status) {
+                        $missingLocations[] = sprintf(
+                            '%s (%s)',
+                            Carbon::parse($date)->format('M j'),
+                            $status
+                        );
+                    }
                 }
             }
             

@@ -1118,7 +1118,7 @@ const modalAudit = computed(() => {
     }
 })
 
-const isLocationRequired = computed(() => form.status !== 'Restday')
+const isLocationRequired = computed(() => !['Restday', 'Holiday'].includes(form.status))
 
 const formatTime = (isoString) => {
     if (!isoString) return '-'
