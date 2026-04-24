@@ -654,19 +654,27 @@ const isTicketNearlyDue = (ticket) => {
     return responseNearlyDue || resolutionNearlyDue;
 };
 
+const isNewTicket = (ticket) => {
+    return ticket?.status === 'open'
+        && !ticket?.category_id
+        && !ticket?.sub_category_id
+        && !ticket?.item_id
+        && !ticket?.assignee;
+};
+
 const summaryCards = computed(() => {
     const data = pagination.data.value || [];
 
     return [
         {
-            key: 'visible',
-            filterKey: 'all',
-            label: 'Visible Tickets',
-            value: data.length,
-            hint: pagination.showingText.value || 'Current page results',
-            shellClass: 'border-slate-200 bg-slate-50/80',
-            valueClass: 'text-slate-900',
-            accentClass: 'bg-slate-700',
+            key: 'new',
+            filterKey: 'new',
+            label: 'New',
+            value: data.filter(isNewTicket).length,
+            hint: 'Open, uncategorized, and unassigned',
+            shellClass: 'border-purple-200 bg-purple-50/80',
+            valueClass: 'text-purple-900',
+            accentClass: 'bg-purple-600',
         },
         {
             key: 'unassigned',
@@ -715,6 +723,8 @@ const displayedTickets = computed(() => {
     const data = pagination.data.value || [];
 
     switch (activeDashboardFilter.value) {
+        case 'new':
+            return data.filter(isNewTicket);
         case 'unassigned':
             return data.filter(ticket => !ticket.assignee);
         case 'breached':
@@ -731,6 +741,7 @@ const displayedTickets = computed(() => {
 
 const getDashboardFilterLabel = (filterKey) => {
     switch (filterKey) {
+        case 'new': return 'Quick Filter: New';
         case 'unassigned': return 'Quick Filter: Unassigned';
         case 'breached': return 'Quick Filter: SLA Breached';
         case 'due_soon': return 'Quick Filter: Due Soon';
@@ -1251,7 +1262,8 @@ watch(activeDashboardFilter, () => {
                                 </div>
                                 <button
                                     v-else-if="hasPermission('tickets.assign')"
-                                    @click="acceptTicket(ticket)"
+                                    type="button"
+                                    @click.stop="acceptTicket(ticket)"
                                     class="inline-flex items-center rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-xs font-bold text-blue-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white focus:outline-none"
                                 >
                                     Accept Ticket
