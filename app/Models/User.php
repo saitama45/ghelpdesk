@@ -30,6 +30,8 @@ class User extends Authenticatable
         'last_activity_at',
         'profile_photo',
         'company_id',
+        'created_by',
+        'updated_by',
     ];
 
     public function managers()
@@ -40,6 +42,16 @@ class User extends Authenticatable
     public function subordinates()
     {
         return $this->belongsToMany(User::class, 'manager_user', 'manager_id', 'user_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     protected $hidden = [

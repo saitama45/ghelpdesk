@@ -34,6 +34,29 @@ const { hasPermission } = usePermission();
 
 const allStoreIds = computed(() => props.stores.map(s => s.id));
 
+const auditUserLabel = (user) => user?.name || user?.email || 'System';
+
+const formatAuditDate = (value) => {
+    if (!value) {
+        return '-';
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return '-';
+    }
+
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+};
+
 const isAllStoresSelected = (storeIds) => allStoreIds.value.length > 0 && allStoreIds.value.every(id => storeIds.includes(id));
 
 const toggleAllStores = (form) => {
@@ -534,7 +557,25 @@ const updatePassword = () => {
                                 :limit="5"
                             />
                         </div>
-                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-6 border-t mt-6">
+                            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created By</p>
+                                <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingUser?.creator) }}</p>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Updated By</p>
+                                <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingUser?.updater) }}</p>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created At</p>
+                                <p class="text-sm font-semibold text-gray-800">{{ formatAuditDate(editingUser?.created_at) }}</p>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Updated At</p>
+                                <p class="text-sm font-semibold text-gray-800">{{ formatAuditDate(editingUser?.updated_at) }}</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-end space-x-3 pt-2">
                             <button type="button" @click="showEditModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
                             <button type="submit" :disabled="editForm.processing" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all disabled:opacity-50">Update</button>
                         </div>

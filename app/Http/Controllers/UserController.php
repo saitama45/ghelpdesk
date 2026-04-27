@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Http\Services\RoleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
@@ -14,7 +15,7 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['roles:id,name', 'stores:id,name,code', 'managers:id,name']);
+        $query = User::with(['roles:id,name', 'stores:id,name,code', 'managers:id,name', 'creator:id,name,email', 'updater:id,name,email']);
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
@@ -77,6 +78,8 @@ class UserController extends Controller
             'is_active' => $request->input('is_active', true),
             'is_manager' => $request->input('is_manager', false),
             'email_verified_at' => now(),
+            'created_by' => auth()->id(),
+            'updated_by' => auth()->id(),
         ]);
 
         $user->assignRole($request->role);
@@ -118,6 +121,7 @@ class UserController extends Controller
         $user->position = $request->position;
         $user->is_active = $request->boolean('is_active');
         $user->is_manager = $request->boolean('is_manager');
+        $user->updated_by = auth()->id();
         $user->save();
 
         $user->syncRoles([$request->role]);
@@ -142,6 +146,9 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
+        DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);
+
         $user->delete();
         return redirect()->back()->with('success', 'User deleted successfully.');
     }
@@ -154,6 +161,7 @@ class UserController extends Controller
 
         $user->update([
             'password' => Hash::make($request->password),
+            'updated_by' => auth()->id(),
         ]);
 
         return redirect()->back()->with('success', 'Password reset successfully.');
