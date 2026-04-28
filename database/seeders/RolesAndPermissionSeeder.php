@@ -238,6 +238,10 @@ class RolesAndPermissionSeeder extends Seeder
             ]
         );
         $adminUser->assignRole('Admin');
+        $adminUser->forceFill([
+            'created_by' => $adminUser->created_by ?: $adminUser->id,
+            'updated_by' => $adminUser->updated_by ?: $adminUser->id,
+        ])->save();
 
         $techSupportUser = User::firstOrCreate(
             ['email' => 'support@gmail.com'],
@@ -250,6 +254,10 @@ class RolesAndPermissionSeeder extends Seeder
             ]
         );
         $techSupportUser->assignRole('Tech Support');
+        $techSupportUser->forceFill([
+            'created_by' => $techSupportUser->created_by ?: $adminUser->id,
+            'updated_by' => $techSupportUser->updated_by ?: $adminUser->id,
+        ])->save();
 
         $regularUser = User::firstOrCreate(
             ['email' => 'user@gmail.com'],
@@ -262,6 +270,10 @@ class RolesAndPermissionSeeder extends Seeder
             ]
         );
         $regularUser->assignRole('User');
+        $regularUser->forceFill([
+            'created_by' => $regularUser->created_by ?: $adminUser->id,
+            'updated_by' => $regularUser->updated_by ?: $adminUser->id,
+        ])->save();
 
         $this->command->info('✅ Roles and permissions created successfully!');
         $this->command->info('  - Admin: admin@gmail.com / admin123');

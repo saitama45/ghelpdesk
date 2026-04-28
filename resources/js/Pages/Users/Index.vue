@@ -34,7 +34,17 @@ const { hasPermission } = usePermission();
 
 const allStoreIds = computed(() => props.stores.map(s => s.id));
 
-const auditUserLabel = (user) => user?.name || user?.email || 'System';
+const auditUserLabel = (user, userId = null) => {
+    if (user?.name || user?.email) {
+        return user.name || user.email;
+    }
+
+    if (userId) {
+        return `User #${userId}`;
+    }
+
+    return 'System';
+};
 
 const formatAuditDate = (value) => {
     if (!value) {
@@ -560,11 +570,11 @@ const updatePassword = () => {
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-6 border-t mt-6">
                             <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
                                 <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created By</p>
-                                <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingUser?.creator) }}</p>
+                                <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingUser?.creator, editingUser?.created_by) }}</p>
                             </div>
                             <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
                                 <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Updated By</p>
-                                <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingUser?.updater) }}</p>
+                                <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingUser?.updater, editingUser?.updated_by) }}</p>
                             </div>
                             <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
                                 <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created At</p>

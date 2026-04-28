@@ -41,6 +41,10 @@ class RegisteredUserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
         ]);
+        $user->forceFill([
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ])->save();
 
         event(new Registered($user));
 
