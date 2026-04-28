@@ -43,7 +43,7 @@ class DashboardController extends Controller
         // Dropdown Data for Filters
         $allUsers = \App\Models\User::active()->whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name')->get();
+        })->select('id', 'name', 'sub_unit')->orderBy('name')->get();
 
         $allStores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
         $subUnits = \App\Models\User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
@@ -148,6 +148,119 @@ class DashboardController extends Controller
             ->whereNull('sub_category_id')
             ->whereNull('item_id')
             ->whereNull('assignee_id');
+
+        $kanbanColumns = [
+            ['key' => 'backlogs', 'label' => 'Backlogs', 'statuses' => ['open', 'for_schedule']],
+            ['key' => 'in_progress', 'label' => 'In Progress', 'statuses' => ['in_progress', 'waiting_service_provider', 'waiting_client_feedback']],
+            ['key' => 'resolved', 'label' => 'Resolved', 'statuses' => ['resolved']],
+            ['key' => 'closed', 'label' => 'Closed', 'statuses' => ['closed']],
+        ];
+        $kanbanStatusToColumn = collect($kanbanColumns)
+            ->flatMap(fn ($column) => collect($column['statuses'])->mapWithKeys(fn ($status) => [$status => $column['key']]))
+            ->all();
+        $kanbanStatuses = array_keys($kanbanStatusToColumn);
+
+        $kanbanQuery = (clone $filteredQuery)->whereIn('status', $kanbanStatuses);
+
+        if ($subUnitFilter && $subUnitFilter !== 'all') {
+            $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('sub_unit', $subUnitFilter));
+        }
+
+        if ($userIdFilter && $userIdFilter !== 'all') {
+            $kanbanQuery->where('assignee_id', $userIdFilter);
+        }
+
+        if ($storeIdFilter && $storeIdFilter !== 'all') {
+            $kanbanQuery->where('store_id', $storeIdFilter);
+        }
+
+        $kanbanTickets = $kanbanQuery
+            ->with([
+                'assignee:id,name,sub_unit',
+                'company:id,name',
+                'store:id,code,name',
+                'item:id,priority',
+                'parent:id,ticket_key',
+            ])
+            ->select('id', 'ticket_key', 'title', 'status', 'priority', 'created_at', 'updated_at', 'assignee_id', 'company_id', 'store_id', 'item_id', 'parent_id')
+            ->latest('updated_at')
+            ->get()
+            ->map(function ($ticket) use ($kanbanStatusToColumn) {
+                $priority = $ticket->item?->priority ?? $ticket->priority ?? 'low';
+
+                return [
+                    'id' => $ticket->id,
+                    'key' => $ticket->ticket_key ?? $ticket->id,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'column' => $kanbanStatusToColumn[$ticket->status] ?? 'backlogs',
+                    'priority' => strtolower((string) $priority),
+                    'assignee_id' => $ticket->assignee_id,
+                    'assignee' => $ticket->assignee?->name ?? 'Unassigned',
+                    'sub_unit' => $ticket->assignee?->sub_unit ?: 'No Sub-Unit',
+                    'company_name' => $ticket->company?->name ?? 'N/A',
+                    'store' => $ticket->store ? [
+                        'id' => $ticket->store->id,
+                        'label' => trim(($ticket->store->code ? "[{$ticket->store->code}] " : '') . $ticket->store->name),
+                    ] : null,
+                    'parent_key' => $ticket->parent?->ticket_key,
+                    'created_at' => $ticket->created_at?->format('Y-m-d H:i:s'),
+                    'updated_at' => $ticket->updated_at?->diffForHumans(),
+                    'age' => $ticket->created_at?->diffForHumans(null, true),
+                ];
+            });
+
+        $emptyColumnSet = fn () => collect($kanbanColumns)
+            ->mapWithKeys(fn ($column) => [$column['key'] => ['count' => 0, 'tickets' => []]])
+            ->all();
+
+        $buildKanbanGroups = function ($tickets, string $mode) use ($kanbanColumns, $emptyColumnSet) {
+            return $tickets
+                ->groupBy(function ($ticket) use ($mode) {
+                    if ($mode === 'user') {
+                        return $ticket['assignee_id'] ? (string) $ticket['assignee_id'] : 'unassigned';
+                    }
+
+                    return $ticket['sub_unit'] ?: 'No Sub-Unit';
+                })
+                ->map(function ($groupTickets, $groupKey) use ($mode, $emptyColumnSet) {
+                    $firstTicket = $groupTickets->first();
+                    $columns = $emptyColumnSet();
+
+                    foreach ($groupTickets->groupBy('column') as $columnKey => $columnTickets) {
+                        $columns[$columnKey] = [
+                            'count' => $columnTickets->count(),
+                            'tickets' => $columnTickets->values()->all(),
+                        ];
+                    }
+
+                    return [
+                        'key' => (string) $groupKey,
+                        'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) $groupKey,
+                        'subtitle' => $mode === 'user' ? $firstTicket['sub_unit'] : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)',
+                        'total' => $groupTickets->count(),
+                        'columns' => $columns,
+                    ];
+                })
+                ->sortBy([
+                    ['total', 'desc'],
+                    ['label', 'asc'],
+                ])
+                ->values()
+                ->all();
+        };
+
+        $kanbanReport = [
+            'columns' => $kanbanColumns,
+            'totals' => collect($kanbanColumns)
+                ->mapWithKeys(fn ($column) => [$column['key'] => $kanbanTickets->where('column', $column['key'])->count()])
+                ->merge(['all' => $kanbanTickets->count()])
+                ->all(),
+            'groups' => [
+                'sub_unit' => $buildKanbanGroups($kanbanTickets, 'sub_unit'),
+                'user' => $buildKanbanGroups($kanbanTickets, 'user'),
+            ],
+        ];
 
         // Modal Lists (limited to 100 to prevent performance issues)
         $listWithDetails = function($q) {
@@ -303,6 +416,7 @@ class DashboardController extends Controller
 
         return Inertia::render('Dashboard', [
             'storeHealth' => $storeHealth,
+            'kanbanReport' => $kanbanReport,
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'myTickets' => $myTickets,

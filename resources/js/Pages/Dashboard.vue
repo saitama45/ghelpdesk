@@ -9,6 +9,7 @@ import { usePermission } from '@/Composables/usePermission.js';
 
 const props = defineProps({
     storeHealth: Object,
+    kanbanReport: Object,
     stats: Object,
     recentActivity: Array,
     myTickets: Array,
@@ -38,6 +39,7 @@ onMounted(() => {
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
+const kanbanView = ref('sub_unit');
 
 const filterForm = reactive({
     year: props.filters.year || '',
@@ -74,6 +76,41 @@ watch(() => [filterForm.year, filterForm.month, filterForm.sub_unit, filterForm.
     applyFilters();
 });
 
+const hasActiveFilters = computed(() => {
+    return Boolean(
+        filterForm.year ||
+        filterForm.month ||
+        filterForm.sub_unit !== 'all' ||
+        filterForm.user_id !== 'all' ||
+        filterForm.store_id !== 'all'
+    );
+});
+
+const filteredUsers = computed(() => {
+    const users = props.users || [];
+
+    if (!filterForm.sub_unit || filterForm.sub_unit === 'all') {
+        return users;
+    }
+
+    const matchingUsers = users.filter(u => u.sub_unit === filterForm.sub_unit);
+    const selectedUser = users.find(u => String(u.id) === String(filterForm.user_id));
+
+    if (selectedUser && !matchingUsers.some(u => String(u.id) === String(selectedUser.id))) {
+        return [selectedUser, ...matchingUsers];
+    }
+
+    return matchingUsers;
+});
+
+const kanbanColumns = computed(() => props.kanbanReport?.columns || []);
+const kanbanGroups = computed(() => props.kanbanReport?.groups?.[kanbanView.value] || []);
+const kanbanTotals = computed(() => props.kanbanReport?.totals || {});
+
+const getKanbanCell = (group, columnKey) => {
+    return group?.columns?.[columnKey] || { count: 0, tickets: [] };
+};
+
 const truncate = (text, length = 100) => {
     if (!text) return '';
     return text.length > length ? text.substring(0, length) + '...' : text;
@@ -82,7 +119,9 @@ const truncate = (text, length = 100) => {
 const getStatusColor = (status) => {
     switch (status) {
         case 'open': return 'bg-blue-100 text-blue-800';
+        case 'for_schedule': return 'bg-teal-100 text-teal-800';
         case 'in_progress': return 'bg-purple-100 text-purple-800';
+        case 'resolved': return 'bg-green-100 text-green-800';
         case 'closed': return 'bg-gray-100 text-gray-800';
         case 'waiting_service_provider': return 'bg-orange-100 text-orange-800';
         case 'waiting_client_feedback': return 'bg-blue-100 text-blue-800';
@@ -92,6 +131,7 @@ const getStatusColor = (status) => {
 
 const getStatusLabel = (status) => {
     switch (status) {
+        case 'for_schedule': return 'For Schedule';
         case 'waiting_service_provider': return 'Waiting for service provider';
         case 'waiting_client_feedback': return 'Waiting for clients feedback?';
         default: return status ? status.replace('_', ' ') : '';
@@ -99,12 +139,47 @@ const getStatusLabel = (status) => {
 };
 
 const getPriorityColor = (priority) => {
-    switch (priority) {
+    switch (String(priority || '').toLowerCase()) {
         case 'urgent': return 'text-red-900 bg-red-100';
         case 'high': return 'text-red-800 bg-red-50';
         case 'medium': return 'text-yellow-800 bg-yellow-50';
         case 'low': return 'text-green-800 bg-green-50';
         default: return 'text-gray-600 bg-gray-50';
+    }
+};
+
+const getKanbanColumnTheme = (key) => {
+    switch (key) {
+        case 'backlogs':
+            return {
+                header: 'bg-sky-50 text-sky-800 border-sky-200',
+                count: 'bg-sky-100 text-sky-800',
+                rail: 'border-sky-200',
+            };
+        case 'in_progress':
+            return {
+                header: 'bg-violet-50 text-violet-800 border-violet-200',
+                count: 'bg-violet-100 text-violet-800',
+                rail: 'border-violet-200',
+            };
+        case 'resolved':
+            return {
+                header: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                count: 'bg-emerald-100 text-emerald-800',
+                rail: 'border-emerald-200',
+            };
+        case 'closed':
+            return {
+                header: 'bg-slate-50 text-slate-700 border-slate-200',
+                count: 'bg-slate-100 text-slate-700',
+                rail: 'border-slate-200',
+            };
+        default:
+            return {
+                header: 'bg-gray-50 text-gray-700 border-gray-200',
+                count: 'bg-gray-100 text-gray-700',
+                rail: 'border-gray-200',
+            };
     }
 };
 
@@ -149,6 +224,176 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        <!-- Management Filters -->
+        <div class="mb-6 bg-white rounded-xl shadow-sm border border-gray-200">
+            <div class="px-4 py-3 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-sm font-black text-gray-700 uppercase tracking-widest">Management Filters</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Controls the Kanban report and Live Store Health views.</p>
+                </div>
+                <button
+                    v-if="hasActiveFilters"
+                    @click="clearFilters"
+                    class="self-start lg:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-gray-600 bg-gray-100 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
+                >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    Clear
+                </button>
+            </div>
+            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
+                    <select v-model="filterForm.sub_unit" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                        <option value="all">All Sub-Units</option>
+                        <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">User</label>
+                    <select v-model="filterForm.user_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                        <option value="all">All Users</option>
+                        <option v-for="u in filteredUsers" :key="u.id" :value="u.id">{{ u.name }}{{ u.sub_unit ? ' - ' + u.sub_unit : '' }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                    <select v-model="filterForm.store_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                        <option value="all">All Stores</option>
+                        <option v-for="s in stores" :key="s.id" :value="s.id">[{{ s.code }}] {{ s.name }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Year</label>
+                    <select v-model="filterForm.year" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                        <option value="">All Years</option>
+                        <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Month</label>
+                    <select v-model="filterForm.month" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
+                        <option value="">All Months</option>
+                        <option v-for="m in months" :key="m.id" :value="m.id">{{ m.name }}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Static Kanban Report -->
+        <div class="mb-8">
+            <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-4">
+                <div>
+                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h7M9 7h11M4 7h1m-1 5h1m-1 5h1" /></svg>
+                        Ticket Flow Board
+                    </h3>
+                    <p class="text-xs text-gray-500 mt-1">Static workload view grouped by {{ kanbanView === 'sub_unit' ? 'sub-unit' : 'user' }}.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                        <button
+                            @click="kanbanView = 'sub_unit'"
+                            :class="['px-3 py-1.5 text-xs font-black rounded-md transition-all', kanbanView === 'sub_unit' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                        >
+                            Sub-Unit View
+                        </button>
+                        <button
+                            @click="kanbanView = 'user'"
+                            :class="['px-3 py-1.5 text-xs font-black rounded-md transition-all', kanbanView === 'user' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                        >
+                            User View
+                        </button>
+                    </div>
+                    <span class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
+                        {{ kanbanTotals.all || 0 }} Tickets
+                    </span>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto custom-scrollbar">
+                <div class="grid min-w-[1120px]" :style="{ gridTemplateColumns: `220px repeat(${kanbanColumns.length}, minmax(220px, 1fr))` }">
+                    <div class="sticky left-0 z-20 bg-gray-50 border-r border-b border-gray-200 px-4 py-3">
+                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? 'Sub-Unit' : 'User' }}</p>
+                    </div>
+                    <div
+                        v-for="column in kanbanColumns"
+                        :key="column.key"
+                        class="border-b border-r border-gray-200 px-3 py-3"
+                        :class="getKanbanColumnTheme(column.key).header"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[11px] font-black uppercase tracking-widest">{{ column.label }}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="getKanbanColumnTheme(column.key).count">
+                                {{ kanbanTotals[column.key] || 0 }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <template v-if="kanbanGroups.length > 0">
+                        <template v-for="group in kanbanGroups" :key="group.key">
+                            <div class="sticky left-0 z-10 bg-white border-r border-b border-gray-200 px-4 py-4">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-black text-gray-900 truncate">{{ group.label }}</p>
+                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">{{ group.subtitle }}</p>
+                                    </div>
+                                    <span class="shrink-0 px-2 py-1 rounded-lg bg-gray-100 text-[10px] font-black text-gray-700">{{ group.total }}</span>
+                                </div>
+                            </div>
+
+                            <div
+                                v-for="column in kanbanColumns"
+                                :key="`${group.key}-${column.key}`"
+                                class="border-r border-b border-gray-200 bg-gray-50/40 p-2"
+                            >
+                                <div class="min-h-[92px] max-h-[360px] overflow-y-auto pr-1 custom-scrollbar space-y-2 border-l-2 pl-2" :class="getKanbanColumnTheme(column.key).rail">
+                                    <Link
+                                        v-for="ticket in getKanbanCell(group, column.key).tickets"
+                                        :key="ticket.id"
+                                        :href="route('tickets.edit', ticket.id)"
+                                        class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-200 hover:shadow-md transition-all"
+                                    >
+                                        <div class="flex items-start justify-between gap-2">
+                                            <span class="text-xs font-black text-blue-600">{{ ticket.key }}</span>
+                                            <span :class="['px-1.5 py-0.5 text-[9px] font-black uppercase rounded-md', getPriorityColor(ticket.priority)]">
+                                                {{ ticket.priority || 'low' }}
+                                            </span>
+                                        </div>
+                                        <p class="mt-1 text-xs font-bold text-gray-900 leading-4 line-clamp-2">{{ ticket.title }}</p>
+                                        <div class="mt-2 flex flex-wrap gap-1">
+                                            <span :class="['px-1.5 py-0.5 text-[9px] font-black uppercase rounded border', getStatusColor(ticket.status)]">
+                                                {{ getStatusLabel(ticket.status) }}
+                                            </span>
+                                            <span v-if="ticket.parent_key" class="px-1.5 py-0.5 text-[9px] font-black uppercase rounded border border-purple-100 bg-purple-50 text-purple-700">
+                                                {{ ticket.parent_key }}
+                                            </span>
+                                        </div>
+                                        <div class="mt-2 space-y-1 text-[10px] font-bold text-gray-500">
+                                            <p class="truncate">Assignee: <span class="text-gray-700">{{ ticket.assignee }}</span></p>
+                                            <p v-if="ticket.store" class="truncate">Store: <span class="text-gray-700">{{ ticket.store.label }}</span></p>
+                                            <p class="truncate">Company: <span class="text-gray-700">{{ ticket.company_name }}</span></p>
+                                        </div>
+                                        <div class="mt-2 flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-gray-400">
+                                            <span>Age {{ ticket.age || '-' }}</span>
+                                            <span>{{ ticket.updated_at }}</span>
+                                        </div>
+                                    </Link>
+
+                                    <div v-if="getKanbanCell(group, column.key).count === 0" class="h-20 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white/60">
+                                        <span class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No tickets</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </template>
+
+                    <div v-else class="col-span-5 px-6 py-12 text-center">
+                        <p class="text-sm font-bold text-gray-500">No tickets match the selected management filters.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Store Health Section -->
         <div v-if="hasPermission('reports.store_health')" class="mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -157,33 +402,6 @@ const exportToExcel = (type) => {
                     Live Store Health
                 </h3>
                 <Link :href="route('reports.store-health')" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider">Full Report &rarr;</Link>
-            </div>
-
-            <!-- Health Filters -->
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-4">
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                        <select v-model="filterForm.sub_unit" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                            <option value="all">All Sub-Units</option>
-                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">User</label>
-                        <select v-model="filterForm.user_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                            <option value="all">All Users</option>
-                            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
-                        <select v-model="filterForm.store_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                            <option value="all">All Stores</option>
-                            <option v-for="s in stores" :key="s.id" :value="s.id">[{{ s.code }}] {{ s.name }}</option>
-                        </select>
-                    </div>
-                </div>
             </div>
 
             <StoreHealthReport 
@@ -201,26 +419,6 @@ const exportToExcel = (type) => {
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                 Overview Performance
             </h3>
-            
-            <div class="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm px-3 py-1.5 self-start sm:self-auto">
-                <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 8.293A1 1 0 013 7.586V4z" /></svg>
-                
-                <select v-model="filterForm.year" class="border-0 focus:ring-0 text-sm font-bold text-gray-700 py-0 bg-transparent cursor-pointer">
-                    <option value="">All Years</option>
-                    <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
-                </select>
-                
-                <div class="w-px h-4 bg-gray-200 mx-2"></div>
-                
-                <select v-model="filterForm.month" class="border-0 focus:ring-0 text-sm font-bold text-gray-700 py-0 bg-transparent cursor-pointer">
-                    <option value="">All Months</option>
-                    <option v-for="m in months" :key="m.id" :value="m.id">{{ m.name }}</option>
-                </select>
-
-                <button v-if="filterForm.year || filterForm.month" @click="clearFilters" class="ml-2 p-1 text-gray-400 hover:text-red-500 transition-colors" title="Clear Filters">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-            </div>
         </div>
 
         <!-- Stats Grid -->
