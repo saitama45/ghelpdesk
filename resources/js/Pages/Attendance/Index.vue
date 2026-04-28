@@ -90,7 +90,24 @@ const isRecentlyLogged = computed(() => {
 });
 
 const requiresGeofencing = computed(() => {
-    return props.todaySchedule?.status !== 'WFH';
+    return Boolean(props.todaySchedule && props.todaySchedule.status !== 'WFH');
+});
+
+const activeScheduleStore = computed(() => props.todaySchedule?.store || null);
+
+const hasStoreCoordinates = (store) => {
+    return store?.latitude !== null &&
+           store?.latitude !== undefined &&
+           store?.longitude !== null &&
+           store?.longitude !== undefined;
+};
+
+const activeScheduleStoreHasCoordinates = computed(() => {
+    return hasStoreCoordinates(activeScheduleStore.value);
+});
+
+const isMissingActiveGeofence = computed(() => {
+    return Boolean(props.todaySchedule && requiresGeofencing.value && !activeScheduleStoreHasCoordinates.value);
 });
 
 // Remaining cooldown as a "m:ss" string, e.g. "3:42"
@@ -329,17 +346,36 @@ const stopLocationTracking = () => {
 };
 
 // Geofencing logic
+const getStoreDistance = (store) => {
+    if (latitude.value === null || longitude.value === null || !hasStoreCoordinates(store)) return Infinity;
+
+    return calculateDistance(latitude.value, longitude.value, store.latitude, store.longitude);
+};
+
+const activeScheduleStoreDistance = computed(() => {
+    return getStoreDistance(activeScheduleStore.value);
+});
+
 const isWithinStoreVicinity = computed(() => {
+    if (!props.todaySchedule) return false;
     if (!requiresGeofencing.value) return true;
-    if (!latitude.value || !longitude.value || !props.assignedStores?.length) return false;
-    
-    return props.assignedStores.some(store => {
-        const dist = calculateDistance(latitude.value, longitude.value, store.latitude, store.longitude);
-        return dist <= store.radius_meters;
-    });
+    if (latitude.value === null || longitude.value === null || !activeScheduleStoreHasCoordinates.value) return false;
+
+    const store = activeScheduleStore.value;
+    const dist = activeScheduleStoreDistance.value;
+    const radius = store.radius_meters || 100;
+
+    return dist <= radius;
 });
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    lat1 = Number(lat1);
+    lon1 = Number(lon1);
+    lat2 = Number(lat2);
+    lon2 = Number(lon2);
+
+    if ([lat1, lon1, lat2, lon2].some(Number.isNaN)) return Infinity;
+
     const R = 6371000; // Earth radius in meters
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -351,7 +387,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 const updateMap = async () => {
-    if (!mapElement.value || !latitude.value || !longitude.value) return;
+    if (!mapElement.value || latitude.value === null || longitude.value === null) return;
 
     try {
         await loadGoogleMaps();
@@ -375,20 +411,20 @@ const updateMap = async () => {
             });
             
             if (requiresGeofencing.value) {
-                props.assignedStores.forEach(store => {
-                    if (store.latitude && store.longitude) {
-                        new google.maps.Circle({
-                            strokeColor: "#3B82F6",
-                            strokeOpacity: 0.8,
-                            strokeWeight: 2,
-                            fillColor: "#3B82F6",
-                            fillOpacity: 0.15,
-                            map: map,
-                            center: { lat: store.latitude, lng: store.longitude },
-                            radius: store.radius_meters || 100,
-                        });
-                    }
-                });
+                const store = activeScheduleStore.value;
+
+                if (hasStoreCoordinates(store)) {
+                    new google.maps.Circle({
+                        strokeColor: "#3B82F6",
+                        strokeOpacity: 0.8,
+                        strokeWeight: 2,
+                        fillColor: "#3B82F6",
+                        fillOpacity: 0.15,
+                        map: map,
+                        center: { lat: Number(store.latitude), lng: Number(store.longitude) },
+                        radius: store.radius_meters || 100,
+                    });
+                }
             }
         } else {
             map.setCenter(pos);
@@ -509,11 +545,17 @@ const statusMessage = computed(() => {
     if (!isWithinScheduleWindow.value) return scheduleWindowMessage.value;
     if (props.isSegmentComplete) return 'You have already completed Time In and Time Out for this schedule.';
     if (isRecentlyLogged.value) return `A log was already recorded recently. Please wait ${recentLogCooldownLabel.value} before logging again.`;
-    if (requiresGeofencing.value && props.assignedStores.length === 0) return 'No assigned work sites found.';
+    if (isMissingActiveGeofence.value) {
+        return activeScheduleStore.value
+            ? `The active schedule store ${activeScheduleStore.value.name} has no GPS coordinates configured.`
+            : 'The active schedule has no store assigned.';
+    }
     if (!capturedImage.value) return 'Please take a selfie first.';
-    if (!latitude.value) return 'Acquiring GPS...';
+    if (latitude.value === null || longitude.value === null) return 'Acquiring GPS...';
     if (!isLocationStable.value) return 'Waiting for location to stabilize...';
-    if (requiresGeofencing.value && !isWithinStoreVicinity.value) return 'You are outside the office vicinity.';
+    if (requiresGeofencing.value && !isWithinStoreVicinity.value) {
+        return `You are outside the active schedule store vicinity for ${activeScheduleStore.value?.name ?? 'the scheduled store'}.`;
+    }
     return `Ready to ${nextAction.value}`;
 });
 
@@ -528,14 +570,14 @@ const statusMessage = computed(() => {
         </template>
 
         <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
-            <div v-if="assignedStores.length === 0" class="p-8 text-center bg-red-50">
+            <div v-if="isMissingActiveGeofence" class="p-8 text-center bg-red-50">
                 <ExclamationCircleIcon class="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <h3 class="text-lg font-bold text-red-900">Geofencing Restricted</h3>
-                <p v-if="totalAssignedCount > 0" class="text-red-700 max-w-md mx-auto">
-                    You have {{ totalAssignedCount }} work site(s) assigned, but they are missing GPS coordinates or are inactive. Please contact HR to configure your work site's location.
+                <h3 class="text-lg font-bold text-red-900">Active Schedule Geofence Required</h3>
+                <p v-if="todaySchedule?.store" class="text-red-700 max-w-md mx-auto">
+                    The active schedule store {{ todaySchedule.store.name }} is missing GPS coordinates. Please contact HR to configure this store's location.
                 </p>
                 <p v-else class="text-red-700 max-w-md mx-auto">
-                    No active work sites are assigned to your account. You must be assigned to a specific office or store to use the DTR module.
+                    The active schedule has no store assigned. Please contact your supervisor before logging attendance.
                 </p>
             </div>
 
@@ -621,11 +663,11 @@ const statusMessage = computed(() => {
                             <span v-if="isLocationStable" class="text-[10px] font-bold text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded">
                                 <CheckCircleIcon class="w-3 h-3" /> STABLE
                             </span>
-                            <span v-if="!requiresGeofencing" class="text-[10px] font-bold text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
+                            <span v-if="todaySchedule?.status === 'WFH'" class="text-[10px] font-bold text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                 <GlobeAsiaAustraliaIcon class="w-3 h-3" /> WFH MODE
                             </span>
                             <span v-else-if="isWithinStoreVicinity" class="text-[10px] font-bold text-blue-600 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
-                                <GlobeAsiaAustraliaIcon class="w-3 h-3" /> IN VICINITY
+                                <GlobeAsiaAustraliaIcon class="w-3 h-3" /> IN SCHEDULE VICINITY
                             </span>
                         </div>
                     </div>

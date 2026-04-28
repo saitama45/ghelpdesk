@@ -76,7 +76,14 @@ class AttendanceController extends Controller implements HasMiddleware
                 'start_time' => ($activeStoreEntry ? $activeStoreEntry->start_time : $todaySchedule->start_time)->toIso8601String(),
                 'end_time'   => ($activeStoreEntry ? $activeStoreEntry->end_time : $todaySchedule->end_time)->toIso8601String(),
                 'store'      => ($activeStoreEntry && $activeStoreEntry->store)
-                    ? ['id' => $activeStoreEntry->store->id, 'name' => $activeStoreEntry->store->name]
+                    ? [
+                        'id'            => $activeStoreEntry->store->id,
+                        'code'          => $activeStoreEntry->store->code,
+                        'name'          => $activeStoreEntry->store->name,
+                        'latitude'      => $activeStoreEntry->store->latitude,
+                        'longitude'     => $activeStoreEntry->store->longitude,
+                        'radius_meters' => $activeStoreEntry->store->radius_meters ?: 100,
+                    ]
                     : null,
             ] : null,
         ]);
@@ -170,42 +177,23 @@ class AttendanceController extends Controller implements HasMiddleware
         if ($schedule->status !== 'WFH') {
             $userLat = $request->latitude;
             $userLng = $request->longitude;
+            $store = $activeStoreEntry?->store;
 
-            $assignedStores = $user->stores()
-                ->whereNotNull('latitude')
-                ->whereNotNull('longitude')
-                ->where('is_active', true)
-                ->get();
-
-            // Fallback for Admins/Devs
-            if ($assignedStores->isEmpty() && $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin'])) {
-                $assignedStores = Store::whereNotNull('latitude')
-                    ->whereNotNull('longitude')
-                    ->where('is_active', true)
-                    ->get();
+            if (!$activeStoreEntry || !$store) {
+                return back()->with('error', 'The active schedule has no store assigned. Please contact your supervisor.');
             }
 
-            if ($assignedStores->isEmpty()) {
-                return back()->with('error', 'No active work site assigned to your account. Please contact HR.');
+            if ($store->latitude === null || $store->longitude === null) {
+                return back()->with('error', "The active schedule store ({$store->name}) has no GPS coordinates configured. Please contact HR.");
             }
 
-            $isWithinVicinity = false;
-            $closestDistance = null;
+            $radius = $store->radius_meters ?: 100;
+            $distance = $this->calculateDistance($userLat, $userLng, $store->latitude, $store->longitude);
 
-            foreach ($assignedStores as $store) {
-                $distance = $this->calculateDistance($userLat, $userLng, $store->latitude, $store->longitude);
-                if ($distance <= $store->radius_meters) {
-                    $isWithinVicinity = true;
-                    break;
-                }
-                if ($closestDistance === null || $distance < $closestDistance) {
-                    $closestDistance = $distance;
-                }
+            if ($distance > $radius) {
+                return back()->with('error', "You are outside the active schedule store vicinity for {$store->name}. (" . round($distance) . "m away, allowed {$radius}m)");
             }
 
-            if (!$isWithinVicinity) {
-                return back()->with('error', "You are outside the allowed vicinity. (Closest site: " . round($closestDistance) . "m away)");
-            }
         }
 
         // Determine type per-segment if possible, otherwise per-schedule
