@@ -15,7 +15,7 @@
  *   hasItems       – whether to show the items section
  */
 
-import { computed, reactive, onUnmounted } from 'vue'
+import { computed, reactive, onUnmounted, watch } from 'vue'
 import { useToast } from '@/Composables/useToast'
 
 const props = defineProps({
@@ -24,6 +24,8 @@ const props = defineProps({
     itemsColumns: { type: Array, default: () => [] },
     items: { type: Array, default: () => [] },
     itemLabel: { type: String, default: 'Row' },
+    itemsTemplateSource: { type: String, default: null },
+    itemsTemplates: { type: Object, default: () => ({}) },
     errors: { type: Object, default: () => ({}) },
     context: { type: Object, default: () => ({}) },
     hasItems: { type: Boolean, default: false },
@@ -105,6 +107,36 @@ const isVisible = (field) => {
 
 const visibleFields = computed(() => sortedFields.value.filter(isVisible))
 
+const selectedItemsTemplateKey = computed(() =>
+    props.itemsTemplateSource ? String(props.modelValue[props.itemsTemplateSource] ?? '') : ''
+)
+
+const activeItemsTemplate = computed(() =>
+    selectedItemsTemplateKey.value
+        ? props.itemsTemplates?.[selectedItemsTemplateKey.value] || null
+        : null
+)
+
+const resolvedItemsColumns = computed(() =>
+    props.itemsTemplateSource
+        ? (activeItemsTemplate.value?.columns || [])
+        : props.itemsColumns
+)
+
+const resolvedItemsTitle = computed(() =>
+    activeItemsTemplate.value?.label || `${props.itemLabel}s`
+)
+
+const resolvedItemBadgeLabel = computed(() =>
+    activeItemsTemplate.value?.label
+        ? activeItemsTemplate.value.label.replace(/\s+items$/i, ' Item')
+        : props.itemLabel
+)
+
+const hasResolvedItems = computed(() =>
+    props.hasItems && resolvedItemsColumns.value.length > 0
+)
+
 // ── Field value helpers ───────────────────────────────────────────────────────
 const getValue = (key) => props.modelValue[key] ?? ''
 
@@ -145,32 +177,45 @@ const getItemColOptions = (col, row) => {
 }
 
 // ── Items table helpers ───────────────────────────────────────────────────────
+const blankValueForColumn = (col) => col.type === 'checkbox_group' ? [] : ''
+
+const normalizeItemRowsForColumns = (rows = props.items, columns = resolvedItemsColumns.value) => {
+    if (!columns.length) return []
+    const sourceRows = rows.length ? rows : [{}]
+
+    return sourceRows.map(row => {
+        const normalized = {}
+        columns.forEach(c => {
+            normalized[c.key] = row?.[c.key] ?? blankValueForColumn(c)
+        })
+        return normalized
+    })
+}
+
 const addItemRow = () => {
-    // Build from all known columns (copies first row values when one exists)
+    const columns = resolvedItemsColumns.value
+    if (!columns.length) return
+
     const first = props.items[0] ?? {}
     const newRow = {}
-    props.itemsColumns.forEach(c => { newRow[c.key] = first[c.key] ?? '' })
-    // Ensure any keys already present on first row that aren't in itemsColumns are also carried over
-    Object.keys(first).forEach(k => { if (!(k in newRow)) newRow[k] = '' })
+    columns.forEach(c => { newRow[c.key] = first[c.key] ?? blankValueForColumn(c) })
     emit('update:items', [...props.items, newRow])
 }
 
 const removeItemRow = (idx) => {
     const next = props.items.filter((_, i) => i !== idx)
-    emit('update:items', next.length ? next : [buildBlankRow()])
+    emit('update:items', next.length ? next : (resolvedItemsColumns.value.length ? [buildBlankRow()] : []))
 }
 
 const setItemCell = (rowIdx, key, value) => {
     const next = props.items.map((row, i) => {
         if (i !== rowIdx) return row
-        // Normalise: always include every column key so nothing is silently dropped
-        // even if the row was initialised before itemsColumns were available
         const base = {}
-        props.itemsColumns.forEach(c => { base[c.key] = row[c.key] ?? '' })
+        resolvedItemsColumns.value.forEach(c => { base[c.key] = row[c.key] ?? blankValueForColumn(c) })
         const updated = { ...base, [key]: value }
         // Auto-clear child columns that depend on this key
-        props.itemsColumns.forEach(c => {
-            if (c.depends_on === key) updated[c.key] = Array.isArray(updated[c.key]) ? [] : ''
+        resolvedItemsColumns.value.forEach(c => {
+            if (c.depends_on === key) updated[c.key] = blankValueForColumn(c)
         })
         return updated
     })
@@ -178,7 +223,7 @@ const setItemCell = (rowIdx, key, value) => {
 }
 
 const getItemCellCheckboxValue = (rowIdx, key) => {
-    const v = props.items[rowIdx][key]
+    const v = props.items[rowIdx]?.[key]
     return Array.isArray(v) ? v : []
 }
 
@@ -191,9 +236,14 @@ const toggleItemCellCheckbox = (rowIdx, key, optValue) => {
 
 const buildBlankRow = () => {
     const r = {}
-    props.itemsColumns.forEach(c => { r[c.key] = '' })
+    resolvedItemsColumns.value.forEach(c => { r[c.key] = blankValueForColumn(c) })
     return r
 }
+
+watch(selectedItemsTemplateKey, () => {
+    if (!props.hasItems) return
+    emit('update:items', normalizeItemRowsForColumns())
+})
 
 // ── File attachment helpers ───────────────────────────────────────────────────
 const validateFileSize = (file, maxSizeMb) => {
@@ -473,10 +523,10 @@ const getSelectedFileNames = (value) => {
         </div>
 
         <!-- ── Line Items Section (Card-based Grid) ── -->
-        <div v-if="hasItems && itemsColumns.length" class="space-y-6 pt-4">
+        <div v-if="hasResolvedItems" class="space-y-6 pt-4">
             <div class="flex items-center justify-between border-b border-gray-100 pb-4">
                 <div>
-                    <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest">{{ itemLabel }}s</h4>
+                    <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest">{{ resolvedItemsTitle }}</h4>
                     <p class="text-[10px] text-gray-400 font-bold uppercase mt-1 italic">Add multiple records below</p>
                 </div>
                 <button type="button" @click="addItemRow"
@@ -493,7 +543,7 @@ const getSelectedFileNames = (value) => {
                     <!-- Item Header/Remove -->
                     <div class="flex items-center justify-between mb-6">
                         <span class="px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-black uppercase tracking-widest">
-                            {{ itemLabel }} #{{ rowIdx + 1 }}
+                            {{ resolvedItemBadgeLabel }} #{{ rowIdx + 1 }}
                         </span>
                         <button v-if="items.length > 1" type="button" @click="removeItemRow(rowIdx)"
                             class="p-2 text-gray-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all">
@@ -503,7 +553,7 @@ const getSelectedFileNames = (value) => {
 
                     <!-- Grid for Item Fields -->
                     <div class="grid gap-6" :class="gridClass">
-                        <div v-for="col in itemsColumns" :key="col.key"
+                        <div v-for="col in resolvedItemsColumns" :key="col.key"
                             :class="colSpanClass(col)">
                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                                 {{ col.label }}

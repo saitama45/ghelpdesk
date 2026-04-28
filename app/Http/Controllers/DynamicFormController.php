@@ -171,8 +171,11 @@ class DynamicFormController extends Controller
 
         // Process line items
         if (isset($data['items']) && is_array($data['items'])) {
+            $formData = is_array($data['form_data'] ?? null) ? $data['form_data'] : [];
+            $itemColumns = $this->resolveItemColumns($schema, $formData);
+
             foreach ($data['items'] as $idx => $item) {
-                foreach ($schema['items_columns'] ?? [] as $col) {
+                foreach ($itemColumns as $col) {
                     if (($col['type'] ?? '') === 'file') {
                         $key = $col['key'];
                         $val = $item[$key] ?? null;
@@ -203,6 +206,27 @@ class DynamicFormController extends Controller
         }
 
         return $data;
+    }
+
+    private function resolveItemColumns(array $schema, array $formData): array
+    {
+        $source = $schema['items_template_source'] ?? null;
+
+        if ($source) {
+            $selected = $formData[$source] ?? null;
+            if (is_array($selected)) return [];
+
+            $selectedKey = is_scalar($selected) ? (string) $selected : '';
+            if ($selectedKey === '') return [];
+
+            $templates = is_array($schema['items_templates'] ?? null) ? $schema['items_templates'] : [];
+            $columns = $templates[$selectedKey]['columns'] ?? [];
+
+            return is_array($columns) ? $columns : [];
+        }
+
+        $columns = $schema['items_columns'] ?? [];
+        return is_array($columns) ? $columns : [];
     }
 
     public function destroy($slug, $id)

@@ -31,7 +31,23 @@ const authUserId = computed(() => page.props.auth.user.id)
 const approverFields = computed(() => props.form.form_schema?.approver_fields ?? [])
 const schemaFields = computed(() => props.form.form_schema?.fields ?? [])
 const schemaItemsColumns = computed(() => props.form.form_schema?.items_columns ?? [])
-const hasSchemaItems = computed(() => !!props.form.form_schema?.has_items && schemaItemsColumns.value.length > 0)
+const itemsTemplateSource = computed(() => props.form.form_schema?.items_template_source || null)
+const itemsTemplates = computed(() => props.form.form_schema?.items_templates || {})
+const selectedItemsTemplateKey = computed(() =>
+    itemsTemplateSource.value ? String(props.record.data?.[itemsTemplateSource.value] ?? '') : ''
+)
+const activeItemsTemplate = computed(() =>
+    selectedItemsTemplateKey.value
+        ? itemsTemplates.value[selectedItemsTemplateKey.value] || null
+        : null
+)
+const activeSchemaItemsColumns = computed(() =>
+    itemsTemplateSource.value
+        ? (activeItemsTemplate.value?.columns || [])
+        : schemaItemsColumns.value
+)
+const activeItemLabel = computed(() => activeItemsTemplate.value?.label || 'Line Items')
+const hasSchemaItems = computed(() => !!props.form.form_schema?.has_items && activeSchemaItemsColumns.value.length > 0)
 
 const approverMatrix = computed(() => props.form.approver_matrix ?? [])
 
@@ -124,7 +140,7 @@ function fmt(d) {
 }
 
 const getLabel = (key, value, isItem = false) => {
-    const fields = isItem ? schemaItemsColumns.value : schemaFields.value;
+    const fields = isItem ? activeSchemaItemsColumns.value : schemaFields.value;
     const field = fields.find(f => f.key === key);
 
     if (field && field.options && field.options.length > 0) {
@@ -144,7 +160,7 @@ const getLabel = (key, value, isItem = false) => {
 };
 
 const isFileField = (key, isItem = false) => {
-    const fields = isItem ? schemaItemsColumns.value : schemaFields.value;
+    const fields = isItem ? activeSchemaItemsColumns.value : schemaFields.value;
     const field = fields.find(f => f.key === key);
     return field && field.type === 'file';
 };
@@ -256,13 +272,13 @@ const lineItems = computed(() => props.record.data?.items ?? [])
 
                         <!-- Items Card -->
                         <div v-if="hasSchemaItems && lineItems.length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-xl font-black text-gray-900 mb-6">Line Items ({{ lineItems.length }})</h3>
+                            <h3 class="text-xl font-black text-gray-900 mb-6">{{ activeItemLabel }} ({{ lineItems.length }})</h3>
                             <div class="overflow-x-auto">
                                 <table class="w-full border-separate border-spacing-y-3">
                                     <thead>
                                         <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left">
                                             <th class="px-4 pb-4">#</th>
-                                            <th v-for="col in schemaItemsColumns" :key="col.key" class="px-4 pb-4">
+                                            <th v-for="col in activeSchemaItemsColumns" :key="col.key" class="px-4 pb-4">
                                                 {{ col.label }}
                                             </th>
                                         </tr>
@@ -270,7 +286,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                     <tbody>
                                         <tr v-for="(item, i) in lineItems" :key="i" class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
                                             <td class="px-4 py-5 rounded-l-2xl text-[10px] font-black text-gray-400">{{ i + 1 }}</td>
-                                            <td v-for="col in schemaItemsColumns" :key="col.key" class="px-4 py-5 text-sm font-semibold text-gray-700">
+                                            <td v-for="col in activeSchemaItemsColumns" :key="col.key" class="px-4 py-5 text-sm font-semibold text-gray-700">
                                                 <template v-if="col.type === 'file'">
                                                     <div v-if="Array.isArray(item[col.key])" class="flex flex-col gap-1">
                                                         <a v-for="(file, fi) in item[col.key]" :key="fi" :href="getFileUrl(file)" target="_blank" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">

@@ -67,6 +67,8 @@ class FormBuilderController extends Controller implements HasMiddleware
                 'fields' => [],
                 'approver_fields' => [],
                 'items_columns' => [],
+                'items_template_source' => null,
+                'items_templates' => [],
                 'has_items' => false
             ],
         ]);

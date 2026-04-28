@@ -45,6 +45,25 @@ const dynamicForm = useForm({
     items: [],
 })
 
+const schemaItemsTemplateSource = computed(() => props.form.form_schema?.items_template_source || null)
+const schemaItemsTemplates = computed(() => props.form.form_schema?.items_templates || {})
+
+const getActiveItemColumns = (formData = dynamicForm.form_data) => {
+    const source = schemaItemsTemplateSource.value
+    if (!source) return props.form.form_schema?.items_columns || []
+
+    const selected = String(formData?.[source] ?? '')
+    return selected ? (schemaItemsTemplates.value[selected]?.columns || []) : []
+}
+
+const buildBlankItemRow = (formData = dynamicForm.form_data) => {
+    const row = {}
+    getActiveItemColumns(formData).forEach(column => {
+        row[column.key] = column.type === 'checkbox_group' ? [] : ''
+    })
+    return row
+}
+
 const initForm = (record = null) => {
     const schema = props.form.form_schema || {}
     const fields = schema.fields || []
@@ -55,7 +74,9 @@ const initForm = (record = null) => {
     })
     
     dynamicForm.form_data = initialFormData
-    dynamicForm.items = record?.data?.items ? JSON.parse(JSON.stringify(record.data.items)) : (schema.has_items ? [{}] : [])
+    dynamicForm.items = record?.data?.items
+        ? JSON.parse(JSON.stringify(record.data.items))
+        : (schema.has_items && getActiveItemColumns(initialFormData).length ? [buildBlankItemRow(initialFormData)] : [])
 }
 
 onMounted(() => {
@@ -320,6 +341,9 @@ function statusClass(s) {
                             :fields="form.form_schema?.fields"
                             v-model="dynamicForm.form_data"
                             :items-columns="form.form_schema?.items_columns"
+                            :items-template-source="form.form_schema?.items_template_source"
+                            :items-templates="form.form_schema?.items_templates || {}"
+                            :item-label="form.form_schema?.item_label || 'Row'"
                             v-model:items="dynamicForm.items"
                             :has-items="form.form_schema?.has_items"
                             :errors="dynamicForm.errors"

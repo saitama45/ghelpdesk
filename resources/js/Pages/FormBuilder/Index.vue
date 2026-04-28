@@ -253,7 +253,10 @@ const openFieldBuilder = (formData) => {
                                         <span v-if="formData.form_schema?.approver_fields?.length" class="text-[9px] font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                                             {{ formData.form_schema.approver_fields.length }} approver fields
                                         </span>
-                                        <span v-if="formData.form_schema?.has_items && formData.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                        <span v-if="formData.form_schema?.has_items && formData.form_schema?.items_template_source && Object.keys(formData.form_schema?.items_templates || {}).length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                            {{ Object.keys(formData.form_schema.items_templates || {}).length }} item templates
+                                        </span>
+                                        <span v-else-if="formData.form_schema?.has_items && formData.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                                             {{ formData.form_schema.items_columns.length }} line item cols
                                         </span>
                                     </div>

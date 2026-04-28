@@ -59,6 +59,23 @@ const cloneOption = (option = {}) => {
 }
 
 const cloneOptions = (options = []) => options.map(cloneOption)
+const cloneOptionMap = (om) => om
+    ? Object.fromEntries(Object.entries(om).map(([k, v]) => [k, (Array.isArray(v) ? v : []).map(o => ({ ...o }))]))
+    : {}
+const cloneItemColumn = (column = {}) => ({
+    ...column,
+    options: (column.options || []).map(o => ({ ...o })),
+    option_map: cloneOptionMap(column.option_map),
+})
+const cloneItemsTemplates = (templates = {}) => Object.fromEntries(
+    Object.entries(templates || {}).map(([key, template]) => [
+        key,
+        {
+            label: template?.label || key,
+            columns: (template?.columns || []).map(cloneItemColumn),
+        },
+    ])
+)
 
 // ── Schema state ──────────────────────────────────────────────────────────────
 const activeTab = ref('fields')
@@ -70,37 +87,35 @@ const schema = reactive({
     has_items: false,
     item_label: 'Row',
     items_columns: [],
+    items_template_source: null,
+    items_templates: {},
 })
 
 const editingField = ref(null)
 const editingIndex = ref(null)
 const editingItemCol = ref(null)
 const editingItemColIndex = ref(null)
+const selectedItemsTemplateKey = ref('')
 
 // Seed from existing schema when modal opens
 watch(() => props.show, (val) => {
     if (!val) return
     const src = props.form.form_schema || {}
-    const deepCloneOptionMap = (om) => om
-        ? Object.fromEntries(Object.entries(om).map(([k, v]) => [k, v.map(o => ({ ...o }))]))
-        : {}
     schema.fields = (src.fields || []).map(f => ({
         ...f,
         options: cloneOptions(f.options),
-        option_map: deepCloneOptionMap(f.option_map),
+        option_map: cloneOptionMap(f.option_map),
     }))
     schema.approver_fields = (src.approver_fields || []).map(f => ({
         ...f,
         options: cloneOptions(f.options),
-        option_map: deepCloneOptionMap(f.option_map),
+        option_map: cloneOptionMap(f.option_map),
     }))
     schema.has_items = src.has_items ?? false
     schema.item_label = src.item_label ?? 'Row'
-    schema.items_columns = (src.items_columns || []).map(c => ({
-        ...c,
-        options: (c.options || []).map(o => ({ ...o })),
-        option_map: deepCloneOptionMap(c.option_map),
-    }))
+    schema.items_columns = (src.items_columns || []).map(cloneItemColumn)
+    schema.items_template_source = src.items_template_source ?? null
+    schema.items_templates = cloneItemsTemplates(src.items_templates)
     editingField.value = null
     editingItemCol.value = null
     activeTab.value = 'fields'
@@ -288,6 +303,72 @@ const removeOption = (i) => editingField.value.options.splice(i, 1)
 // ── Items columns ─────────────────────────────────────────────────────────────
 const ITEM_COL_TYPES = FIELD_TYPES.map(t => t.value)
 
+const itemTemplateSourceFields = computed(() =>
+    schema.fields.filter(f => ['select', 'radio'].includes(f.type) && f.key)
+)
+
+const itemTemplateSourceField = computed(() =>
+    itemTemplateSourceFields.value.find(f => f.key === schema.items_template_source) || null
+)
+
+const itemTemplateOptions = computed(() => itemTemplateSourceField.value?.options || [])
+
+const currentItemsTemplate = computed(() =>
+    schema.items_template_source && selectedItemsTemplateKey.value
+        ? schema.items_templates?.[selectedItemsTemplateKey.value] || null
+        : null
+)
+
+const activeItemColumns = computed(() =>
+    schema.items_template_source
+        ? (currentItemsTemplate.value?.columns || [])
+        : schema.items_columns
+)
+
+const itemTemplateColumnCount = (key) =>
+    schema.items_templates?.[key]?.columns?.length || 0
+
+const syncItemsTemplatesForSource = () => {
+    if (!schema.items_template_source) {
+        selectedItemsTemplateKey.value = ''
+        return
+    }
+
+    if (!itemTemplateSourceField.value) {
+        schema.items_template_source = null
+        selectedItemsTemplateKey.value = ''
+        return
+    }
+
+    if (!schema.items_templates || Array.isArray(schema.items_templates)) {
+        schema.items_templates = {}
+    }
+
+    const validKeys = itemTemplateOptions.value
+        .map(option => option.value)
+        .filter(value => value !== undefined && value !== null && String(value) !== '')
+        .map(String)
+
+    itemTemplateOptions.value.forEach(option => {
+        const key = String(option.value ?? '')
+        if (!key) return
+
+        const existing = schema.items_templates[key]
+        schema.items_templates[key] = {
+            label: existing?.label || `${option.label || option.value} Items`,
+            columns: (existing?.columns || []).map(cloneItemColumn),
+        }
+    })
+
+    Object.keys(schema.items_templates).forEach(key => {
+        if (!validKeys.includes(key)) delete schema.items_templates[key]
+    })
+
+    if (!validKeys.includes(selectedItemsTemplateKey.value)) {
+        selectedItemsTemplateKey.value = validKeys[0] || ''
+    }
+}
+
 const blankItemCol = () => ({ 
     key: '', 
     label: '', 
@@ -302,11 +383,16 @@ const blankItemCol = () => ({
     _dependsOnField: '' 
 })
 const openAddItemCol = () => {
+    syncItemsTemplatesForSource()
+    if (schema.items_template_source && !selectedItemsTemplateKey.value) {
+        showError('Select a line item template option first.')
+        return
+    }
     editingItemCol.value = blankItemCol()
     editingItemColIndex.value = null
 }
 const openEditItemCol = (idx) => {
-    const c = schema.items_columns[idx]
+    const c = activeItemColumns.value[idx]
     editingItemCol.value = {
         ...c,
         options: (c.options || []).map(o => ({ ...o })),
@@ -336,13 +422,13 @@ const saveItemCol = () => {
     delete c._dependsOnField
 
     if (editingItemColIndex.value === null) {
-        schema.items_columns.push(c)
+        activeItemColumns.value.push(c)
     } else {
-        schema.items_columns.splice(editingItemColIndex.value, 1, c)
+        activeItemColumns.value.splice(editingItemColIndex.value, 1, c)
     }
     editingItemCol.value = null
 }
-const removeItemCol = (idx) => schema.items_columns.splice(idx, 1)
+const removeItemCol = (idx) => activeItemColumns.value.splice(idx, 1)
 
 // ── Save schema ───────────────────────────────────────────────────────────────
 const saveSchema = () => {
@@ -354,6 +440,8 @@ const saveSchema = () => {
             has_items: schema.has_items,
             item_label: schema.item_label,
             items_columns: schema.items_columns,
+            items_template_source: schema.items_template_source || null,
+            items_templates: schema.items_template_source ? schema.items_templates : {},
         }
     }
     router.put(route('form-builder.schema', props.form.id), payload, {
@@ -376,7 +464,7 @@ const optionFields = computed(() =>
     activeFields.value.filter(f => HAS_OPTIONS.includes(f.type) && f.key && f.key !== editingField.value?.key)
 )
 const optionItemCols = computed(() =>
-    schema.items_columns.filter(c => HAS_OPTIONS.includes(c.type) && c.key && c.key !== editingItemCol.value?.key)
+    activeItemColumns.value.filter(c => HAS_OPTIONS.includes(c.type) && c.key && c.key !== editingItemCol.value?.key)
 )
 
 const getParentOptions = (parentKey, sourceList) =>
@@ -400,7 +488,21 @@ watch(() => editingField.value?._dependsOnField, (newKey) => {
 })
 watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
     if (editingItemCol.value?._dependentOptions)
-        syncOptionMapKeys(editingItemCol.value, newKey, schema.items_columns)
+        syncOptionMapKeys(editingItemCol.value, newKey, activeItemColumns.value)
+})
+
+watch(() => props.show, (val) => {
+    if (val) syncItemsTemplatesForSource()
+}, { immediate: true })
+
+watch(() => schema.items_template_source, () => {
+    editingItemCol.value = null
+    editingItemColIndex.value = null
+    syncItemsTemplatesForSource()
+})
+
+watch(() => schema.fields.map(f => `${f.key}:${(f.options || []).map(o => o.value).join(',')}`).join('|'), () => {
+    syncItemsTemplatesForSource()
 })
 </script>
 
@@ -758,11 +860,60 @@ watch(() => editingItemCol.value?._dependsOnField, (newKey) => {
                                     <input v-model="schema.item_label" type="text" placeholder="e.g. Item, SKU, BOM Line" class="w-full rounded-xl border-gray-200 text-sm focus:ring-teal-500 focus:border-teal-500" />
                                 </div>
 
+                                <div class="p-4 rounded-2xl bg-white border border-gray-200 space-y-3">
+                                    <div>
+                                        <p class="text-sm font-bold text-gray-900">Line Item Column Mode</p>
+                                        <p class="text-xs text-gray-500 mt-0.5">Use one shared column set, or switch columns based on a dropdown field.</p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Template Source</label>
+                                        <select v-model="schema.items_template_source" class="w-full rounded-xl border-gray-200 text-sm bg-white focus:ring-teal-500 focus:border-teal-500">
+                                            <option :value="null">One shared column set</option>
+                                            <option v-for="field in itemTemplateSourceFields" :key="field.key" :value="field.key">
+                                                {{ field.label }} ({{ field.key }})
+                                            </option>
+                                        </select>
+                                        <p v-if="!itemTemplateSourceFields.length" class="mt-1 text-xs text-gray-400">Create a dropdown or radio field first to enable option-specific item templates.</p>
+                                    </div>
+
+                                    <div v-if="schema.items_template_source" class="space-y-2">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <p class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Edit Template For</p>
+                                            <span class="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-100 rounded-full px-2 py-1">
+                                                {{ itemTemplateSourceField?.label || schema.items_template_source }}
+                                            </span>
+                                        </div>
+                                        <div v-if="itemTemplateOptions.length" class="flex flex-wrap gap-2">
+                                            <button
+                                                v-for="option in itemTemplateOptions"
+                                                :key="option.value"
+                                                type="button"
+                                                @click="selectedItemsTemplateKey = String(option.value)"
+                                                :class="[
+                                                    'px-3 py-2 rounded-xl text-xs font-bold border transition-colors',
+                                                    selectedItemsTemplateKey === String(option.value)
+                                                        ? 'bg-teal-600 text-white border-teal-600'
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:border-teal-300'
+                                                ]"
+                                            >
+                                                {{ option.label }}
+                                                <span class="ml-1 opacity-75">({{ itemTemplateColumnCount(String(option.value)) }})</span>
+                                            </button>
+                                        </div>
+                                        <p v-else class="text-xs text-gray-400">The selected source field has no options yet.</p>
+                                    </div>
+                                </div>
+
                                 <!-- Column list -->
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-2">Columns</label>
-                                    <div v-if="schema.items_columns.length" class="space-y-2 mb-3">
-                                        <div v-for="(col, idx) in schema.items_columns" :key="idx"
+                                    <div class="flex items-center justify-between gap-3 mb-2">
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Columns</label>
+                                        <span v-if="schema.items_template_source && selectedItemsTemplateKey" class="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-100 rounded-full px-2 py-1">
+                                            {{ schema.items_templates[selectedItemsTemplateKey]?.label }}
+                                        </span>
+                                    </div>
+                                    <div v-if="activeItemColumns.length" class="space-y-2 mb-3">
+                                        <div v-for="(col, idx) in activeItemColumns" :key="idx"
                                             class="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100 group">
                                             <div class="flex-1 min-w-0">
                                                 <span class="text-sm font-bold text-gray-900">{{ col.label }}</span>
