@@ -209,10 +209,6 @@ const buildScheduleContext = (activity = {}) => {
 };
 
 const openChildModal = () => {
-    if (!validateResolutionDetails('creating a child ticket')) {
-        return;
-    }
-
     childForm.reset();
     
     // Set default times
@@ -398,6 +394,7 @@ const commentForm = useForm({
 });
 
 const showStatusDropdown = ref(false);
+const showResolutionModal = ref(false);
 const syncingTicketState = ref(false);
 
 const selectedItem = computed(() => {
@@ -409,6 +406,12 @@ const selectedItem = computed(() => {
 const canResolveTicket = computed(() => availableStatuses.value.includes('resolved'));
 const requiresRcaOnResolve = computed(() => !!selectedItem.value?.requires_rca_on_resolve);
 const requiresResolutionDetails = (targetStatus) => ['resolved', 'closed'].includes(targetStatus);
+
+const hasValidResolutionDetails = () => {
+    if (!commentForm.action_taken.trim()) return false;
+    if (requiresRcaOnResolve.value && !commentForm.root_cause_analysis.trim()) return false;
+    return true;
+};
 
 const validateResolutionDetails = (contextLabel = 'continue') => {
     if (!commentForm.action_taken.trim()) {
@@ -443,6 +446,13 @@ const canSubmitCurrentComment = () => {
 };
 
 const submitWithStatus = (newStatus) => {
+    if (requiresResolutionDetails(newStatus) && !hasValidResolutionDetails()) {
+        commentForm.status = newStatus;
+        showResolutionModal.value = true;
+        showStatusDropdown.value = false;
+        return;
+    }
+
     if (!validateResolutionBeforeSubmit(newStatus)) {
         showStatusDropdown.value = false;
         return;
@@ -451,6 +461,13 @@ const submitWithStatus = (newStatus) => {
     commentForm.status = newStatus;
     addComment();
     showStatusDropdown.value = false;
+};
+
+const submitResolution = () => {
+    if (!validateResolutionBeforeSubmit(commentForm.status)) return;
+    
+    addComment();
+    showResolutionModal.value = false;
 };
 
 const commentFileInput = ref(null);
@@ -764,6 +781,18 @@ watch(() => editForm.status, (newStatus, oldStatus) => {
     if (syncingTicketState.value || oldStatus === undefined || newStatus === oldStatus) return;
 
     if (requiresResolutionDetails(newStatus)) {
+        if (!hasValidResolutionDetails()) {
+            syncingTicketState.value = true;
+            editForm.status = oldStatus;
+            nextTick(() => {
+                syncingTicketState.value = false;
+            });
+            
+            commentForm.status = newStatus;
+            showResolutionModal.value = true;
+            return;
+        }
+
         if (!validateResolutionBeforeSubmit(newStatus)) {
             syncingTicketState.value = true;
             editForm.status = oldStatus;
@@ -787,13 +816,28 @@ watch(() => editForm.status, (newStatus, oldStatus) => {
     updateTicket({ preserveScroll: true });
 });
 
-// Watcher for is_self_requester — also updates department before saving
-watch(() => editForm.is_self_requester, (isSelf, oldValue) => {
-    if (syncingTicketState.value || oldValue === undefined || isSelf === oldValue) return;
+const handleSelfRequesterToggle = async (event) => {
+    const isChecked = event.target.checked;
+    
+    const confirmed = await confirm({
+        title: 'Confirm Requester Change',
+        message: isChecked 
+            ? 'Are you sure you want to set yourself as the requester? This will overwrite existing sender details.'
+            : 'Are you sure you want to remove yourself as the requester? You will need to manually enter the sender\'s details.'
+    });
 
-    editForm.department = isSelf ? (page.props.auth.user?.department || '') : '';
-    updateTicket({ preserveScroll: true });
-});
+    if (confirmed) {
+        syncingTicketState.value = true;
+        editForm.is_self_requester = isChecked;
+        editForm.department = isChecked ? (page.props.auth.user?.department || '') : '';
+        nextTick(() => {
+            syncingTicketState.value = false;
+            updateTicket({ preserveScroll: true });
+        });
+    } else {
+        event.target.checked = !isChecked;
+    }
+};
 
 // Watchers for free-text fields (debounced to avoid saving on every keystroke)
 const debouncedUpdateSenderName = debounce(() => updateTicket(), 800);
@@ -1087,7 +1131,7 @@ const linkify = (text) => {
                                 </button>
                                 <label class="flex items-center space-x-3 cursor-pointer">
                                     <div class="relative">
-                                        <input type="checkbox" v-model="editForm.is_self_requester" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
+                                        <input type="checkbox" :checked="editForm.is_self_requester" @change="handleSelfRequesterToggle" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
                                         <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                                     </div>
                                     <span class="text-xs font-bold text-gray-700">I am the requester</span>
@@ -1720,36 +1764,6 @@ const linkify = (text) => {
                                             </div>
                                         </div>
 
-                                        <div v-if="canResolveTicket" class="border-t border-blue-50 px-3 py-3 bg-slate-50/80 space-y-3">
-                                            <div class="flex items-center justify-between gap-3">
-                                                <div>
-                                                    <p class="text-[11px] font-black uppercase tracking-widest text-slate-700">Resolution Details</p>
-                                                    <p class="text-[11px] text-slate-500">Required only when sending this response as resolved.</p>
-                                                </div>
-                                                <span v-if="requiresRcaOnResolve" class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
-                                                    RCA Required
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Action Taken</label>
-                                                <textarea
-                                                    v-model="commentForm.action_taken"
-                                                    rows="2"
-                                                    class="block w-full rounded-lg border border-slate-200 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
-                                                    placeholder="Describe what was done to resolve the issue."
-                                                ></textarea>
-                                            </div>
-                                            <div v-if="requiresRcaOnResolve">
-                                                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Root Cause Analysis (RCA)</label>
-                                                <textarea
-                                                    v-model="commentForm.root_cause_analysis"
-                                                    rows="2"
-                                                    class="block w-full rounded-lg border border-slate-200 text-sm text-slate-700 focus:border-blue-500 focus:ring-blue-500"
-                                                    placeholder="Explain the root cause for this issue."
-                                                ></textarea>
-                                            </div>
-                                        </div>
-
                                         <div class="flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 border-t border-blue-50 bg-blue-50/50 rounded-b-xl gap-3">
                                             <div class="flex items-center space-x-2">
                                                 <input ref="commentFileInput" type="file" multiple accept="image/*,video/*" class="hidden" @change="handleCommentFileSelect">
@@ -2083,6 +2097,77 @@ const linkify = (text) => {
                              :style="{ transform: `scale(${zoomLevel}) translate(${panOffset.x / zoomLevel}px, ${panOffset.y / zoomLevel}px)` }" 
                              draggable="false">
                     </template>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Resolution Details Modal -->
+        <Modal :show="showResolutionModal" max-width="2xl" @close="showResolutionModal = false">
+            <div class="p-4 sm:p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest">
+                            Resolve Ticket
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-1">Please provide the details of the resolution.</p>
+                    </div>
+                    <button @click="showResolutionModal = false" class="text-gray-400 hover:text-gray-600">
+                        <XMarkIcon class="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center">
+                            Action Taken
+                            <span class="ml-1 text-red-500">*</span>
+                        </label>
+                        <textarea
+                            v-model="commentForm.action_taken"
+                            rows="4"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            placeholder="Describe what was done to resolve the issue..."
+                        ></textarea>
+                    </div>
+
+                    <div v-if="requiresRcaOnResolve">
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center">
+                            Root Cause Analysis (RCA)
+                            <span class="ml-1 text-red-500">*</span>
+                        </label>
+                        <textarea
+                            v-model="commentForm.root_cause_analysis"
+                            rows="4"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            placeholder="Explain the root cause for this issue..."
+                        ></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                            Resolution Note (Optional)
+                        </label>
+                        <textarea
+                            v-model="commentForm.comment_text"
+                            rows="3"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            placeholder="Any final comments to the requester..."
+                        ></textarea>
+                    </div>
+
+                    <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t">
+                        <button type="button" @click="showResolutionModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest">
+                            Cancel
+                        </button>
+                        <button 
+                            @click="submitResolution"
+                            :disabled="commentForm.processing"
+                            class="px-8 py-2 text-sm font-black text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-md transition-all active:scale-95 uppercase tracking-widest disabled:opacity-50"
+                        >
+                            <template v-if="commentForm.processing">Resolving...</template>
+                            <template v-else>Submit Resolution</template>
+                        </button>
+                    </div>
                 </div>
             </div>
         </Modal>

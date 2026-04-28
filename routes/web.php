@@ -94,6 +94,7 @@ Route::middleware('auth')->group(function () {
     Route::get('tickets/data/items', [\App\Http\Controllers\TicketController::class, 'getItems'])->name('tickets.data.items');
     Route::get('assets/template', [\App\Http\Controllers\AssetController::class, 'template'])->name('assets.template');
     Route::post('assets/import', [\App\Http\Controllers\AssetController::class, 'import'])->name('assets.import');
+    Route::get('assets/generate-code', [\App\Http\Controllers\AssetController::class, 'generateCode'])->name('assets.generate-code');
     Route::resource('assets', \App\Http\Controllers\AssetController::class)->except(['show', 'create', 'edit']);
     Route::post('tickets/sync', [\App\Http\Controllers\TicketController::class, 'sync'])->name('tickets.sync');
 

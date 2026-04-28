@@ -26,6 +26,10 @@ const props = defineProps({
     size: {
         type: String,
         default: 'md', // md, sm
+    },
+    allowCustom: {
+        type: Boolean,
+        default: false,
     }
 });
 
@@ -49,6 +53,18 @@ const selectedOption = computed(() => {
         const val = typeof opt === 'object' ? opt[props.valueKey] : opt;
         return val == props.modelValue;
     });
+});
+
+const displayLabel = computed(() => {
+    if (selectedOption.value) {
+        return typeof selectedOption.value === 'object' ? selectedOption.value[props.labelKey] : selectedOption.value;
+    }
+
+    if (props.allowCustom && props.modelValue !== null && props.modelValue !== undefined && props.modelValue !== '') {
+        return props.modelValue;
+    }
+
+    return '';
 });
 
 const filteredOptions = computed(() => {
@@ -86,6 +102,7 @@ const updatePosition = () => {
 
 const openDropdown = async () => {
     if (props.disabled) return;
+    searchQuery.value = props.allowCustom && props.modelValue ? String(props.modelValue) : '';
     isOpen.value = true;
     await nextTick();
     updatePosition();
@@ -101,6 +118,12 @@ const select = (option) => {
     const actualValue = typeof option === 'object' ? option[props.valueKey] : option;
     emit('update:modelValue', actualValue);
     closeDropdown();
+};
+
+const handleSearchInput = () => {
+    if (props.allowCustom) {
+        emit('update:modelValue', searchQuery.value);
+    }
 };
 
 const handleClickOutside = (event) => {
@@ -136,8 +159,8 @@ watch(selectedOption, (newVal) => {
             ]"
         >
             <div v-if="!isOpen">
-                <span v-if="selectedOption" class="text-gray-900 break-words line-clamp-2">
-                    {{ typeof selectedOption === 'object' ? selectedOption[labelKey] : selectedOption }}
+                <span v-if="displayLabel" class="text-gray-900 break-words line-clamp-2">
+                    {{ displayLabel }}
                 </span>
                 <span v-else class="text-gray-400">{{ placeholder }}</span>
             </div>
@@ -149,8 +172,10 @@ watch(selectedOption, (newVal) => {
                 type="text"
                 class="w-full p-0 border-none focus:ring-0 bg-transparent"
                 :class="size === 'sm' ? 'text-xs' : 'text-sm'"
-                :placeholder="selectedOption ? (typeof selectedOption === 'object' ? selectedOption[labelKey] : selectedOption) : placeholder"
+                :placeholder="displayLabel || placeholder"
+                @input="handleSearchInput"
                 @keydown.esc="closeDropdown"
+                @keydown.enter.prevent="closeDropdown"
             />
 
             <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">

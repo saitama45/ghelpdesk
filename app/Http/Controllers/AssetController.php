@@ -22,10 +22,32 @@ class AssetController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:assets.view', only: ['index']),
-            new Middleware('can:assets.create', only: ['store', 'import', 'template']),
+            new Middleware('can:assets.create', only: ['store', 'import', 'template', 'generateCode']),
             new Middleware('can:assets.edit', only: ['update']),
             new Middleware('can:assets.delete', only: ['destroy']),
         ];
+    }
+
+    public function generateCode()
+    {
+        return response()->json(['code' => $this->nextItemCode()]);
+    }
+
+    private function nextItemCode(): string
+    {
+        $latestNumber = Asset::where('item_code', 'like', 'SKU%')
+            ->pluck('item_code')
+            ->map(function (string $itemCode): ?int {
+                if (preg_match('/^SKU(\d+)$/', $itemCode, $matches)) {
+                    return (int) $matches[1];
+                }
+
+                return null;
+            })
+            ->filter()
+            ->max();
+
+        return 'SKU' . (($latestNumber ?? 100000) + 1);
     }
 
     public function index(Request $request)
@@ -48,11 +70,27 @@ class AssetController extends Controller implements HasMiddleware
         
         $categories = Category::orderBy('name')->get();
         $subCategories = SubCategory::orderBy('name')->get();
+        $brandOptions = Asset::whereNotNull('brand')
+            ->pluck('brand')
+            ->map(fn (?string $brand) => trim((string) $brand))
+            ->filter(fn (string $brand) => $brand !== '')
+            ->unique(fn (string $brand) => mb_strtolower($brand))
+            ->sortBy(fn (string $brand) => mb_strtolower($brand))
+            ->values();
+        $modelOptions = Asset::whereNotNull('model')
+            ->pluck('model')
+            ->map(fn (?string $model) => trim((string) $model))
+            ->filter(fn (string $model) => $model !== '')
+            ->unique(fn (string $model) => mb_strtolower($model))
+            ->sortBy(fn (string $model) => mb_strtolower($model))
+            ->values();
 
         return Inertia::render('Assets/Index', [
             'assets' => $assets,
             'categories' => $categories,
             'subCategories' => $subCategories,
+            'brandOptions' => $brandOptions,
+            'modelOptions' => $modelOptions,
             'filters' => $request->only(['search', 'per_page']),
         ]);
     }
@@ -60,7 +98,6 @@ class AssetController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'item_code' => 'required|string|unique:assets,item_code',
             'category_id' => 'required|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'brand' => 'nullable|string|max:255',
@@ -71,6 +108,8 @@ class AssetController extends Controller implements HasMiddleware
             'eol_years' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
+
+        $validated['item_code'] = $this->nextItemCode();
 
         Asset::create($validated);
 

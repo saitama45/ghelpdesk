@@ -259,52 +259,71 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item Code</label>
-                                <input v-model="form.item_code" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono">
+                                <div class="relative">
+                                    <input v-model="form.item_code" type="text" :required="isEditing"
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono bg-gray-50"
+                                           :readonly="!isEditing">
+                                    <div v-if="!isEditing" class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                <p v-if="!isEditing" class="mt-1 text-[10px] text-blue-600 font-medium">System generated code</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type</label>
-                                <select v-model="form.type" required
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option value="Fixed">Fixed</option>
-                                    <option value="Consumables">Consumables</option>
-                                </select>
+                                <Autocomplete
+                                    v-model="form.type"
+                                    :options="['Fixed', 'Consumables']"
+                                    placeholder="Select Type"
+                                    required
+                                />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
-                                <select v-model="form.category_id" required
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option :value="null" disabled>Select Category</option>
-                                    <option v-for="category in categories" :key="category.id" :value="category.id">
-                                        {{ category.name }}
-                                    </option>
-                                </select>
+                                <Autocomplete
+                                    v-model="form.category_id"
+                                    :options="categories"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select Category"
+                                    required
+                                />
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Category</label>
-                                <select v-model="form.sub_category_id"
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option :value="null">None</option>
-                                    <option v-for="sub in filteredSubCategories" :key="sub.id" :value="sub.id">
-                                        {{ sub.name }}
-                                    </option>
-                                </select>
+                                <Autocomplete
+                                    v-model="form.sub_category_id"
+                                    :options="filteredSubCategories"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select Sub-Category (Optional)"
+                                />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
-                                <input v-model="form.brand" type="text"
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <Autocomplete
+                                    v-model="form.brand"
+                                    :options="brandOptions"
+                                    placeholder="Type or select Brand"
+                                    allow-custom
+                                />
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Model</label>
-                                <input v-model="form.model" type="text"
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <Autocomplete
+                                    v-model="form.model"
+                                    :options="modelOptions"
+                                    placeholder="Type or select Model"
+                                    allow-custom
+                                />
                             </div>
                         </div>
 
@@ -357,6 +376,7 @@ import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -368,6 +388,8 @@ const props = defineProps({
     assets: Object,
     categories: Array,
     subCategories: Array,
+    brandOptions: Array,
+    modelOptions: Array,
     filters: Object
 })
 
@@ -385,6 +407,16 @@ const importFileInput = ref(null)
 const selectedImportFile = ref(null)
 const isImporting = ref(false)
 const importResults = ref(null)
+const autoDescription = ref('')
+
+const fetchNextCode = async () => {
+    try {
+        const response = await axios.get(route('assets.generate-code'));
+        form.item_code = response.data.code;
+    } catch (error) {
+        console.error('Error fetching next item code:', error);
+    }
+};
 
 const form = reactive({
     item_code: '',
@@ -415,9 +447,29 @@ const filteredSubCategories = computed(() => {
     return props.subCategories.filter(s => s.category_id === form.category_id || !s.category_id);
 })
 
+const buildAutoDescription = () => {
+    return [form.brand, form.model]
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .join(' ')
+}
+
+const syncDescriptionFromBrandModel = () => {
+    const nextDescription = buildAutoDescription()
+
+    if (!form.description || form.description === autoDescription.value) {
+        form.description = nextDescription
+    }
+
+    autoDescription.value = nextDescription
+}
+
+watch(() => [form.brand, form.model], syncDescriptionFromBrandModel)
+
 const openCreateModal = () => {
     isEditing.value = false
     currentAsset.value = null
+    autoDescription.value = ''
     Object.assign(form, {
         item_code: '',
         category_id: props.categories.length > 0 ? props.categories[0].id : null,
@@ -430,6 +482,7 @@ const openCreateModal = () => {
         eol_years: null,
         is_active: true
     })
+    fetchNextCode()
     showModal.value = true
 }
 
@@ -445,6 +498,10 @@ const openImportModal = () => {
 const editAsset = (asset) => {
     isEditing.value = true
     currentAsset.value = asset
+    autoDescription.value = [asset.brand, asset.model]
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .join(' ')
     Object.assign(form, {
         item_code: asset.item_code,
         category_id: asset.category_id,
