@@ -347,8 +347,12 @@ class TicketController extends Controller
                 $validated['sender_email'] = null;
                 $validated['department'] = auth()->user()->department;
             } else {
-                $validated['reporter_id'] = null;
-                // sender_name, sender_email, and department are already in $validated from request
+                if (!$ticket->reporter_id || (int) $ticket->reporter_id === (int) auth()->id()) {
+                    $validated['reporter_id'] = null;
+                    // sender_name, sender_email, and department are already in $validated from request
+                } else {
+                    unset($validated['reporter_id'], $validated['sender_name'], $validated['sender_email']);
+                }
             }
         } elseif ($request->has('department')) {
             $validated['department'] = $request->input('department');

@@ -59,6 +59,16 @@ const availableCompanies = computed(() => {
     return props.companies.filter(company => allowedCompanyIds.has(company.id));
 });
 
+const sameUserId = (left, right) => Number(left) === Number(right);
+
+const isCurrentUserRequester = (ticket) => {
+    return !!ticket?.reporter_id && !!authUser.value?.id && sameUserId(ticket.reporter_id, authUser.value.id);
+};
+
+const hasDifferentInternalRequester = (ticket) => {
+    return !!ticket?.reporter_id && !!authUser.value?.id && !sameUserId(ticket.reporter_id, authUser.value.id);
+};
+
 // Canned Messages State
 const showCannedMessages = ref(false);
 
@@ -332,10 +342,22 @@ const editForm = useForm({
     severity: props.ticket.severity,
     assignee_id: props.ticket.assignee_id || '',
     
-    is_self_requester: !!props.ticket.reporter_id,
+    is_self_requester: isCurrentUserRequester(props.ticket),
     sender_name: props.ticket.sender_name || '',
     sender_email: props.ticket.sender_email || '',
     department: props.ticket.department || '',
+});
+
+const requesterDisplayName = computed(() => {
+    return props.ticket.reporter?.name || props.ticket.sender_name || 'No requester set';
+});
+
+const requesterDisplayEmail = computed(() => {
+    return props.ticket.reporter?.email || props.ticket.sender_email || '';
+});
+
+const showExternalRequesterFields = computed(() => {
+    return !editForm.is_self_requester && !hasDifferentInternalRequester(props.ticket);
 });
 
 const items = ref([]);
@@ -672,7 +694,15 @@ const updateTicket = (options = {}) => {
         else window.scrollTo(0, savedScrollTop);
     };
 
-    put(route('tickets.update', props.ticket.id), editForm.data(), {
+    const payload = editForm.data();
+
+    if (!editForm.is_self_requester && hasDifferentInternalRequester(props.ticket)) {
+        delete payload.is_self_requester;
+        delete payload.sender_name;
+        delete payload.sender_email;
+    }
+
+    put(route('tickets.update', props.ticket.id), payload, {
         preserveScroll: true,
         preserveState: true,
         only: ['ticket', 'flash'], // Only refresh ticket data, ignore static lists
@@ -708,7 +738,7 @@ watch(() => props.ticket, (newTicket) => {
     editForm.item_id = newTicket.item_id || '';
     editForm.company_id = newTicket.company_id || '';
     editForm.store_id = newTicket.store_id || '';
-    editForm.is_self_requester = !!newTicket.reporter_id;
+    editForm.is_self_requester = isCurrentUserRequester(newTicket);
     editForm.sender_name = newTicket.sender_name || '';
     editForm.sender_email = newTicket.sender_email || '';
     editForm.department = newTicket.department || '';
@@ -758,7 +788,9 @@ watch(() => editForm.status, (newStatus, oldStatus) => {
 });
 
 // Watcher for is_self_requester — also updates department before saving
-watch(() => editForm.is_self_requester, (isSelf) => {
+watch(() => editForm.is_self_requester, (isSelf, oldValue) => {
+    if (syncingTicketState.value || oldValue === undefined || isSelf === oldValue) return;
+
     editForm.department = isSelf ? (page.props.auth.user?.department || '') : '';
     updateTicket({ preserveScroll: true });
 });
@@ -1061,7 +1093,15 @@ const linkify = (text) => {
                                     <span class="text-xs font-bold text-gray-700">I am the requester</span>
                                 </label>
 
-                                <div v-if="!editForm.is_self_requester" class="space-y-3 pt-2 border-t border-gray-200">
+                                <div class="pt-2 border-t border-gray-200">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Current Requester</label>
+                                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                        <div class="text-xs font-bold text-gray-900">{{ requesterDisplayName }}</div>
+                                        <div v-if="requesterDisplayEmail" class="text-[11px] text-gray-500 truncate">{{ requesterDisplayEmail }}</div>
+                                    </div>
+                                </div>
+
+                                <div v-if="showExternalRequesterFields" class="space-y-3 pt-2 border-t border-gray-200">
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
                                         <input v-model="editForm.sender_name" type="text" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
