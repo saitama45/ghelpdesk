@@ -758,13 +758,6 @@ const getActualTimesForScheduleDate = (source, dateKey) => {
     }
 }
 
-const getAnyActualTimes = (source) => {
-    return {
-        actual_time_in: source?.actual_time_in ?? null,
-        actual_time_out: source?.actual_time_out ?? null,
-    }
-}
-
 const getActualTimesForSegmentDate = (segments, dateKey, fallback = null) => {
     const dailyTimes = { actual_time_in: null, actual_time_out: null }
 
@@ -780,17 +773,7 @@ const getActualTimesForSegmentDate = (segments, dateKey, fallback = null) => {
         actual_time_out: dailyTimes.actual_time_out || fallbackTimes.actual_time_out,
     }
 
-    if (exactTimes.actual_time_in || exactTimes.actual_time_out || segments.length !== 1) {
-        return exactTimes
-    }
-
-    const singleSegmentTimes = getAnyActualTimes(segments[0])
-    const scheduleTimes = getAnyActualTimes(fallback)
-
-    return {
-        actual_time_in: singleSegmentTimes.actual_time_in || scheduleTimes.actual_time_in,
-        actual_time_out: singleSegmentTimes.actual_time_out || scheduleTimes.actual_time_out,
-    }
+    return exactTimes
 }
 
 const page = usePage()
