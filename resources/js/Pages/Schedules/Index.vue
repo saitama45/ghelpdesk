@@ -738,6 +738,43 @@ const getTopPriorityTicket = (segments, fallbackTicket = null) => {
     })[0]
 }
 
+const getActualTimesForScheduleDate = (source, dateKey) => {
+    if (!source || !dateKey) {
+        return { actual_time_in: null, actual_time_out: null }
+    }
+
+    const dateActualTimes = source.actual_times_by_date?.[dateKey]
+
+    if (dateActualTimes) {
+        return {
+            actual_time_in: dateActualTimes.actual_time_in ?? null,
+            actual_time_out: dateActualTimes.actual_time_out ?? null,
+        }
+    }
+
+    return {
+        actual_time_in: source.actual_time_in && getScheduleDateKey(source.actual_time_in) === dateKey ? source.actual_time_in : null,
+        actual_time_out: source.actual_time_out && getScheduleDateKey(source.actual_time_out) === dateKey ? source.actual_time_out : null,
+    }
+}
+
+const getActualTimesForSegmentDate = (segments, dateKey, fallback = null) => {
+    const dailyTimes = { actual_time_in: null, actual_time_out: null }
+
+    for (const segment of segments) {
+        const segmentTimes = getActualTimesForScheduleDate(segment, dateKey)
+        dailyTimes.actual_time_in = dailyTimes.actual_time_in || segmentTimes.actual_time_in
+        dailyTimes.actual_time_out = segmentTimes.actual_time_out || dailyTimes.actual_time_out
+    }
+
+    const fallbackTimes = getActualTimesForScheduleDate(fallback, dateKey)
+
+    return {
+        actual_time_in: dailyTimes.actual_time_in || fallbackTimes.actual_time_in,
+        actual_time_out: dailyTimes.actual_time_out || fallbackTimes.actual_time_out,
+    }
+}
+
 const page = usePage()
 const initialRange = props.filters?.start && props.filters?.end
     ? { start: props.filters.start, end: props.filters.end }
@@ -807,6 +844,7 @@ const calendarSchedules = computed(() => {
             const lastSegment = sortedSegments.reduce((latest, segment) => (
                 new Date(segment.end_time) > new Date(latest.end_time) ? segment : latest
             ), sortedSegments[0])
+            const actualTimes = getActualTimesForSegmentDate(sortedSegments, dateKey, schedule)
 
             return {
                 ...schedule,
@@ -814,6 +852,12 @@ const calendarSchedules = computed(() => {
                 end_time: lastSegment.end_time,
                 store: firstSegment.store ?? schedule.store ?? null,
                 ticket: getTopPriorityTicket(sortedSegments, schedule.ticket ?? null),
+                actual_time_in: actualTimes.actual_time_in,
+                actual_time_out: actualTimes.actual_time_out,
+                actual_times_by_date: {
+                    ...(schedule.actual_times_by_date ?? {}),
+                    [dateKey]: actualTimes,
+                },
                 calendar_date_key: dateKey,
             }
         })
@@ -1255,18 +1299,7 @@ const getCalendarDateKey = (value) => {
 }
 
 const getActualTimesForDate = (source, dateKey) => {
-    if (!source || !dateKey) {
-        return { actual_time_in: null, actual_time_out: null }
-    }
-
-    if (source.actual_times_by_date?.[dateKey]) {
-        return source.actual_times_by_date[dateKey]
-    }
-
-    return {
-        actual_time_in: source.actual_time_in && getManilaDateKey(source.actual_time_in) === dateKey ? source.actual_time_in : null,
-        actual_time_out: source.actual_time_out && getManilaDateKey(source.actual_time_out) === dateKey ? source.actual_time_out : null,
-    }
+    return getActualTimesForScheduleDate(source, dateKey)
 }
 
 const isEntryOnDate = (entry, dateKey) => {
@@ -1278,12 +1311,21 @@ const isEntryOnDate = (entry, dateKey) => {
     return startKey === dateKey || endKey === dateKey
 }
 
-const openCreateModal = () => {
+const resetScheduleModalState = () => {
     isEditing.value = false
     isViewingOnly.value = false
+    canEditSchedule.value = false
     currentScheduleId.value = null
-    currentActualTimeIn.value  = null
+    currentActualTimeIn.value = null
     currentActualTimeOut.value = null
+    currentCreatedBy.value = null
+    currentCreatedAt.value = null
+    currentUpdatedBy.value = null
+    currentUpdatedAt.value = null
+}
+
+const openCreateModal = () => {
+    resetScheduleModalState()
     currentCreatedBy.value = authUser.value?.name || null
     currentCreatedAt.value = null
     currentUpdatedBy.value = authUser.value?.name || null
@@ -1301,7 +1343,7 @@ const openCreateModal = () => {
     start.setHours(7, 0, 0, 0)
     const end = new Date(now)
     end.setHours(17, 0, 0, 0)
-    form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
+    form.stores = [{ store_id: null, ticket_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
 
     showModal.value = true
 }
@@ -1314,7 +1356,7 @@ const handleDateClick = (date) => {
     start.setHours(7, 0, 0, 0)
     const end = new Date(date)
     end.setHours(17, 0, 0, 0)
-    form.stores = [{ store_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30 }]
+    form.stores = [{ store_id: null, ticket_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
 }
 
 const handleEventClick = (payload) => {
@@ -1356,6 +1398,9 @@ const handleEventClick = (payload) => {
     if (event.schedule_stores && event.schedule_stores.length > 0) {
         const dayStores = event.schedule_stores.filter(ss => isEntryOnDate(ss, clickedDateKey))
         const storesToDisplay = dayStores.length > 0 ? dayStores : event.schedule_stores
+        const eventActualTimesFallback = storesToDisplay.length === 1
+            ? eventActualTimes
+            : { actual_time_in: null, actual_time_out: null }
 
         form.stores = storesToDisplay.map(ss => {
             const segmentActualTimes = getActualTimesForDate(ss, clickedDateKey)
@@ -1366,8 +1411,8 @@ const handleEventClick = (payload) => {
                 end_time: formatDateForInput(new Date(ss.end_time)),
                 grace_period_minutes: ss.grace_period_minutes ?? 30,
                 remarks: ss.remarks || '',
-                actual_time_in: segmentActualTimes.actual_time_in,
-                actual_time_out: segmentActualTimes.actual_time_out,
+                actual_time_in: segmentActualTimes.actual_time_in || eventActualTimesFallback.actual_time_in,
+                actual_time_out: segmentActualTimes.actual_time_out || eventActualTimesFallback.actual_time_out,
                 ticket: ss.ticket || null,
             }
         })
@@ -1390,12 +1435,8 @@ const handleEventClick = (payload) => {
 }
 
 const closeModal = () => {
-    showModal.value = false;
-    isViewingOnly.value = false;
-    currentCreatedBy.value = null;
-    currentCreatedAt.value = null;
-    currentUpdatedBy.value = null;
-    currentUpdatedAt.value = null;
+    showModal.value = false
+    resetScheduleModalState()
 }
 
 const addStore = () => {
@@ -1433,13 +1474,15 @@ const validateScheduleStores = () => {
 const submitForm = () => {
     if (!validateScheduleStores()) return
 
-    const url = isEditing.value ? `/schedules/${currentScheduleId.value}` : '/schedules'
-    const requestMethod = isEditing.value ? put : post
+    const editingScheduleId = isEditing.value ? currentScheduleId.value : null
+    const isUpdatingSchedule = Boolean(editingScheduleId)
+    const url = isUpdatingSchedule ? `/schedules/${editingScheduleId}` : '/schedules'
+    const requestMethod = isUpdatingSchedule ? put : post
     
     requestMethod(url, form, {
         onSuccess: () => {
             closeModal()
-            showSuccess(isEditing.value ? 'Schedule updated successfully' : 'Schedule created successfully')
+            showSuccess(isUpdatingSchedule ? 'Schedule updated successfully' : 'Schedule created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
