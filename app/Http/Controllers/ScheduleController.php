@@ -249,21 +249,11 @@ class ScheduleController extends Controller implements HasMiddleware
         ]);
 
         $storeEntries = $request->input('stores');
+        $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
-        // Check for overlaps using overall shift window
-        $overlap = Schedule::where('user_id', $request->user_id)
-            ->where(function($query) use ($startTime, $endTime) {
-                $query->whereBetween('start_time', [$startTime, $endTime])
-                      ->orWhereBetween('end_time', [$startTime, $endTime])
-                      ->orWhere(function($q) use ($startTime, $endTime) {
-                          $q->where('start_time', '<=', $startTime)
-                            ->where('end_time', '>=', $endTime);
-                      });
-            })->exists();
-
-        if ($overlap) {
+        if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries)) {
             return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
 
@@ -280,7 +270,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'backlogs_end'   => $request->backlogs_end,
         ]);
 
-        foreach ($this->expandStoreEntries($storeEntries) as $entry) {
+        foreach ($expandedStoreEntries as $entry) {
             $schedule->scheduleStores()->create([
                 'store_id'             => $entry['store_id'] ?? null,
                 'ticket_id'            => $entry['ticket_id'] ?? null,
@@ -328,22 +318,11 @@ class ScheduleController extends Controller implements HasMiddleware
         ]);
 
         $storeEntries = $request->input('stores');
+        $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
-        // Check for overlaps excluding current schedule
-        $overlap = Schedule::where('user_id', $request->user_id)
-            ->where('id', '!=', $schedule->id)
-            ->where(function($query) use ($startTime, $endTime) {
-                $query->whereBetween('start_time', [$startTime, $endTime])
-                      ->orWhereBetween('end_time', [$startTime, $endTime])
-                      ->orWhere(function($q) use ($startTime, $endTime) {
-                          $q->where('start_time', '<=', $startTime)
-                            ->where('end_time', '>=', $endTime);
-                      });
-            })->exists();
-
-        if ($overlap) {
+        if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries, $schedule->id)) {
             return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
 
@@ -361,7 +340,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
         // Rebuild store entries
         $schedule->scheduleStores()->delete();
-        foreach ($this->expandStoreEntries($storeEntries) as $entry) {
+        foreach ($expandedStoreEntries as $entry) {
             $schedule->scheduleStores()->create([
                 'store_id'             => $entry['store_id'] ?? null,
                 'ticket_id'            => $entry['ticket_id'] ?? null,
@@ -373,6 +352,59 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
+    }
+
+    private function hasScheduleOverlap(int $userId, array $newEntries, $excludeScheduleId = null): bool
+    {
+        if (empty($newEntries)) {
+            return false;
+        }
+
+        $candidateEntries = collect($newEntries)->map(fn ($entry) => [
+            'start_time' => Carbon::parse($entry['start_time']),
+            'end_time'   => Carbon::parse($entry['end_time']),
+        ]);
+
+        $rangeStart = $candidateEntries->sortBy(fn ($entry) => $entry['start_time']->getTimestamp())->first()['start_time'];
+        $rangeEnd = $candidateEntries->sortByDesc(fn ($entry) => $entry['end_time']->getTimestamp())->first()['end_time'];
+
+        $existingSegments = ScheduleStore::query()
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart)
+            ->whereHas('schedule', function ($query) use ($userId, $excludeScheduleId) {
+                $query->where('user_id', $userId);
+
+                if ($excludeScheduleId) {
+                    $query->where('id', '!=', $excludeScheduleId);
+                }
+            })
+            ->get(['start_time', 'end_time']);
+
+        foreach ($existingSegments as $segment) {
+            foreach ($candidateEntries as $entry) {
+                if ($entry['start_time']->lte($segment->end_time) && $entry['end_time']->gte($segment->start_time)) {
+                    return true;
+                }
+            }
+        }
+
+        $legacySchedules = Schedule::query()
+            ->where('user_id', $userId)
+            ->when($excludeScheduleId, fn ($query) => $query->where('id', '!=', $excludeScheduleId))
+            ->whereDoesntHave('scheduleStores')
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart)
+            ->get(['start_time', 'end_time']);
+
+        foreach ($legacySchedules as $legacySchedule) {
+            foreach ($candidateEntries as $entry) {
+                if ($entry['start_time']->lte($legacySchedule->end_time) && $entry['end_time']->gte($legacySchedule->start_time)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -148,7 +148,7 @@
                 <!-- Calendar View -->
                 <div v-if="currentView === 'calendar'">
                     <Calendar 
-                        :events="schedules" 
+                        :events="calendarSchedules"
                         v-model:statusFilter="filterStatus"
                         v-model:priorityFilter="filterPriority"
                         @visible-range-change="handleVisibleRangeChange"
@@ -693,6 +693,51 @@ const getMonthRange = (date = new Date()) => {
     }
 }
 
+const getScheduleDateKey = (value) => {
+    if (!value) return null
+
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value))
+}
+
+const parseScheduleDateKey = (key) => {
+    const [year, month, day] = key.split('-').map(Number)
+    return new Date(year, month - 1, day)
+}
+
+const getScheduleDateKeysBetween = (startValue, endValue) => {
+    const startKey = getScheduleDateKey(startValue)
+    const endKey = getScheduleDateKey(endValue)
+
+    if (!startKey || !endKey) return []
+
+    const keys = []
+    const cursor = parseScheduleDateKey(startKey)
+    const end = parseScheduleDateKey(endKey)
+
+    while (cursor <= end) {
+        keys.push(formatDateParam(cursor))
+        cursor.setDate(cursor.getDate() + 1)
+    }
+
+    return keys
+}
+
+const getTopPriorityTicket = (segments, fallbackTicket = null) => {
+    const tickets = segments
+        .map(segment => segment.ticket)
+        .filter(Boolean)
+
+    if (!tickets.length) return fallbackTicket
+
+    const priorityRank = { urgent: 1, high: 2, medium: 3, low: 4 }
+
+    return [...tickets].sort((a, b) => {
+        const rankA = priorityRank[String(a.priority || '').toLowerCase()] ?? 5
+        const rankB = priorityRank[String(b.priority || '').toLowerCase()] ?? 5
+        return rankA - rankB
+    })[0]
+}
+
 const page = usePage()
 const initialRange = props.filters?.start && props.filters?.end
     ? { start: props.filters.start, end: props.filters.end }
@@ -723,6 +768,57 @@ const reportTitle = computed(() => {
 })
 const currentView = useRemember('calendar', 'schedules.currentView')
 const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
+
+const calendarSchedules = computed(() => {
+    return (props.schedules ?? []).flatMap(schedule => {
+        const stores = Array.isArray(schedule.schedule_stores) ? schedule.schedule_stores : []
+
+        if (!stores.length) {
+            return [schedule]
+        }
+
+        const displaySegments = filterStore.value
+            ? stores.filter(segment => String(segment.store_id ?? '') === String(filterStore.value))
+            : stores
+
+        if (!displaySegments.length) {
+            return []
+        }
+
+        const segmentsByDate = new Map()
+
+        for (const segment of displaySegments) {
+            for (const dateKey of getScheduleDateKeysBetween(segment.start_time, segment.end_time)) {
+                if (!segmentsByDate.has(dateKey)) {
+                    segmentsByDate.set(dateKey, [])
+                }
+
+                segmentsByDate.get(dateKey).push(segment)
+            }
+        }
+
+        if (!segmentsByDate.size) {
+            return [schedule]
+        }
+
+        return [...segmentsByDate.entries()].map(([dateKey, segments]) => {
+            const sortedSegments = [...segments].sort((a, b) => new Date(a.start_time) - new Date(b.start_time))
+            const firstSegment = sortedSegments[0]
+            const lastSegment = sortedSegments.reduce((latest, segment) => (
+                new Date(segment.end_time) > new Date(latest.end_time) ? segment : latest
+            ), sortedSegments[0])
+
+            return {
+                ...schedule,
+                start_time: firstSegment.start_time,
+                end_time: lastSegment.end_time,
+                store: firstSegment.store ?? schedule.store ?? null,
+                ticket: getTopPriorityTicket(sortedSegments, schedule.ticket ?? null),
+                calendar_date_key: dateKey,
+            }
+        })
+    })
+})
 
 // Pivot report data — fetched on demand when the user opens the Report tab
 const pivotData = ref([])
