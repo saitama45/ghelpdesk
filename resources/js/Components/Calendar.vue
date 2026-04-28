@@ -624,6 +624,17 @@ const formatDateLong = (date) => {
                                     <span>{{ event.status }}</span>
                                     <span class="text-[9px]">{{ formatTime(event.start_time) }}</span>
                                 </div>
+                                <div
+                                    v-if="getActualTimesForDate(event, day.date).actual_time_in || getActualTimesForDate(event, day.date).actual_time_out"
+                                    class="flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-bold opacity-95 leading-tight"
+                                >
+                                    <span v-if="getActualTimesForDate(event, day.date).actual_time_in">
+                                        Actual In: {{ formatTime(getActualTimesForDate(event, day.date).actual_time_in) }}
+                                    </span>
+                                    <span v-if="getActualTimesForDate(event, day.date).actual_time_out">
+                                        Actual Out: {{ formatTime(getActualTimesForDate(event, day.date).actual_time_out) }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -701,6 +712,17 @@ const formatDateLong = (date) => {
                             <span class="text-[10px] opacity-90 truncate">{{ item.event.status }}</span>
                             <span class="text-[9px] opacity-75">{{ formatTime(item.event.start_time) }} – {{ formatTime(item.event.end_time) }}</span>
                             <p v-if="item.event.store" class="text-[9px] opacity-75 italic truncate">@ {{ item.event.store.name }}</p>
+                            <div
+                                v-if="getActualTimesForDate(item.event, currentDayDate).actual_time_in || getActualTimesForDate(item.event, currentDayDate).actual_time_out"
+                                class="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-bold opacity-95 leading-tight"
+                            >
+                                <span v-if="getActualTimesForDate(item.event, currentDayDate).actual_time_in">
+                                    Actual In: {{ formatTime(getActualTimesForDate(item.event, currentDayDate).actual_time_in) }}
+                                </span>
+                                <span v-if="getActualTimesForDate(item.event, currentDayDate).actual_time_out">
+                                    Actual Out: {{ formatTime(getActualTimesForDate(item.event, currentDayDate).actual_time_out) }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
