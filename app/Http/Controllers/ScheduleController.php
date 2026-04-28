@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Schedule;
 use App\Models\ScheduleStore;
+use App\Models\AttendanceLog;
 use App\Models\User;
 use App\Models\Store;
 use Illuminate\Support\Carbon;
@@ -115,7 +116,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
         foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
             $attendanceLogs = $attendanceLogs->concat(
-                \App\Models\AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
                     ->orderBy('log_time')
                     ->get(['schedule_id', 'schedule_store_id', 'type', 'log_time'])
             );
@@ -322,6 +323,18 @@ class ScheduleController extends Controller implements HasMiddleware
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
+        if ($this->scheduleHasAttendanceLogs($schedule) && (int) $request->user_id !== (int) $schedule->user_id) {
+            return redirect()->back()->withErrors([
+                'user_id' => 'This schedule already has attendance logs and cannot be reassigned to another user.',
+            ]);
+        }
+
+        if ($this->hasAttendanceLogsOutsideEntries($schedule, $expandedStoreEntries)) {
+            return redirect()->back()->withErrors([
+                'stores' => 'This schedule already has attendance logs. The selected date and time range must still include the existing time-in/time-out logs.',
+            ]);
+        }
+
         if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries, $schedule->id)) {
             return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
@@ -401,6 +414,43 @@ class ScheduleController extends Controller implements HasMiddleware
                 if ($entry['start_time']->lte($legacySchedule->end_time) && $entry['end_time']->gte($legacySchedule->start_time)) {
                     return true;
                 }
+            }
+        }
+
+        return false;
+    }
+
+    private function scheduleHasAttendanceLogs(Schedule $schedule): bool
+    {
+        return AttendanceLog::where('schedule_id', $schedule->id)->exists();
+    }
+
+    private function hasAttendanceLogsOutsideEntries(Schedule $schedule, array $entries): bool
+    {
+        $logs = AttendanceLog::where('schedule_id', $schedule->id)->get(['log_time']);
+
+        if ($logs->isEmpty()) {
+            return false;
+        }
+
+        return $logs->contains(function ($log) use ($entries) {
+            return !$this->entriesContainLogTime($entries, $log->log_time);
+        });
+    }
+
+    private function entriesContainLogTime(array $entries, ?Carbon $logTime): bool
+    {
+        if (!$logTime) {
+            return true;
+        }
+
+        foreach ($entries as $entry) {
+            $graceMinutes = (int) ($entry['grace_period_minutes'] ?? 30);
+            $windowStart = Carbon::parse($entry['start_time'])->subMinutes($graceMinutes);
+            $windowEnd = Carbon::parse($entry['end_time']);
+
+            if ($logTime->betweenIncluded($windowStart, $windowEnd)) {
+                return true;
             }
         }
 
