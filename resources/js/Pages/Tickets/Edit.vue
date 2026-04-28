@@ -580,6 +580,68 @@ const storesWithLabel = computed(() =>
     props.stores.map(s => ({ ...s, display_name: `${s.code} - ${s.name}` }))
 );
 
+const STORE_LIST_DISPLAY_LIMIT = 5;
+const expandedStoreLists = ref({});
+
+const parseStoreListLine = (line) => {
+    const match = String(line || '').match(/^(.*?\bStores:\s*)(.*)$/i);
+    if (!match) return null;
+
+    const prefix = match[1];
+    const rawStores = match[2].trim();
+
+    if (!rawStores) return null;
+
+    if (/^all stores$/i.test(rawStores)) {
+        return {
+            prefix,
+            isAllStores: true,
+            stores: ['All Stores'],
+        };
+    }
+
+    const stores = rawStores
+        .split(',')
+        .map(store => store.trim())
+        .filter(Boolean);
+
+    if (!stores.length) return null;
+
+    return {
+        prefix,
+        isAllStores: false,
+        stores,
+    };
+};
+
+const getDescriptionLines = (text) => {
+    return String(text || '').split(/\r?\n/).map((line, index) => ({
+        index,
+        raw: line,
+        storeList: parseStoreListLine(line),
+    }));
+};
+
+const getStoreListKey = (activity, lineIndex) => `${activity.activity_type}-${activity.id}-${lineIndex}`;
+
+const isStoreListExpanded = (key) => !!expandedStoreLists.value[key];
+
+const toggleStoreList = (key) => {
+    expandedStoreLists.value = {
+        ...expandedStoreLists.value,
+        [key]: !expandedStoreLists.value[key],
+    };
+};
+
+const visibleStoresForLine = (stores, key) => {
+    return isStoreListExpanded(key) ? stores : stores.slice(0, STORE_LIST_DISPLAY_LIMIT);
+};
+
+const hiddenStoreCountForLine = (stores, key) => {
+    if (isStoreListExpanded(key)) return 0;
+    return Math.max(stores.length - STORE_LIST_DISPLAY_LIMIT, 0);
+};
+
 const updateTicket = (options = {}) => {
     if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
         showError('You do not have permission to update tickets.');
@@ -1363,7 +1425,37 @@ const linkify = (text) => {
                                     <!-- Editable Description Area -->
                                     <div v-if="!isEditingDescription" 
                                          class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors">
-                                        <div class="text-gray-700 whitespace-pre-wrap text-sm sm:text-base leading-relaxed" v-html="linkify(activity.text)"></div>
+                                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed">
+                                            <template v-for="line in getDescriptionLines(activity.text)" :key="line.index">
+                                                <div v-if="line.storeList" class="flex flex-wrap items-center gap-1.5 min-h-[1.5rem]">
+                                                    <span class="font-semibold text-gray-800" v-html="linkify(line.storeList.prefix)"></span>
+                                                    <span
+                                                        v-for="store in visibleStoresForLine(line.storeList.stores, getStoreListKey(activity, line.index))"
+                                                        :key="`${getStoreListKey(activity, line.index)}-${store}`"
+                                                        class="inline-flex items-center rounded-md border border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700"
+                                                    >
+                                                        {{ store }}
+                                                    </span>
+                                                    <button
+                                                        v-if="hiddenStoreCountForLine(line.storeList.stores, getStoreListKey(activity, line.index)) > 0"
+                                                        type="button"
+                                                        @click="toggleStoreList(getStoreListKey(activity, line.index))"
+                                                        class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-black text-blue-600 hover:border-blue-200 hover:bg-blue-50"
+                                                    >
+                                                        +{{ hiddenStoreCountForLine(line.storeList.stores, getStoreListKey(activity, line.index)) }} more
+                                                    </button>
+                                                    <button
+                                                        v-else-if="isStoreListExpanded(getStoreListKey(activity, line.index)) && line.storeList.stores.length > STORE_LIST_DISPLAY_LIMIT"
+                                                        type="button"
+                                                        @click="toggleStoreList(getStoreListKey(activity, line.index))"
+                                                        class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-black text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                                    >
+                                                        Show less
+                                                    </button>
+                                                </div>
+                                                <div v-else class="whitespace-pre-wrap min-h-[1.5rem]" v-html="linkify(line.raw || ' ')"></div>
+                                            </template>
+                                        </div>
                                         <div v-if="hasPermission('tickets.edit')" 
                                              class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 cursor-pointer hover:text-blue-600 transition-colors"
                                              @click="startEditingDescription"
