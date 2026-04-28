@@ -31,6 +31,8 @@ class StockIn extends Model
         'eol_date',
         'cost',
         'price',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
@@ -47,6 +49,16 @@ class StockIn extends Model
     public function asset()
     {
         return $this->belongsTo(Asset::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updater()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     protected static function booted()

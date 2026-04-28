@@ -15,7 +15,7 @@ class StockInController extends Controller
     public function index()
     {
         return Inertia::render('StockIn/Index', [
-            'stockIns' => StockIn::with('asset')->latest()->paginate(10),
+            'stockIns' => StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])->latest()->paginate(10),
             'assets' => Asset::all(),
             'stores' => Store::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'vendors' => Vendor::active()->orderBy('name')->get(['id', 'code', 'name']),
@@ -58,6 +58,8 @@ class StockInController extends Controller
                 'status' => $validated['status'],
                 'asset_id' => $validated['asset_id'],
                 'quantity' => 1,
+                'created_by' => $request->user()?->id,
+                'updated_by' => $request->user()?->id,
                 ...$this->normalizeStockEntry(Arr::only($entry, [
                     'serial_no',
                     'barcode',
@@ -113,7 +115,10 @@ class StockInController extends Controller
             return redirect()->back()->with('success', 'Stock In updated successfully');
         }
 
-        $stockIn->update($this->normalizeStockEntry(Arr::except($validated, ['header_mode'])));
+        $stockIn->update([
+            ...$this->normalizeStockEntry(Arr::except($validated, ['header_mode'])),
+            'updated_by' => $request->user()?->id,
+        ]);
 
         return redirect()->back()->with('success', 'Stock In updated successfully');
     }
@@ -134,6 +139,7 @@ class StockInController extends Controller
             ->update([
                 'status' => 'Posted',
                 'posted_by' => $request->user()->name,
+                'updated_by' => $request->user()->id,
             ]);
 
         return redirect()->back()->with('success', 'Stock In posted successfully');
@@ -169,6 +175,7 @@ class StockInController extends Controller
                 'status' => $validated['status'],
                 'asset_id' => $validated['asset_id'],
                 'quantity' => 1,
+                'updated_by' => auth()->id(),
                 ...$this->normalizeStockEntry(Arr::only($entry, [
                     'serial_no',
                     'barcode',
@@ -184,7 +191,10 @@ class StockInController extends Controller
             if (isset($relatedRows[$index])) {
                 $relatedRows[$index]->update($payload);
             } else {
-                StockIn::create($payload);
+                StockIn::create([
+                    ...$payload,
+                    'created_by' => auth()->id(),
+                ]);
             }
         }
 

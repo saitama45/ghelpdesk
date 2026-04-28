@@ -319,6 +319,25 @@
                         </div>
                     </div>
 
+                    <div v-if="isEditing" class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-6 border-t mt-6">
+                        <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created By</p>
+                            <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingStockIn?.creator, editingStockIn?.created_by) }}</p>
+                        </div>
+                        <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Updated By</p>
+                            <p class="text-sm font-semibold text-gray-800 truncate">{{ auditUserLabel(editingStockIn?.updater, editingStockIn?.updated_by) }}</p>
+                        </div>
+                        <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Created Date</p>
+                            <p class="text-sm font-semibold text-gray-800">{{ formatAuditDate(editingStockIn?.created_at) }}</p>
+                        </div>
+                        <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Updated Date</p>
+                            <p class="text-sm font-semibold text-gray-800">{{ formatAuditDate(editingStockIn?.updated_at) }}</p>
+                        </div>
+                    </div>
+
                     <div class="flex justify-end space-x-3 mt-6">
                         <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
                         <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700">
@@ -470,6 +489,36 @@ const normalizeLocationValue = (value) => {
 const showModal = ref(false)
 const isEditing = ref(false)
 const currentId = ref(null)
+const editingStockIn = ref(null)
+
+const auditUserLabel = (user, userId = null) => {
+    if (user?.name || user?.email) {
+        return user.name || user.email
+    }
+
+    if (userId) {
+        return `User #${userId}`
+    }
+
+    return 'System'
+}
+
+const formatAuditDate = (value) => {
+    if (!value) return '-'
+
+    const date = new Date(value)
+
+    if (Number.isNaN(date.getTime())) return '-'
+
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    })
+}
 
 const getToday = () => new Date().toISOString().split('T')[0]
 
@@ -511,6 +560,11 @@ const toDateKey = (value) => {
     return new Date(value).toISOString().slice(0, 10)
 }
 
+const toTimestamp = (value) => {
+    const timestamp = new Date(value || 0).getTime()
+    return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
 const groupedStockIns = computed(() => {
     const groups = new Map()
 
@@ -538,6 +592,18 @@ const groupedStockIns = computed(() => {
         if (new Date(row.receive_date) > new Date(existing.receive_date)) {
             existing.latestRecord = row
             existing.id = row.id
+        }
+
+        if (toTimestamp(row.created_at) && (!toTimestamp(existing.created_at) || toTimestamp(row.created_at) < toTimestamp(existing.created_at))) {
+            existing.created_at = row.created_at
+            existing.created_by = row.created_by
+            existing.creator = row.creator
+        }
+
+        if (toTimestamp(row.updated_at) >= toTimestamp(existing.updated_at)) {
+            existing.updated_at = row.updated_at
+            existing.updated_by = row.updated_by
+            existing.updater = row.updater
         }
     }
 
@@ -704,19 +770,21 @@ const resetForm = () => {
 const openCreateModal = () => {
     isEditing.value = false
     currentId.value = null
+    editingStockIn.value = null
     resetForm()
     showModal.value = true
 }
 
 const editHeaderItem = (header) => {
     const target = header.latestRecord || header
-    editItem(target, header.quantity, header.relatedRows || [target])
+    editItem(target, header.quantity, header.relatedRows || [target], header)
 }
 
-const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]) => {
+const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item], auditSource = item) => {
     const asset = normalizedAssets.value.find(a => a.id == item.asset_id)
     isEditing.value = true
     currentId.value = item.id
+    editingStockIn.value = auditSource
     Object.assign(form, {
         receive_date: toDateKey(item.receive_date),
         dr_no: item.dr_no || '',
