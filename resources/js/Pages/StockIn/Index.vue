@@ -227,7 +227,29 @@
                                 <h4 class="text-sm font-semibold text-gray-900">Stock Details</h4>
                                 <p class="text-xs text-gray-500">Add serial, codes, pricing, warranty, and location per unit.</p>
                             </div>
-                            <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} row<span v-if="form.entries.length !== 1">s</span></span>
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <div v-if="isEditing && editingStockIn" class="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        @click="printStockInCodes('barcodes')"
+                                        class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                                        title="Print barcode labels as PDF"
+                                    >
+                                        <PrinterIcon class="h-4 w-4" />
+                                        <span>Print Barcodes</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="printStockInCodes('qrcodes')"
+                                        class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                                        title="Print QR code labels as PDF"
+                                    >
+                                        <QrCodeIcon class="h-4 w-4" />
+                                        <span>Print QR Codes</span>
+                                    </button>
+                                </div>
+                                <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} row<span v-if="form.entries.length !== 1">s</span></span>
+                            </div>
                         </div>
 
                         <div class="max-h-[55vh] overflow-y-auto p-4 space-y-4">
@@ -410,7 +432,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
-import { PlusIcon } from '@heroicons/vue/24/outline'
+import { PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -813,6 +835,22 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
 
 const closeModal = () => {
     showModal.value = false
+}
+
+const printStockInCodes = (type) => {
+    const stockInId = editingStockIn.value?.id || currentId.value
+
+    if (!stockInId) {
+        showError('Open an existing stock-in record before printing.')
+        return
+    }
+
+    const endpoint = type === 'qrcodes' ? 'print-qrcodes' : 'print-barcodes'
+    const popup = window.open(`/stock-ins/${stockInId}/${endpoint}`, '_blank', 'noopener,noreferrer')
+
+    if (!popup) {
+        showError('Unable to open the PDF. Please allow pop-ups for this site.')
+    }
 }
 
 const postHeaderItem = (item) => {

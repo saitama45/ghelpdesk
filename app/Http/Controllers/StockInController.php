@@ -6,9 +6,12 @@ use App\Models\Asset;
 use App\Models\StockIn;
 use App\Models\Store;
 use App\Models\Vendor;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Inertia\Inertia;
+use Milon\Barcode\DNS1D;
+use Milon\Barcode\DNS2D;
 
 class StockInController extends Controller
 {
@@ -143,6 +146,60 @@ class StockInController extends Controller
             ]);
 
         return redirect()->back()->with('success', 'Stock In posted successfully');
+    }
+
+    public function printBarcodes(StockIn $stockIn)
+    {
+        $barcode = new DNS1D();
+        $items = $this->groupedStockInRows($stockIn)
+            ->whereNotNull('barcode')
+            ->get()
+            ->map(function (StockIn $item) use ($barcode) {
+                return [
+                    'item' => $item,
+                    'image' => $barcode->getBarcodePNG($item->barcode, 'C128', 2, 58),
+                ];
+            });
+
+        if ($items->isEmpty()) {
+            return "No barcodes generated for this stock group.";
+        }
+
+        $pdf = Pdf::loadView('pdf.stock-in-barcodes', compact('items'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->stream('barcodes-' . $stockIn->receive_date->format('Y-m-d') . '.pdf');
+    }
+
+    public function printQrcodes(StockIn $stockIn)
+    {
+        $qrcode = new DNS2D();
+        $items = $this->groupedStockInRows($stockIn)
+            ->whereNotNull('qrcode')
+            ->get()
+            ->map(function (StockIn $item) use ($qrcode) {
+                return [
+                    'item' => $item,
+                    'image' => $qrcode->getBarcodePNG($item->qrcode, 'QRCODE', 4, 4, [0, 0, 0], [255, 255, 255]),
+                ];
+            });
+
+        if ($items->isEmpty()) {
+            return "No QR codes generated for this stock group.";
+        }
+
+        $pdf = Pdf::loadView('pdf.stock-in-qrcodes', compact('items'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->stream('qrcodes-' . $stockIn->receive_date->format('Y-m-d') . '.pdf');
+    }
+
+    protected function groupedStockInRows(StockIn $stockIn)
+    {
+        return StockIn::with('asset')
+            ->where('asset_id', $stockIn->asset_id)
+            ->whereDate('receive_date', $stockIn->receive_date->toDateString())
+            ->orderBy('id');
     }
 
     protected function syncGroupedEntries(StockIn $stockIn, array $validated): void

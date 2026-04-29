@@ -1215,6 +1215,7 @@ const form = reactive({
     user_id: authUser.value?.id ?? null,
     status: 'On-site',
     stores: [{ store_id: null, ticket_id: null, start_time: '', end_time: '', grace_period_minutes: 30, remarks: '' }],
+    scope_date: null,
     pickup_start: '',
     pickup_end: '',
     backlogs_start: '',
@@ -1323,6 +1324,7 @@ const resetScheduleModalState = () => {
     currentCreatedAt.value = null
     currentUpdatedBy.value = null
     currentUpdatedAt.value = null
+    form.scope_date = null
 }
 
 const openCreateModal = () => {
@@ -1334,6 +1336,7 @@ const openCreateModal = () => {
 
     form.user_id = authUser.value?.id ?? null
     form.status = 'On-site'
+    form.scope_date = null
     form.pickup_start = ''
     form.pickup_end = ''
     form.backlogs_start = ''
@@ -1390,6 +1393,7 @@ const handleEventClick = (payload) => {
 
     form.user_id = event.user_id
     form.status = event.status
+    form.scope_date = null
     form.pickup_start = event.pickup_start || ''
     form.pickup_end = event.pickup_end || ''
     form.backlogs_start = event.backlogs_start || ''
@@ -1399,6 +1403,7 @@ const handleEventClick = (payload) => {
     if (event.schedule_stores && event.schedule_stores.length > 0) {
         const dayStores = event.schedule_stores.filter(ss => isEntryOnDate(ss, clickedDateKey))
         const storesToDisplay = dayStores.length > 0 ? dayStores : event.schedule_stores
+        form.scope_date = dayStores.length > 0 ? clickedDateKey : null
         const eventActualTimesFallback = storesToDisplay.length === 1
             ? eventActualTimes
             : { actual_time_in: null, actual_time_out: null }
@@ -1406,6 +1411,7 @@ const handleEventClick = (payload) => {
         form.stores = storesToDisplay.map(ss => {
             const segmentActualTimes = getActualTimesForDate(ss, clickedDateKey)
             return {
+                id: ss.id || null,
                 store_id: ss.store_id,
                 ticket_id: ss.ticket_id || ss.ticket?.id || null,
                 start_time: formatDateForInput(new Date(ss.start_time)),
@@ -1418,8 +1424,10 @@ const handleEventClick = (payload) => {
             }
         })
     } else {
+        form.scope_date = null
         const scheduleActualTimes = getActualTimesForDate(event, clickedDateKey)
         form.stores = [{
+            id: null,
             store_id: event.store_id || null,
             ticket_id: event.ticket_id || event.ticket?.id || null,
             start_time: formatDateForInput(new Date(event.start_time)),

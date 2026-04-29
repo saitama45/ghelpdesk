@@ -411,10 +411,11 @@ const autoDescription = ref('')
 
 const fetchNextCode = async () => {
     try {
-        const response = await axios.get(route('assets.generate-code'));
+        const response = await axios.get('/assets/generate-code');
         form.item_code = response.data.code;
     } catch (error) {
         console.error('Error fetching next item code:', error);
+        showError('Could not generate the next item code. Please enter it manually or refresh.');
     }
 };
 

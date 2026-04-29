@@ -20,6 +20,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
 
 class ScheduleController extends Controller implements HasMiddleware
 {
@@ -304,6 +305,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'user_id'                          => 'required|exists:users,id',
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'stores'                           => 'required|array|min:1',
+            'stores.*.id'                      => 'nullable|integer|exists:schedule_stores,id',
             'stores.*.store_id'                => 'required_unless:status,Restday,Holiday|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
@@ -314,6 +316,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'pickup_end'                       => 'nullable|string',
             'backlogs_start'                   => 'nullable|string',
             'backlogs_end'                     => 'nullable|string',
+            'scope_date'                       => 'nullable|date',
         ], [
             'stores.*.store_id.required_unless' => 'Location is required for every schedule entry.',
         ]);
@@ -322,6 +325,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
+        $scopeDate = $request->filled('scope_date') ? Carbon::parse($request->scope_date)->toDateString() : null;
 
         if ($this->scheduleHasAttendanceLogs($schedule) && (int) $request->user_id !== (int) $schedule->user_id) {
             return redirect()->back()->withErrors([
@@ -329,7 +333,13 @@ class ScheduleController extends Controller implements HasMiddleware
             ]);
         }
 
-        if ($this->hasAttendanceLogsOutsideEntries($schedule, $expandedStoreEntries)) {
+        if ($this->hasInvalidSubmittedScheduleStoreIds($schedule, $storeEntries)) {
+            return redirect()->back()->withErrors([
+                'stores' => 'One or more selected schedule entries do not belong to this schedule.',
+            ]);
+        }
+
+        if ($this->hasAttendanceLogsOutsideEntries($schedule, $expandedStoreEntries, $scopeDate)) {
             return redirect()->back()->withErrors([
                 'stores' => 'This schedule already has attendance logs. The selected date and time range must still include the existing time-in/time-out logs.',
             ]);
@@ -339,30 +349,30 @@ class ScheduleController extends Controller implements HasMiddleware
             return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
 
-        $schedule->update([
-            'user_id'        => $request->user_id,
-            'updated_by'     => auth()->id(),
-            'status'         => $request->status,
-            'start_time'     => $startTime,
-            'end_time'       => $endTime,
-            'pickup_start'   => $request->pickup_start,
-            'pickup_end'     => $request->pickup_end,
-            'backlogs_start' => $request->backlogs_start,
-            'backlogs_end'   => $request->backlogs_end,
-        ]);
-
-        // Rebuild store entries
-        $schedule->scheduleStores()->delete();
-        foreach ($expandedStoreEntries as $entry) {
-            $schedule->scheduleStores()->create([
-                'store_id'             => $entry['store_id'] ?? null,
-                'ticket_id'            => $entry['ticket_id'] ?? null,
-                'start_time'           => $entry['start_time'],
-                'end_time'             => $entry['end_time'],
-                'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
-                'remarks'              => $entry['remarks'] ?? null,
+        DB::transaction(function () use ($request, $schedule, $startTime, $endTime, $expandedStoreEntries, $scopeDate) {
+            $schedule->update([
+                'user_id'        => $request->user_id,
+                'updated_by'     => auth()->id(),
+                'status'         => $request->status,
+                'start_time'     => $startTime,
+                'end_time'       => $endTime,
+                'pickup_start'   => $request->pickup_start,
+                'pickup_end'     => $request->pickup_end,
+                'backlogs_start' => $request->backlogs_start,
+                'backlogs_end'   => $request->backlogs_end,
             ]);
-        }
+
+            if ($scopeDate) {
+                $this->syncScopedScheduleStores($schedule, $expandedStoreEntries, $scopeDate);
+                $this->refreshScheduleBounds($schedule);
+            } else {
+                // Rebuild store entries
+                $schedule->scheduleStores()->delete();
+                foreach ($expandedStoreEntries as $entry) {
+                    $schedule->scheduleStores()->create($this->scheduleStorePayload($entry));
+                }
+            }
+        });
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
     }
@@ -425,9 +435,29 @@ class ScheduleController extends Controller implements HasMiddleware
         return AttendanceLog::where('schedule_id', $schedule->id)->exists();
     }
 
-    private function hasAttendanceLogsOutsideEntries(Schedule $schedule, array $entries): bool
+    private function hasInvalidSubmittedScheduleStoreIds(Schedule $schedule, array $entries): bool
     {
-        $logs = AttendanceLog::where('schedule_id', $schedule->id)->get(['log_time']);
+        $ids = collect($entries)
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return false;
+        }
+
+        return ScheduleStore::where('schedule_id', $schedule->id)
+            ->whereIn('id', $ids)
+            ->count() !== $ids->count();
+    }
+
+    private function hasAttendanceLogsOutsideEntries(Schedule $schedule, array $entries, ?string $scopeDate = null): bool
+    {
+        $logs = AttendanceLog::where('schedule_id', $schedule->id)
+            ->when($scopeDate, fn ($query) => $query->whereDate('log_time', $scopeDate))
+            ->get(['log_time']);
 
         if ($logs->isEmpty()) {
             return false;
@@ -457,6 +487,89 @@ class ScheduleController extends Controller implements HasMiddleware
         return false;
     }
 
+    private function syncScopedScheduleStores(Schedule $schedule, array $entries, string $scopeDate): void
+    {
+        $scopeStart = Carbon::parse($scopeDate)->startOfDay();
+        $scopeEnd = Carbon::parse($scopeDate)->endOfDay();
+        $existingRows = $schedule->scheduleStores()
+            ->where('start_time', '<=', $scopeEnd)
+            ->where('end_time', '>=', $scopeStart)
+            ->get();
+
+        $existingById = $existingRows->keyBy('id');
+        $usedIds = collect();
+
+        foreach (array_values($entries) as $index => $entry) {
+            $payload = $this->scheduleStorePayload($entry);
+            $entryId = isset($entry['id']) ? (int) $entry['id'] : null;
+            $matchedRow = $entryId ? $existingById->get($entryId) : null;
+
+            if ($entryId && !$matchedRow) {
+                throw ValidationException::withMessages([
+                    'stores' => 'One or more selected schedule entries do not belong to the selected schedule date.',
+                ]);
+            }
+
+            if (!$matchedRow) {
+                $matchedRow = $existingRows
+                    ->values()
+                    ->first(fn ($row, $rowIndex) => $rowIndex === $index && !$usedIds->contains((int) $row->id));
+            }
+
+            if ($matchedRow) {
+                $matchedRow->update($payload);
+                $usedIds->push((int) $matchedRow->id);
+                continue;
+            }
+
+            $createdRow = $schedule->scheduleStores()->create($payload);
+            $usedIds->push((int) $createdRow->id);
+        }
+
+        $staleRows = $existingRows->reject(fn ($row) => $usedIds->contains((int) $row->id));
+
+        if ($staleRows->isEmpty()) {
+            return;
+        }
+
+        $staleIds = $staleRows->pluck('id')->map(fn ($id) => (int) $id)->values();
+        $hasLogs = AttendanceLog::whereIn('schedule_store_id', $staleIds)->exists();
+
+        if ($hasLogs) {
+            throw ValidationException::withMessages([
+                'stores' => 'This schedule already has attendance logs. Logged schedule entries cannot be removed.',
+            ]);
+        }
+
+        ScheduleStore::whereIn('id', $staleIds)->delete();
+    }
+
+    private function refreshScheduleBounds(Schedule $schedule): void
+    {
+        $scheduleStores = $schedule->scheduleStores()->get(['start_time', 'end_time']);
+
+        if ($scheduleStores->isEmpty()) {
+            return;
+        }
+
+        $schedule->update([
+            'start_time' => $scheduleStores->min('start_time'),
+            'end_time' => $scheduleStores->max('end_time'),
+        ]);
+    }
+
+    private function scheduleStorePayload(array $entry): array
+    {
+        return [
+            'store_id'             => $entry['store_id'] ?? null,
+            'ticket_id'            => $entry['ticket_id'] ?? null,
+            'start_time'           => $entry['start_time'],
+            'end_time'             => $entry['end_time'],
+            'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
+            'remarks'              => $entry['remarks'] ?? null,
+        ];
+    }
+
     /**
      * Expand each store entry into one record per calendar day.
      *
@@ -476,6 +589,7 @@ class ScheduleController extends Controller implements HasMiddleware
             // Single-day entry — keep as-is
             if ($startDate->eq($endDate)) {
                 $expanded[] = [
+                    'id'                   => $entry['id'] ?? null,
                     'store_id'             => $entry['store_id'] ?? null,
                     'ticket_id'            => $entry['ticket_id'] ?? null,
                     'start_time'           => $start,
