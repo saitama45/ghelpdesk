@@ -18,14 +18,24 @@
                     @change-per-page="pagination.changePerPage"
                 >
                     <template #actions>
-                        <button 
-                            v-if="hasPermission('stock_ins.create')"
-                            @click="openCreateModal" 
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
-                        >
-                            <PlusIcon class="w-4 h-4" />
-                            <span>Add Stock</span>
-                        </button>
+                        <div class="flex items-center space-x-2">
+                            <button
+                                v-if="hasPermission('stock_ins.create')"
+                                @click="openImportModal"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                            >
+                                <ArrowUpTrayIcon class="w-4 h-4" />
+                                <span>Import</span>
+                            </button>
+                            <button
+                                v-if="hasPermission('stock_ins.create')"
+                                @click="openCreateModal"
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                            >
+                                <PlusIcon class="w-4 h-4" />
+                                <span>Add Stock</span>
+                            </button>
+                        </div>
                     </template>
 
                     <template #header>
@@ -112,6 +122,117 @@
                 </DataTable>
             </div>
         </div>
+
+        <!-- Import Modal -->
+        <Modal :show="showImportModal" @close="closeImportModal" max-width="xl">
+            <div class="p-6">
+                <div class="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Import Stock In</h3>
+                        <p class="text-sm text-gray-500 mt-1">Upload one spreadsheet row per stock-in unit.</p>
+                    </div>
+                    <button type="button" @click="closeImportModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <span class="sr-only">Close</span>
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="rounded-xl border border-blue-200 bg-blue-50 p-5">
+                        <h4 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2">Instructions</h4>
+                        <ul class="text-xs text-blue-600 space-y-1 list-disc pl-4">
+                            <li>Download the Excel template to keep the expected column order.</li>
+                            <li>Each row creates one Stock In unit; matching rows are grouped in the table.</li>
+                            <li>Use existing asset item codes. Store codes are recommended for origin and destination.</li>
+                            <li>Imported rows are saved as For Posting.</li>
+                        </ul>
+                    </div>
+
+                    <a
+                        :href="route('stock-ins.template')"
+                        class="group flex items-center justify-between gap-4 rounded-xl border border-blue-300 bg-blue-600 px-5 py-4 text-white shadow-sm transition-colors hover:bg-blue-700"
+                    >
+                        <div class="flex items-center gap-4">
+                            <div class="flex h-11 w-11 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/20">
+                                <ArrowDownTrayIcon class="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-black uppercase tracking-[0.2em] text-blue-100">Step 1</p>
+                                <p class="text-base font-black leading-tight">Download Excel Template</p>
+                                <p class="text-xs text-blue-100 mt-1">Includes sample rows and dropdown-ready reference fields.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 text-sm font-black uppercase tracking-wider">
+                            <span>Download</span>
+                            <ArrowDownTrayIcon class="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
+                        </div>
+                    </a>
+
+                    <div class="space-y-3">
+                        <label
+                            class="flex flex-col items-center justify-center w-full px-6 py-8 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-blue-300 transition-colors cursor-pointer"
+                        >
+                            <input
+                                ref="importFileInput"
+                                type="file"
+                                accept=".xlsx,.csv"
+                                class="hidden"
+                                @change="handleImportFileChange"
+                            >
+                            <ArrowUpTrayIcon class="w-8 h-8 text-gray-400 mb-3" />
+                            <span class="text-sm font-semibold text-gray-700">Choose stock-in import file</span>
+                            <span class="text-xs text-gray-500 mt-1">Accepted formats: .xlsx or .csv</span>
+                        </label>
+
+                        <div v-if="selectedImportFile" class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900">{{ selectedImportFile.name }}</p>
+                                <p class="text-xs text-gray-500">{{ formatFileSize(selectedImportFile.size) }}</p>
+                            </div>
+                            <button type="button" @click="removeImportFile" class="text-sm font-semibold text-red-600 hover:text-red-700">
+                                Remove
+                            </button>
+                        </div>
+
+                        <div
+                            v-if="importResults"
+                            class="p-4 rounded-lg"
+                            :class="(importResults.errors?.length || 0) > 0 ? 'bg-amber-50' : 'bg-green-50'"
+                        >
+                            <p
+                                class="text-sm font-bold"
+                                :class="(importResults.errors?.length || 0) > 0 ? 'text-amber-800' : 'text-green-800'"
+                            >
+                                Successfully imported {{ importResults.imported }} stock-in row<span v-if="importResults.imported !== 1">s</span>.
+                            </p>
+                            <div v-if="(importResults.errors?.length || 0) > 0" class="mt-2">
+                                <p class="text-xs font-black text-amber-700 uppercase mb-1">Issues encountered:</p>
+                                <ul class="text-[10px] text-amber-600 max-h-32 overflow-y-auto list-disc pl-4">
+                                    <li v-for="(err, index) in importResults.errors" :key="index">{{ err }}</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end space-x-3 pt-6 border-t">
+                        <button type="button" @click="closeImportModal"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Close
+                        </button>
+                        <button @click="submitImport" :disabled="!selectedImportFile || isImporting"
+                                class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-md transition-all disabled:opacity-50 flex items-center space-x-2">
+                            <svg v-if="isImporting" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>{{ isImporting ? 'Importing...' : 'Start Import' }}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Modal>
 
         <!-- Modal -->
         <Modal :show="showModal" @close="closeModal" max-width="4xl">
@@ -432,11 +553,12 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
-import { PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePermission } from '@/Composables/usePermission'
+import axios from 'axios'
 
 const props = defineProps({
     stockIns: Object,
@@ -509,9 +631,14 @@ const normalizeLocationValue = (value) => {
 }
 
 const showModal = ref(false)
+const showImportModal = ref(false)
 const isEditing = ref(false)
 const currentId = ref(null)
 const editingStockIn = ref(null)
+const importFileInput = ref(null)
+const selectedImportFile = ref(null)
+const isImporting = ref(false)
+const importResults = ref(null)
 
 const auditUserLabel = (user, userId = null) => {
     if (user?.name || user?.email) {
@@ -835,6 +962,73 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
 
 const closeModal = () => {
     showModal.value = false
+}
+
+const openImportModal = () => {
+    selectedImportFile.value = null
+    importResults.value = null
+    if (importFileInput.value) {
+        importFileInput.value.value = ''
+    }
+    showImportModal.value = true
+}
+
+const closeImportModal = () => {
+    showImportModal.value = false
+    selectedImportFile.value = null
+    if (importFileInput.value) {
+        importFileInput.value.value = ''
+    }
+}
+
+const handleImportFileChange = (event) => {
+    selectedImportFile.value = event.target.files?.[0] || null
+    importResults.value = null
+}
+
+const removeImportFile = () => {
+    selectedImportFile.value = null
+    if (importFileInput.value) {
+        importFileInput.value.value = ''
+    }
+}
+
+const formatFileSize = (size) => {
+    if (!size) return '0 B'
+    if (size < 1024) return `${size} B`
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const submitImport = async () => {
+    if (!selectedImportFile.value || isImporting.value) return
+
+    isImporting.value = true
+    importResults.value = null
+
+    const formData = new FormData()
+    formData.append('file', selectedImportFile.value)
+
+    try {
+        const response = await axios.post(route('stock-ins.import'), formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+
+        importResults.value = response.data
+
+        if (response.data.imported > 0) {
+            showSuccess(`Imported ${response.data.imported} stock-in row${response.data.imported > 1 ? 's' : ''} successfully`)
+            router.reload({ only: ['stockIns'] })
+        }
+
+        if (response.data.errors?.length > 0) {
+            showError(`Import completed with ${response.data.errors.length} issue${response.data.errors.length > 1 ? 's' : ''}`)
+        }
+    } catch (error) {
+        showError(error.response?.data?.message || 'Import failed')
+    } finally {
+        isImporting.value = false
+    }
 }
 
 const printStockInCodes = (type) => {

@@ -76,6 +76,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);
     Route::post('sap-requests/{sap_request}/approve', [\App\Http\Controllers\SapRequestController::class, 'approve'])->name('sap-requests.approve');
     Route::post('sap-requests/{sap_request}/reject', [\App\Http\Controllers\SapRequestController::class, 'reject'])->name('sap-requests.reject');
+    Route::get('stock-ins/template', [\App\Http\Controllers\StockInController::class, 'template'])->name('stock-ins.template');
+    Route::post('stock-ins/import', [\App\Http\Controllers\StockInController::class, 'import'])->name('stock-ins.import');
     Route::post('stock-ins/{stock_in}/post', [\App\Http\Controllers\StockInController::class, 'post'])->name('stock-ins.post');
     Route::get('stock-ins/{stock_in}/print-barcodes', [\App\Http\Controllers\StockInController::class, 'printBarcodes'])->name('stock-ins.print-barcodes');
     Route::get('stock-ins/{stock_in}/print-qrcodes', [\App\Http\Controllers\StockInController::class, 'printQrcodes'])->name('stock-ins.print-qrcodes');
