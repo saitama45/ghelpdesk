@@ -799,12 +799,12 @@ class ScheduleController extends Controller implements HasMiddleware
         }
         $listsSheet->setCellValue('A' . (count($statuses) + 2), 'NA');
 
-        // Store List
-        $listsSheet->setCellValue('B1', 'Stores');
-        $firstStoreValue = '';
+        // Location List
+        $listsSheet->setCellValue('B1', 'Locations');
+        $firstLocationValue = '';
         foreach ($stores as $i => $s) {
             $val = $s->code . ' - ' . $s->name;
-            if ($i === 0) $firstStoreValue = $val;
+            if ($i === 0) $firstLocationValue = $val;
             $listsSheet->setCellValue('B' . ($i + 2), $val);
         }
 
@@ -812,23 +812,23 @@ class ScheduleController extends Controller implements HasMiddleware
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
-        // Layout: A=user_id, B=user_name, then per date: [YYYY-MM-DD | YYYY-MM-DD_store | YYYY-MM-DD_remarks] triples
+        // Layout: A=user_id, B=user_name, then per date: [YYYY-MM-DD | YYYY-MM-DD_location | YYYY-MM-DD_remarks] triples
         $sheet->setCellValue('A1', 'user_id');
         $sheet->setCellValue('B1', 'user_name');
 
         foreach ($dates as $i => $date) {
-            // Each date occupies 3 columns: status, store, then remarks
-            $statusColIdx  = ($i * 3) + 3;                // col C, F, I, ...
-            $storeColIdx   = ($i * 3) + 4;                // col D, G, J, ...
-            $remarksColIdx = ($i * 3) + 5;                // col E, H, K, ...
+            // Each date occupies 3 columns: status, location, then remarks
+            $statusColIdx   = ($i * 3) + 3;                // col C, F, I, ...
+            $locationColIdx = ($i * 3) + 4;                // col D, G, J, ...
+            $remarksColIdx  = ($i * 3) + 5;                // col E, H, K, ...
             
-            $statusCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
-            $storeCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($storeColIdx);
-            $remarksCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($remarksColIdx);
+            $statusCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
+            $locationCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($locationColIdx);
+            $remarksCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($remarksColIdx);
             
-            $sheet->setCellValue("{$statusCol}1",  $date);
-            $sheet->setCellValue("{$storeCol}1",   "{$date}_store");
-            $sheet->setCellValue("{$remarksCol}1", "{$date}_remarks");
+            $sheet->setCellValue("{$statusCol}1",   $date);
+            $sheet->setCellValue("{$locationCol}1", "{$date}_location");
+            $sheet->setCellValue("{$remarksCol}1",  "{$date}_remarks");
         }
 
         // Add Sample Row at index 2 (row 2)
@@ -838,19 +838,19 @@ class ScheduleController extends Controller implements HasMiddleware
             if ($i >= count($statuses)) break;
             
             $status = $statuses[$i];
-            $statusColIdx  = ($i * 3) + 3;
-            $storeColIdx   = ($i * 3) + 4;
-            $remarksColIdx = ($i * 3) + 5;
+            $statusColIdx   = ($i * 3) + 3;
+            $locationColIdx = ($i * 3) + 4;
+            $remarksColIdx  = ($i * 3) + 5;
             
             $sCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($statusColIdx);
-            $stCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($storeColIdx);
+            $lCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($locationColIdx);
             $rCol  = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($remarksColIdx);
             
             $sheet->setCellValue("{$sCol}2", $status);
             $sheet->setCellValue("{$rCol}2", "Sample {$status} entry");
             
-            if (in_array($status, ['On-site', 'Off-site']) && $firstStoreValue) {
-                $sheet->setCellValue("{$stCol}2", $firstStoreValue);
+            if (in_array($status, ['On-site', 'Off-site']) && $firstLocationValue) {
+                $sheet->setCellValue("{$lCol}2", $firstLocationValue);
             }
         }
         // Grey out the sample row
@@ -884,7 +884,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
         // Dropdowns
         $statusFormula   = 'Lists!$A$2:$A$' . (count($statuses) + 2);
-        $storeFormula    = 'Lists!$B$2:$B$' . (count($stores) + 1);
+        $locationFormula = 'Lists!$B$2:$B$' . max(count($stores) + 1, 2);
         $dropdownLastRow = max($lastUserRow, 2);
 
         foreach ($dates as $i => $date) {
@@ -896,21 +896,21 @@ class ScheduleController extends Controller implements HasMiddleware
             $sv->setType(DataValidation::TYPE_LIST)
               ->setErrorStyle(DataValidation::STYLE_INFORMATION)
               ->setAllowBlank(true)
-              ->setShowDropDown(false)
+              ->setShowDropDown(true)
               ->setFormula1($statusFormula)
               ->setSqref($sSqref);
 
-            // Store Dropdown
-            $storeColIdx = ($i * 3) + 4;
-            $stCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($storeColIdx);
-            $stSqref = "{$stCol}2:{$stCol}{$dropdownLastRow}";
-            $stv = $sheet->getCell("{$stCol}2")->getDataValidation();
-            $stv->setType(DataValidation::TYPE_LIST)
+            // Location Dropdown
+            $locationColIdx = ($i * 3) + 4;
+            $lCol   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($locationColIdx);
+            $lSqref = "{$lCol}2:{$lCol}{$dropdownLastRow}";
+            $lv = $sheet->getCell("{$lCol}2")->getDataValidation();
+            $lv->setType(DataValidation::TYPE_LIST)
               ->setErrorStyle(DataValidation::STYLE_INFORMATION)
               ->setAllowBlank(true)
-              ->setShowDropDown(false)
-              ->setFormula1($storeFormula)
-              ->setSqref($stSqref);
+              ->setShowDropDown(true)
+              ->setFormula1($locationFormula)
+              ->setSqref($lSqref);
         }
 
         // Column widths
@@ -918,10 +918,10 @@ class ScheduleController extends Controller implements HasMiddleware
         $sheet->getColumnDimension('B')->setAutoSize(true);
         foreach ($dates as $i => $date) {
             $sCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 3);
-            $stCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 4);
+            $lCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 4);
             $rCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(($i * 3) + 5);
             $sheet->getColumnDimension($sCol)->setWidth(12);
-            $sheet->getColumnDimension($stCol)->setWidth(25);
+            $sheet->getColumnDimension($lCol)->setWidth(25);
             $sheet->getColumnDimension($rCol)->setWidth(18);
         }
 
@@ -971,7 +971,7 @@ class ScheduleController extends Controller implements HasMiddleware
         // Build lookup: user_id (int) → exists
         $validUserIds = User::pluck('id')->flip()->toArray(); // [id => 0]
         
-        // Build Store Lookup (Code or "Code - Name")
+        // Build location lookup (Code or "Code - Name")
         $storeLookup = [];
         foreach (Store::where('is_active', true)->get(['id', 'code', 'name']) as $s) {
             $storeLookup[strtoupper($s->code)] = $s->id;
@@ -983,7 +983,7 @@ class ScheduleController extends Controller implements HasMiddleware
         // Build date-column map from header:
         //   dateStr => [ 'statusIdx' => int, 'storeIdx' => int|null, 'remarksIdx' => int|null ]
         // Header format: col 0 = user_id, col 1 = user_name,
-        //   then pairs: YYYY-MM-DD  |  YYYY-MM-DD_store | YYYY-MM-DD_remarks  |  ...
+        //   then triples: YYYY-MM-DD  |  YYYY-MM-DD_location | YYYY-MM-DD_remarks  |  ...
         $dateCols = [];
         foreach ($header as $idx => $h) {
             if ($idx < 2) continue;
@@ -992,8 +992,8 @@ class ScheduleController extends Controller implements HasMiddleware
                 if (isset($dateCols[$m[1]])) {
                     $dateCols[$m[1]]['remarksIdx'] = $idx;
                 }
-            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})_store$/', $h, $m)) {
-                // Store column — attach to the already-registered date entry
+            } elseif (preg_match('/^(\d{4}-\d{2}-\d{2})_(?:location|store)$/', $h, $m)) {
+                // Location column. The legacy _store suffix is still accepted.
                 if (isset($dateCols[$m[1]])) {
                     $dateCols[$m[1]]['storeIdx'] = $idx;
                 }
@@ -1031,7 +1031,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 continue;
             }
 
-            // Process each date pair
+            // Process each date triple
             foreach ($dateCols as $dateStr => $cols) {
                 $rawValue   = isset($line[$cols['statusIdx']]) ? trim((string) $line[$cols['statusIdx']]) : '';
                 $rawStore   = ($cols['storeIdx'] !== null && isset($line[$cols['storeIdx']]))
@@ -1051,14 +1051,14 @@ class ScheduleController extends Controller implements HasMiddleware
                     continue;
                 }
 
-                // Resolve Store if provided
+                // Resolve location if provided
                 $resolvedStoreId = null;
                 if ($rawStore !== '') {
                     $storeKey = strtoupper($rawStore);
                     if (isset($storeLookup[$storeKey])) {
                         $resolvedStoreId = $storeLookup[$storeKey];
                     } else {
-                        $errors[] = "Row {$rowNum}, {$dateStr}: Store '{$rawStore}' not recognized. Proceeding without store link.";
+                        $errors[] = "Row {$rowNum}, {$dateStr}: Location '{$rawStore}' not recognized. Proceeding without location link.";
                     }
                 }
 

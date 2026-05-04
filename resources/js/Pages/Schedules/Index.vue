@@ -443,7 +443,7 @@
                             <ul class="list-disc list-inside space-y-0.5 text-blue-700">
                                 <li><span class="font-semibold">user_id</span> — numeric user ID (column A)</li>
                                 <li><span class="font-semibold">user_name</span> — reference only, not imported (column B)</li>
-                                <li><span class="font-semibold">Per Date Triples</span> — set <span class="font-semibold">Status</span>, <span class="font-semibold">Store</span> (optional), and <span class="font-semibold">Remarks</span> (optional)</li>
+                                <li><span class="font-semibold">Per Date Triples</span> — set <span class="font-semibold">Status</span>, <span class="font-semibold">Location</span> (dropdown), and <span class="font-semibold">Remarks</span> (optional)</li>
                                 <li>Leave status <span class="font-semibold">NA</span> or blank for no schedule</li>
                             </ul>
                             <p class="text-blue-600 mt-1">Default schedule time: <span class="font-semibold">07:00 – 17:00</span></p>
