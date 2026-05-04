@@ -273,7 +273,7 @@ class ScheduleExportController extends Controller
 
     private function reportPdf(Request $request)
     {
-        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
         $selectedYearsInput = $request->input('report_years');
         $selectedYears = $selectedYearsInput
             ? collect((array) $selectedYearsInput)->map(fn ($y) => (int) $y)->unique()->sort()->values()->toArray()

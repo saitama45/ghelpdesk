@@ -211,7 +211,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ? collect((array)$selectedYearsInput)->map(fn($y) => (int)$y)->unique()->sort()->values()->toArray()
             : [2024, 2025, 2026];
 
-        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
 
         return Inertia::render('Schedules/Index', [
             'schedules'      => $schedules,
@@ -234,9 +234,9 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         $request->validate([
             'user_id'                          => 'required|exists:users,id',
-            'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday,N/A',
             'stores'                           => 'required|array|min:1',
-            'stores.*.store_id'                => 'required_unless:status,Restday,Holiday|nullable|exists:stores,id',
+            'stores.*.store_id'                => 'required_unless:status,Restday,Holiday,N/A|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
@@ -303,10 +303,10 @@ class ScheduleController extends Controller implements HasMiddleware
 
         $request->validate([
             'user_id'                          => 'required|exists:users,id',
-            'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday,N/A',
             'stores'                           => 'required|array|min:1',
             'stores.*.id'                      => 'nullable|integer|exists:schedule_stores,id',
-            'stores.*.store_id'                => 'required_unless:status,Restday,Holiday|nullable|exists:stores,id',
+            'stores.*.store_id'                => 'required_unless:status,Restday,Holiday,N/A|nullable|exists:stores,id',
             'stores.*.ticket_id'               => 'nullable|exists:tickets,id',
             'stores.*.start_time'              => 'required|date',
             'stores.*.end_time'                => 'required|date',
@@ -682,7 +682,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function reportData(Request $request)
     {
-        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
 
         $selectedYearsInput = $request->input('report_years');
         $selectedYears = $selectedYearsInput
@@ -782,9 +782,10 @@ class ScheduleController extends Controller implements HasMiddleware
 
         $users    = User::active()->orderBy('name')->get(['id', 'name']);
         $stores   = Store::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']);
-        $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
 
         $spreadsheet = new Spreadsheet();
+
 
         // -- Hidden Lists sheet ------------------------------------------
         $listsSheet = $spreadsheet->createSheet(1);
@@ -977,7 +978,7 @@ class ScheduleController extends Controller implements HasMiddleware
             $storeLookup[strtoupper($s->code . ' - ' . $s->name)] = $s->id;
         }
 
-        $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'];
+        $statuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
 
         // Build date-column map from header:
         //   dateStr => [ 'statusIdx' => int, 'storeIdx' => int|null, 'remarksIdx' => int|null ]
@@ -1276,7 +1277,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 $curr->addDay();
             }
 
-            if ($s->status === 'Restday') {
+            if (in_array($s->status, ['Restday', 'Holiday', 'N/A'])) {
                 continue;
             }
 

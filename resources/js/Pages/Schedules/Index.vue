@@ -787,7 +787,7 @@ const filterStore = useRemember(props.filters?.store_id || '', 'schedules.filter
 
 // These filters are synced with the Calendar component
 const filterStatus = useRemember(
-    props.filters?.status ? (Array.isArray(props.filters.status) ? props.filters.status : [props.filters.status]) : ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Holiday', 'Offset'],
+    props.filters?.status ? (Array.isArray(props.filters.status) ? props.filters.status : [props.filters.status]) : ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Holiday', 'Offset', 'N/A'],
     'schedules.filterStatus'
 )
 const filterPriority = useRemember(
@@ -1190,7 +1190,7 @@ const currentUpdatedBy     = ref(null)
 const currentUpdatedAt     = ref(null)
 
 const statuses = [
-    'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
+    'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'
 ]
 
 const priorityLegend = [
@@ -1209,6 +1209,7 @@ const scheduleLegend = [
     { status: 'Restday',  label: 'Rest Day',       color: 'bg-slate-400' },
     { status: 'Holiday',  label: 'Holiday',        color: 'bg-yellow-500' },
     { status: 'Offset',   label: 'Offset',         color: 'bg-cyan-600' },
+    { status: 'N/A',      label: 'N/A',            color: 'bg-gray-400' },
 ]
 
 const form = reactive({
@@ -1260,7 +1261,7 @@ const modalAudit = computed(() => {
     }
 })
 
-const isLocationRequired = computed(() => !['Restday', 'Holiday'].includes(form.status))
+const isLocationRequired = computed(() => !['Restday', 'Holiday', 'N/A'].includes(form.status))
 
 const formatTime = (isoString) => {
     if (!isoString) return '-'
