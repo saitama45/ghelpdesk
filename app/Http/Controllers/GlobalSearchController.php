@@ -56,6 +56,7 @@ class GlobalSearchController extends Controller
             ['name' => 'Users', 'url' => route('users.index', [], false), 'path' => 'User Management > Users', 'permission' => 'users.view'],
             ['name' => 'Roles & Permissions', 'url' => route('roles.index', [], false), 'path' => 'User Management > Roles & Permissions', 'permission' => 'roles.view'],
             ['name' => 'System Settings', 'url' => route('settings.index', [], false), 'path' => 'Settings > System Settings', 'permission' => 'settings.view'],
+            ['name' => 'Ticket Archive', 'url' => route('ticket-archive.index', [], false), 'path' => 'Settings > Ticket Archive', 'permission' => 'settings.view'],
             ['name' => 'Canned Messages', 'url' => route('canned-messages.index', [], false), 'path' => 'Settings > Canned Messages', 'permission' => 'canned_messages.view'],
             ['name' => 'My Profile', 'url' => route('profile.edit', [], false), 'path' => 'Settings > My Profile', 'permission' => null],
         ];

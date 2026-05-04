@@ -18,7 +18,8 @@ import {
     ServerIcon,
     AdjustmentsHorizontalIcon,
     CheckCircleIcon,
-    ClockIcon
+    ClockIcon,
+    ArchiveBoxIcon
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -26,7 +27,8 @@ const props = defineProps({
     subUnits: Array
 });
 
-const activeTab = ref('mail');
+const requestedTab = new URLSearchParams(window.location.search).get('tab');
+const activeTab = ref(requestedTab || 'mail');
 const selectedSubUnit = ref('global');
 const selectedThresholdSubUnit = ref('global');
 
@@ -34,11 +36,12 @@ const tabs = [
     { id: 'mail', name: 'Mail Configuration', icon: EnvelopeIcon, description: 'Manage inbound and outbound email settings.' },
     { id: 'business_hours', name: 'Business Hours', icon: ClockIcon, description: 'Define operational hours and working days for SLA calculations.' },
     { id: 'sla_targets', name: 'SLA Targets', icon: ShieldCheckIcon, description: 'Configure response and resolution targets per ticket priority.' },
+    { id: 'ticket_retention', name: 'Ticket Retention', icon: ArchiveBoxIcon, description: 'Control when archived tickets become eligible for permanent purge.' },
     { id: 'integrations', name: 'Integrations', icon: MapIcon, description: 'External API keys and third-party services.' },
     { id: 'thresholds', name: 'Health Thresholds', icon: ChartBarIcon, description: 'Ticket count limits and status labels.' },
 ];
 
-const currentTab = computed(() => tabs.find(t => t.id === activeTab.value));
+const currentTab = computed(() => tabs.find(t => t.id === activeTab.value) || tabs[0]);
 
 const showImapPassword = ref(false);
 const showMailPassword = ref(false);
@@ -108,6 +111,8 @@ const getInitialFormData = () => {
         sla_urgent_label: props.settings.sla_urgent_label || 'P1',
         auto_close_resolved_hours: props.settings.auto_close_resolved_hours || 72,
         waiting_aging_alarm_days: props.settings.waiting_aging_alarm_days || 3,
+        ticket_retention_value: props.settings.ticket_retention_value || 6,
+        ticket_retention_unit: props.settings.ticket_retention_unit || 'months',
     };
 
     // Add sub-unit specific settings
@@ -600,6 +605,51 @@ const syncEmails = () => {
                                         </p>
                                     </div>
                                 </div>
+                            </div>
+
+                            <!-- Ticket Retention Tab -->
+                            <div v-if="activeTab === 'ticket_retention'" class="space-y-8">
+                                <section>
+                                    <h3 class="text-xs font-black text-red-600 uppercase tracking-widest mb-6 flex items-center">
+                                        <ArchiveBoxIcon class="w-4 h-4 mr-2" />
+                                        Archive Purge Eligibility
+                                    </h3>
+
+                                    <div class="max-w-xl space-y-6">
+                                        <div class="p-4 bg-red-50 rounded-xl border border-red-100">
+                                            <p class="text-sm font-black text-red-900">Manual purge retention</p>
+                                            <p class="mt-1 text-xs text-red-700 leading-relaxed">
+                                                Archived tickets remain restorable until they are older than this retention window. Purging is still manual and requires confirmation from the Ticket Archive page.
+                                            </p>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_180px] gap-4">
+                                            <div>
+                                                <InputLabel for="ticket_retention_value" value="Retention Length" />
+                                                <TextInput
+                                                    id="ticket_retention_value"
+                                                    type="number"
+                                                    min="1"
+                                                    class="mt-1 block w-full"
+                                                    v-model="form.ticket_retention_value"
+                                                />
+                                                <InputError class="mt-2" :message="form.errors.ticket_retention_value" />
+                                            </div>
+                                            <div>
+                                                <InputLabel for="ticket_retention_unit" value="Unit" />
+                                                <select
+                                                    id="ticket_retention_unit"
+                                                    v-model="form.ticket_retention_unit"
+                                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm"
+                                                >
+                                                    <option value="months">Months</option>
+                                                    <option value="years">Years</option>
+                                                </select>
+                                                <InputError class="mt-2" :message="form.errors.ticket_retention_unit" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
                             </div>
 
                             <!-- Integrations Tab -->

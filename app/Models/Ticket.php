@@ -34,6 +34,7 @@ class Ticket extends Model
         'department',
         'message_id',
         'survey_token',
+        'is_deleted',
     ];
 
     public function parent()
@@ -102,6 +103,7 @@ class Ticket extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
         'deleted_at' => 'datetime:Y-m-d H:i:s',
+        'is_deleted' => 'boolean',
     ];
 
     /**

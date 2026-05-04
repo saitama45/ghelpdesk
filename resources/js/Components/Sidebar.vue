@@ -89,7 +89,7 @@ onMounted(() => {
     if (route().current('users.*') || route().current('roles.*')) {
         openMenus.value.userManagement = true;
     }
-    if (route().current('profile.*') || route().current('settings.*') || route().current('canned-messages.*')) {
+    if (route().current('profile.*') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*')) {
         openMenus.value.settings = true;
     }
     if (route().current('reports.*') || route().current('reports.assignee-performance')) {
@@ -633,10 +633,20 @@ const canSeeSettings = computed(() => {
                             :href="route('settings.index')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('settings.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                                route().current('settings.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
                             <span>System Settings</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('settings.view')"
+                            :href="route('ticket-archive.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('ticket-archive.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Ticket Archive</span>
                         </Link>
                         <Link
                             v-if="hasPermission('canned_messages.view')"

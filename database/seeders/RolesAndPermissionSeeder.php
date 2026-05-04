@@ -28,6 +28,7 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.edit' => 'Edit tickets',
             'tickets.assign' => 'Assign tickets',
             'tickets.close' => 'Close tickets',
+            'tickets.delete' => 'Archive and purge tickets',
             'tickets.canned_messages' => 'Use canned messages',
             'tickets.internal_notes' => 'Use internal notes',
             

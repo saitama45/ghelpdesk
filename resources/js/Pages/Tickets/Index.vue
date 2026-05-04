@@ -286,6 +286,7 @@ const bulkForm = reactive({
     store_id: '', item_id: '', assignee_id: ''
 })
 const isBulkSubmitting = ref(false)
+const isBulkArchiving = ref(false)
 
 const showSplitModal = ref(false);
 const showMergeModal = ref(false);
@@ -429,6 +430,31 @@ const submitBulk = () => {
         },
         onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Bulk update failed'),
         onFinish: () => { isBulkSubmitting.value = false }
+    })
+}
+
+const submitBulkArchive = async () => {
+    if (!selectedIds.value.length || isBulkArchiving.value) return
+
+    const confirmed = await confirm({
+        title: 'Archive Selected Tickets',
+        message: `Archive ${selectedIds.value.length} selected ticket(s)? Archived tickets can be restored from Ticket Archive.`,
+        confirmLabel: 'Archive',
+        cancelLabel: 'Cancel',
+        variant: 'danger'
+    })
+
+    if (!confirmed) return
+
+    isBulkArchiving.value = true
+
+    post(route('tickets.bulk-archive'), { ticket_ids: selectedIds.value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            selectedIds.value = []
+        },
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Bulk archive failed'),
+        onFinish: () => { isBulkArchiving.value = false }
     })
 }
 
@@ -1045,7 +1071,7 @@ watch(activeDashboardFilter, () => {
                             <div class="rounded-2xl border border-blue-200 bg-white/80 px-4 py-3 h-full">
                                 <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Bulk Selection</div>
                                 <div class="mt-2 text-2xl font-black text-blue-900">{{ selectedIds.length }}</div>
-                                <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for update, split, merge, or child creation.</div>
+                                <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for update, split, merge, child creation, or archive.</div>
                             </div>
 
                             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1114,6 +1140,21 @@ watch(activeDashboardFilter, () => {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                     </svg>
                                     Merge
+                                </button>
+                                <button
+                                    v-if="hasPermission('tickets.delete')"
+                                    @click="submitBulkArchive"
+                                    :disabled="isBulkArchiving"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                >
+                                    <svg v-if="isBulkArchiving" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <svg v-else class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M10 12h4m-7 8h10a2 2 0 002-2V8H5v10a2 2 0 002 2zM8 8V6a2 2 0 012-2h4a2 2 0 012 2v2" />
+                                    </svg>
+                                    Archive
                                 </button>
                                 <button
                                     @click="selectedIds = []"

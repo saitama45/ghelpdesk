@@ -41,12 +41,20 @@ class SettingsController extends Controller implements HasMiddleware
             $group = 'general';
             if (str_starts_with($key, 'imap_') || str_starts_with($key, 'mail_')) {
                 $group = 'mail';
+            } elseif (str_starts_with($key, 'ticket_retention_')) {
+                $group = 'ticket_retention';
             } elseif (str_starts_with($key, 'threshold_')) {
                 $group = 'thresholds';
             } elseif (str_starts_with($key, 'business_') || str_starts_with($key, 'working_days')) {
                 $group = 'business_hours';
             } elseif (str_starts_with($key, 'sla_')) {
                 $group = 'sla_targets';
+            }
+
+            if ($key === 'ticket_retention_value') {
+                $value = max(1, (int) $value);
+            } elseif ($key === 'ticket_retention_unit' && !in_array($value, ['months', 'years'], true)) {
+                $value = 'months';
             }
             
             // Handle array values (like working_days)

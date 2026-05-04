@@ -21,6 +21,7 @@ const props = defineProps({
     stores: Array,
     vendors: Array,
     cannedMessages: Array,
+    businessHours: Object,
 });
 
 const page = usePage();
@@ -510,6 +511,46 @@ const getValidTicketDate = (value) => {
     return date instanceof Date && !Number.isNaN(date.getTime()) && date.getTime() > 0 ? date : null;
 };
 
+const getWorkingMilliseconds = (start, end, config) => {
+    if (!start || !end || start >= end) return 0;
+    
+    // Fallback if no config or invalid days
+    if (!config || !config.days || !config.days.length) {
+        return end.getTime() - start.getTime();
+    }
+
+    const [startH, startM] = config.start.split(':').map(Number);
+    const [endH, endM] = config.end.split(':').map(Number);
+
+    let totalMs = 0;
+    let cursor = new Date(start.getTime());
+
+    while (cursor < end) {
+        const dayOfWeek = cursor.getDay() === 0 ? 7 : cursor.getDay(); // 1=Mon, 7=Sun
+        
+        if (config.days.includes(dayOfWeek)) {
+            const dayStart = new Date(cursor.getTime());
+            dayStart.setHours(startH, startM, 0, 0);
+
+            const dayEnd = new Date(cursor.getTime());
+            dayEnd.setHours(endH, endM, 0, 0);
+
+            const actualStart = Math.max(cursor.getTime(), dayStart.getTime());
+            const actualEnd = Math.min(end.getTime(), dayEnd.getTime());
+
+            if (actualStart < actualEnd) {
+                totalMs += actualEnd - actualStart;
+            }
+        }
+
+        // Move to next day 00:00:00
+        cursor.setDate(cursor.getDate() + 1);
+        cursor.setHours(0, 0, 0, 0);
+    }
+
+    return totalMs;
+};
+
 const getStatusHistoryEvents = () => {
     return (props.ticket.histories || [])
         .filter(history => history.column_changed === 'status')
@@ -567,7 +608,7 @@ const slaRuntime = computed(() => {
 
         if (eventTime < cursorTime) continue;
 
-        const intervalMilliseconds = eventTime - cursorTime;
+        const intervalMilliseconds = getWorkingMilliseconds(cursor, event.changedAt, props.businessHours);
         if (slaWaitingStatuses.has(currentStatus)) {
             pausedMilliseconds += intervalMilliseconds;
         } else {
@@ -601,7 +642,7 @@ const slaRuntime = computed(() => {
             endAt = cursor;
         }
 
-        const intervalMilliseconds = endAt.getTime() - cursor.getTime();
+        const intervalMilliseconds = getWorkingMilliseconds(cursor, endAt, props.businessHours);
         const intervalStatus = currentStatus || liveStatus;
 
         if (slaWaitingStatuses.has(intervalStatus) || slaWaitingStatuses.has(liveStatus)) {
@@ -633,6 +674,57 @@ const slaRuntime = computed(() => {
         totalHours: (activeMilliseconds / 3600000).toFixed(2),
         pausedLabel: formatDurationCompact(pausedMilliseconds),
     };
+});
+
+const calculateCountdown = (targetAt, pausedAt) => {
+    const targetDate = getValidTicketDate(targetAt);
+    if (!targetDate) return null;
+
+    const now = slaNow.value;
+    const isPaused = slaRuntime.value?.state === 'paused';
+    
+    let diffMs;
+    let isBreached = false;
+
+    if (now > targetDate) {
+        isBreached = true;
+        diffMs = getWorkingMilliseconds(targetDate, now, props.businessHours);
+    } else {
+        if (isPaused && pausedAt) {
+            const pAt = getValidTicketDate(pausedAt);
+            diffMs = getWorkingMilliseconds(pAt || now, targetDate, props.businessHours);
+        } else {
+            diffMs = getWorkingMilliseconds(now, targetDate, props.businessHours);
+        }
+    }
+
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    const clock = [hours, minutes, seconds]
+        .map(value => String(value).padStart(2, '0'))
+        .join(':');
+
+    return {
+        clock,
+        isBreached,
+        label: isBreached ? 'Breached' : 'Remaining',
+        class: isBreached ? 'text-red-600' : 'text-emerald-600',
+    };
+};
+
+const responseSLA = computed(() => {
+    const metric = props.ticket.sla_metric;
+    if (!metric || !metric.response_target_at || metric.first_response_at) return null;
+    return calculateCountdown(metric.response_target_at, metric.paused_at);
+});
+
+const resolutionSLA = computed(() => {
+    const metric = props.ticket.sla_metric;
+    if (!metric || !metric.resolution_target_at || metric.resolved_at) return null;
+    return calculateCountdown(metric.resolution_target_at, metric.paused_at);
 });
 
 // Filter available statuses based on permissions
@@ -1155,8 +1247,10 @@ const deleteTicket = async () => {
     if (!hasPermission('tickets.delete')) return;
 
     const confirmed = await confirm({
-        title: 'Delete Ticket',
-        message: `Are you sure you want to delete Ticket ${props.ticket.ticket_key}? This action cannot be undone.`
+        title: 'Archive Ticket',
+        message: `Archive Ticket ${props.ticket.ticket_key}? It will move to Ticket Archive and can be restored later.`,
+        confirmLabel: 'Archive',
+        cancelLabel: 'Cancel'
     });
     
     if (confirmed) {
@@ -1165,7 +1259,7 @@ const deleteTicket = async () => {
                 router.visit(route('tickets.index'));
             },
             onError: (errors) => {
-                const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete ticket';
+                const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot archive ticket';
                 showError(errorMessage);
             }
         });
@@ -1338,6 +1432,12 @@ const linkify = (text) => {
                                         <div class="text-[11px] font-bold text-gray-900 truncate">
                                             {{ ticket.sla_metric.first_response_at ? formatDate(ticket.sla_metric.first_response_at) : (ticket.sla_metric.response_target_at ? formatDate(ticket.sla_metric.response_target_at) : 'No target') }}
                                         </div>
+                                        <div v-if="responseSLA" class="mt-2 pt-2 border-t border-gray-200/50 flex justify-between items-baseline">
+                                            <span class="text-[8px] font-black text-gray-400 uppercase tracking-tighter">{{ responseSLA.label }}</span>
+                                            <span class="font-mono text-sm font-black tabular-nums" :class="responseSLA.class">
+                                                {{ responseSLA.isBreached ? '-' : '' }}{{ responseSLA.clock }}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <!-- Resolution SLA -->
@@ -1350,6 +1450,12 @@ const linkify = (text) => {
                                         </div>
                                         <div class="text-[11px] font-bold text-gray-900 truncate">
                                             {{ ticket.sla_metric.resolved_at ? formatDate(ticket.sla_metric.resolved_at) : (ticket.sla_metric.resolution_target_at ? formatDate(ticket.sla_metric.resolution_target_at) : 'No target') }}
+                                        </div>
+                                        <div v-if="resolutionSLA" class="mt-2 pt-2 border-t border-gray-200/50 flex justify-between items-baseline">
+                                            <span class="text-[8px] font-black text-gray-400 uppercase tracking-tighter">{{ resolutionSLA.label }}</span>
+                                            <span class="font-mono text-sm font-black tabular-nums" :class="resolutionSLA.class">
+                                                {{ resolutionSLA.isBreached ? '-' : '' }}{{ resolutionSLA.clock }}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -1562,7 +1668,7 @@ const linkify = (text) => {
                             </button>
                             
                             <button v-if="hasPermission('tickets.delete')" type="button" @click="deleteTicket" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md text-sm font-black text-red-600 bg-red-50 hover:bg-red-100 transition-colors uppercase tracking-widest">
-                                Delete Ticket
+                                Archive Ticket
                             </button>
                         </div>
                     </div>

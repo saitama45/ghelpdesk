@@ -104,6 +104,7 @@ Route::middleware('auth')->group(function () {
     Route::post('tickets/sync', [\App\Http\Controllers\TicketController::class, 'sync'])->name('tickets.sync');
 
     Route::post('tickets/bulk-update', [\App\Http\Controllers\TicketController::class, 'bulkUpdate'])->name('tickets.bulk-update');
+    Route::post('tickets/bulk-archive', [\App\Http\Controllers\TicketController::class, 'bulkArchive'])->name('tickets.bulk-archive');
     Route::post('tickets/bulk-child', [\App\Http\Controllers\TicketController::class, 'bulkStoreChild'])->name('tickets.bulk-child');
     Route::post('tickets/merge', [\App\Http\Controllers\TicketController::class, 'merge'])->name('tickets.merge');
     Route::resource('tickets', \App\Http\Controllers\TicketController::class);
@@ -117,6 +118,11 @@ Route::middleware('auth')->group(function () {
     Route::get('settings', [\App\Http\Controllers\SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [\App\Http\Controllers\SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/test-imap', [\App\Http\Controllers\SettingsController::class, 'testImap'])->name('settings.test-imap');
+    Route::get('settings/ticket-archive', [\App\Http\Controllers\TicketArchiveController::class, 'index'])->name('ticket-archive.index');
+    Route::post('settings/ticket-archive/bulk-restore', [\App\Http\Controllers\TicketArchiveController::class, 'bulkRestore'])->name('ticket-archive.bulk-restore');
+    Route::delete('settings/ticket-archive/bulk-purge', [\App\Http\Controllers\TicketArchiveController::class, 'bulkPurge'])->name('ticket-archive.bulk-purge');
+    Route::post('settings/ticket-archive/{ticket}/restore', [\App\Http\Controllers\TicketArchiveController::class, 'restore'])->name('ticket-archive.restore');
+    Route::delete('settings/ticket-archive/{ticket}/purge', [\App\Http\Controllers\TicketArchiveController::class, 'purge'])->name('ticket-archive.purge');
     Route::resource('canned-messages', \App\Http\Controllers\CannedMessageController::class)->except(['show', 'create', 'edit']);
 
     Route::get('reports/store-health', [\App\Http\Controllers\StoreReportController::class, 'index'])->name('reports.store-health');

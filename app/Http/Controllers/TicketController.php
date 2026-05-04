@@ -46,6 +46,7 @@ class TicketController extends Controller
                   ->with('assignee:id,name,profile_photo');
             }
         ])
+            ->where('is_deleted', false)
             ->whereNull('parent_id'); // Only show top-level tickets
 
         // If user has 'User' role, only show their own reported tickets — no company gate needed
@@ -320,6 +321,13 @@ class TicketController extends Controller
         $vendors = collect([['id' => null, 'name' => 'None']])
             ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
 
+        $subUnit = $ticket->assignee?->sub_unit;
+        $businessHours = [
+            'start' => \App\Models\Setting::get($subUnit ? "business_start_time_" . \Illuminate\Support\Str::slug($subUnit, '_') : "business_start_time", \App\Models\Setting::get("business_start_time", "08:00")),
+            'end' => \App\Models\Setting::get($subUnit ? "business_end_time_" . \Illuminate\Support\Str::slug($subUnit, '_') : "business_end_time", \App\Models\Setting::get("business_end_time", "17:00")),
+            'days' => json_decode(\App\Models\Setting::get($subUnit ? "working_days_" . \Illuminate\Support\Str::slug($subUnit, '_') : "working_days", \App\Models\Setting::get("working_days", "[1,2,3,4,5]")), true),
+        ];
+
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
             'staff' => $staff,
@@ -328,6 +336,7 @@ class TicketController extends Controller
             'stores' => $stores,
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
+            'businessHours' => $businessHours,
         ]);
     }
 
@@ -478,11 +487,54 @@ class TicketController extends Controller
      */
     public function destroy(Ticket $ticket)
     {
-        foreach ($ticket->attachments as $attachment) {
-            Storage::disk('public')->delete($attachment->file_storage_path);
+        abort_unless(auth()->user()->can('tickets.delete'), 403);
+
+        $count = $this->archiveTickets(collect([$ticket]));
+
+        return redirect()->route('tickets.index')->with('success', "{$count} ticket(s) archived successfully.");
+    }
+
+    public function bulkArchive(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.delete'), 403);
+
+        $validated = $request->validate([
+            'ticket_ids' => 'required|array|min:1',
+            'ticket_ids.*' => 'exists:tickets,id',
+        ]);
+
+        $tickets = Ticket::whereIn('id', $validated['ticket_ids'])->get();
+
+        if ($tickets->isEmpty()) {
+            return redirect()->back()->withErrors(['archive' => 'No active tickets selected for archive.']);
         }
-        $ticket->delete();
-        return redirect()->route('tickets.index')->with('success', 'Ticket deleted successfully.');
+
+        $count = $this->archiveTickets($tickets);
+
+        return redirect()->back()->with('success', "{$count} ticket(s) archived successfully.");
+    }
+
+    private function archiveTickets($tickets): int
+    {
+        $rootIds = $tickets->pluck('id');
+
+        return DB::transaction(function () use ($rootIds) {
+            $targets = Ticket::whereIn('id', $rootIds)
+                ->orWhereIn('parent_id', $rootIds)
+                ->get()
+                ->unique('id');
+
+            foreach ($targets as $target) {
+                if ($target->trashed()) {
+                    continue;
+                }
+
+                $target->forceFill(['is_deleted' => true])->save();
+                $target->delete();
+            }
+
+            return $targets->count();
+        });
     }
 
     /**
