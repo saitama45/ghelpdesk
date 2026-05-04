@@ -91,6 +91,7 @@ Route::middleware('auth')->group(function () {
     Route::post('schedules/import', [\App\Http\Controllers\ScheduleController::class, 'import'])->name('schedules.import');
     Route::get('schedules/report-data', [\App\Http\Controllers\ScheduleController::class, 'reportData'])->name('schedules.report-data');
     Route::get('schedules/missing-schedules', [\App\Http\Controllers\ScheduleController::class, 'missingSchedules'])->name('schedules.missing-schedules');
+    Route::get('schedules/complete-schedules', [\App\Http\Controllers\ScheduleController::class, 'completeSchedules'])->name('schedules.complete-schedules');
     Route::resource('schedules', \App\Http\Controllers\ScheduleController::class)->except(['show', 'create', 'edit']);
     Route::get('schedules/export/pdf', [\App\Http\Controllers\ScheduleExportController::class, 'pdf'])->name('schedules.export.pdf');
     Route::get('tickets/data/categories', [\App\Http\Controllers\TicketController::class, 'getCategories'])->name('tickets.data.categories');

@@ -27,11 +27,18 @@
                             >
                                 Missing Schedules
                             </button>
+                            <button
+                                @click="switchView('complete-schedules')"
+                                :class="['px-4 py-2 text-sm font-bold rounded-md transition-all', currentView === 'complete-schedules' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                            >
+                                Complete Schedules
+                            </button>
                         </div>
 
                         <!-- Action Buttons -->
                         <div class="flex items-center space-x-2">
                             <button
+                                v-if="currentView !== 'complete-schedules'"
                                 @click="exportPdf"
                                 class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors flex items-center space-x-2 shadow-sm"
                             >
@@ -77,7 +84,7 @@
                             />
                         </div>
 
-                        <!-- Store filter (both views) -->
+                        <!-- Store filter -->
                         <div class="w-56">
                             <Autocomplete
                                 v-model="filterStore"
@@ -89,8 +96,8 @@
                             />
                         </div>
 
-                        <!-- User filter (calendar and missing schedules) -->
-                        <div class="w-56" v-if="currentView === 'calendar' || currentView === 'missing-schedules'">
+                        <!-- User filter -->
+                        <div class="w-56" v-if="currentView === 'calendar' || currentView === 'missing-schedules' || currentView === 'complete-schedules'">
                             <Autocomplete
                                 v-model="filterUser"
                                 :options="userFilterOptions"
@@ -101,8 +108,8 @@
                             />
                         </div>
 
-                        <!-- Date Range filter (missing schedules only) -->
-                        <div v-if="currentView === 'missing-schedules'" class="flex items-center gap-2">
+                        <!-- Date Range filter -->
+                        <div v-if="currentView === 'missing-schedules' || currentView === 'complete-schedules'" class="flex items-center gap-2">
                             <div class="flex items-center gap-1.5">
                                 <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">From:</span>
                                 <input 
@@ -318,6 +325,94 @@
                             <button 
                                 @click="fetchMissingSchedulesData(missingSchedulesPagination.current_page + 1)"
                                 :disabled="missingSchedulesPagination.current_page === missingSchedulesPagination.last_page"
+                                class="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Complete Schedules View -->
+                <div v-else-if="currentView === 'complete-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900">Complete Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Full Schedule Coverage</span>
+                    </div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Covered Days</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Date Range</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr v-if="isCompleteSchedulesLoading">
+                                    <td colspan="4" class="px-6 py-12 text-center">
+                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                            <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
+                                            </svg>
+                                            Loading completed schedules...
+                                        </div>
+                                    </td>
+                                </tr>
+                                <template v-else>
+                                    <tr v-for="user in completeSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
+                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ user.sub_unit || '-' }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-emerald-700">{{ user.covered_days_count }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">{{ user.range_start }} to {{ user.range_end }}</td>
+                                    </tr>
+                                    <tr v-if="completeSchedulesData.length === 0">
+                                        <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                            No users have complete schedule coverage for this period.
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Footer -->
+                    <div v-if="completeSchedulesPagination.total > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <div class="text-xs text-gray-500 font-bold uppercase tracking-widest">
+                            Showing {{ (completeSchedulesPagination.current_page - 1) * completeSchedulesPagination.per_page + 1 }} 
+                            to {{ Math.min(completeSchedulesPagination.current_page * completeSchedulesPagination.per_page, completeSchedulesPagination.total) }} 
+                            of {{ completeSchedulesPagination.total }} users
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button 
+                                @click="fetchCompleteSchedulesData(completeSchedulesPagination.current_page - 1)"
+                                :disabled="completeSchedulesPagination.current_page === 1"
+                                class="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Previous
+                            </button>
+                            
+                            <div class="flex items-center space-x-1">
+                                <button 
+                                    v-for="p in completeSchedulesPagination.last_page" 
+                                    :key="p"
+                                    @click="fetchCompleteSchedulesData(p)"
+                                    :class="[
+                                        'w-8 h-8 rounded-md text-xs font-bold transition-all',
+                                        completeSchedulesPagination.current_page === p 
+                                            ? 'bg-blue-600 text-white shadow-sm' 
+                                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                    ]"
+                                >
+                                    {{ p }}
+                                </button>
+                            </div>
+
+                            <button 
+                                @click="fetchCompleteSchedulesData(completeSchedulesPagination.current_page + 1)"
+                                :disabled="completeSchedulesPagination.current_page === completeSchedulesPagination.last_page"
                                 class="px-3 py-1 bg-white border border-gray-300 rounded-md text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                                 Next
@@ -932,11 +1027,61 @@ const fetchMissingSchedulesData = async (page = 1) => {
     }
 }
 
+// Complete schedules data
+const completeSchedulesData = ref([])
+const completeSchedulesPagination = ref({
+    current_page: 1,
+    last_page: 1,
+    total: 0,
+    per_page: 10
+})
+const isCompleteSchedulesLoading = ref(false)
+
+const fetchCompleteSchedulesData = async (page = 1) => {
+    if (isCompleteSchedulesLoading.value) return
+    isCompleteSchedulesLoading.value = true
+    try {
+        const params = new URLSearchParams()
+        params.set('start', visibleRange.value.start)
+        params.set('end', visibleRange.value.end)
+        params.set('page', page)
+        if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
+        if (filterUser.value)    params.set('user_id', filterUser.value)
+        if (filterStore.value)   params.set('store_id', filterStore.value)
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        const res = await fetch(`/schedules/complete-schedules?${params}`, {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken }
+        })
+        if (res.ok) {
+            const result = await res.json()
+            completeSchedulesData.value = result.data
+            completeSchedulesPagination.value = {
+                current_page: result.current_page,
+                last_page: result.last_page,
+                total: result.total,
+                per_page: result.per_page
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load complete schedules data', e)
+    } finally {
+        isCompleteSchedulesLoading.value = false
+    }
+}
+
 const switchView = (view) => {
     currentView.value = view
     if (view === 'report') fetchPivotData()
     if (view === 'missing-schedules') fetchMissingSchedulesData()
+    if (view === 'complete-schedules') fetchCompleteSchedulesData()
 }
+
+onMounted(() => {
+    if (currentView.value === 'report') fetchPivotData()
+    if (currentView.value === 'missing-schedules') fetchMissingSchedulesData()
+    if (currentView.value === 'complete-schedules') fetchCompleteSchedulesData()
+})
 
 const authUser = computed(() => page.props.auth.user)
 const isManager = computed(() => !!authUser.value?.is_manager)
@@ -1014,6 +1159,9 @@ const applyFilter = () => {
     if (currentView.value === 'missing-schedules') {
         fetchMissingSchedulesData()
     }
+    if (currentView.value === 'complete-schedules') {
+        fetchCompleteSchedulesData()
+    }
 }
 
 const handleVisibleRangeChange = (range) => {
@@ -1037,6 +1185,9 @@ const handleVisibleRangeChange = (range) => {
         onSuccess: () => {
             if (currentView.value === 'missing-schedules') {
                 fetchMissingSchedulesData()
+            }
+            if (currentView.value === 'complete-schedules') {
+                fetchCompleteSchedulesData()
             }
         }
     })

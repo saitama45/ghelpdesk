@@ -56,7 +56,7 @@ class ScheduleController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules']),
+            new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules', 'completeSchedules']),
             new Middleware('can:schedules.create', only: ['store', 'import']),
             // schedules.edit is checked inside update() to also allow the schedule owner
         ];
@@ -1216,6 +1216,107 @@ class ScheduleController extends Controller implements HasMiddleware
         });
 
         return response()->json(['imported' => $imported, 'errors' => $errors]);
+    }
+
+    public function completeSchedules(Request $request)
+    {
+        $rangeStart = $request->filled('start')
+            ? Carbon::parse($request->start, 'Asia/Manila')->startOfDay()
+            : now('Asia/Manila')->startOfMonth();
+        $rangeEnd = $request->filled('end')
+            ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
+            : now('Asia/Manila')->endOfMonth();
+
+        $allDates = [];
+        $tempDate = $rangeStart->copy();
+        while ($tempDate <= $rangeEnd) {
+            $allDates[] = $tempDate->toDateString();
+            $tempDate->addDay();
+        }
+
+        $query = User::active();
+
+        if ($request->filled('sub_unit')) {
+            $query->where('sub_unit', $request->sub_unit);
+        }
+
+        if ($request->filled('user_id')) {
+            if ($request->user_id === 'my') {
+                $query->where('id', auth()->id());
+            } else {
+                $query->where('id', $request->user_id);
+            }
+        }
+
+        $users = $query->orderByRaw("CASE WHEN sub_unit IS NULL OR sub_unit = '' THEN 1 ELSE 0 END")
+            ->orderBy('sub_unit')
+            ->orderBy('name')
+            ->get(['id', 'name', 'sub_unit', 'email']);
+        $userIds = $users->pluck('id');
+
+        $scheduleQuery = Schedule::with(['scheduleStores:id,schedule_id,store_id,start_time,end_time'])
+            ->whereIn('user_id', $userIds)
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart);
+
+        if ($request->filled('store_id')) {
+            $scheduleQuery->whereHas('scheduleStores', fn ($sq) => $sq->where('store_id', $request->store_id));
+        }
+
+        $schedules = $scheduleQuery->get(['id', 'user_id', 'start_time', 'end_time']);
+
+        $userScheduledDates = [];
+        foreach ($schedules as $schedule) {
+            $coverageEntries = $request->filled('store_id')
+                ? $schedule->scheduleStores->filter(fn ($scheduleStore) => (string) $scheduleStore->store_id === (string) $request->store_id)
+                : collect([$schedule]);
+
+            foreach ($coverageEntries as $entry) {
+                $entryStart = ($entry->start_time ?? $schedule->start_time)->copy()->timezone('Asia/Manila');
+                $entryEnd = ($entry->end_time ?? $schedule->end_time)->copy()->timezone('Asia/Manila');
+
+                $curr = $entryStart->copy();
+                while ($curr->toDateString() <= $entryEnd->toDateString()) {
+                    $dateStr = $curr->toDateString();
+                    if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                        $userScheduledDates[$schedule->user_id][$dateStr] = true;
+                    }
+                    $curr->addDay();
+                }
+            }
+        }
+
+        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $rangeStart, $rangeEnd) {
+            $coveredDays = [];
+
+            foreach ($allDates as $date) {
+                if (!isset($userScheduledDates[$user->id][$date])) {
+                    return null;
+                }
+
+                $coveredDays[] = Carbon::parse($date)->format('M j');
+            }
+
+            $user->covered_days = $coveredDays;
+            $user->covered_days_count = count($coveredDays);
+            $user->range_start = $rangeStart->toDateString();
+            $user->range_end = $rangeEnd->toDateString();
+            return $user;
+        })->filter()->values();
+
+        $perPage = (int) $request->input('per_page', 10);
+        $page = (int) $request->input('page', 1);
+        $total = $results->count();
+
+        $paginatedResults = new LengthAwarePaginator(
+            $results->forPage($page, $perPage)->values(),
+            $total,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return response()->json($paginatedResults);
     }
 
     public function missingSchedules(Request $request)
