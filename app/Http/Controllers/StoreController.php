@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
@@ -74,8 +75,9 @@ class StoreController extends Controller implements HasMiddleware
             'sector' => 'required|numeric|min:1|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
-            'class' => 'required|in:Regular,Kitchen,Office',
-            'cluster_ids' => 'required|array',
+            'class' => 'nullable|in:Regular,Kitchen,Office',
+            'cluster' => 'nullable|required_without:cluster_ids|string|max:255',
+            'cluster_ids' => 'nullable|required_without:cluster|array',
             'cluster_ids.*' => 'exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
@@ -87,12 +89,13 @@ class StoreController extends Controller implements HasMiddleware
         ]);
 
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
+        $validated['class'] = $validated['class'] ?? 'Regular';
+        $clusterIds = $this->resolveClusterIds($validated);
+        unset($validated['cluster'], $validated['cluster_ids'], $validated['user_ids']);
 
         $store = Store::create($validated);
 
-        if ($request->has('cluster_ids')) {
-            $store->clusters()->sync($request->cluster_ids);
-        }
+        $store->clusters()->sync($clusterIds);
 
         if ($request->has('user_ids')) {
             $store->users()->sync($request->user_ids);
@@ -109,8 +112,9 @@ class StoreController extends Controller implements HasMiddleware
             'sector' => 'required|numeric|min:1|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
-            'class' => 'required|in:Regular,Kitchen,Office',
-            'cluster_ids' => 'required|array',
+            'class' => 'nullable|in:Regular,Kitchen,Office',
+            'cluster' => 'nullable|required_without:cluster_ids|string|max:255',
+            'cluster_ids' => 'nullable|required_without:cluster|array',
             'cluster_ids.*' => 'exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'latitude' => 'nullable|numeric|between:-90,90',
@@ -122,12 +126,13 @@ class StoreController extends Controller implements HasMiddleware
         ]);
 
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
+        $validated['class'] = $validated['class'] ?? 'Regular';
+        $clusterIds = $this->resolveClusterIds($validated);
+        unset($validated['cluster'], $validated['cluster_ids'], $validated['user_ids']);
 
         $store->update($validated);
 
-        if ($request->has('cluster_ids')) {
-            $store->clusters()->sync($request->cluster_ids);
-        }
+        $store->clusters()->sync($clusterIds);
 
         if ($request->has('user_ids')) {
             $store->users()->sync($request->user_ids);
@@ -136,6 +141,40 @@ class StoreController extends Controller implements HasMiddleware
         }
 
         return redirect()->back()->with('success', 'Store updated successfully');
+    }
+
+    private function resolveClusterIds(array $data): array
+    {
+        if (!empty($data['cluster_ids'])) {
+            return array_values($data['cluster_ids']);
+        }
+
+        $clusterName = trim((string) ($data['cluster'] ?? ''));
+        if ($clusterName === '') {
+            return [];
+        }
+
+        $cluster = Cluster::firstOrCreate(
+            ['name' => $clusterName],
+            ['code' => $this->uniqueClusterCode($clusterName)]
+        );
+
+        return [$cluster->id];
+    }
+
+    private function uniqueClusterCode(string $name): string
+    {
+        $base = Str::upper(Str::slug(Str::limit($name, 40, ''), '-'));
+        $base = $base !== '' ? $base : 'CLUSTER';
+        $code = $base;
+        $suffix = 1;
+
+        while (Cluster::where('code', $code)->exists()) {
+            $code = Str::limit($base, 45, '') . '-' . $suffix;
+            $suffix++;
+        }
+
+        return $code;
     }
 
     public function destroy(Store $store)

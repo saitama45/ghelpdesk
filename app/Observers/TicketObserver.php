@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Services\SlaService;
 use App\Models\PosRequest;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class TicketObserver
 {
@@ -19,17 +20,7 @@ class TicketObserver
         if (!$ticket->ticket_key) {
             $company = Company::find($ticket->company_id);
             if ($company) {
-                $prefix = $company->code;
-                $maxNumber = Ticket::withTrashed()
-                    ->where('ticket_key', 'LIKE', "{$prefix}-%")
-                    ->selectRaw(
-                        'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
-                        [$prefix]
-                    )
-                    ->value('max_num');
-
-                $nextNumber = ($maxNumber ?? 0) + 1;
-                $ticket->ticket_key = "{$prefix}-{$nextNumber}";
+                $ticket->ticket_key = $this->nextTicketKey($company->code);
             }
         }
     }
@@ -42,21 +33,38 @@ class TicketObserver
         if ($ticket->isDirty('company_id')) {
             $company = Company::find($ticket->company_id);
             if ($company) {
-                $prefix = $company->code;
-                
-                // Get the maximum ticket number for the NEW company
-                $maxNumber = Ticket::withTrashed()
-                    ->where('ticket_key', 'LIKE', "{$prefix}-%")
-                    ->selectRaw(
-                        'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
-                        [$prefix]
-                    )
-                    ->value('max_num');
-
-                $nextNumber = ($maxNumber ?? 0) + 1;
-                $ticket->ticket_key = "{$prefix}-{$nextNumber}";
+                $ticket->ticket_key = $this->nextTicketKey($company->code);
             }
         }
+    }
+
+    private function nextTicketKey(string $prefix): string
+    {
+        if (DB::connection()->getDriverName() === 'sqlsrv') {
+            $maxNumber = Ticket::withTrashed()
+                ->where('ticket_key', 'LIKE', "{$prefix}-%")
+                ->selectRaw(
+                    'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
+                    [$prefix]
+                )
+                ->value('max_num');
+
+            return "{$prefix}-" . (($maxNumber ?? 0) + 1);
+        }
+
+        $pattern = '/^' . preg_quote($prefix, '/') . '-(\d+)$/';
+
+        $maxNumber = Ticket::withTrashed()
+            ->where('ticket_key', 'LIKE', "{$prefix}-%")
+            ->pluck('ticket_key')
+            ->map(function ($ticketKey) use ($pattern) {
+                return preg_match($pattern, (string) $ticketKey, $matches)
+                    ? (int) $matches[1]
+                    : 0;
+            })
+            ->max() ?? 0;
+
+        return "{$prefix}-" . ($maxNumber + 1);
     }
 
     /**

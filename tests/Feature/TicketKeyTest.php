@@ -5,13 +5,13 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\Ticket;
 use App\Models\User;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Spatie\Permission\Models\Role;
 
 class TicketKeyTest extends TestCase
 {
-    use DatabaseTransactions;
+    use RefreshDatabase;
     public function test_ticket_key_is_generated_correctly_based_on_company_code()
     {
         $this->withoutMiddleware();

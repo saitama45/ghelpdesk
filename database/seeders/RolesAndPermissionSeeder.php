@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
@@ -14,8 +15,7 @@ class RolesAndPermissionSeeder extends Seeder
     {
         // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-        \Illuminate\Support\Facades\Cache::forget('permissions_version');
-        \Illuminate\Support\Facades\Cache::increment('permissions_version');
+        Cache::forever('permissions_version', now()->timestamp);
 
         // Define help desk permissions
         $permissions = [
@@ -31,6 +31,13 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.delete' => 'Archive and purge tickets',
             'tickets.canned_messages' => 'Use canned messages',
             'tickets.internal_notes' => 'Use internal notes',
+
+            // Task Lists
+            'task_lists.view' => 'View task list boards',
+            'task_lists.create' => 'Create task list boards',
+            'task_lists.edit' => 'Edit task list cards and boards',
+            'task_lists.delete' => 'Close and delete task list boards/cards',
+            'task_lists.manage_members' => 'Manage task list board members',
             
             // Users
             'users.view' => 'View users',
@@ -186,10 +193,12 @@ class RolesAndPermissionSeeder extends Seeder
 
         // Assign permissions to roles
         $admin->givePermissionTo(Permission::all());
+        Role::where('name', 'Solutions Admin')->first()?->givePermissionTo(Permission::all());
         
         $techSupport->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
+            'task_lists.view', 'task_lists.create', 'task_lists.edit', 'task_lists.manage_members',
             'attendance.view', 'attendance.logs', 'attendance.create',
             'users.view',
             'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance',
@@ -224,6 +233,7 @@ class RolesAndPermissionSeeder extends Seeder
         $user->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.create',
+            'task_lists.view', 'task_lists.edit',
             'attendance.view', 'attendance.create',
         ]);
 

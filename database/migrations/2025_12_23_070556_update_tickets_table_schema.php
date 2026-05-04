@@ -37,6 +37,12 @@ return new class extends Migration
             }
         });
 
+        if (DB::connection()->getDriverName() !== 'sqlsrv') {
+            Schema::table('tickets', function (Blueprint $table) {
+                $table->dropUnique('tickets_ticket_number_unique');
+            });
+        }
+
         Schema::table('tickets', function (Blueprint $table) {
             // Drop old columns that are being replaced or heavily modified
             $table->dropColumn(['ticket_number', 'created_date', 'modified_date']);

@@ -82,6 +82,35 @@ Route::middleware('auth')->group(function () {
     Route::get('stock-ins/{stock_in}/print-barcodes', [\App\Http\Controllers\StockInController::class, 'printBarcodes'])->name('stock-ins.print-barcodes');
     Route::get('stock-ins/{stock_in}/print-qrcodes', [\App\Http\Controllers\StockInController::class, 'printQrcodes'])->name('stock-ins.print-qrcodes');
     Route::resource('stock-ins', \App\Http\Controllers\StockInController::class);
+    Route::post('task-lists/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-lists.restore');
+    Route::post('task-lists/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-lists.star');
+    Route::post('task-lists/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-lists.watch');
+    Route::post('task-lists/{taskBoard}/members', [\App\Http\Controllers\TaskBoardController::class, 'storeMember'])->name('task-lists.members.store');
+    Route::put('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'updateMember'])->name('task-lists.members.update');
+    Route::delete('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'destroyMember'])->name('task-lists.members.destroy');
+    Route::post('task-lists/{taskBoard}/cards', [\App\Http\Controllers\TaskCardController::class, 'store'])->name('task-lists.cards.store');
+    Route::post('task-lists/{taskBoard}/labels', [\App\Http\Controllers\TaskCardController::class, 'storeLabel'])->name('task-lists.labels.store');
+    Route::resource('task-lists', \App\Http\Controllers\TaskBoardController::class)
+        ->parameters(['task-lists' => 'taskBoard'])
+        ->except(['create', 'edit']);
+    Route::put('task-labels/{taskLabel}', [\App\Http\Controllers\TaskCardController::class, 'updateLabel'])->name('task-labels.update');
+    Route::delete('task-labels/{taskLabel}', [\App\Http\Controllers\TaskCardController::class, 'destroyLabel'])->name('task-labels.destroy');
+    Route::put('task-cards/{taskCard}', [\App\Http\Controllers\TaskCardController::class, 'update'])->name('task-cards.update');
+    Route::post('task-cards/{taskCard}/move', [\App\Http\Controllers\TaskCardController::class, 'move'])->name('task-cards.move');
+    Route::post('task-cards/{taskCard}/archive', [\App\Http\Controllers\TaskCardController::class, 'archive'])->name('task-cards.archive');
+    Route::post('task-cards/{taskCard}/restore', [\App\Http\Controllers\TaskCardController::class, 'restore'])->name('task-cards.restore');
+    Route::delete('task-cards/{taskCard}', [\App\Http\Controllers\TaskCardController::class, 'destroy'])->name('task-cards.destroy');
+    Route::post('task-cards/{taskCard}/watch', [\App\Http\Controllers\TaskCardController::class, 'toggleWatch'])->name('task-cards.watch');
+    Route::post('task-cards/{taskCard}/checklists', [\App\Http\Controllers\TaskCardController::class, 'storeChecklist'])->name('task-cards.checklists.store');
+    Route::post('task-cards/{taskCard}/comments', [\App\Http\Controllers\TaskCardController::class, 'storeComment'])->name('task-cards.comments.store');
+    Route::post('task-cards/{taskCard}/attachments', [\App\Http\Controllers\TaskCardController::class, 'storeAttachment'])->name('task-cards.attachments.store');
+    Route::put('task-checklists/{taskChecklist}', [\App\Http\Controllers\TaskCardController::class, 'updateChecklist'])->name('task-checklists.update');
+    Route::delete('task-checklists/{taskChecklist}', [\App\Http\Controllers\TaskCardController::class, 'destroyChecklist'])->name('task-checklists.destroy');
+    Route::post('task-checklists/{taskChecklist}/items', [\App\Http\Controllers\TaskCardController::class, 'storeChecklistItem'])->name('task-checklists.items.store');
+    Route::put('task-checklist-items/{taskChecklistItem}', [\App\Http\Controllers\TaskCardController::class, 'updateChecklistItem'])->name('task-checklist-items.update');
+    Route::delete('task-checklist-items/{taskChecklistItem}', [\App\Http\Controllers\TaskCardController::class, 'destroyChecklistItem'])->name('task-checklist-items.destroy');
+    Route::delete('task-card-comments/{taskCardComment}', [\App\Http\Controllers\TaskCardController::class, 'destroyComment'])->name('task-card-comments.destroy');
+    Route::delete('task-card-attachments/{taskCardAttachment}', [\App\Http\Controllers\TaskCardController::class, 'destroyAttachment'])->name('task-card-attachments.destroy');
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);

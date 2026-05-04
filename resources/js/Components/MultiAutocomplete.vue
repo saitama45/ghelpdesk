@@ -39,6 +39,7 @@ const isExpanded = ref(false);
 const searchQuery = ref('');
 const containerRef = ref(null);
 const inputRef = ref(null);
+const dropdownTarget = ref('body');
 const uniqueId = Math.random().toString(36).substr(2, 9);
 
 const dropdownStyle = reactive({
@@ -46,6 +47,7 @@ const dropdownStyle = reactive({
     left: '0px',
     width: '0px',
     maxHeight: '300px',
+    zIndex: '2147483647',
 });
 
 const selectedOptions = computed(() => {
@@ -103,8 +105,15 @@ const updatePosition = () => {
     dropdownStyle.width = `${rect.width}px`;
 };
 
+const updateDropdownTarget = () => {
+    if (!containerRef.value) return;
+
+    dropdownTarget.value = containerRef.value.closest('dialog') || document.body;
+};
+
 const openDropdown = async () => {
     if (props.disabled) return;
+    updateDropdownTarget();
     isOpen.value = true;
     await nextTick();
     updatePosition();
@@ -148,13 +157,16 @@ const handleClickOutside = (event) => {
 };
 
 onMounted(() => {
+    updateDropdownTarget();
     document.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
 });
 
 onUnmounted(() => {
     document.removeEventListener('mousedown', handleClickOutside);
     window.removeEventListener('resize', updatePosition);
+    window.removeEventListener('scroll', updatePosition, true);
 });
 </script>
 
@@ -218,7 +230,7 @@ onUnmounted(() => {
             </span>
         </div>
 
-        <Teleport to="body">
+        <Teleport :to="dropdownTarget">
             <transition
                 leave-active-class="transition ease-in duration-100"
                 leave-from-class="opacity-100"

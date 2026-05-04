@@ -5,6 +5,7 @@ namespace App\Http\Services;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
+use Illuminate\Support\Facades\Cache;
 
 class RoleService
 {
@@ -49,6 +50,7 @@ class RoleService
         $preferredOrder = [
             'dashboard',
             'tickets',
+            'task lists',
             'pos_requests',
             'sap_requests',
             'stock in',
@@ -85,6 +87,8 @@ class RoleService
             // We use the raw category for keys that are special like 'Pos_requests'
             if ($category === 'kb_articles') {
                 $categoryDisplay = 'KB Articles';
+            } elseif ($category === 'task_lists') {
+                $categoryDisplay = 'Task Lists';
             } elseif ($category === 'stock_ins') {
                 $categoryDisplay = 'Stock In';
             } else {
@@ -148,6 +152,7 @@ class RoleService
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+        Cache::forever('permissions_version', now()->timestamp);
         
         return $role;
     }
@@ -166,6 +171,7 @@ class RoleService
         
         $role->syncPermissions($permissions);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+        Cache::forever('permissions_version', now()->timestamp);
         
         return $role;
     }

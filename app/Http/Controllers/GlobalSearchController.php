@@ -39,6 +39,7 @@ class GlobalSearchController extends Controller
             ['name' => 'DTR', 'url' => route('attendance.index', [], false), 'path' => 'Administrative > DTR', 'permission' => 'attendance.view'],
             ['name' => 'Attendance Logs', 'url' => route('attendance.logs', [], false), 'path' => 'Administrative > Attendance Logs', 'permission' => 'attendance.logs'],
             ['name' => 'Tickets', 'url' => route('tickets.index', [], false), 'path' => 'Services > Tickets', 'permission' => 'tickets.view'],
+            ['name' => 'Task Lists', 'url' => route('task-lists.index', [], false), 'path' => 'Services > Task Lists', 'permission' => 'task_lists.view'],
             ['name' => 'POS Requests', 'url' => route('pos-requests.index', [], false), 'path' => 'Services > POS Requests', 'permission' => 'pos_requests.view'],
             ['name' => 'SAP Requests', 'url' => route('sap-requests.index', [], false), 'path' => 'Services > SAP Requests', 'permission' => 'sap_requests.view'],
             ['name' => 'Scheduling', 'url' => route('schedules.index', [], false), 'path' => 'Administrative > Scheduling', 'permission' => 'schedules.view'],

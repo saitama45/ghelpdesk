@@ -573,7 +573,7 @@ const activeTab = ref('')
 const dynamicForms = computed(() => usePage().props.dynamicForms || []);
 
 const permissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Pos_requests', 'Sap_requests', 'Stock_in'];
+    const servicesCategories = ['Tickets', 'Task Lists', 'Pos_requests', 'Sap_requests', 'Stock_in'];
 
     // Add dynamic form names exactly as the backend RoleService does
     (dynamicForms.value || []).forEach(form => {

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -59,9 +60,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'permissions' => array_values($permissions),
             ],
-            'dynamicForms' => Cache::remember('active_form_definitions', 3600, function() {
-                return \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug', 'icon'])->toArray();
-            }),
+            'dynamicForms' => $this->activeFormDefinitions(),
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
@@ -69,5 +68,16 @@ class HandleInertiaRequests extends Middleware
                 'info' => $request->session()->get('info'),
             ],
         ]);
+    }
+
+    private function activeFormDefinitions(): array
+    {
+        if (!Schema::hasTable('form_definitions')) {
+            return [];
+        }
+
+        return Cache::remember('active_form_definitions', 3600, function () {
+            return \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug', 'icon'])->toArray();
+        });
     }
 }

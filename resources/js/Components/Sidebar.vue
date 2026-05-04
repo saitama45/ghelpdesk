@@ -80,7 +80,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) {
+    if (route().current('tickets.*') || route().current('task-lists.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
     if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
@@ -111,6 +111,7 @@ const canSeeAdminTask = computed(() => {
 
 const canSeeServices = computed(() => {
     return hasPermission('tickets.view') ||
+           hasPermission('task_lists.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
            hasPermission('stock_ins.view') ||
@@ -227,7 +228,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) && !openMenus.services
+                            (route().current('tickets.*') || route().current('task-lists.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) && !openMenus.services
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -251,6 +252,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Tickets</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('task_lists.view')"
+                            :href="route('task-lists.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('task-lists.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Task Lists</span>
                         </Link>
                         <Link
                             v-if="hasPermission('pos_requests.view')"
