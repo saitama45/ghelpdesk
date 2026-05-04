@@ -863,7 +863,7 @@ watch(activeDashboardFilter, () => {
 <template>
     <Head title="Tickets - Help Desk" />
 
-    <AppLayout>
+    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <template #header>
             Tickets
         </template>

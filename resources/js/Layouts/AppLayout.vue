@@ -14,6 +14,12 @@ import { usePresence } from '@/Composables/usePresence.js';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
+defineProps({
+    contentClass: {
+        type: String,
+        default: 'max-w-7xl mx-auto px-2 sm:px-6 lg:px-8',
+    },
+});
 const sidebarOpen = ref(false);
 const isSidebarCollapsed = ref(false);
 const { init: initPresence, destroy: destroyPresence, currentStatus } = usePresence();
@@ -188,7 +194,7 @@ const isCurrentRoute = (routeName) => {
             <!-- Page Content -->
             <main scroll-region class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
                 <div class="py-4 sm:py-6">
-                    <div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+                    <div :class="contentClass">
                         <slot />
                     </div>
                 </div>
