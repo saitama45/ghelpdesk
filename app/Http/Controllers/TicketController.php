@@ -497,7 +497,7 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'user_id' => 'required|exists:users,id',
-            'store_id' => 'required|exists:stores,id',
+            'store_id' => 'required_unless:status,SL,VL,Restday,Holiday|nullable|exists:stores,id',
             'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
             'start_time' => 'required|date',
             'end_time' => 'required|date|after_or_equal:start_time',
@@ -506,19 +506,25 @@ class TicketController extends Controller
             'backlogs_start' => 'nullable|string',
             'backlogs_end' => 'nullable|string',
             'remarks' => 'nullable|string',
+        ], [
+            'store_id.required_unless' => 'Store is required before creating a child ticket.',
         ]);
 
         // Check for an overlapping schedule for the same user + store
         $newStart = \Carbon\Carbon::parse($validated['start_time']);
         $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
 
-        $conflict = Schedule::where('user_id', $validated['user_id'])
-            ->where('start_time', '<', $newEnd)
-            ->where('end_time', '>', $newStart)
-            ->whereHas('scheduleStores', function($q) use ($validated) {
-                $q->where('store_id', $validated['store_id']);
-            })
-            ->first();
+        $conflict = null;
+
+        if (!empty($validated['store_id'])) {
+            $conflict = Schedule::where('user_id', $validated['user_id'])
+                ->where('start_time', '<', $newEnd)
+                ->where('end_time', '>', $newStart)
+                ->whereHas('scheduleStores', function($q) use ($validated) {
+                    $q->where('store_id', $validated['store_id']);
+                })
+                ->first();
+        }
 
         if ($conflict) {
             $from = $conflict->start_time->format('M d, Y h:i A');
@@ -553,7 +559,7 @@ class TicketController extends Controller
                 'reporter_id' => auth()->id(),
                 'assignee_id' => $validated['user_id'],
                 'company_id' => $ticket->company_id,
-                'store_id' => $validated['store_id'],
+                'store_id' => $validated['store_id'] ?? null,
                 'category_id' => $ticket->category_id,
                 'sub_category_id' => $ticket->sub_category_id,
                 'item_id' => $ticket->item_id,
@@ -577,7 +583,7 @@ class TicketController extends Controller
 
             // Always create a scheduleStore entry for child tickets so the ticket_id link is preserved
             $schedule->scheduleStores()->create([
-                'store_id' => $validated['store_id'],
+                'store_id' => $validated['store_id'] ?? null,
                 'ticket_id' => $childTicket->id,
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],

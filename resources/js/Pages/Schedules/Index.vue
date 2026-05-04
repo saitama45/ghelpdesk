@@ -1106,9 +1106,12 @@ const storeOptions = computed(() => {
     ]
 })
 
+const optionalScheduleLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday', 'N/A'])
+
 // For the store repeater inside the form (no "All Stores" entry)
 const storeSelectOptions = computed(() => {
-    return (props.stores ?? []).map(s => ({ id: s.id, name: `${s.code} - ${s.name}` }))
+    const storeChoices = (props.stores ?? []).map(s => ({ id: s.id, name: `${s.code} - ${s.name}` }))
+    return isLocationRequired.value ? storeChoices : [{ id: null, name: 'No location' }, ...storeChoices]
 })
 
 const subUnitOptions = computed(() => {
@@ -1412,7 +1415,7 @@ const modalAudit = computed(() => {
     }
 })
 
-const isLocationRequired = computed(() => !['Restday', 'Holiday', 'N/A'].includes(form.status))
+const isLocationRequired = computed(() => !optionalScheduleLocationStatuses.has(form.status))
 
 const formatTime = (isoString) => {
     if (!isoString) return '-'

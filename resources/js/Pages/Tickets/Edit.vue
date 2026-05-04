@@ -11,7 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -149,11 +149,13 @@ const internalNotes = computed(() => {
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 });
 
+const defaultChildStoreId = () => props.ticket.store_id || props.ticket.schedule_store?.store_id || props.ticket.scheduleStore?.store_id || null;
+
 // Child Ticket State
 const showChildModal = ref(false);
 const childForm = useForm({
     user_id: isManager.value ? authUser.value?.id ?? null : null,
-    store_id: props.ticket.store_id || props.ticket.schedule_store?.store_id || props.ticket.scheduleStore?.store_id || '',
+    store_id: defaultChildStoreId(),
     status: 'On-site',
     start_time: '',
     end_time: '',
@@ -167,6 +169,14 @@ const childForm = useForm({
 const scheduleStatuses = [
     'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
 ];
+
+const childOptionalLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday']);
+const isChildLocationRequired = computed(() => !childOptionalLocationStatuses.has(childForm.status));
+const childStoreOptions = computed(() => {
+    return isChildLocationRequired.value
+        ? storesWithLabel.value
+        : [{ id: null, display_name: 'No location' }, ...storesWithLabel.value];
+});
 
 const formatDateForInput = (date) => {
     const d = new Date(date);
@@ -220,13 +230,13 @@ const openChildModal = () => {
     end.setHours(17, 0, 0, 0);
     childForm.end_time = formatDateForInput(end);
     childForm.user_id = isManager.value ? authUser.value?.id ?? null : null;
-    childForm.store_id = props.ticket.store_id || props.ticket.schedule_store?.store_id || props.ticket.scheduleStore?.store_id || '';
+    childForm.store_id = defaultChildStoreId();
     
     showChildModal.value = true
 };
 
 const submitChildTicket = () => {
-    if (!childForm.store_id) {
+    if (isChildLocationRequired.value && !childForm.store_id) {
         showError('Store is required before creating a child ticket.');
         return;
     }
@@ -356,6 +366,9 @@ const showExternalRequesterFields = computed(() => {
     return !editForm.is_self_requester && !hasDifferentInternalRequester(props.ticket);
 });
 
+const slaNow = ref(new Date());
+let slaTimerInterval = null;
+
 const items = ref([]);
 
 const fetchItems = async () => {
@@ -368,6 +381,10 @@ const fetchItems = async () => {
 };
 
 onMounted(async () => {
+    slaTimerInterval = window.setInterval(() => {
+        slaNow.value = new Date();
+    }, 1000);
+
     await fetchItems();
     // Sync priority from the current item's latest value (in case it was changed in Items management)
     if (props.ticket.item_id) {
@@ -382,6 +399,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
     window.removeEventListener('keydown', handleKeydown);
+    if (slaTimerInterval) {
+        window.clearInterval(slaTimerInterval);
+    }
 });
 
 const commentForm = useForm({
@@ -480,6 +500,140 @@ const descriptionInput = ref(null);
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'for_schedule', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
+const slaWaitingStatuses = new Set(['waiting_service_provider', 'waiting_client_feedback']);
+const slaStopStatuses = new Set(['resolved', 'closed']);
+
+const normalizeTicketStatus = (status) => String(status || '').trim().toLowerCase();
+
+const getValidTicketDate = (value) => {
+    const date = parseDate(value);
+    return date instanceof Date && !Number.isNaN(date.getTime()) && date.getTime() > 0 ? date : null;
+};
+
+const getStatusHistoryEvents = () => {
+    return (props.ticket.histories || [])
+        .filter(history => history.column_changed === 'status')
+        .map(history => ({
+            oldStatus: normalizeTicketStatus(history.old_value),
+            newStatus: normalizeTicketStatus(history.new_value),
+            changedAt: getValidTicketDate(history.changed_at),
+        }))
+        .filter(event => event.changedAt)
+        .sort((left, right) => left.changedAt.getTime() - right.changedAt.getTime());
+};
+
+const formatDurationClock = (milliseconds) => {
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return [hours, minutes, seconds]
+        .map(value => String(value).padStart(2, '0'))
+        .join(':');
+};
+
+const formatDurationCompact = (milliseconds) => {
+    const totalMinutes = Math.max(0, Math.floor(milliseconds / 60000));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours === 0) return `${totalMinutes} min`;
+    if (minutes === 0) return `${hours} hr${hours === 1 ? '' : 's'}`;
+    return `${hours} hr${hours === 1 ? '' : 's'} ${minutes} min`;
+};
+
+const slaRuntime = computed(() => {
+    const startedAt = getValidTicketDate(props.ticket.created_at);
+
+    if (!startedAt) {
+        return null;
+    }
+
+    const now = slaNow.value;
+    const events = getStatusHistoryEvents()
+        .filter(event => event.changedAt.getTime() >= startedAt.getTime());
+
+    let cursor = startedAt;
+    let activeMilliseconds = 0;
+    let pausedMilliseconds = 0;
+    let currentStatus = events[0]?.oldStatus || normalizeTicketStatus(props.ticket.status);
+    let stoppedAt = null;
+    let stoppedStatus = null;
+
+    for (const event of events) {
+        const eventTime = event.changedAt.getTime();
+        const cursorTime = cursor.getTime();
+
+        if (eventTime < cursorTime) continue;
+
+        const intervalMilliseconds = eventTime - cursorTime;
+        if (slaWaitingStatuses.has(currentStatus)) {
+            pausedMilliseconds += intervalMilliseconds;
+        } else {
+            activeMilliseconds += intervalMilliseconds;
+        }
+
+        currentStatus = event.newStatus || currentStatus;
+        cursor = event.changedAt;
+
+        if (slaStopStatuses.has(currentStatus)) {
+            stoppedAt = event.changedAt;
+            stoppedStatus = currentStatus;
+            break;
+        }
+    }
+
+    const liveStatus = normalizeTicketStatus(editForm.status || props.ticket.status) || currentStatus;
+
+    if (!stoppedAt) {
+        let endAt = now;
+
+        if (slaStopStatuses.has(liveStatus)) {
+            endAt = getValidTicketDate(props.ticket.sla_metric?.resolved_at)
+                || getValidTicketDate(props.ticket.updated_at)
+                || now;
+            stoppedAt = endAt;
+            stoppedStatus = liveStatus;
+        }
+
+        if (endAt.getTime() < cursor.getTime()) {
+            endAt = cursor;
+        }
+
+        const intervalMilliseconds = endAt.getTime() - cursor.getTime();
+        const intervalStatus = currentStatus || liveStatus;
+
+        if (slaWaitingStatuses.has(intervalStatus) || slaWaitingStatuses.has(liveStatus)) {
+            pausedMilliseconds += intervalMilliseconds;
+        } else {
+            activeMilliseconds += intervalMilliseconds;
+        }
+    }
+
+    const isPaused = !stoppedAt && (slaWaitingStatuses.has(currentStatus) || slaWaitingStatuses.has(liveStatus));
+    const state = stoppedAt ? 'stopped' : (isPaused ? 'paused' : 'running');
+
+    return {
+        startedAt,
+        stoppedAt,
+        stoppedStatus,
+        state,
+        stateLabel: state === 'running' ? 'Running' : (state === 'paused' ? 'Paused' : 'Stopped'),
+        stateClass: state === 'running'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : (state === 'paused'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-gray-100 text-gray-700 border-gray-200'),
+        activeMilliseconds,
+        pausedMilliseconds,
+        clock: formatDurationClock(activeMilliseconds),
+        pausedClock: formatDurationClock(pausedMilliseconds),
+        totalMinutes: Math.floor(activeMilliseconds / 60000).toLocaleString(),
+        totalHours: (activeMilliseconds / 3600000).toFixed(2),
+        pausedLabel: formatDurationCompact(pausedMilliseconds),
+    };
+});
 
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
@@ -1095,7 +1249,7 @@ const linkify = (text) => {
 <template>
     <Head :title="`Edit Ticket ${ticket.ticket_key}`" />
 
-    <AppLayout>
+    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <template #header>
             <div class="flex items-center space-x-4">
                 <Link :href="route('tickets.index')" class="text-blue-600 hover:text-blue-800 flex-shrink-0 transition-colors">
@@ -1117,7 +1271,90 @@ const linkify = (text) => {
                 <div class="lg:col-span-1 space-y-6 order-1 lg:order-2">
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-6 lg:sticky lg:top-6">
                         <div class="space-y-4 sm:space-y-6">
-                            
+                            <div v-if="slaRuntime" class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div class="h-9 w-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 shrink-0">
+                                            <ClockIcon class="w-5 h-5" />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">SLA Timer</h3>
+                                            <p class="text-[11px] font-semibold text-gray-600 truncate">Requester created date</p>
+                                        </div>
+                                    </div>
+                                    <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shrink-0" :class="slaRuntime.stateClass">
+                                        {{ slaRuntime.stateLabel }}
+                                    </span>
+                                </div>
+
+                                <div>
+                                    <div class="font-mono text-3xl sm:text-4xl font-black text-gray-900 tracking-normal tabular-nums leading-none">
+                                        {{ slaRuntime.clock }}
+                                    </div>
+                                    <div class="mt-2 grid grid-cols-2 gap-2">
+                                        <div class="rounded-md border border-gray-200 bg-white px-3 py-2">
+                                            <div class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Minutes</div>
+                                            <div class="text-sm font-black text-gray-900 tabular-nums">{{ slaRuntime.totalMinutes }}</div>
+                                        </div>
+                                        <div class="rounded-md border border-gray-200 bg-white px-3 py-2">
+                                            <div class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Hours</div>
+                                            <div class="text-sm font-black text-gray-900 tabular-nums">{{ slaRuntime.totalHours }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 text-[11px]">
+                                    <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest">Started</span>
+                                        <span class="font-bold text-gray-800 text-right">{{ formatDate(slaRuntime.startedAt) }}</span>
+                                    </div>
+                                    <div v-if="slaRuntime.stoppedAt" class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest">{{ getStatusLabel(slaRuntime.stoppedStatus) }}</span>
+                                        <span class="font-bold text-gray-800 text-right">{{ formatDate(slaRuntime.stoppedAt) }}</span>
+                                    </div>
+                                    <div v-else class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest">Status</span>
+                                        <span class="font-bold text-gray-800 text-right">{{ getStatusLabel(editForm.status || ticket.status) }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest">Waiting Paused</span>
+                                        <span class="font-mono font-black text-gray-900 text-right tabular-nums">{{ slaRuntime.pausedClock }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SLA Widget -->
+                            <div v-if="ticket.sla_metric" class="pt-6 border-t space-y-4">
+                                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Ticket SLA</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                                    <!-- Response SLA -->
+                                    <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response</span>
+                                            <span v-if="ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-else-if="ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ ticket.sla_metric.first_response_at ? formatDate(ticket.sla_metric.first_response_at) : (ticket.sla_metric.response_target_at ? formatDate(ticket.sla_metric.response_target_at) : 'No target') }}
+                                        </div>
+                                    </div>
+
+                                    <!-- Resolution SLA -->
+                                    <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution</span>
+                                            <span v-if="ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-else-if="ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ ticket.sla_metric.resolved_at ? formatDate(ticket.sla_metric.resolved_at) : (ticket.sla_metric.resolution_target_at ? formatDate(ticket.sla_metric.resolution_target_at) : 'No target') }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                             
                             <!-- Requester Configuration -->
                             <div class="relative bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
                                 <button
@@ -1276,38 +1513,6 @@ const linkify = (text) => {
                                     <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(editForm.priority)">
                                         {{ getPriorityLabel(editForm.priority) }}
                                     </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- SLA Widget -->
-                        <div v-if="ticket.sla_metric" class="pt-6 border-t space-y-4">
-                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Ticket SLA</h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
-                                <!-- Response SLA -->
-                                <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
-                                    <div class="flex justify-between items-center mb-1">
-                                        <span class="text-[9px] font-black text-gray-500 uppercase">Response</span>
-                                        <span v-if="ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
-                                        <span v-else-if="ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
-                                        <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
-                                    </div>
-                                    <div class="text-[11px] font-bold text-gray-900 truncate">
-                                        {{ ticket.sla_metric.first_response_at ? formatDate(ticket.sla_metric.first_response_at) : (ticket.sla_metric.response_target_at ? formatDate(ticket.sla_metric.response_target_at) : 'No target') }}
-                                    </div>
-                                </div>
-
-                                <!-- Resolution SLA -->
-                                <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
-                                    <div class="flex justify-between items-center mb-1">
-                                        <span class="text-[9px] font-black text-gray-500 uppercase">Resolution</span>
-                                        <span v-if="ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
-                                        <span v-else-if="ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
-                                        <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
-                                    </div>
-                                    <div class="text-[11px] font-bold text-gray-900 truncate">
-                                        {{ ticket.sla_metric.resolved_at ? formatDate(ticket.sla_metric.resolved_at) : (ticket.sla_metric.resolution_target_at ? formatDate(ticket.sla_metric.resolution_target_at) : 'No target') }}
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1981,13 +2186,13 @@ const linkify = (text) => {
                             <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location{{ isChildLocationRequired ? '' : ' (Optional)' }}</label>
                             <Autocomplete
                                 v-model="childForm.store_id"
-                                :options="storesWithLabel"
+                                :options="childStoreOptions"
                                 label-key="display_name"
                                 value-key="id"
-                                placeholder="Select store..."
+                                :placeholder="isChildLocationRequired ? 'Select store...' : 'Select store if needed...'"
                             />
                         </div>
                     </div>
