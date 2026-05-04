@@ -350,6 +350,12 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         DB::transaction(function () use ($request, $schedule, $startTime, $endTime, $expandedStoreEntries, $scopeDate) {
+            if ($scopeDate && $this->scheduleHasEntriesOutsideScope($schedule, $scopeDate)) {
+                $this->splitScopedSchedule($request, $schedule, $expandedStoreEntries, $scopeDate);
+
+                return;
+            }
+
             $schedule->update([
                 'user_id'        => $request->user_id,
                 'updated_by'     => auth()->id(),
@@ -489,13 +495,63 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function syncScopedScheduleStores(Schedule $schedule, array $entries, string $scopeDate): void
     {
+        $existingRows = $this->scopedScheduleStoreRows($schedule, $scopeDate);
+
+        $this->syncScheduleStoreRows($schedule, $existingRows, $entries);
+    }
+
+    private function splitScopedSchedule(Request $request, Schedule $schedule, array $entries, string $scopeDate): void
+    {
+        $newSchedule = Schedule::create([
+            'user_id'        => $request->user_id,
+            'created_by'     => $schedule->created_by ?: auth()->id(),
+            'updated_by'     => auth()->id(),
+            'status'         => $request->status,
+            'start_time'     => collect($entries)->min('start_time'),
+            'end_time'       => collect($entries)->max('end_time'),
+            'pickup_start'   => $request->pickup_start,
+            'pickup_end'     => $request->pickup_end,
+            'backlogs_start' => $request->backlogs_start,
+            'backlogs_end'   => $request->backlogs_end,
+        ]);
+
+        $existingRows = $this->scopedScheduleStoreRows($schedule, $scopeDate);
+
+        $this->syncScheduleStoreRows($newSchedule, $existingRows, $entries);
+        $this->refreshScheduleBounds($schedule);
+    }
+
+    private function scopedScheduleStoreRows(Schedule $schedule, string $scopeDate)
+    {
         $scopeStart = Carbon::parse($scopeDate)->startOfDay();
         $scopeEnd = Carbon::parse($scopeDate)->endOfDay();
-        $existingRows = $schedule->scheduleStores()
+
+        return $schedule->scheduleStores()
             ->where('start_time', '<=', $scopeEnd)
             ->where('end_time', '>=', $scopeStart)
             ->get();
+    }
 
+    private function scheduleHasEntriesOutsideScope(Schedule $schedule, string $scopeDate): bool
+    {
+        $scopeStart = Carbon::parse($scopeDate)->startOfDay();
+        $scopeEnd = Carbon::parse($scopeDate)->endOfDay();
+
+        if ($schedule->scheduleStores()->exists()) {
+            return $schedule->scheduleStores()
+                ->where(function ($query) use ($scopeStart, $scopeEnd) {
+                    $query->where('start_time', '>', $scopeEnd)
+                        ->orWhere('end_time', '<', $scopeStart);
+                })
+                ->exists();
+        }
+
+        return !$schedule->start_time->copy()->startOfDay()->eq($scopeStart)
+            || !$schedule->end_time->copy()->startOfDay()->eq($scopeStart);
+    }
+
+    private function syncScheduleStoreRows(Schedule $schedule, $existingRows, array $entries): void
+    {
         $existingById = $existingRows->keyBy('id');
         $usedIds = collect();
 
@@ -517,7 +573,10 @@ class ScheduleController extends Controller implements HasMiddleware
             }
 
             if ($matchedRow) {
-                $matchedRow->update($payload);
+                $matchedRow->update([
+                    ...$payload,
+                    'schedule_id' => $schedule->id,
+                ]);
                 $usedIds->push((int) $matchedRow->id);
                 continue;
             }
@@ -586,8 +645,8 @@ class ScheduleController extends Controller implements HasMiddleware
             $startDate = $start->copy()->startOfDay();
             $endDate   = $end->copy()->startOfDay();
 
-            // Single-day entry — keep as-is
-            if ($startDate->eq($endDate)) {
+            // Single-day and overnight shifts are one schedule segment.
+            if ($startDate->eq($endDate) || ($start->lt($end) && $start->diffInSeconds($end) <= 86400)) {
                 $expanded[] = [
                     'id'                   => $entry['id'] ?? null,
                     'store_id'             => $entry['store_id'] ?? null,
