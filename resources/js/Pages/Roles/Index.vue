@@ -390,7 +390,14 @@ const landingPageOptions = [
             { label: 'Tickets', value: 'tickets.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
             { label: 'SAP Requests', value: 'sap-requests.index' },
+        ]
+    },
+    {
+        group: 'Inventory',
+        options: [
+            { label: 'Assets', value: 'assets.index' },
             { label: 'Stock In', value: 'stock-ins.index' },
+            { label: 'Inventory Report', value: 'reports.inventory' },
         ]
     },
     {
@@ -407,7 +414,6 @@ const landingPageOptions = [
         group: 'Reports',
         options: [
             { label: 'Store Health Report', value: 'reports.store-health' },
-            { label: 'Inventory Report', value: 'reports.inventory' },
         ]
     },
     {
@@ -420,7 +426,6 @@ const landingPageOptions = [
             { label: 'Categories', value: 'categories.index' },
             { label: 'Sub-Categories', value: 'sub-categories.index' },
             { label: 'Items', value: 'items.index' },
-            { label: 'Assets', value: 'assets.index' },
             { label: 'Request Types', value: 'request-types.index' },
             { label: 'Form Builder', value: 'form-builder.index' },
         ]
@@ -574,7 +579,7 @@ const activeTab = ref('')
 const dynamicForms = computed(() => usePage().props.dynamicForms || []);
 
 const permissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Task Lists', 'Pos_requests', 'Sap_requests', 'Stock_in'];
+    const servicesCategories = ['Tickets', 'Task Lists', 'Pos_requests', 'Sap_requests'];
 
     // Add dynamic form names exactly as the backend RoleService does
     (dynamicForms.value || []).forEach(form => {
@@ -585,8 +590,9 @@ const permissionGroups = computed(() => {
         { name: 'Dashboard', categories: ['Dashboard'] },
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Services', categories: servicesCategories },
+        { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Reports'] },
         { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
-        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Assets', 'Request_types', 'Form_builder'] },
+        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },
         { name: 'Settings', categories: ['Settings', 'Canned_messages'] }
@@ -614,13 +620,26 @@ const groupedPermissions = computed(() => {
             if (actualKey && !mappedKeys.has(actualKey)) {
                 const perms = props.permissions[actualKey]
                 if (perms) {
-                    const filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search))
+                    // Custom filtering for Inventory vs Reports tabs
+                    let filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search))
+                    
+                    if (group.name === 'Inventory' && actualKey === 'Reports') {
+                        // Only include reports.inventory in the Inventory tab
+                        filteredPerms = filteredPerms.filter(p => p.name === 'reports.inventory')
+                    } else if (group.name === 'Reports' && actualKey === 'Reports') {
+                        // Exclude reports.inventory from the generic Reports tab
+                        filteredPerms = filteredPerms.filter(p => p.name !== 'reports.inventory')
+                    }
+
                     if (filteredPerms.length > 0) {
                         groupCategories.push({
                             name: actualKey,
                             permissions: filteredPerms
                         })
-                        mappedKeys.add(actualKey)
+                        // We only mark it as mapped if it's fully consumed or specialized
+                        if (group.name !== 'Inventory' || actualKey !== 'Reports') {
+                            mappedKeys.add(actualKey)
+                        }
                     }
                 }
             }

@@ -28,12 +28,52 @@ class StockInController extends Controller
 {
     public function index()
     {
+        $stockIns = StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])
+            ->select(
+                'asset_id',
+                'receive_date',
+                'dr_no',
+                'dr_date',
+                'vendor',
+                'origin_location',
+                'received_by',
+                'status',
+                'posted_by',
+                'posted_date',
+                DB::raw('SUM(quantity) as quantity'),
+                DB::raw('COUNT(*) as record_count'),
+                DB::raw('MAX(id) as id'),
+                DB::raw('MAX(created_at) as created_at'),
+                DB::raw('MAX(updated_at) as updated_at')
+            )
+            ->groupBy(
+                'asset_id',
+                'receive_date',
+                'dr_no',
+                'dr_date',
+                'vendor',
+                'origin_location',
+                'received_by',
+                'status',
+                'posted_by',
+                'posted_date'
+            )
+            ->latest('receive_date')
+            ->paginate(10);
+
         return Inertia::render('StockIn/Index', [
-            'stockIns' => StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])->latest()->paginate(10),
+            'stockIns' => $stockIns,
             'assets' => Asset::all(),
             'stores' => Store::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
             'vendors' => Vendor::active()->orderBy('name')->get(['id', 'code', 'name']),
         ]);
+    }
+
+    public function show(StockIn $stockIn)
+    {
+        return response()->json(
+            $this->groupedStockInRows($stockIn)->get()
+        );
     }
 
     public function store(Request $request)
@@ -137,9 +177,13 @@ class StockInController extends Controller
         return redirect()->back()->with('success', 'Stock In updated successfully');
     }
 
-    public function destroy(StockIn $stockIn)
+    public function destroy(Request $request, StockIn $stockIn)
     {
-        $stockIn->delete();
+        if ($request->boolean('delete_group')) {
+            $this->groupedStockInRows($stockIn)->delete();
+        } else {
+            $stockIn->delete();
+        }
 
         return redirect()->back()->with('success', 'Stock In deleted successfully');
     }
@@ -466,10 +510,20 @@ class StockInController extends Controller
 
     protected function groupedStockInRows(StockIn $stockIn)
     {
-        return StockIn::with('asset')
+        $query = StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])
             ->where('asset_id', $stockIn->asset_id)
-            ->whereDate('receive_date', $stockIn->receive_date->toDateString())
-            ->orderBy('id');
+            ->whereDate('receive_date', $stockIn->receive_date);
+
+        $fields = ['dr_no', 'dr_date', 'vendor', 'origin_location', 'received_by', 'status', 'posted_by', 'posted_date'];
+        foreach ($fields as $field) {
+            if ($stockIn->$field !== null) {
+                $query->where($field, $stockIn->$field);
+            } else {
+                $query->whereNull($field);
+            }
+        }
+
+        return $query->orderBy('id');
     }
 
     protected function syncGroupedEntries(StockIn $stockIn, array $validated): void

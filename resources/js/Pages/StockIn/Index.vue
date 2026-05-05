@@ -7,7 +7,7 @@
                     subtitle="Manage grouped stock-in header records and their quantity"
                     search-placeholder="Search by serial no..."
                     :search="pagination.search.value"
-                    :data="groupedStockIns"
+                    :data="pagination.data.value"
                     :current-page="pagination.currentPage.value"
                     :last-page="pagination.lastPage.value"
                     :per-page="pagination.perPage.value"
@@ -797,51 +797,6 @@ const toTimestamp = (value) => {
     return Number.isNaN(timestamp) ? 0 : timestamp
 }
 
-const groupedStockIns = computed(() => {
-    const groups = new Map()
-
-    for (const row of pagination.data.value || []) {
-        const receiveDateKey = toDateKey(row.receive_date)
-        const key = `${row.asset_id || `row-${row.id}`}-${receiveDateKey}`
-        const existing = groups.get(key)
-
-        if (!existing) {
-            groups.set(key, {
-                ...row,
-                quantity: Number(row.quantity || 0),
-                record_count: 1,
-                latestRecord: row,
-                relatedRows: [row],
-                receive_date: receiveDateKey,
-            })
-            continue
-        }
-
-        existing.quantity += Number(row.quantity || 0)
-        existing.record_count += 1
-        existing.relatedRows.push(row)
-
-        if (new Date(row.receive_date) > new Date(existing.receive_date)) {
-            existing.latestRecord = row
-            existing.id = row.id
-        }
-
-        if (toTimestamp(row.created_at) && (!toTimestamp(existing.created_at) || toTimestamp(row.created_at) < toTimestamp(existing.created_at))) {
-            existing.created_at = row.created_at
-            existing.created_by = row.created_by
-            existing.creator = row.creator
-        }
-
-        if (toTimestamp(row.updated_at) >= toTimestamp(existing.updated_at)) {
-            existing.updated_at = row.updated_at
-            existing.updated_by = row.updated_by
-            existing.updater = row.updater
-        }
-    }
-
-    return Array.from(groups.values())
-})
-
 const syncEntriesToQuantity = (quantity) => {
     const target = Math.max(1, parseInt(quantity || 1, 10))
     form.quantity = target
@@ -1019,9 +974,16 @@ const openCreateModal = () => {
     showModal.value = true
 }
 
-const editHeaderItem = (header) => {
-    const target = header.latestRecord || header
-    editItem(target, header.quantity, header.relatedRows || [target], header)
+const editHeaderItem = async (header) => {
+    try {
+        const response = await axios.get(route('stock-ins.show', header.id))
+        const items = response.data
+        if (items.length > 0) {
+            editItem(items[0], items.reduce((sum, i) => sum + Number(i.quantity), 0), items, header)
+        }
+    } catch (error) {
+        showError('Could not fetch stock details. Please try again.')
+    }
 }
 
 const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item], auditSource = item) => {
@@ -1209,14 +1171,24 @@ const removeEntry = (index) => {
     form.quantity = form.entries.length
 }
 
-const deleteItem = (item) => {
-    confirm({
-        title: 'Delete Stock In',
-        message: 'Are you sure you want to delete this record?',
-        onConfirm: () => {
-            router.delete(route('stock-ins.destroy', item.id))
-        }
+const deleteItem = async (item) => {
+    const isGroup = item.record_count > 1;
+    const message = isGroup 
+        ? `This header contains ${item.record_count} items. Deleting this will remove ALL associated stock items. Please double check the entries before proceeding.`
+        : 'Are you sure you want to delete this stock-in record?';
+
+    const confirmed = await confirm({
+        title: isGroup ? 'Delete Entire Stock Group' : 'Delete Stock In',
+        message: message,
     })
+    
+    if (confirmed) {
+        router.delete(route('stock-ins.destroy', item.id), {
+            data: { delete_group: isGroup },
+            onSuccess: () => showSuccess('Stock In deleted successfully'),
+            onError: (errors) => showError(Object.values(errors)[0] || 'Unable to delete record')
+        })
+    }
 }
 
 // Image Viewer State
