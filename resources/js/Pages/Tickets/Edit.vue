@@ -11,7 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ChatBubbleBottomCenterTextIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -365,6 +365,33 @@ const requesterDisplayEmail = computed(() => {
 
 const showExternalRequesterFields = computed(() => {
     return !editForm.is_self_requester && !hasDifferentInternalRequester(props.ticket);
+});
+
+const getRequesterValues = (ticket) => ({
+    sender_name: ticket?.sender_name || '',
+    sender_email: ticket?.sender_email || '',
+    department: ticket?.department || '',
+});
+
+const initialRequesterValues = getRequesterValues(props.ticket);
+const requesterDraft = reactive({ ...initialRequesterValues });
+const requesterBaseline = reactive({ ...initialRequesterValues });
+const requesterDetailsProcessing = ref(false);
+
+const setRequesterValues = (target, values) => {
+    target.sender_name = values.sender_name;
+    target.sender_email = values.sender_email;
+    target.department = values.department;
+};
+
+const requesterDetailsDirty = computed(() => {
+    return requesterDraft.sender_name !== requesterBaseline.sender_name
+        || requesterDraft.sender_email !== requesterBaseline.sender_email
+        || requesterDraft.department !== requesterBaseline.department;
+});
+
+const canEditRequesterDetails = computed(() => {
+    return hasPermission('tickets.edit') && !editForm.is_self_requester;
 });
 
 const slaNow = ref(new Date());
@@ -927,6 +954,18 @@ const hiddenStoreCountForLine = (stores, key) => {
     return Math.max(stores.length - STORE_LIST_DISPLAY_LIMIT, 0);
 };
 
+const buildTicketPayload = (source = editForm.data()) => {
+    const payload = { ...source };
+
+    if (!editForm.is_self_requester && hasDifferentInternalRequester(props.ticket)) {
+        delete payload.is_self_requester;
+        delete payload.sender_name;
+        delete payload.sender_email;
+    }
+
+    return payload;
+};
+
 const updateTicket = (options = {}) => {
     if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
         showError('You do not have permission to update tickets.');
@@ -957,13 +996,7 @@ const updateTicket = (options = {}) => {
         else window.scrollTo(0, savedScrollTop);
     };
 
-    const payload = editForm.data();
-
-    if (!editForm.is_self_requester && hasDifferentInternalRequester(props.ticket)) {
-        delete payload.is_self_requester;
-        delete payload.sender_name;
-        delete payload.sender_email;
-    }
+    const payload = buildTicketPayload();
 
     put(route('tickets.update', props.ticket.id), payload, {
         preserveScroll: true,
@@ -992,6 +1025,9 @@ const debouncedUpdate = debounce(() => {
 
 // Watch for ticket changes to sync form state (important after status changes from comments)
 watch(() => props.ticket, (newTicket) => {
+    const hadRequesterDraftChanges = requesterDetailsDirty.value;
+    const requesterValues = getRequesterValues(newTicket);
+
     syncingTicketState.value = true;
     editForm.status = newTicket.status;
     editForm.priority = newTicket.priority ? String(newTicket.priority).toLowerCase() : '';
@@ -1005,6 +1041,10 @@ watch(() => props.ticket, (newTicket) => {
     editForm.sender_name = newTicket.sender_name || '';
     editForm.sender_email = newTicket.sender_email || '';
     editForm.department = newTicket.department || '';
+    setRequesterValues(requesterBaseline, requesterValues);
+    if (!hadRequesterDraftChanges) {
+        setRequesterValues(requesterDraft, requesterValues);
+    }
     editForm.defaults(editForm.data()); // Reset dirty state
     nextTick(() => {
         syncingTicketState.value = false;
@@ -1076,6 +1116,11 @@ const handleSelfRequesterToggle = async (event) => {
         syncingTicketState.value = true;
         editForm.is_self_requester = isChecked;
         editForm.department = isChecked ? (page.props.auth.user?.department || '') : '';
+        if (isChecked) {
+            requesterDraft.sender_name = '';
+            requesterDraft.sender_email = '';
+        }
+        requesterDraft.department = editForm.department;
         nextTick(() => {
             syncingTicketState.value = false;
             updateTicket({ preserveScroll: true });
@@ -1085,13 +1130,47 @@ const handleSelfRequesterToggle = async (event) => {
     }
 };
 
-// Watchers for free-text fields (debounced to avoid saving on every keystroke)
-const debouncedUpdateSenderName = debounce(() => updateTicket(), 800);
-const debouncedUpdateSenderEmail = debounce(() => updateTicket(), 800);
-const debouncedUpdateDepartment = debounce(() => updateTicket(), 800);
-watch(() => editForm.sender_name, () => { debouncedUpdateSenderName(); });
-watch(() => editForm.sender_email, () => { debouncedUpdateSenderEmail(); });
-watch(() => editForm.department, () => { debouncedUpdateDepartment(); });
+const updateRequesterDetails = () => {
+    if (!hasPermission('tickets.edit')) {
+        showError('You do not have permission to update tickets.');
+        return;
+    }
+
+    if (!requesterDetailsDirty.value || requesterDetailsProcessing.value) return;
+
+    requesterDetailsProcessing.value = true;
+
+    const payload = buildTicketPayload({
+        ...editForm.data(),
+        sender_name: requesterDraft.sender_name,
+        sender_email: requesterDraft.sender_email,
+        department: requesterDraft.department,
+    });
+
+    put(route('tickets.update', props.ticket.id), payload, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['ticket', 'flash'],
+        onSuccess: () => {
+            editForm.sender_name = requesterDraft.sender_name;
+            editForm.sender_email = requesterDraft.sender_email;
+            editForm.department = requesterDraft.department;
+            setRequesterValues(requesterBaseline, {
+                sender_name: requesterDraft.sender_name,
+                sender_email: requesterDraft.sender_email,
+                department: requesterDraft.department,
+            });
+            editForm.defaults(editForm.data());
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
+            showError(errorMessage);
+        },
+        onFinish: () => {
+            requesterDetailsProcessing.value = false;
+        }
+    });
+};
 
 // Classification Watcher
 watch(() => editForm.item_id, (newVal, oldVal) => {
@@ -1491,12 +1570,12 @@ const linkify = (text) => {
                                 <div v-if="showExternalRequesterFields" class="space-y-3 pt-2 border-t border-gray-200">
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
-                                        <input v-model="editForm.sender_name" type="text" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                        <input v-model="requesterDraft.sender_name" type="text" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
-                                        <input v-model="editForm.sender_email" type="email" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                        <input v-model="requesterDraft.sender_email" type="email" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                     </div>
                                 </div>
@@ -1504,7 +1583,7 @@ const linkify = (text) => {
                                 <div class="pt-2 border-t border-gray-200">
                                     <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Department</label>
                                     <input
-                                        v-model="editForm.department"
+                                        v-model="requesterDraft.department"
                                         type="text"
                                         list="edit-ticket-departments-list"
                                         maxlength="255"
@@ -1517,6 +1596,16 @@ const linkify = (text) => {
                                     <datalist id="edit-ticket-departments-list">
                                         <option v-for="dept in departments" :key="dept" :value="dept" />
                                     </datalist>
+                                    <button
+                                        v-if="canEditRequesterDetails"
+                                        type="button"
+                                        @click="updateRequesterDetails"
+                                        :disabled="!requesterDetailsDirty || requesterDetailsProcessing"
+                                        class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <CheckIcon class="h-4 w-4" />
+                                        <span>{{ requesterDetailsProcessing ? 'Updating...' : 'Update Requester Details' }}</span>
+                                    </button>
                                 </div>
 
                             </div>
