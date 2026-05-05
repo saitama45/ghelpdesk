@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\ProjectTask;
 use App\Models\Project;
 use App\Models\ProjectTemplate;
+use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 class ProjectTaskController extends Controller
 {
+    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
+    {
+    }
+
     public function applyTemplates(Request $request, Project $project)
     {
         $request->validate([
@@ -81,6 +86,10 @@ class ProjectTaskController extends Controller
                 ]);
                 $addedCount++;
             }
+        }
+
+        if ($project->taskBoard()->exists()) {
+            $this->projectTaskBoards->syncProject($project, $request->user());
         }
 
         if ($addedCount > 0) {
@@ -157,6 +166,7 @@ class ProjectTaskController extends Controller
         }
 
         $task = ProjectTask::create($validated);
+        $this->projectTaskBoards->syncProjectTask($task->fresh(['project.taskBoard', 'assignedUser', 'supportUser', 'parentTask']), $request->user());
 
         return redirect()->back()->with('success', 'Task added successfully.');
     }
@@ -229,6 +239,7 @@ class ProjectTaskController extends Controller
         }
 
         $projects_task->update($validated);
+        $this->projectTaskBoards->syncProjectTask($projects_task->fresh(['project.taskBoard', 'assignedUser', 'supportUser', 'parentTask']), $request->user());
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'task' => $projects_task]);
@@ -237,8 +248,11 @@ class ProjectTaskController extends Controller
         return redirect()->back()->with('success', 'Task updated successfully.');
     }
 
-    public function destroy(ProjectTask $projects_task)
+    public function destroy(Request $request, ProjectTask $projects_task)
     {
+        $taskIds = $projects_task->subTasks()->pluck('id')->push($projects_task->id);
+        $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
+
         $projects_task->subTasks()->delete();
         $projects_task->delete();
 
@@ -277,6 +291,8 @@ class ProjectTaskController extends Controller
                 ProjectTask::where('id', $taskData['id'])->update($updates);
             }
         }
+
+        $this->projectTaskBoards->syncProjectTaskIds(collect($validated['tasks'])->pluck('id'), $request->user());
 
         return response()->json(['success' => true]);
     }

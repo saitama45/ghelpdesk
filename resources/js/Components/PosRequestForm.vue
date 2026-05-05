@@ -367,11 +367,11 @@ const submit = async () => {
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Company</label>
+                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-1">Entity/Dept.</label>
                         <select v-model="form.company_id" required 
                                 :class="[getError('company_id') ? 'border-rose-500 bg-rose-50' : 'bg-gray-50 border-gray-50']"
                                 class="w-full border-2 rounded-2xl px-5 py-4 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all outline-none">
-                            <option value="" disabled>Select Company</option>
+                            <option value="" disabled>Select Entity/Dept.</option>
                             <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </select>
                         <p v-if="getError('company_id')" class="text-[10px] text-rose-600 font-bold ml-1">{{ getError('company_id') }}</p>

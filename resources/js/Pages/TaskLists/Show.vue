@@ -51,6 +51,8 @@ const draggedCardId = ref(null);
 const dragOverStatus = ref(null);
 const isSaving = ref(false);
 const isCreatingCard = ref(false);
+const isCreatingSubTask = ref(false);
+const isSyncingProject = ref(false);
 const attachmentInput = ref(null);
 const filterInput = ref(null);
 const cardComposerInputs = ref({});
@@ -64,6 +66,7 @@ const filters = reactive({
     assignee_id: '',
     label_id: '',
     due: '',
+    milestone: '',
     mine: false,
     showArchived: false,
 });
@@ -85,6 +88,13 @@ const cardDraft = reactive({
     cover_value: '',
 });
 
+const projectDraft = reactive({
+    category: 'General',
+    progress: 0,
+    assigned_to: '',
+    support_by: '',
+});
+
 const memberForm = reactive({
     user_ids: [],
     role: 'member',
@@ -103,6 +113,7 @@ const editingLabelForm = reactive({
 
 const newComment = ref('');
 const newChecklistTitle = ref('Checklist');
+const newSubTaskTitle = ref('');
 const newChecklistItems = reactive({});
 const newCardTitles = reactive(Object.fromEntries((props.statuses || []).map((status) => [status, ''])));
 
@@ -144,6 +155,24 @@ const selectedCard = computed(() => {
 
 const boardMembers = computed(() => localBoard.value.members || []);
 
+const isProjectBoard = computed(() => !!localBoard.value.project);
+
+const projectMilestones = computed(() => {
+    const milestones = localBoard.value.milestones?.length
+        ? localBoard.value.milestones
+        : (localBoard.value.cards || [])
+            .map((card) => card.project_task?.category)
+            .filter(Boolean);
+
+    return [...new Set(milestones)].sort();
+});
+
+const topLevelProjectCards = computed(() => {
+    return (localBoard.value.cards || []).filter((card) => {
+        return card.project_task && !card.project_task.parent_task_id && !card.archived_at;
+    });
+});
+
 const availableMembers = computed(() => {
     const memberIds = new Set(boardMembers.value.map((member) => member.id));
     return (props.users || []).filter((user) => !memberIds.has(user.id));
@@ -176,6 +205,7 @@ const activeFilterCount = computed(() => {
         filters.assignee_id,
         filters.label_id,
         filters.due,
+        filters.milestone,
         filters.mine,
         filters.showArchived,
     ].filter(Boolean).length;
@@ -190,6 +220,11 @@ watch(selectedCard, (card) => {
     cardDraft.due_complete = !!card.due_complete;
     cardDraft.cover_type = card.cover_type || '';
     cardDraft.cover_value = card.cover_value || '';
+    projectDraft.category = card.project_task?.category || 'General';
+    projectDraft.progress = card.project_task?.progress ?? 0;
+    projectDraft.assigned_to = card.project_task?.assigned_to || '';
+    projectDraft.support_by = card.project_task?.support_by || '';
+    newSubTaskTitle.value = '';
 }, { immediate: true });
 
 const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
@@ -351,6 +386,8 @@ const matchesFilters = (card) => {
         const haystack = [
             card.title,
             card.description,
+            card.project_task?.category,
+            card.project_task?.parent_task?.name,
             ...(card.comments || []).map((comment) => comment.comment_text),
             ...(card.checklists || []).flatMap((checklist) => (checklist.items || []).map((item) => item.title)),
         ].join(' ').toLowerCase();
@@ -360,6 +397,7 @@ const matchesFilters = (card) => {
 
     if (filters.assignee_id && !(card.assignees || []).some((user) => String(user.id) === String(filters.assignee_id))) return false;
     if (filters.label_id && !(card.labels || []).some((label) => String(label.id) === String(filters.label_id))) return false;
+    if (filters.milestone && card.project_task?.category !== filters.milestone) return false;
     if (filters.mine && !(card.assignees || []).some((user) => Number(user.id) === Number(authUser.value.id))) return false;
 
     if (filters.due) {
@@ -376,6 +414,7 @@ const clearFilters = () => {
     filters.assignee_id = '';
     filters.label_id = '';
     filters.due = '';
+    filters.milestone = '';
     filters.mine = false;
     filters.showArchived = false;
 };
@@ -458,7 +497,13 @@ const createCard = async (status) => {
     isCreatingCard.value = true;
 
     try {
-        const response = await axios.post(route('task-lists.cards.store', localBoard.value.id), { title, status });
+        const payload = { title, status };
+
+        if (isProjectBoard.value) {
+            payload.category = filters.milestone || projectMilestones.value[0] || 'General';
+        }
+
+        const response = await axios.post(route('task-lists.cards.store', localBoard.value.id), payload);
         const card = response.data.card;
         replaceCard(card);
         newCardTitles[status] = '';
@@ -471,12 +516,38 @@ const createCard = async (status) => {
     }
 };
 
+const createSubTask = async () => {
+    const title = newSubTaskTitle.value.trim();
+    const parentTask = selectedCard.value?.project_task;
+
+    if (!title || !parentTask || parentTask.parent_task_id || isCreatingSubTask.value || !canEditBoard.value) return;
+
+    isCreatingSubTask.value = true;
+
+    try {
+        const response = await axios.post(route('task-lists.cards.store', localBoard.value.id), {
+            title,
+            status: 'Backlogs',
+            category: parentTask.category || 'General',
+            parent_project_task_id: parentTask.id,
+        });
+        const card = response.data.card;
+        replaceCard(card);
+        newSubTaskTitle.value = '';
+        selectedCardId.value = card.id;
+    } catch (error) {
+        handleApiError(error, 'Unable to create sub-task');
+    } finally {
+        isCreatingSubTask.value = false;
+    }
+};
+
 const saveCardDetails = async ({ closeModal = true } = {}) => {
     if (!selectedCard.value || !canEditBoard.value || isSaving.value) return;
     isSaving.value = true;
 
     try {
-        const response = await axios.put(route('task-cards.update', selectedCard.value.id), {
+        const payload = {
             title: cardDraft.title,
             description: cardDraft.description,
             start_at: cardDraft.start_at || null,
@@ -484,7 +555,16 @@ const saveCardDetails = async ({ closeModal = true } = {}) => {
             due_complete: cardDraft.due_complete,
             cover_type: cardDraft.cover_type || null,
             cover_value: cardDraft.cover_value || null,
-        });
+        };
+
+        if (selectedCard.value.project_task) {
+            payload.project_category = projectDraft.category || 'General';
+            payload.project_progress = projectDraft.progress ?? 0;
+            payload.project_assigned_to = projectDraft.assigned_to || null;
+            payload.project_support_by = projectDraft.support_by || null;
+        }
+
+        const response = await axios.put(route('task-cards.update', selectedCard.value.id), payload);
         replaceCard(response.data.card);
         showSuccess('Card updated');
         if (closeModal) {
@@ -950,6 +1030,20 @@ const restoreBoard = () => {
     router.post(route('task-lists.restore', localBoard.value.id));
 };
 
+const syncProjectBoard = () => {
+    if (!isProjectBoard.value || isSyncingProject.value) return;
+
+    router.post(route('task-lists.sync-project', localBoard.value.id), {}, {
+        preserveScroll: true,
+        onStart: () => {
+            isSyncingProject.value = true;
+        },
+        onFinish: () => {
+            isSyncingProject.value = false;
+        },
+    });
+};
+
 const handleKeyboard = (event) => {
     const tag = event.target?.tagName?.toLowerCase();
     const isTyping = ['input', 'textarea', 'select'].includes(tag);
@@ -1013,10 +1107,25 @@ onUnmounted(() => {
                                 <span v-if="localBoard.closed_at" class="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">Closed</span>
                             </div>
                             <p class="truncate text-xs font-medium text-white/70">{{ localBoard.description || 'Services task board' }}</p>
+                            <div v-if="isProjectBoard" class="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold text-white/85">
+                                <span class="rounded-full bg-white/15 px-2 py-1 uppercase tracking-wider">Project Board</span>
+                                <span>{{ localBoard.project?.store?.name || localBoard.project?.name }}</span>
+                                <span>{{ localBoard.project?.progress || 0 }}%</span>
+                                <span>{{ localBoard.project?.activity_count || 0 }} activities</span>
+                                <span>{{ localBoard.project?.subtask_count || 0 }} sub-tasks</span>
+                            </div>
                         </div>
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2">
+                        <Link v-if="isProjectBoard" :href="route('projects.show', localBoard.project.id)" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
+                            <LinkIcon class="h-4 w-4" />
+                            Project
+                        </Link>
+                        <button v-if="isProjectBoard && canEditBoard" type="button" @click="syncProjectBoard" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
+                            <ClipboardDocumentCheckIcon class="h-4 w-4" />
+                            {{ isSyncingProject ? 'Syncing...' : 'Sync' }}
+                        </button>
                         <button type="button" @click="toggleStar" class="rounded-lg p-2 transition-colors hover:bg-white/15" title="Star board">
                             <StarSolidIcon v-if="localBoard.starred" class="h-5 w-5 text-yellow-300" />
                             <StarIcon v-else class="h-5 w-5 text-white/80" />
@@ -1048,6 +1157,10 @@ onUnmounted(() => {
                     <select v-model="filters.label_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
                         <option value="">All labels</option>
                         <option v-for="label in localBoard.labels" :key="label.id" :value="label.id">{{ label.name || label.color }}</option>
+                    </select>
+                    <select v-if="isProjectBoard" v-model="filters.milestone" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
+                        <option value="">All milestones</option>
+                        <option v-for="milestone in projectMilestones" :key="milestone" :value="milestone">{{ milestone }}</option>
                     </select>
                     <select v-model="filters.due" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
                         <option value="">All due dates</option>
@@ -1115,6 +1228,18 @@ onUnmounted(() => {
                                         </span>
                                     </div>
                                     <h3 class="text-sm font-bold leading-snug text-gray-900">{{ card.title }}</h3>
+                                    <div v-if="card.project_task" class="mt-2 space-y-1">
+                                        <div class="flex flex-wrap items-center gap-1.5 text-[10px] font-black uppercase tracking-wide">
+                                            <span class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">{{ card.project_task.category || 'General' }}</span>
+                                            <span class="rounded px-1.5 py-0.5" :class="card.project_task.is_subtask ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'">
+                                                {{ card.project_task.is_subtask ? 'Sub-task' : 'Activity' }}
+                                            </span>
+                                            <span class="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{{ card.project_task.progress }}%</span>
+                                        </div>
+                                        <p v-if="card.project_task.parent_task" class="truncate text-[11px] font-semibold text-gray-500">
+                                            Under {{ card.project_task.parent_task.name }}
+                                        </p>
+                                    </div>
                                     <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                                         <span v-if="card.due_at" class="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-bold" :class="dueBadgeClass(card)">
                                             <CalendarDaysIcon class="h-3.5 w-3.5" />
@@ -1188,6 +1313,22 @@ onUnmounted(() => {
                 </button>
             </div>
             <div class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-4">
+                <section v-if="isProjectBoard" class="space-y-3">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Project</h3>
+                    <div class="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                        <p class="text-sm font-black text-blue-950">{{ localBoard.project?.name }}</p>
+                        <p class="mt-1 text-xs font-semibold text-blue-700">{{ localBoard.project?.store?.name || 'No store' }}</p>
+                        <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs font-bold text-blue-900">
+                            <div class="rounded-md bg-white/70 p-2">{{ localBoard.project?.activity_count || 0 }} activities</div>
+                            <div class="rounded-md bg-white/70 p-2">{{ localBoard.project?.subtask_count || 0 }} sub-tasks</div>
+                            <div class="rounded-md bg-white/70 p-2">{{ localBoard.project?.progress || 0 }}%</div>
+                        </div>
+                    </div>
+                    <button v-if="canEditBoard" type="button" @click="syncProjectBoard" class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                        {{ isSyncingProject ? 'Syncing...' : 'Sync Activities' }}
+                    </button>
+                </section>
+
                 <section v-if="localBoard.my_role === 'admin'" class="space-y-3">
                     <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Settings</h3>
                     <input v-model="boardForm.title" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
@@ -1256,6 +1397,48 @@ onUnmounted(() => {
 
                 <div class="custom-scrollbar grid max-h-[calc(90vh-7rem)] grid-cols-1 gap-6 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
                     <div class="space-y-6">
+                        <section v-if="selectedCard.project_task" class="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+                            <div class="mb-3 flex items-center justify-between">
+                                <h3 class="text-sm font-black uppercase tracking-wider text-blue-900">Project Activity</h3>
+                                <button v-if="canEditBoard" type="button" @click="saveCardDetails({ closeModal: false })" :disabled="isSaving" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+                                    {{ isSaving ? 'Saving...' : 'Save Project Fields' }}
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Milestone</label>
+                                    <input v-model="projectDraft.category" :disabled="!canEditBoard || selectedCard.project_task.is_subtask" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Progress</label>
+                                    <input v-model="projectDraft.progress" :disabled="!canEditBoard" type="number" min="0" max="100" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Assigned</label>
+                                    <select v-model="projectDraft.assigned_to" :disabled="!canEditBoard || !!selectedCard.project_task.external_assignment" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50">
+                                        <option value="">{{ selectedCard.project_task.external_assignment || 'Unassigned' }}</option>
+                                        <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Support</label>
+                                    <select v-model="projectDraft.support_by" :disabled="!canEditBoard" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="">No support</option>
+                                        <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p v-if="selectedCard.project_task.parent_task" class="mt-3 text-xs font-semibold text-gray-500">
+                                Parent activity: {{ selectedCard.project_task.parent_task.name }}
+                            </p>
+                            <form v-if="canEditBoard && !selectedCard.project_task.parent_task_id" class="mt-4 flex gap-2 border-t border-blue-50 pt-4" @submit.prevent="createSubTask">
+                                <input v-model="newSubTaskTitle" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add a sub-task under this activity">
+                                <button type="submit" :disabled="isCreatingSubTask || !newSubTaskTitle.trim()" class="rounded-lg bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50">
+                                    {{ isCreatingSubTask ? 'Adding...' : 'Add Sub-task' }}
+                                </button>
+                            </form>
+                        </section>
+
                         <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                             <div class="mb-3 flex items-center justify-between">
                                 <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Details</h3>
@@ -1378,7 +1561,7 @@ onUnmounted(() => {
                     </div>
 
                     <aside class="space-y-4">
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <section v-if="!selectedCard.project_task" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                             <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">Members</h3>
                             <div class="space-y-2">
                                 <button

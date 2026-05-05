@@ -14,6 +14,7 @@ class TaskBoard extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'project_id',
         'title',
         'description',
         'background_type',
@@ -29,6 +30,11 @@ class TaskBoard extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function memberRecords(): HasMany

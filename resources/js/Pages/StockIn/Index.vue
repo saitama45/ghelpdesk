@@ -414,11 +414,22 @@
 
                                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
                                     <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Barcode Generated</label>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                            Barcode Generated <span class="text-red-500">*</span>
+                                        </label>
                                         <div class="flex rounded-md shadow-sm">
-                                            <input type="text" v-model="entry.barcode" class="block w-full rounded-none rounded-l-md border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                            <input
+                                                type="text"
+                                                v-model="entry.barcode"
+                                                @input="entry.qrcode = ''"
+                                                class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
+                                            >
                                             <button type="button" @click="generateBarcode(index)" class="inline-flex items-center px-4 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-xs font-bold hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
                                         </div>
+                                        <p v-if="entryNeedsBarcode(entry)" class="mt-2 text-xs text-red-600">
+                                            Generate a barcode before saving.
+                                        </p>
                                         <div v-if="entry.barcode" class="mt-3 p-4 bg-white border border-gray-200 rounded-lg flex justify-center cursor-pointer hover:border-blue-300 transition-all shadow-sm"
                                              @click="openImageViewer(`https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(entry.barcode)}&code=Code128`, `Barcode: ${entry.barcode}`)">
                                             <img :src="`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(entry.barcode)}&scale=1&height=10&includetext`" class="max-h-12" :alt="entry.barcode">
@@ -426,11 +437,22 @@
                                     </div>
 
                                     <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">QR Code Generated</label>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                            QR Code Generated <span class="text-red-500">*</span>
+                                        </label>
                                         <div class="flex rounded-md shadow-sm">
-                                            <input type="text" v-model="entry.qrcode" class="block w-full rounded-none rounded-l-md border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Generate summary for scanning...">
+                                            <input
+                                                type="text"
+                                                v-model="entry.qrcode"
+                                                class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                                :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
+                                                placeholder="Generate summary for scanning..."
+                                            >
                                             <button type="button" @click="generateQrcode(index)" class="inline-flex items-center px-4 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-xs font-bold hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
                                         </div>
+                                        <p v-if="entryNeedsQrcode(entry)" class="mt-2 text-xs text-red-600">
+                                            Generate a QR code before saving.
+                                        </p>
                                         <div v-if="entry.qrcode" class="mt-3 p-4 bg-white border border-gray-200 rounded-lg flex justify-center cursor-pointer hover:border-blue-300 transition-all shadow-sm"
                                              @click="openImageViewer(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(entry.qrcode)}`, `QR Code Summary`)">
                                             <img :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(entry.qrcode)}`" class="w-24 h-24" :alt="entry.qrcode">
@@ -669,7 +691,19 @@ const formatAuditDate = (value) => {
     })
 }
 
-const getToday = () => new Date().toISOString().split('T')[0]
+const padDatePart = (value) => String(value).padStart(2, '0')
+
+const toLocalDateKey = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
+
+    return [
+        date.getFullYear(),
+        padDatePart(date.getMonth() + 1),
+        padDatePart(date.getDate()),
+    ].join('-')
+}
+
+const getToday = () => toLocalDateKey(new Date())
 
 const form = reactive({
     receive_date: getToday(),
@@ -687,6 +721,7 @@ const form = reactive({
 })
 
 let entryUid = 0
+const codeValidationAttempted = ref(false)
 
 const createEntry = (overrides = {}) => ({
     uid: `entry-${entryUid++}`,
@@ -701,12 +736,57 @@ const createEntry = (overrides = {}) => ({
     ...overrides
 })
 
+const hasGeneratedCode = (value) => String(value || '').trim().length > 0
+
+const entryNeedsBarcode = (entry) => codeValidationAttempted.value && !hasGeneratedCode(entry?.barcode)
+const entryNeedsQrcode = (entry) => codeValidationAttempted.value && !hasGeneratedCode(entry?.qrcode)
+
+const missingGeneratedCodeRows = () => form.entries
+    .map((entry, index) => {
+        const missing = []
+
+        if (!hasGeneratedCode(entry.barcode)) missing.push('barcode')
+        if (!hasGeneratedCode(entry.qrcode)) missing.push('QR code')
+
+        return missing.length ? { row: index + 1, missing } : null
+    })
+    .filter(Boolean)
+
+const describeMissingGeneratedCodes = (missingRows) => {
+    const preview = missingRows
+        .slice(0, 5)
+        .map(({ row, missing }) => `row ${row} (${missing.join(' and ')})`)
+        .join(', ')
+    const remaining = missingRows.length > 5 ? `, and ${missingRows.length - 5} more` : ''
+
+    return `${preview}${remaining}`
+}
+
+const validateGeneratedCodes = () => {
+    codeValidationAttempted.value = true
+
+    const missingRows = missingGeneratedCodeRows()
+    if (!missingRows.length) return true
+
+    const action = isEditing.value ? 'updating' : 'saving'
+    showError(`Generate required codes before ${action}: ${describeMissingGeneratedCodes(missingRows)}.`)
+    return false
+}
+
 const selectedAsset = computed(() => normalizedAssets.value.find(asset => asset.id == form.asset_id) || null)
 const selectedAssetLabel = computed(() => selectedAsset.value ? `${selectedAsset.value.item_code} - ${selectedAsset.value.description || selectedAsset.value.model}` : '')
 const toDateKey = (value) => {
     if (!value) return ''
-    if (typeof value === 'string') return value.slice(0, 10)
-    return new Date(value).toISOString().slice(0, 10)
+    if (value instanceof Date) return toLocalDateKey(value)
+
+    const normalized = String(value).trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized
+
+    const parsed = new Date(normalized)
+    if (!Number.isNaN(parsed.getTime())) return toLocalDateKey(parsed)
+
+    const dateMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})/)
+    return dateMatch ? dateMatch[1] : ''
 }
 
 const toTimestamp = (value) => {
@@ -806,6 +886,8 @@ const onAssetChange = () => {
     const defaults = getEntryDefaults()
     form.entries = form.entries.map(entry => ({
         ...entry,
+        barcode: '',
+        qrcode: '',
         cost: entry.cost || defaults.cost,
         price: entry.price || defaults.price,
     }))
@@ -817,13 +899,21 @@ const generateBarcode = (index) => {
     const entry = form.entries[index]
     if (!entry) return
     entry.barcode = `${prefix}-${Date.now()}-${index + 1}`
+    entry.qrcode = ''
 }
 
 const generateQrcode = (index) => {
     const asset = selectedAsset.value
     const entry = form.entries[index]
+    if (!entry) return
+
     if (!asset) {
         showError('Please select an asset first');
+        return
+    }
+
+    if (!hasGeneratedCode(entry.barcode)) {
+        showError('Generate a barcode before generating the QR code.')
         return
     }
 
@@ -852,8 +942,7 @@ const parseDateOnly = (value) => {
     if (value instanceof Date) return new Date(value.getTime())
 
     const normalized = String(value).trim()
-    const datePart = normalized.includes('T') ? normalized.split('T')[0] : normalized
-    const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/)
 
     if (match) {
         const [, year, month, day] = match
@@ -861,7 +950,9 @@ const parseDateOnly = (value) => {
     }
 
     const parsed = new Date(normalized)
-    return Number.isNaN(parsed.getTime()) ? null : parsed
+    if (Number.isNaN(parsed.getTime())) return null
+
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
 }
 
 const addMonths = (dateStr, months) => {
@@ -900,6 +991,7 @@ const computedEolDate = (entry) => {
 }
 
 const resetForm = () => {
+    codeValidationAttempted.value = false
     Object.assign(form, {
         receive_date: getToday(),
         dr_no: '',
@@ -931,6 +1023,7 @@ const editHeaderItem = (header) => {
 
 const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item], auditSource = item) => {
     const asset = normalizedAssets.value.find(a => a.id == item.asset_id)
+    codeValidationAttempted.value = false
     isEditing.value = true
     currentId.value = item.id
     editingStockIn.value = auditSource
@@ -962,6 +1055,7 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
 
 const closeModal = () => {
     showModal.value = false
+    codeValidationAttempted.value = false
 }
 
 const openImportModal = () => {
@@ -1066,6 +1160,8 @@ const postHeaderItem = (item) => {
 }
 
 const submitForm = (statusOverride = form.status || 'For Posting') => {
+    if (!validateGeneratedCodes()) return
+
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
     const method = isEditing.value ? 'put' : 'post'
     const payload = {

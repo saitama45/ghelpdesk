@@ -85,6 +85,7 @@ Route::middleware('auth')->group(function () {
     Route::post('task-lists/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-lists.restore');
     Route::post('task-lists/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-lists.star');
     Route::post('task-lists/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-lists.watch');
+    Route::post('task-lists/{taskBoard}/sync-project', [\App\Http\Controllers\TaskBoardController::class, 'syncProject'])->name('task-lists.sync-project');
     Route::post('task-lists/{taskBoard}/members', [\App\Http\Controllers\TaskBoardController::class, 'storeMember'])->name('task-lists.members.store');
     Route::put('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'updateMember'])->name('task-lists.members.update');
     Route::delete('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'destroyMember'])->name('task-lists.members.destroy');
@@ -196,6 +197,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/knowledge-base/{kb_article}/feedback', [\App\Http\Controllers\KbArticleController::class, 'submitFeedback'])->name('knowledge-base.feedback');
 
     // NSO Project Tracker
+    Route::post('projects/{project}/task-list', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-list');
     Route::resource('projects', \App\Http\Controllers\ProjectController::class);
     Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->name('projects.apply-templates');
     Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->name('projects.tasks.gantt-update');

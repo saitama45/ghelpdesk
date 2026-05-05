@@ -56,6 +56,7 @@ class ProjectController extends Controller
         $project->load([
             'store',
             'teamMembers.user:id,name,profile_photo',
+            'taskBoard:id,project_id,title,closed_at',
             'tasks',
             'tasks.assignedUser:id,name,profile_photo',
             'tasks.supportUser:id,name,profile_photo',

@@ -50,14 +50,14 @@ class StockInController extends Controller
             'quantity' => 'required|integer|min:1',
             'entries' => 'required|array|min:1',
             'entries.*.serial_no' => 'nullable|string',
-            'entries.*.barcode' => 'nullable|string',
-            'entries.*.qrcode' => 'nullable|string',
+            'entries.*.barcode' => 'required|string',
+            'entries.*.qrcode' => 'required|string',
             'entries.*.warranty_months' => 'required|integer|min:0',
             'entries.*.eol_months' => 'required|integer|min:0',
             'entries.*.cost' => 'required|numeric|min:0',
             'entries.*.price' => 'required|numeric|min:0',
             'entries.*.destination_location' => 'nullable|string|max:255',
-        ]);
+        ], $this->stockInCodeValidationMessages());
 
         foreach ($validated['entries'] as $entry) {
             StockIn::create([
@@ -105,22 +105,22 @@ class StockInController extends Controller
             'header_mode' => 'nullable|boolean',
             'entries' => 'nullable|array|min:1',
             'entries.*.serial_no' => 'nullable|string',
-            'entries.*.barcode' => 'nullable|string',
-            'entries.*.qrcode' => 'nullable|string',
+            'entries.*.barcode' => 'required|string',
+            'entries.*.qrcode' => 'required|string',
             'entries.*.warranty_months' => 'required_with:entries|integer|min:0',
             'entries.*.eol_months' => 'required_with:entries|integer|min:0',
             'entries.*.cost' => 'required_with:entries|numeric|min:0',
             'entries.*.price' => 'required_with:entries|numeric|min:0',
             'entries.*.destination_location' => 'nullable|string|max:255',
             'serial_no' => 'nullable|string',
-            'barcode' => 'nullable|string',
-            'qrcode' => 'nullable|string',
+            'barcode' => 'required_without:entries|string',
+            'qrcode' => 'required_without:entries|string',
             'warranty_months' => 'required_without:entries|integer|min:0',
             'eol_months' => 'required_without:entries|integer|min:0',
             'cost' => 'required_without:entries|numeric|min:0',
             'price' => 'required_without:entries|numeric|min:0',
             'destination_location' => 'nullable|string|max:255',
-        ]);
+        ], $this->stockInCodeValidationMessages());
 
         if (!empty($validated['header_mode'])) {
             $this->syncGroupedEntries($stockIn, $validated);
@@ -539,6 +539,16 @@ class StockInController extends Controller
         }
 
         return $entry;
+    }
+
+    protected function stockInCodeValidationMessages(): array
+    {
+        return [
+            'entries.*.barcode.required' => 'Generate a barcode for every stock-in row before saving or updating.',
+            'entries.*.qrcode.required' => 'Generate a QR code for every stock-in row before saving or updating.',
+            'barcode.required_without' => 'Generate a barcode before updating this stock-in record.',
+            'qrcode.required_without' => 'Generate a QR code before updating this stock-in record.',
+        ];
     }
 
     protected function stockInImportHeaders(): array

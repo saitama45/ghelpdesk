@@ -11,6 +11,7 @@ use App\Models\TaskChecklist;
 use App\Models\TaskChecklistItem;
 use App\Models\TaskLabel;
 use App\Models\User;
+use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -21,6 +22,10 @@ use Illuminate\Validation\Rule;
 
 class TaskCardController extends Controller implements HasMiddleware
 {
+    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
+    {
+    }
+
     public static function middleware(): array
     {
         return [
@@ -37,6 +42,8 @@ class TaskCardController extends Controller implements HasMiddleware
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'status' => ['required', Rule::in(TaskCard::STATUSES)],
+            'category' => 'nullable|string|max:255',
+            'parent_project_task_id' => 'nullable|integer|exists:project_tasks,id',
             'assignee_ids' => 'nullable|array',
             'assignee_ids.*' => 'integer|exists:users,id',
             'label_ids' => 'nullable|array',
@@ -47,6 +54,12 @@ class TaskCardController extends Controller implements HasMiddleware
             'cover_value' => 'nullable|string|max:1000',
         ]);
         $validated = $this->normalizeDateTimeFields($validated, ['start_at', 'due_at']);
+
+        if ($taskBoard->project_id) {
+            $card = $this->projectTaskBoards->createProjectCard($taskBoard, $validated, $request->user());
+
+            return response()->json(['card' => $this->freshCard($card)], 201);
+        }
 
         $card = DB::transaction(function () use ($request, $taskBoard, $validated) {
             $sortOrder = ((int) $taskBoard->cards()
@@ -97,10 +110,16 @@ class TaskCardController extends Controller implements HasMiddleware
             'due_complete' => 'nullable|boolean',
             'cover_type' => 'nullable|in:color,image',
             'cover_value' => 'nullable|string|max:1000',
+            'project_category' => 'nullable|string|max:255',
+            'project_progress' => 'nullable|integer|min:0|max:100',
+            'project_assigned_to' => 'nullable|integer|exists:users,id',
+            'project_support_by' => 'nullable|integer|exists:users,id',
         ]);
         $validated = $this->normalizeDateTimeFields($validated, ['start_at', 'due_at']);
 
-        DB::transaction(function () use ($request, $taskCard, $validated) {
+        $syncedCard = null;
+
+        DB::transaction(function () use ($request, $taskCard, $validated, &$syncedCard) {
             $updates = [];
             foreach ([
                 'title',
@@ -131,9 +150,13 @@ class TaskCardController extends Controller implements HasMiddleware
             }
 
             $this->recordActivity($taskCard->board, $taskCard, $request->user()->id, 'card.updated', 'updated this card');
+
+            if ($taskCard->project_task_id) {
+                $syncedCard = $this->projectTaskBoards->syncProjectTaskFromCard($taskCard->fresh('projectTask'), $validated, $request->user());
+            }
         });
 
-        return response()->json(['card' => $this->freshCard($taskCard)]);
+        return response()->json(['card' => $this->freshCard($syncedCard ?: $taskCard)]);
     }
 
     public function move(Request $request, TaskCard $taskCard)
@@ -178,6 +201,12 @@ class TaskCardController extends Controller implements HasMiddleware
                 $this->recordActivity($taskCard->board, $taskCard, $request->user()->id, 'card.reordered', 'reordered this card');
             }
         });
+
+        if ($taskCard->project_task_id) {
+            $this->projectTaskBoards->syncProjectTaskFromCard($taskCard->fresh('projectTask'), [
+                'status' => $validated['status'],
+            ], $request->user());
+        }
 
         return response()->json(['card' => $this->freshCard($taskCard)]);
     }
@@ -496,6 +525,9 @@ class TaskCardController extends Controller implements HasMiddleware
             'comments.user:id,name,profile_photo',
             'attachments.user:id,name,profile_photo',
             'activities.actor:id,name,profile_photo',
+            'projectTask.assignedUser:id,name,email,profile_photo',
+            'projectTask.supportUser:id,name,email,profile_photo',
+            'projectTask.parentTask:id,name,category',
         ]);
 
         return [
@@ -522,7 +554,40 @@ class TaskCardController extends Controller implements HasMiddleware
             'comments' => $card->comments,
             'attachments' => $card->attachments,
             'activities' => $card->activities->take(50)->values(),
+            'project_task' => $this->projectTaskPayload($card),
             'checklist_totals' => $card->checklist_totals,
+        ];
+    }
+
+    private function projectTaskPayload(TaskCard $card): ?array
+    {
+        $task = $card->projectTask;
+
+        if (!$task) {
+            return null;
+        }
+
+        return [
+            'id' => $task->id,
+            'project_id' => $task->project_id,
+            'parent_task_id' => $task->parent_task_id,
+            'name' => $task->name,
+            'category' => $task->category ?: 'General',
+            'status' => $task->status,
+            'progress' => $task->progress,
+            'start_date' => $task->start_date?->format('Y-m-d'),
+            'end_date' => $task->end_date?->format('Y-m-d'),
+            'assigned_to' => $task->assigned_to,
+            'support_by' => $task->support_by,
+            'external_assignment' => $task->external_assignment,
+            'is_subtask' => (bool) $task->parent_task_id,
+            'parent_task' => $task->parentTask ? [
+                'id' => $task->parentTask->id,
+                'name' => $task->parentTask->name,
+                'category' => $task->parentTask->category,
+            ] : null,
+            'assigned_user' => $task->assignedUser,
+            'support_user' => $task->supportUser,
         ];
     }
 

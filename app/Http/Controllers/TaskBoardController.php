@@ -6,7 +6,10 @@ use App\Models\TaskBoard;
 use App\Models\TaskBoardMember;
 use App\Models\TaskCard;
 use App\Models\TaskCardActivity;
+use App\Models\Project;
+use App\Models\ProjectTask;
 use App\Models\User;
+use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -15,10 +18,14 @@ use Inertia\Inertia;
 
 class TaskBoardController extends Controller implements HasMiddleware
 {
+    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
+    {
+    }
+
     public static function middleware(): array
     {
         return [
-            new Middleware('can:task_lists.view', only: ['index', 'show', 'toggleStar', 'toggleWatch']),
+            new Middleware('can:task_lists.view', only: ['index', 'show', 'toggleStar', 'toggleWatch', 'openProjectBoard', 'syncProject']),
             new Middleware('can:task_lists.create', only: ['store']),
             new Middleware('can:task_lists.edit', only: ['update']),
             new Middleware('can:task_lists.delete', only: ['destroy', 'restore']),
@@ -32,7 +39,12 @@ class TaskBoardController extends Controller implements HasMiddleware
         $showClosed = $request->boolean('closed');
 
         $boards = TaskBoard::query()
-            ->with(['creator:id,name', 'members:id,name,profile_photo'])
+            ->with([
+                'creator:id,name',
+                'members:id,name,profile_photo',
+                'project.store:id,name',
+                'cards.projectTask:id,project_id,parent_task_id,name,category,status,progress',
+            ])
             ->when(!$this->canSeeAllBoards($user), function ($query) use ($user) {
                 $query->whereHas('memberRecords', fn ($memberQuery) => $memberQuery->where('user_id', $user->id));
             })
@@ -110,6 +122,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             'creator:id,name',
             'members:id,name,email,profile_photo',
             'watchers:id,name',
+            'project.store:id,name',
             'labels',
             'activities.actor:id,name,profile_photo',
             'activities.card:id,title',
@@ -126,6 +139,9 @@ class TaskBoardController extends Controller implements HasMiddleware
                 'comments.user:id,name,profile_photo',
                 'attachments.user:id,name,profile_photo',
                 'activities.actor:id,name,profile_photo',
+                'projectTask.assignedUser:id,name,email,profile_photo',
+                'projectTask.supportUser:id,name,email,profile_photo',
+                'projectTask.parentTask:id,name,category',
             ])
             ->orderBy('status')
             ->orderBy('sort_order')
@@ -180,6 +196,32 @@ class TaskBoardController extends Controller implements HasMiddleware
         $this->recordActivity($taskBoard, null, $request->user()->id, 'board.restored', 'reopened this board');
 
         return redirect()->route('task-lists.show', $taskBoard)->with('success', 'Task board restored successfully.');
+    }
+
+    public function openProjectBoard(Request $request, Project $project)
+    {
+        $board = $this->projectTaskBoards->openBoard($project, $request->user());
+
+        return redirect()
+            ->route('task-lists.show', $board)
+            ->with('success', 'Project task list is ready.');
+    }
+
+    public function syncProject(Request $request, TaskBoard $taskBoard)
+    {
+        $this->ensureBoardEditor($taskBoard, $request->user());
+
+        if (!$taskBoard->project_id) {
+            abort(422, 'This board is not linked to a project.');
+        }
+
+        $this->projectTaskBoards->syncProject($taskBoard->project, $request->user(), $taskBoard);
+
+        if ($request->wantsJson()) {
+            return response()->json(['synced' => true]);
+        }
+
+        return redirect()->back()->with('success', 'Project activities synced to this task list.');
     }
 
     public function toggleStar(Request $request, TaskBoard $taskBoard)
@@ -307,6 +349,15 @@ class TaskBoardController extends Controller implements HasMiddleware
         abort(403);
     }
 
+    private function ensureBoardEditor(TaskBoard $board, User $user): void
+    {
+        if ($this->canSeeAllBoards($user) || in_array($board->memberRole($user), ['admin', 'member'], true)) {
+            return;
+        }
+
+        abort(403);
+    }
+
     private function boardSummary(TaskBoard $board, User $user): array
     {
         $memberRecord = $board->memberRecords->firstWhere('user_id', $user->id);
@@ -324,6 +375,8 @@ class TaskBoardController extends Controller implements HasMiddleware
             'members' => $this->memberPayload($board),
             'my_role' => $this->canSeeAllBoards($user) ? ($memberRecord?->role ?? 'admin') : $memberRecord?->role,
             'starred' => (bool) $memberRecord?->starred,
+            'is_project_board' => (bool) $board->project_id,
+            'project' => $this->boardProjectPayload($board),
             'updated_at' => $board->updated_at,
         ];
     }
@@ -337,6 +390,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             'labels' => $board->labels,
             'cards' => $cards->map(fn (TaskCard $card) => $this->cardPayload($card))->values(),
             'activities' => $board->activities->take(80)->values(),
+            'milestones' => $this->boardMilestones($cards),
             'watching' => $board->watchers->contains('id', $user->id),
         ];
     }
@@ -367,8 +421,81 @@ class TaskBoardController extends Controller implements HasMiddleware
             'comments' => $card->comments,
             'attachments' => $card->attachments,
             'activities' => $card->activities->take(50)->values(),
+            'project_task' => $this->projectTaskPayload($card),
             'checklist_totals' => $card->checklist_totals,
         ];
+    }
+
+    private function projectTaskPayload(TaskCard $card): ?array
+    {
+        $task = $card->projectTask;
+
+        if (!$task) {
+            return null;
+        }
+
+        return [
+            'id' => $task->id,
+            'project_id' => $task->project_id,
+            'parent_task_id' => $task->parent_task_id,
+            'name' => $task->name,
+            'category' => $task->category ?: 'General',
+            'status' => $task->status,
+            'progress' => $task->progress,
+            'start_date' => $task->start_date?->format('Y-m-d'),
+            'end_date' => $task->end_date?->format('Y-m-d'),
+            'assigned_to' => $task->assigned_to,
+            'support_by' => $task->support_by,
+            'external_assignment' => $task->external_assignment,
+            'is_subtask' => (bool) $task->parent_task_id,
+            'parent_task' => $task->parentTask ? [
+                'id' => $task->parentTask->id,
+                'name' => $task->parentTask->name,
+                'category' => $task->parentTask->category,
+            ] : null,
+            'assigned_user' => $task->assignedUser,
+            'support_user' => $task->supportUser,
+        ];
+    }
+
+    private function boardProjectPayload(TaskBoard $board): ?array
+    {
+        if (!$board->project) {
+            return null;
+        }
+
+        $cards = $board->relationLoaded('cards')
+            ? $board->cards
+            : $board->cards()->with('projectTask')->get();
+
+        $projectTasks = $cards
+            ->map(fn (TaskCard $card) => $card->projectTask)
+            ->filter();
+
+        return [
+            'id' => $board->project->id,
+            'name' => $board->project->name,
+            'status' => $board->project->status,
+            'store' => $board->project->store,
+            'task_board_id' => $board->id,
+            'activity_count' => $projectTasks->whereNull('parent_task_id')->count(),
+            'subtask_count' => $projectTasks->whereNotNull('parent_task_id')->count(),
+            'milestone_count' => $projectTasks->pluck('category')->filter()->unique()->count(),
+            'progress' => $projectTasks->count()
+                ? (int) round($projectTasks->avg(fn (ProjectTask $task) => (int) $task->progress))
+                : 0,
+        ];
+    }
+
+    private function boardMilestones($cards): array
+    {
+        return $cards
+            ->map(fn (TaskCard $card) => $card->projectTask?->category ?: null)
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
     }
 
     private function memberPayload(TaskBoard $board): array

@@ -171,24 +171,40 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                                 </div>
                                 <p class="mt-2 line-clamp-2 text-xs font-medium text-white/80">{{ board.description || 'No board description' }}</p>
                             </div>
-                            <span v-if="board.closed_at" class="rounded-full bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-wider">Closed</span>
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between px-4 py-3">
-                        <div class="flex -space-x-2">
-                            <div
-                                v-for="member in board.members.slice(0, 5)"
-                                :key="member.id"
-                                class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-gray-100 text-[10px] font-bold text-gray-700"
-                                :title="member.name"
-                            >
-                                <img v-if="member.profile_photo" :src="'/serve-storage/' + member.profile_photo" class="h-full w-full object-cover" :alt="member.name">
-                                <span v-else>{{ initials(member.name) }}</span>
+                            <div class="flex shrink-0 flex-col items-end gap-1">
+                                <span v-if="board.is_project_board" class="rounded-full bg-white/20 px-2 py-1 text-[10px] font-black uppercase tracking-wider">Project</span>
+                                <span v-if="board.closed_at" class="rounded-full bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-wider">Closed</span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 text-xs font-semibold text-gray-500">
-                            <UserGroupIcon class="h-4 w-4" />
-                            {{ board.members_count }}
+                    </div>
+                    <div class="space-y-3 px-4 py-3">
+                        <div v-if="board.project" class="rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900">
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="truncate">{{ board.project.store?.name || board.project.name }}</span>
+                                <span class="shrink-0">{{ board.project.progress }}%</span>
+                            </div>
+                            <div class="mt-1 flex flex-wrap gap-2 text-[11px] text-blue-700">
+                                <span>{{ board.project.activity_count }} activities</span>
+                                <span>{{ board.project.subtask_count }} sub-tasks</span>
+                                <span>{{ board.project.milestone_count }} milestones</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <div class="flex -space-x-2">
+                                <div
+                                    v-for="member in board.members.slice(0, 5)"
+                                    :key="member.id"
+                                    class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-gray-100 text-[10px] font-bold text-gray-700"
+                                    :title="member.name"
+                                >
+                                    <img v-if="member.profile_photo" :src="'/serve-storage/' + member.profile_photo" class="h-full w-full object-cover" :alt="member.name">
+                                    <span v-else>{{ initials(member.name) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs font-semibold text-gray-500">
+                                <UserGroupIcon class="h-4 w-4" />
+                                {{ board.members_count }}
+                            </div>
                         </div>
                     </div>
                 </Link>

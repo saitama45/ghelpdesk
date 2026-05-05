@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Project extends Model
 {
@@ -42,6 +43,11 @@ class Project extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(ProjectTask::class)->orderBy('order');
+    }
+
+    public function taskBoard(): HasOne
+    {
+        return $this->hasOne(TaskBoard::class);
     }
 
     public function teamMembers(): HasMany

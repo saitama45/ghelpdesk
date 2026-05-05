@@ -11,6 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler'
 
 const props = defineProps({
     posRequests: Object,
+    companies: Array,
     filters: Object,
 })
 
@@ -18,8 +19,10 @@ const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { destroy: performDelete } = useErrorHandler()
 const status = ref(props.filters?.status ?? '')
+const entityDeptId = ref(props.filters?.company_id ? String(props.filters.company_id) : '')
 const pagination = usePagination(props.posRequests, 'pos-requests.index', () => ({
-    status: status.value
+    status: status.value,
+    company_id: entityDeptId.value,
 }))
 const { hasPermission } = usePermission()
 
@@ -27,7 +30,7 @@ onMounted(() => {
     pagination.updateData(props.posRequests)
 })
 
-watch(status, () => {
+watch([status, entityDeptId], () => {
     pagination.goToPage(1)
 })
 
@@ -112,13 +115,12 @@ const getStageDisplay = (request) => {
 </script>
 
 <template>
-    <AppLayout title="POS Requests">
-        <div class="py-12 bg-gray-50/50 min-h-screen">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <AppLayout title="POS Requests" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-6 bg-gray-50/50 min-h-screen">
                 <DataTable
                     title="POS Request Management"
                     subtitle="Track and manage point-of-sale configuration requests"
-                    search-placeholder="Search by company or request type..."
+                    search-placeholder="Search by entity/dept. or request type..."
                     :search="pagination.search.value"
                     :data="pagination.data.value"
                     :current-page="pagination.currentPage.value"
@@ -132,6 +134,13 @@ const getStageDisplay = (request) => {
                 >
                     <template #actions>
                         <div class="flex items-center space-x-4">
+                            <select v-model="entityDeptId" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
+                                <option value="">All Entity/Dept.</option>
+                                <option v-for="company in companies" :key="company.id" :value="String(company.id)">
+                                    {{ company.name }}
+                                </option>
+                            </select>
+
                             <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
                                 <option value="">All Statuses</option>
                                 <option value="Open">Open</option>
@@ -162,7 +171,7 @@ const getStageDisplay = (request) => {
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Request Info</th>
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Requested By</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Company</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Entity/Dept.</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Requested Date</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Launch Date</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Stage</th>
@@ -265,8 +274,7 @@ const getStageDisplay = (request) => {
                             </td>
                         </tr>
                     </template>
-                </DataTable>
-            </div>
+            </DataTable>
         </div>
     </AppLayout>
 </template>

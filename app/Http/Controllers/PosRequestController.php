@@ -62,12 +62,17 @@ class PosRequestController extends Controller implements HasMiddleware
                   });
             });
         }
+
+        if ($request->filled('company_id')) {
+            $query->where('company_id', $request->company_id);
+        }
         
         $posRequests = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
         
         return Inertia::render('PosRequests/Index', [
             'posRequests' => $posRequests,
-            'filters' => $request->only(['search', 'status', 'per_page']),
+            'companies' => Company::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'filters' => $request->only(['search', 'status', 'company_id', 'per_page']),
         ]);
     }
 

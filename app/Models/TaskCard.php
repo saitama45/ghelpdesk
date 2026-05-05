@@ -22,6 +22,7 @@ class TaskCard extends Model
 
     protected $fillable = [
         'task_board_id',
+        'project_task_id',
         'title',
         'description',
         'status',
@@ -48,6 +49,11 @@ class TaskCard extends Model
     public function board(): BelongsTo
     {
         return $this->belongsTo(TaskBoard::class, 'task_board_id');
+    }
+
+    public function projectTask(): BelongsTo
+    {
+        return $this->belongsTo(ProjectTask::class);
     }
 
     public function creator(): BelongsTo

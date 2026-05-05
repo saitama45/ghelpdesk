@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectGantt from '@/Components/ProjectTracker/ProjectGantt.vue';
 import AssetsBoard from '@/Components/ProjectTracker/AssetsBoard.vue';
@@ -18,6 +18,7 @@ import {
     UserGroupIcon,
     ChartBarIcon,
     CpuChipIcon,
+    ClipboardDocumentCheckIcon,
     InformationCircleIcon,
     PlusIcon,
     TrashIcon,
@@ -68,6 +69,7 @@ const activeTab = ref(initialTab || 'overview');
 const { confirm: confirmAction } = useConfirm();
 
 const showManageTeamModal = ref(false);
+const isOpeningTaskList = ref(false);
 const teamForm = useForm({
     project_id: props.project.id,
     user_id: '',
@@ -147,6 +149,20 @@ const removeTeamMember = async (id) => {
             preserveScroll: true
         });
     }
+};
+
+const openProjectTaskList = () => {
+    if (isOpeningTaskList.value) return;
+
+    router.post(route('projects.task-list', props.project.id), {}, {
+        preserveScroll: true,
+        onStart: () => {
+            isOpeningTaskList.value = true;
+        },
+        onFinish: () => {
+            isOpeningTaskList.value = false;
+        },
+    });
 };
 
 const projectProgress = computed(() => {
@@ -479,6 +495,15 @@ const getStatusColor = (status) => {
                             </div>
                         </div>
                     </div>
+                    <button
+                        type="button"
+                        :disabled="isOpeningTaskList"
+                        @click="openProjectTaskList"
+                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+                    >
+                        <ClipboardDocumentCheckIcon class="h-5 w-5" />
+                        {{ project.task_board ? 'Open Task List' : 'Create Task List' }}
+                    </button>
                 </div>
             </div>
 
