@@ -660,14 +660,14 @@
                                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                     <div
                                         v-for="row in group.rows"
-                                        :key="row.schedule_store_id"
+                                        :key="row.row_key"
                                         class="group flex items-center justify-between gap-3 rounded-xl border p-3 transition-all"
                                         :class="row.action === 'keep' ? 'border-emerald-100 bg-emerald-50/50 text-emerald-900' : 'border-red-100 bg-red-50/30 text-red-900 hover:bg-red-50'"
                                     >
                                         <div class="min-w-0">
                                             <div class="text-[9px] font-black uppercase tracking-tighter opacity-50 mb-0.5">ID: #{{ row.schedule_id }}</div>
                                             <div class="text-[11px] font-bold truncate">
-                                                {{ row.ticket_key ? 'Ticket ' + row.ticket_key : 'Regular visit' }}
+                                                {{ row.store_name || 'No location' }}{{ row.ticket_key ? ' • Ticket ' + row.ticket_key : '' }}
                                             </div>
                                         </div>
                                         <span class="shrink-0 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-white shadow-sm" :class="row.action === 'keep' ? 'text-emerald-600' : 'text-red-500'">
@@ -790,7 +790,7 @@
                                                 :options="storeSelectOptions"
                                                 label-key="name"
                                                 value-key="id"
-                                                :placeholder="isLocationRequired ? 'Search deployment store...' : 'Select if applicable...'"
+                                                :placeholder="isLocationRequired ? 'Search Location...' : 'Select if applicable...'"
                                                 :disabled="isViewingOnly"
                                                 class="modern-autocomplete"
                                             />

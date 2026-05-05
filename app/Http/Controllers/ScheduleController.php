@@ -340,7 +340,10 @@ class ScheduleController extends Controller implements HasMiddleware
             ]);
         }
 
-        if ($this->hasAttendanceLogsOutsideEntries($schedule, $expandedStoreEntries, $scopeDate)) {
+        if (
+            $this->scheduleEntryWindowsChanged($schedule, $expandedStoreEntries, $scopeDate)
+            && $this->hasAttendanceLogsOutsideEntries($schedule, $expandedStoreEntries, $scopeDate)
+        ) {
             return redirect()->back()->withErrors([
                 'stores' => 'This schedule already has attendance logs. The selected date and time range must still include the existing time-in/time-out logs.',
             ]);
@@ -427,8 +430,12 @@ class ScheduleController extends Controller implements HasMiddleware
             ->flatMap(fn (array $group) => $group['duplicate_schedule_store_ids'])
             ->unique()
             ->values();
+        $duplicateScheduleIds = $groups
+            ->flatMap(fn (array $group) => $group['duplicate_schedule_ids_to_delete'] ?? [])
+            ->unique()
+            ->values();
 
-        if ($duplicateScheduleStoreIds->isEmpty()) {
+        if ($duplicateScheduleStoreIds->isEmpty() && $duplicateScheduleIds->isEmpty()) {
             return response()->json([
                 'deleted_schedule_stores' => 0,
                 'deleted_schedules' => 0,
@@ -436,35 +443,68 @@ class ScheduleController extends Controller implements HasMiddleware
             ]);
         }
 
-        $affectedScheduleIds = DB::table('schedule_stores')
-            ->whereIn('id', $duplicateScheduleStoreIds->all())
-            ->pluck('schedule_id')
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
+        $affectedScheduleIds = $duplicateScheduleIds->map(fn ($id) => (int) $id);
+
+        if ($duplicateScheduleStoreIds->isNotEmpty()) {
+            $affectedScheduleIds = $affectedScheduleIds->merge(
+                DB::table('schedule_stores')
+                    ->whereIn('id', $duplicateScheduleStoreIds->all())
+                    ->pluck('schedule_id')
+                    ->map(fn ($id) => (int) $id)
+            );
+        }
+
+        $affectedScheduleIds = $affectedScheduleIds->unique()->values();
 
         $deletedScheduleStores = 0;
         $deletedSchedules = 0;
 
         DB::transaction(function () use (
             $duplicateScheduleStoreIds,
+            $duplicateScheduleIds,
             $affectedScheduleIds,
             &$deletedScheduleStores,
             &$deletedSchedules
         ) {
-            DB::table('attendance_logs')
-                ->whereIn('schedule_store_id', $duplicateScheduleStoreIds->all())
-                ->update([
-                    'schedule_id' => null,
-                    'schedule_store_id' => null,
-                ]);
+            $scheduleStoreIdsForDeletedSchedules = $duplicateScheduleIds->isEmpty()
+                ? collect()
+                : DB::table('schedule_stores')
+                    ->whereIn('schedule_id', $duplicateScheduleIds->all())
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id);
 
-            $deletedScheduleStores = DB::table('schedule_stores')
-                ->whereIn('id', $duplicateScheduleStoreIds->all())
-                ->delete();
+            $scheduleStoreIdsToDelete = $duplicateScheduleStoreIds
+                ->merge($scheduleStoreIdsForDeletedSchedules)
+                ->unique()
+                ->values();
+
+            if ($scheduleStoreIdsToDelete->isNotEmpty() || $duplicateScheduleIds->isNotEmpty()) {
+                DB::table('attendance_logs')
+                    ->where(function ($query) use ($scheduleStoreIdsToDelete, $duplicateScheduleIds) {
+                        if ($scheduleStoreIdsToDelete->isNotEmpty()) {
+                            $query->whereIn('schedule_store_id', $scheduleStoreIdsToDelete->all());
+                        }
+
+                        if ($duplicateScheduleIds->isNotEmpty()) {
+                            $method = $scheduleStoreIdsToDelete->isNotEmpty() ? 'orWhereIn' : 'whereIn';
+                            $query->{$method}('schedule_id', $duplicateScheduleIds->all());
+                        }
+                    })
+                    ->update([
+                        'schedule_id' => null,
+                        'schedule_store_id' => null,
+                    ]);
+            }
+
+            if ($scheduleStoreIdsToDelete->isNotEmpty()) {
+                $deletedScheduleStores = DB::table('schedule_stores')
+                    ->whereIn('id', $scheduleStoreIdsToDelete->all())
+                    ->delete();
+            }
 
             $orphanScheduleIds = DB::table('schedules as s')
                 ->whereIn('s.id', $affectedScheduleIds->all())
+                ->whereNotIn('s.id', $duplicateScheduleIds->all())
                 ->whereNotExists(function ($query) {
                     $query->select(DB::raw(1))
                         ->from('schedule_stores as ss')
@@ -474,26 +514,33 @@ class ScheduleController extends Controller implements HasMiddleware
                 ->map(fn ($id) => (int) $id)
                 ->values();
 
-            if ($orphanScheduleIds->isNotEmpty()) {
+            $scheduleIdsToDelete = $duplicateScheduleIds
+                ->merge($orphanScheduleIds)
+                ->unique()
+                ->values();
+
+            if ($scheduleIdsToDelete->isNotEmpty()) {
                 DB::table('attendance_logs')
-                    ->whereIn('schedule_id', $orphanScheduleIds->all())
+                    ->whereIn('schedule_id', $scheduleIdsToDelete->all())
                     ->update([
                         'schedule_id' => null,
                         'schedule_store_id' => null,
                     ]);
 
                 $deletedSchedules = DB::table('schedules')
-                    ->whereIn('id', $orphanScheduleIds->all())
+                    ->whereIn('id', $scheduleIdsToDelete->all())
                     ->delete();
             }
 
             $remainingScheduleIds = $affectedScheduleIds
-                ->diff($orphanScheduleIds)
+                ->diff($scheduleIdsToDelete)
                 ->values();
 
-            Schedule::whereIn('id', $remainingScheduleIds->all())
-                ->get()
-                ->each(fn (Schedule $schedule) => $this->refreshScheduleBounds($schedule));
+            if ($remainingScheduleIds->isNotEmpty()) {
+                Schedule::whereIn('id', $remainingScheduleIds->all())
+                    ->get()
+                    ->each(fn (Schedule $schedule) => $this->refreshScheduleBounds($schedule));
+            }
         });
 
         return response()->json([
@@ -512,13 +559,22 @@ class ScheduleController extends Controller implements HasMiddleware
             ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
             : now('Asia/Manila')->endOfMonth();
 
-        $rows = DB::table('schedule_stores as ss')
-            ->join('schedules as s', 's.id', '=', 'ss.schedule_id')
+        $rows = DB::table('schedules as s')
             ->join('users as u', 'u.id', '=', 's.user_id')
+            ->leftJoin('schedule_stores as ss', 'ss.schedule_id', '=', 's.id')
             ->leftJoin('stores as st', 'st.id', '=', 'ss.store_id')
             ->leftJoin('tickets as t', 't.id', '=', 'ss.ticket_id')
-            ->where('ss.start_time', '<=', $rangeEnd)
-            ->where('ss.end_time', '>=', $rangeStart)
+            ->where(function ($query) use ($rangeStart, $rangeEnd) {
+                $query->where(function ($segmentQuery) use ($rangeStart, $rangeEnd) {
+                    $segmentQuery->whereNotNull('ss.id')
+                        ->where('ss.start_time', '<=', $rangeEnd)
+                        ->where('ss.end_time', '>=', $rangeStart);
+                })->orWhere(function ($scheduleQuery) use ($rangeStart, $rangeEnd) {
+                    $scheduleQuery->whereNull('ss.id')
+                        ->where('s.start_time', '<=', $rangeEnd)
+                        ->where('s.end_time', '>=', $rangeStart);
+                });
+            })
             ->when($request->filled('user_id'), function ($query) use ($request) {
                 if ($request->user_id === 'my') {
                     $query->where('s.user_id', auth()->id());
@@ -531,15 +587,17 @@ class ScheduleController extends Controller implements HasMiddleware
             ->when($request->filled('store_id'), fn ($query) => $query->where('ss.store_id', $request->store_id))
             ->select([
                 'ss.id as schedule_store_id',
-                'ss.schedule_id',
+                's.id as schedule_id',
                 'ss.store_id',
                 'ss.ticket_id',
-                'ss.start_time',
-                'ss.end_time',
+                'ss.start_time as schedule_store_start_time',
+                'ss.end_time as schedule_store_end_time',
                 'ss.grace_period_minutes',
                 'ss.remarks as visit_remarks',
                 's.user_id',
                 's.status',
+                's.start_time as schedule_start_time',
+                's.end_time as schedule_end_time',
                 's.pickup_start',
                 's.pickup_end',
                 's.backlogs_start',
@@ -557,14 +615,33 @@ class ScheduleController extends Controller implements HasMiddleware
             return collect();
         }
 
-        $scheduleStoreIds = $rows->pluck('schedule_store_id')->map(fn ($id) => (int) $id)->values();
-        $logCounts = AttendanceLog::whereIn('schedule_store_id', $scheduleStoreIds->all())
-            ->select('schedule_store_id', DB::raw('COUNT(*) as log_count'))
-            ->groupBy('schedule_store_id')
-            ->pluck('log_count', 'schedule_store_id');
+        $scheduleIds = $rows->pluck('schedule_id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $scheduleStoreIds = $rows->pluck('schedule_store_id')->filter()->map(fn ($id) => (int) $id)->values();
+        $scheduleLogCounts = AttendanceLog::whereIn('schedule_id', $scheduleIds->all())
+            ->select('schedule_id', DB::raw('COUNT(*) as log_count'))
+            ->groupBy('schedule_id')
+            ->pluck('log_count', 'schedule_id');
+        $scheduleStoreLogCounts = collect();
 
-        $rows = $rows->map(function ($row) use ($logCounts) {
-            $row->attendance_log_count = (int) ($logCounts[(int) $row->schedule_store_id] ?? 0);
+        if ($scheduleStoreIds->isNotEmpty()) {
+            $scheduleStoreLogCounts = AttendanceLog::whereIn('schedule_store_id', $scheduleStoreIds->all())
+                ->select('schedule_store_id', DB::raw('COUNT(*) as log_count'))
+                ->groupBy('schedule_store_id')
+                ->pluck('log_count', 'schedule_store_id');
+        }
+
+        $rows = $rows->map(function ($row) use ($scheduleLogCounts, $scheduleStoreLogCounts) {
+            $scheduleId = (int) $row->schedule_id;
+            $scheduleStoreId = $row->schedule_store_id ? (int) $row->schedule_store_id : null;
+            $scheduleLogCount = (int) ($scheduleLogCounts[$scheduleId] ?? 0);
+            $scheduleStoreLogCount = $scheduleStoreId
+                ? (int) ($scheduleStoreLogCounts[$scheduleStoreId] ?? 0)
+                : 0;
+
+            $row->start_time = $row->schedule_store_start_time ?: $row->schedule_start_time;
+            $row->end_time = $row->schedule_store_end_time ?: $row->schedule_end_time;
+            $row->attendance_log_count = max($scheduleLogCount, $scheduleStoreLogCount);
+
             return $row;
         });
 
@@ -592,12 +669,20 @@ class ScheduleController extends Controller implements HasMiddleware
                     'end_time' => $this->formatDuplicateDateTime($keeper->end_time),
                     'total_count' => $sorted->count(),
                     'duplicate_count' => $duplicates->count(),
-                    'duplicate_schedule_store_ids' => $duplicates->pluck('schedule_store_id')->map(fn ($id) => (int) $id)->values(),
+                    'duplicate_schedule_store_ids' => $duplicates->pluck('schedule_store_id')->filter()->map(fn ($id) => (int) $id)->values(),
+                    'duplicate_schedule_ids_to_delete' => $duplicates
+                        ->filter(fn ($row) => empty($row->schedule_store_id))
+                        ->pluck('schedule_id')
+                        ->map(fn ($id) => (int) $id)
+                        ->unique()
+                        ->values(),
                     'duplicate_schedule_ids' => $duplicates->pluck('schedule_id')->map(fn ($id) => (int) $id)->unique()->values(),
                     'attendance_log_count' => $sorted->sum('attendance_log_count'),
                     'rows' => $sorted->map(fn ($row, $index) => [
+                        'row_key' => $row->schedule_store_id ? 'store-' . $row->schedule_store_id : 'schedule-' . $row->schedule_id,
                         'schedule_id' => (int) $row->schedule_id,
-                        'schedule_store_id' => (int) $row->schedule_store_id,
+                        'schedule_store_id' => $row->schedule_store_id ? (int) $row->schedule_store_id : null,
+                        'store_name' => $row->store_name,
                         'ticket_key' => $row->ticket_key,
                         'attendance_log_count' => (int) $row->attendance_log_count,
                         'action' => $index === 0 ? 'keep' : 'delete',
@@ -617,17 +702,8 @@ class ScheduleController extends Controller implements HasMiddleware
         return json_encode([
             (int) $row->user_id,
             $this->duplicateScalar($row->status),
-            $row->store_id ? (int) $row->store_id : null,
-            $this->formatDuplicateDateTime($row->start_time),
-            $this->formatDuplicateDateTime($row->end_time),
-            $this->duplicateScalar($row->ticket_id),
-            (int) ($row->grace_period_minutes ?? 30),
-            $this->duplicateScalar($row->visit_remarks),
-            $this->duplicateScalar($row->pickup_start),
-            $this->duplicateScalar($row->pickup_end),
-            $this->duplicateScalar($row->backlogs_start),
-            $this->duplicateScalar($row->backlogs_end),
-            $this->duplicateScalar($row->schedule_remarks),
+            $this->duplicateDateTimeKey($row->start_time),
+            $this->duplicateDateTimeKey($row->end_time),
         ], JSON_UNESCAPED_UNICODE);
     }
 
@@ -638,7 +714,12 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function formatDuplicateDateTime($value): string
     {
-        return Carbon::parse($value)->toIso8601String();
+        return Carbon::parse($value, 'Asia/Manila')->timezone('Asia/Manila')->toIso8601String();
+    }
+
+    private function duplicateDateTimeKey($value): string
+    {
+        return Carbon::parse($value, 'Asia/Manila')->timezone('Asia/Manila')->format('Y-m-d H:i:s');
     }
 
     private function hasScheduleOverlap(int $userId, array $newEntries, $excludeScheduleId = null): bool
@@ -730,6 +811,52 @@ class ScheduleController extends Controller implements HasMiddleware
         return $logs->contains(function ($log) use ($entries) {
             return !$this->entriesContainLogTime($entries, $log->log_time);
         });
+    }
+
+    private function scheduleEntryWindowsChanged(Schedule $schedule, array $entries, ?string $scopeDate = null): bool
+    {
+        $existingWindows = $this->existingScheduleEntryWindows($schedule, $scopeDate);
+        $submittedWindows = collect($entries)
+            ->map(fn (array $entry) => $this->normalizeScheduleEntryWindow(
+                $entry['start_time'],
+                $entry['end_time'],
+                $entry['grace_period_minutes'] ?? 30
+            ))
+            ->sort()
+            ->values();
+
+        return $existingWindows->toJson() !== $submittedWindows->toJson();
+    }
+
+    private function existingScheduleEntryWindows(Schedule $schedule, ?string $scopeDate = null)
+    {
+        $rows = $schedule->scheduleStores()->exists()
+            ? ($scopeDate ? $this->scopedScheduleStoreRows($schedule, $scopeDate) : $schedule->scheduleStores()->get())
+            : collect([
+                (object) [
+                    'start_time' => $schedule->start_time,
+                    'end_time' => $schedule->end_time,
+                    'grace_period_minutes' => 30,
+                ],
+            ]);
+
+        return $rows
+            ->map(fn ($row) => $this->normalizeScheduleEntryWindow(
+                $row->start_time,
+                $row->end_time,
+                $row->grace_period_minutes ?? 30
+            ))
+            ->sort()
+            ->values();
+    }
+
+    private function normalizeScheduleEntryWindow($startTime, $endTime, $graceMinutes): string
+    {
+        return implode('|', [
+            Carbon::parse($startTime, 'Asia/Manila')->timezone('Asia/Manila')->format('Y-m-d H:i:s'),
+            Carbon::parse($endTime, 'Asia/Manila')->timezone('Asia/Manila')->format('Y-m-d H:i:s'),
+            (int) $graceMinutes,
+        ]);
     }
 
     private function entriesContainLogTime(array $entries, ?Carbon $logTime): bool
