@@ -130,6 +130,7 @@ class RolesAndPermissionSeeder extends Seeder
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',
             'schedules.edit' => 'Edit schedules',
+            'schedules.delete' => 'Delete schedules',
 
             // Administrative - Presence
             'presence.view' => 'View online users and their status history',

@@ -219,7 +219,7 @@ const sortEvents = (events) => {
 };
 
 const monthName = computed(() => {
-    return new Intl.DateTimeFormat('en-US', { month: 'long' }).format(currentDate.value);
+    return new Intl.DateTimeFormat('en-US', { month: 'short' }).format(currentDate.value);
 });
 
 const calendarDays = computed(() => {

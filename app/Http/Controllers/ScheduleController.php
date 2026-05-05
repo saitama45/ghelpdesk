@@ -58,6 +58,7 @@ class ScheduleController extends Controller implements HasMiddleware
         return [
             new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules', 'completeSchedules']),
             new Middleware('can:schedules.create', only: ['store', 'import']),
+            new Middleware('can:schedules.delete', only: ['destroy', 'duplicates', 'destroyDuplicates']),
             // schedules.edit is checked inside update() to also allow the schedule owner
         ];
     }
@@ -381,6 +382,263 @@ class ScheduleController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
+    }
+
+    public function destroy(Schedule $schedule)
+    {
+        $scheduleStoreIds = $schedule->scheduleStores()->pluck('id')->map(fn ($id) => (int) $id)->values();
+
+        DB::transaction(function () use ($schedule, $scheduleStoreIds) {
+            DB::table('attendance_logs')
+                ->where(function ($query) use ($schedule, $scheduleStoreIds) {
+                    $query->where('schedule_id', $schedule->id);
+
+                    if ($scheduleStoreIds->isNotEmpty()) {
+                        $query->orWhereIn('schedule_store_id', $scheduleStoreIds->all());
+                    }
+                })
+                ->update([
+                    'schedule_id' => null,
+                    'schedule_store_id' => null,
+                ]);
+
+            DB::table('schedule_stores')->where('schedule_id', $schedule->id)->delete();
+            DB::table('schedules')->where('id', $schedule->id)->delete();
+        });
+
+        return redirect()->back()->with('success', 'Schedule deleted successfully');
+    }
+
+    public function duplicates(Request $request)
+    {
+        $groups = $this->duplicateScheduleGroups($request);
+
+        return response()->json([
+            'groups' => $groups->values(),
+            'group_count' => $groups->count(),
+            'duplicate_count' => $groups->sum('duplicate_count'),
+        ]);
+    }
+
+    public function destroyDuplicates(Request $request)
+    {
+        $groups = $this->duplicateScheduleGroups($request);
+        $duplicateScheduleStoreIds = $groups
+            ->flatMap(fn (array $group) => $group['duplicate_schedule_store_ids'])
+            ->unique()
+            ->values();
+
+        if ($duplicateScheduleStoreIds->isEmpty()) {
+            return response()->json([
+                'deleted_schedule_stores' => 0,
+                'deleted_schedules' => 0,
+                'group_count' => 0,
+            ]);
+        }
+
+        $affectedScheduleIds = DB::table('schedule_stores')
+            ->whereIn('id', $duplicateScheduleStoreIds->all())
+            ->pluck('schedule_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $deletedScheduleStores = 0;
+        $deletedSchedules = 0;
+
+        DB::transaction(function () use (
+            $duplicateScheduleStoreIds,
+            $affectedScheduleIds,
+            &$deletedScheduleStores,
+            &$deletedSchedules
+        ) {
+            DB::table('attendance_logs')
+                ->whereIn('schedule_store_id', $duplicateScheduleStoreIds->all())
+                ->update([
+                    'schedule_id' => null,
+                    'schedule_store_id' => null,
+                ]);
+
+            $deletedScheduleStores = DB::table('schedule_stores')
+                ->whereIn('id', $duplicateScheduleStoreIds->all())
+                ->delete();
+
+            $orphanScheduleIds = DB::table('schedules as s')
+                ->whereIn('s.id', $affectedScheduleIds->all())
+                ->whereNotExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('schedule_stores as ss')
+                        ->whereColumn('ss.schedule_id', 's.id');
+                })
+                ->pluck('s.id')
+                ->map(fn ($id) => (int) $id)
+                ->values();
+
+            if ($orphanScheduleIds->isNotEmpty()) {
+                DB::table('attendance_logs')
+                    ->whereIn('schedule_id', $orphanScheduleIds->all())
+                    ->update([
+                        'schedule_id' => null,
+                        'schedule_store_id' => null,
+                    ]);
+
+                $deletedSchedules = DB::table('schedules')
+                    ->whereIn('id', $orphanScheduleIds->all())
+                    ->delete();
+            }
+
+            $remainingScheduleIds = $affectedScheduleIds
+                ->diff($orphanScheduleIds)
+                ->values();
+
+            Schedule::whereIn('id', $remainingScheduleIds->all())
+                ->get()
+                ->each(fn (Schedule $schedule) => $this->refreshScheduleBounds($schedule));
+        });
+
+        return response()->json([
+            'deleted_schedule_stores' => $deletedScheduleStores,
+            'deleted_schedules' => $deletedSchedules,
+            'group_count' => $groups->count(),
+        ]);
+    }
+
+    private function duplicateScheduleGroups(Request $request)
+    {
+        $rangeStart = $request->filled('start')
+            ? Carbon::parse($request->start, 'Asia/Manila')->startOfDay()
+            : now('Asia/Manila')->startOfMonth();
+        $rangeEnd = $request->filled('end')
+            ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
+            : now('Asia/Manila')->endOfMonth();
+
+        $rows = DB::table('schedule_stores as ss')
+            ->join('schedules as s', 's.id', '=', 'ss.schedule_id')
+            ->join('users as u', 'u.id', '=', 's.user_id')
+            ->leftJoin('stores as st', 'st.id', '=', 'ss.store_id')
+            ->leftJoin('tickets as t', 't.id', '=', 'ss.ticket_id')
+            ->where('ss.start_time', '<=', $rangeEnd)
+            ->where('ss.end_time', '>=', $rangeStart)
+            ->when($request->filled('user_id'), function ($query) use ($request) {
+                if ($request->user_id === 'my') {
+                    $query->where('s.user_id', auth()->id());
+                    return;
+                }
+
+                $query->where('s.user_id', $request->user_id);
+            })
+            ->when($request->filled('sub_unit'), fn ($query) => $query->where('u.sub_unit', $request->sub_unit))
+            ->when($request->filled('store_id'), fn ($query) => $query->where('ss.store_id', $request->store_id))
+            ->select([
+                'ss.id as schedule_store_id',
+                'ss.schedule_id',
+                'ss.store_id',
+                'ss.ticket_id',
+                'ss.start_time',
+                'ss.end_time',
+                'ss.grace_period_minutes',
+                'ss.remarks as visit_remarks',
+                's.user_id',
+                's.status',
+                's.pickup_start',
+                's.pickup_end',
+                's.backlogs_start',
+                's.backlogs_end',
+                's.remarks as schedule_remarks',
+                's.created_at',
+                'u.name as user_name',
+                'u.sub_unit',
+                'st.name as store_name',
+                't.ticket_key',
+            ])
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return collect();
+        }
+
+        $scheduleStoreIds = $rows->pluck('schedule_store_id')->map(fn ($id) => (int) $id)->values();
+        $logCounts = AttendanceLog::whereIn('schedule_store_id', $scheduleStoreIds->all())
+            ->select('schedule_store_id', DB::raw('COUNT(*) as log_count'))
+            ->groupBy('schedule_store_id')
+            ->pluck('log_count', 'schedule_store_id');
+
+        $rows = $rows->map(function ($row) use ($logCounts) {
+            $row->attendance_log_count = (int) ($logCounts[(int) $row->schedule_store_id] ?? 0);
+            return $row;
+        });
+
+        return $rows
+            ->groupBy(fn ($row) => $this->duplicateScheduleKey($row))
+            ->filter(fn ($group) => $group->count() > 1)
+            ->map(function ($group, $key) {
+                $sorted = $group->sort(function ($a, $b) {
+                    return ($b->attendance_log_count <=> $a->attendance_log_count)
+                        ?: ((int) $a->schedule_store_id <=> (int) $b->schedule_store_id);
+                })->values();
+
+                $keeper = $sorted->first();
+                $duplicates = $sorted->slice(1)->values();
+
+                return [
+                    'key' => sha1($key),
+                    'user_id' => (int) $keeper->user_id,
+                    'user_name' => $keeper->user_name,
+                    'sub_unit' => $keeper->sub_unit,
+                    'store_id' => $keeper->store_id ? (int) $keeper->store_id : null,
+                    'store_name' => $keeper->store_name,
+                    'status' => $keeper->status,
+                    'start_time' => $this->formatDuplicateDateTime($keeper->start_time),
+                    'end_time' => $this->formatDuplicateDateTime($keeper->end_time),
+                    'total_count' => $sorted->count(),
+                    'duplicate_count' => $duplicates->count(),
+                    'duplicate_schedule_store_ids' => $duplicates->pluck('schedule_store_id')->map(fn ($id) => (int) $id)->values(),
+                    'duplicate_schedule_ids' => $duplicates->pluck('schedule_id')->map(fn ($id) => (int) $id)->unique()->values(),
+                    'attendance_log_count' => $sorted->sum('attendance_log_count'),
+                    'rows' => $sorted->map(fn ($row, $index) => [
+                        'schedule_id' => (int) $row->schedule_id,
+                        'schedule_store_id' => (int) $row->schedule_store_id,
+                        'ticket_key' => $row->ticket_key,
+                        'attendance_log_count' => (int) $row->attendance_log_count,
+                        'action' => $index === 0 ? 'keep' : 'delete',
+                    ])->values(),
+                ];
+            })
+            ->sortBy([
+                ['user_name', 'asc'],
+                ['start_time', 'asc'],
+                ['store_name', 'asc'],
+            ])
+            ->values();
+    }
+
+    private function duplicateScheduleKey($row): string
+    {
+        return json_encode([
+            (int) $row->user_id,
+            $this->duplicateScalar($row->status),
+            $row->store_id ? (int) $row->store_id : null,
+            $this->formatDuplicateDateTime($row->start_time),
+            $this->formatDuplicateDateTime($row->end_time),
+            $this->duplicateScalar($row->ticket_id),
+            (int) ($row->grace_period_minutes ?? 30),
+            $this->duplicateScalar($row->visit_remarks),
+            $this->duplicateScalar($row->pickup_start),
+            $this->duplicateScalar($row->pickup_end),
+            $this->duplicateScalar($row->backlogs_start),
+            $this->duplicateScalar($row->backlogs_end),
+            $this->duplicateScalar($row->schedule_remarks),
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function duplicateScalar($value): string
+    {
+        return trim((string) ($value ?? ''));
+    }
+
+    private function formatDuplicateDateTime($value): string
+    {
+        return Carbon::parse($value)->toIso8601String();
     }
 
     private function hasScheduleOverlap(int $userId, array $newEntries, $excludeScheduleId = null): bool

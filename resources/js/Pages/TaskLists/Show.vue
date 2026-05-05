@@ -423,9 +423,7 @@ const createCard = async (status) => {
         replaceCard(card);
         newCardTitles[status] = '';
         activeCardComposer.value = '';
-        showSuccess(activeFilterCount.value && !matchesFilters(card)
-            ? 'Card created but hidden by current filters'
-            : 'Card created');
+        selectedCardId.value = card.id;
     } catch (error) {
         handleApiError(error, 'Unable to create card');
     } finally {
@@ -474,6 +472,10 @@ const toggleCardAssignee = (card, member) => {
     const ids = new Set((card.assignees || []).map((user) => user.id));
     ids.has(member.id) ? ids.delete(member.id) : ids.add(member.id);
     updateCard(card, { assignee_ids: [...ids] });
+};
+
+const isCardAssignedTo = (card, member) => {
+    return !!card?.assignees?.some((user) => Number(user.id) === Number(member.id));
 };
 
 const toggleCardLabel = (card, label) => {
@@ -1290,7 +1292,10 @@ onUnmounted(() => {
                                     :key="member.id"
                                     type="button"
                                     :disabled="!canEditBoard"
-                                    class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left hover:bg-gray-50"
+                                    class="group flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left transition-colors disabled:cursor-default"
+                                    :class="canEditBoard ? 'hover:bg-blue-50' : 'opacity-80'"
+                                    :aria-label="isCardAssignedTo(selectedCard, member) ? `Unassign ${member.name}` : `Assign ${member.name}`"
+                                    :title="isCardAssignedTo(selectedCard, member) ? `Unassign ${member.name}` : `Assign ${member.name}`"
                                     @click="toggleCardAssignee(selectedCard, member)"
                                 >
                                     <span class="flex min-w-0 items-center gap-2">
@@ -1300,7 +1305,20 @@ onUnmounted(() => {
                                         </span>
                                         <span class="truncate text-sm font-semibold text-gray-700">{{ member.name }}</span>
                                     </span>
-                                    <CheckCircleIcon v-if="selectedCard.assignees?.some((user) => user.id === member.id)" class="h-5 w-5 text-emerald-500" />
+                                    <span
+                                        v-if="isCardAssignedTo(selectedCard, member)"
+                                        class="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-100"
+                                    >
+                                        <CheckCircleIcon class="h-4 w-4" />
+                                        Assigned
+                                    </span>
+                                    <span
+                                        v-else-if="canEditBoard"
+                                        class="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-blue-700 ring-1 ring-blue-100 transition-colors group-hover:bg-blue-100"
+                                    >
+                                        <PlusIcon class="h-4 w-4" />
+                                        Assign
+                                    </span>
                                 </button>
                             </div>
                         </section>
