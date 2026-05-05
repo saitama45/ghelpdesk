@@ -59,6 +59,9 @@
                                           :class="item.status === 'Posted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
                                         {{ item.status || 'For Posting' }}
                                     </span>
+                                    <span v-if="item.status === 'Posted'" class="mt-1 text-[11px] text-gray-500">
+                                        Posted by {{ item.posted_by || '-' }}<span v-if="item.posted_date"> on {{ formatAuditDate(item.posted_date) }}</span>
+                                    </span>
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">{{ item.asset?.item_code }}</td>
@@ -1141,20 +1144,22 @@ const printStockInCodes = (type) => {
     }
 }
 
-const postHeaderItem = (item) => {
-    confirm({
-        title: 'Post Stock In',
-        message: `Post stock-in header ${item.asset?.item_code || ''}${item.dr_no ? ` with DR No. ${item.dr_no}` : ''}?`,
-        onConfirm: () => {
-            router.post(route('stock-ins.post', item.id), {}, {
-                onSuccess: () => {
-                    showSuccess('Stock In posted successfully')
-                },
-                onError: (errors) => {
-                    const errorMessage = Object.values(errors).flat().join(', ') || 'Unable to post stock in'
-                    showError(errorMessage)
-                }
-            })
+const postHeaderItem = async (item) => {
+    const confirmed = await confirm({
+        title: 'Update Stock In Status',
+        message: `Mark stock-in header ${item.asset?.item_code || ''}${item.dr_no ? ` with DR No. ${item.dr_no}` : ''} as Posted?`,
+    })
+
+    if (!confirmed) return
+
+    router.post(route('stock-ins.post', item.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            showSuccess('Stock In status updated to Posted')
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Unable to update stock in status'
+            showError(errorMessage)
         }
     })
 }

@@ -19,6 +19,7 @@ class StockIn extends Model
         'destination_location',
         'received_by',
         'posted_by',
+        'posted_date',
         'status',
         'asset_id',
         'quantity',
@@ -38,6 +39,7 @@ class StockIn extends Model
     protected $casts = [
         'receive_date' => 'date',
         'dr_date' => 'date',
+        'posted_date' => 'datetime',
         'warranty_date' => 'date',
         'eol_date' => 'date',
         'warranty_months' => 'integer',

@@ -46,6 +46,7 @@ const route = window.route;
 const openMenus = ref({
     adminTask: false,
     services: false,
+    inventory: false,
     references: false,
     userManagement: false,
     settings: false,
@@ -80,10 +81,13 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('tickets.*') || route().current('task-lists.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) {
+    if (route().current('tickets.*') || route().current('task-lists.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
-    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
+    if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*')) {
+        openMenus.value.inventory = true;
+    }
+    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -92,7 +96,7 @@ onMounted(() => {
     if (route().current('profile.*') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*')) {
         openMenus.value.settings = true;
     }
-    if (route().current('reports.*') || route().current('reports.assignee-performance')) {
+    if (route().current('reports.*') && !route().current('reports.inventory')) {
         openMenus.value.reports = true;
     }
 });
@@ -114,8 +118,11 @@ const canSeeServices = computed(() => {
            hasPermission('task_lists.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
-           hasPermission('stock_ins.view') ||
            visibleDynamicForms.value.length > 0;
+});
+
+const canSeeInventory = computed(() => {
+    return hasPermission('stock_ins.view') || hasPermission('reports.inventory') || hasPermission('assets.view');
 });
 
 const canSeeForms = computed(() => {
@@ -141,7 +148,11 @@ const canSeeUserManagement = computed(() => {
 });
 
 const canSeeReports = computed(() => {
-    return hasPermission('reports.view') && (hasPermission('reports.store_health') || hasPermission('reports.sla_performance') || hasPermission('reports.assignee_performance'));
+    return hasPermission('reports.view') && (
+        hasPermission('reports.store_health') || 
+        hasPermission('reports.sla_performance') || 
+        hasPermission('reports.assignee_performance')
+    );
 });
 
 const canSeeSettings = computed(() => {
@@ -284,17 +295,6 @@ const canSeeSettings = computed(() => {
                             <span>SAP Requests</span>
                         </Link>
 
-                        <Link
-                            v-if="hasPermission('stock_ins.view')"
-                            :href="route('stock-ins.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Stock In</span>
-                        </Link>
-
                         <!-- Nested Dynamic Forms -->
                         <Link
                             v-for="form in visibleDynamicForms"
@@ -306,6 +306,62 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>{{ form.name }}</span>
+                        </Link>
+                    </div>
+                </div>
+
+                <!-- Inventory Section -->
+                <div v-if="canSeeInventory" class="space-y-1 pt-1">
+                    <button
+                        @click="toggleMenu('inventory')"
+                        :class="[
+                            'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
+                            (route().current('stock-ins.*') || route().current('reports.inventory')) && !openMenus.inventory
+                                ? 'bg-gray-800 text-blue-400'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ]"
+                    >
+                        <svg :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Inventory</span>
+                        <ChevronDownIcon v-if="!isCollapsed && openMenus.inventory" class="w-4 h-4 ml-2" />
+                        <ChevronRightIcon v-if="!isCollapsed && !openMenus.inventory" class="w-4 h-4 ml-2" />
+                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+                            Inventory
+                        </div>
+                    </button>
+
+                    <div v-if="!isCollapsed && openMenus.inventory" class="pl-10 space-y-1 mt-1 transition-all duration-300">
+                        <Link
+                            v-if="hasPermission('assets.view')"
+                            :href="route('assets.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Assets</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('stock_ins.view')"
+                            :href="route('stock-ins.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Stock In</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('reports.inventory')"
+                            :href="route('reports.inventory')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('reports.inventory') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Inventory Report</span>
                         </Link>
                     </div>
                 </div>
@@ -485,17 +541,6 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Items</span>
-                        </Link>
-
-                        <Link
-                            v-if="hasPermission('assets.view')"
-                            :href="route('assets.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Assets</span>
                         </Link>
                         <Link
                             v-if="hasPermission('request_types.view')"

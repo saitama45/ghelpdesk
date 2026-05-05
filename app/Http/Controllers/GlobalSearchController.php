@@ -53,6 +53,7 @@ class GlobalSearchController extends Controller
             ['name' => 'Items', 'url' => route('items.index', [], false), 'path' => 'References > Items', 'permission' => 'items.view'],
             ['name' => 'Assets', 'url' => route('assets.index', [], false), 'path' => 'References > Assets', 'permission' => 'assets.view'],
             ['name' => 'Store Health Report', 'url' => route('reports.store-health', [], false), 'path' => 'Reports > Store Health', 'permission' => 'reports.store_health'],
+            ['name' => 'Inventory Report', 'url' => route('reports.inventory', [], false), 'path' => 'Reports > Inventory', 'permission' => 'reports.inventory'],
             ['name' => 'SLA Performance Report', 'url' => route('reports.sla-performance', [], false), 'path' => 'Reports > SLA Performance', 'permission' => 'reports.sla_performance'],
             ['name' => 'Users', 'url' => route('users.index', [], false), 'path' => 'User Management > Users', 'permission' => 'users.view'],
             ['name' => 'Roles & Permissions', 'url' => route('roles.index', [], false), 'path' => 'User Management > Roles & Permissions', 'permission' => 'roles.view'],

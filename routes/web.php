@@ -165,7 +165,7 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/sla-performance/tickets', [\App\Http\Controllers\SlaReportController::class, 'getTickets'])->name('reports.sla-performance.tickets');
     Route::get('reports/assignee-performance', [\App\Http\Controllers\AssigneePerformanceReportController::class, 'index'])->name('reports.assignee-performance');
     Route::get('reports/assignee-performance/pdf', [\App\Http\Controllers\AssigneePerformanceReportController::class, 'pdf'])->name('reports.assignee-performance.pdf');
-
+    Route::get('reports/inventory', [\App\Http\Controllers\InventoryReportController::class, 'index'])->name('reports.inventory');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

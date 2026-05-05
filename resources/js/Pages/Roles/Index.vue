@@ -407,6 +407,7 @@ const landingPageOptions = [
         group: 'Reports',
         options: [
             { label: 'Store Health Report', value: 'reports.store-health' },
+            { label: 'Inventory Report', value: 'reports.inventory' },
         ]
     },
     {

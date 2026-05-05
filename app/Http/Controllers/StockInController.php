@@ -9,6 +9,7 @@ use App\Models\Vendor;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Milon\Barcode\DNS1D;
@@ -147,15 +148,16 @@ class StockInController extends Controller
     {
         abort_unless($request->user()->can('stock_ins.post'), 403);
 
-        StockIn::where('asset_id', $stockIn->asset_id)
+        DB::table('stock_ins')
+            ->where('asset_id', $stockIn->asset_id)
             ->whereDate('receive_date', $stockIn->receive_date)
             ->update([
                 'status' => 'Posted',
                 'posted_by' => $request->user()->name,
-                'updated_by' => $request->user()->id,
+                'posted_date' => now(),
             ]);
 
-        return redirect()->back()->with('success', 'Stock In posted successfully');
+        return redirect()->back()->with('success', 'Stock In status updated to Posted');
     }
 
     public function import(Request $request)

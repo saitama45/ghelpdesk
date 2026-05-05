@@ -6,7 +6,10 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\StockIn;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class StockInCodeValidationTest extends TestCase
@@ -18,6 +21,14 @@ class StockInCodeValidationTest extends TestCase
         parent::setUp();
 
         $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     public function test_stock_in_create_requires_barcode_and_qr_code_per_entry(): void
@@ -94,6 +105,67 @@ class StockInCodeValidationTest extends TestCase
             'barcode' => 'AST-001-1770000000000-1',
             'qrcode' => "Item Code: AST-001\nBarcode: AST-001-1770000000000-1",
         ]);
+    }
+
+    public function test_posting_stock_in_updates_group_status_and_posting_metadata(): void
+    {
+        Permission::create(['name' => 'stock_ins.post']);
+
+        Carbon::setTestNow('2026-05-05 14:30:00');
+
+        $user = User::factory()->create();
+        $user->givePermissionTo('stock_ins.post');
+        $asset = $this->createAsset();
+        $groupedRow = StockIn::create([
+            'receive_date' => '2026-05-05',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'serial_no' => 'SN-001',
+            'barcode' => 'BARCODE-001',
+            'qrcode' => 'QR-001',
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+            'posted_by' => 'Original Poster',
+            'posted_date' => null,
+            'updated_by' => null,
+            'status' => 'For Posting',
+        ]);
+        $sameHeaderRow = StockIn::create([
+            'receive_date' => '2026-05-05',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'serial_no' => 'SN-002',
+            'barcode' => 'BARCODE-002',
+            'qrcode' => 'QR-002',
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+            'posted_by' => null,
+            'posted_date' => null,
+            'updated_by' => null,
+            'status' => 'For Posting',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('stock-ins.post', $groupedRow))
+            ->assertRedirect();
+
+        $groupedRow->refresh();
+        $sameHeaderRow->refresh();
+
+        $this->assertSame('Posted', $groupedRow->status);
+        $this->assertSame('Posted', $sameHeaderRow->status);
+        $this->assertSame($user->name, $groupedRow->posted_by);
+        $this->assertSame($user->name, $sameHeaderRow->posted_by);
+        $this->assertSame('2026-05-05 14:30:00', $groupedRow->posted_date->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-05-05 14:30:00', $sameHeaderRow->posted_date->format('Y-m-d H:i:s'));
+        $this->assertNull($groupedRow->updated_by);
+        $this->assertNull($sameHeaderRow->updated_by);
+
+        Carbon::setTestNow();
     }
 
     protected function createAsset(): Asset

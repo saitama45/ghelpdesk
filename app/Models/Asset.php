@@ -37,4 +37,9 @@ class Asset extends Model
     {
         return $this->belongsTo(SubCategory::class);
     }
+
+    public function stockIns()
+    {
+        return $this->hasMany(StockIn::class);
+    }
 }
