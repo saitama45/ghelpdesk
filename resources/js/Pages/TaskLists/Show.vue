@@ -92,7 +92,13 @@ const memberForm = reactive({
 
 const labelForm = reactive({
     name: '',
-    color: 'blue',
+    color: '#2563eb',
+});
+
+const editingLabelId = ref(null);
+const editingLabelForm = reactive({
+    name: '',
+    color: '#2563eb',
 });
 
 const newComment = ref('');
@@ -107,16 +113,6 @@ const colorOptions = [
     '#be123c',
     '#b45309',
     '#374151',
-];
-
-const labelColors = [
-    'red',
-    'amber',
-    'emerald',
-    'blue',
-    'violet',
-    'pink',
-    'gray',
 ];
 
 const statusStyles = {
@@ -251,6 +247,38 @@ const dueBadgeClass = (card) => {
     }
 };
 
+const namedLabelColors = {
+    red: '#dc2626',
+    amber: '#d97706',
+    emerald: '#059669',
+    blue: '#2563eb',
+    violet: '#7c3aed',
+    pink: '#db2777',
+    gray: '#4b5563',
+};
+
+const normalizeHexColor = (value, fallback = '#2563eb') => {
+    const color = String(value || '').trim();
+    return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+};
+
+const labelColorValue = (color) => {
+    const value = String(color || '').trim();
+    if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+
+    return namedLabelColors[value] || '#4b5563';
+};
+
+const readableTextColor = (hexColor) => {
+    const normalized = normalizeHexColor(hexColor, '#4b5563').replace('#', '');
+    const red = parseInt(normalized.slice(0, 2), 16);
+    const green = parseInt(normalized.slice(2, 4), 16);
+    const blue = parseInt(normalized.slice(4, 6), 16);
+    const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+
+    return luminance > 0.62 ? '#111827' : '#ffffff';
+};
+
 const labelClass = (color) => {
     const map = {
         red: 'bg-red-100 text-red-700 border-red-200',
@@ -263,6 +291,18 @@ const labelClass = (color) => {
     };
 
     return map[color] || map.gray;
+};
+
+const labelStyle = (color) => {
+    if (!String(color || '').startsWith('#')) return {};
+
+    const backgroundColor = labelColorValue(color);
+
+    return {
+        backgroundColor,
+        borderColor: backgroundColor,
+        color: readableTextColor(backgroundColor),
+    };
 };
 
 const coverStyle = (card) => {
@@ -617,26 +657,80 @@ const moveCardToStatus = (card, status) => {
     moveDraggedCard(status);
 };
 
-const createLabel = async () => {
+const syncBoardLabels = (labels) => {
+    localBoard.value.labels = labels || [];
+};
+
+const applyUpdatedLabelToCards = (updatedLabel) => {
+    if (!updatedLabel) return;
+
+    localBoard.value.cards = (localBoard.value.cards || []).map((card) => ({
+        ...card,
+        labels: (card.labels || []).map((label) => (
+            Number(label.id) === Number(updatedLabel.id) ? updatedLabel : label
+        )),
+    }));
+};
+
+const createLabel = async (card = null) => {
     if (!labelForm.name.trim() || !canEditBoard.value) return;
 
     try {
-        const response = await axios.post(route('task-lists.labels.store', localBoard.value.id), labelForm);
-        localBoard.value.labels = response.data.labels;
+        const response = await axios.post(route('task-lists.labels.store', localBoard.value.id), {
+            name: labelForm.name.trim(),
+            color: normalizeHexColor(labelForm.color),
+        });
+        syncBoardLabels(response.data.labels);
+        if (card?.id && response.data.label?.id) {
+            const ids = new Set((card.labels || []).map((item) => item.id));
+            ids.add(response.data.label.id);
+            await updateCard(card, { label_ids: [...ids] });
+        }
         labelForm.name = '';
     } catch (error) {
         handleApiError(error, 'Unable to create label');
     }
 };
 
+const startEditingLabel = (label) => {
+    editingLabelId.value = label.id;
+    editingLabelForm.name = label.name || '';
+    editingLabelForm.color = labelColorValue(label.color);
+};
+
+const cancelEditingLabel = () => {
+    editingLabelId.value = null;
+    editingLabelForm.name = '';
+    editingLabelForm.color = '#2563eb';
+};
+
+const updateLabel = async (label) => {
+    if (!editingLabelForm.name.trim() || !canEditBoard.value) return;
+
+    try {
+        const response = await axios.put(route('task-labels.update', label.id), {
+            name: editingLabelForm.name.trim(),
+            color: normalizeHexColor(editingLabelForm.color),
+        });
+        syncBoardLabels(response.data.labels);
+        applyUpdatedLabelToCards(response.data.label);
+        cancelEditingLabel();
+    } catch (error) {
+        handleApiError(error, 'Unable to update label');
+    }
+};
+
 const deleteLabel = async (label) => {
     try {
         const response = await axios.delete(route('task-labels.destroy', label.id));
-        localBoard.value.labels = response.data.labels;
+        syncBoardLabels(response.data.labels);
         localBoard.value.cards = (localBoard.value.cards || []).map((card) => ({
             ...card,
             labels: (card.labels || []).filter((item) => item.id !== label.id),
         }));
+        if (editingLabelId.value === label.id) {
+            cancelEditingLabel();
+        }
     } catch (error) {
         handleApiError(error, 'Unable to delete label');
     }
@@ -1118,7 +1212,7 @@ onUnmounted(() => {
                         <button v-if="canEditBoard" type="button" @click="showLabelModal = true" class="text-xs font-bold text-blue-600">Manage</button>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <span v-for="label in localBoard.labels" :key="label.id" class="rounded-full border px-2 py-1 text-xs font-bold" :class="labelClass(label.color)">
+                        <span v-for="label in localBoard.labels" :key="label.id" class="rounded-full border px-2 py-1 text-xs font-bold" :class="labelClass(label.color)" :style="labelStyle(label.color)">
                             {{ label.name || label.color }}
                         </span>
                     </div>
@@ -1333,12 +1427,18 @@ onUnmounted(() => {
                                     :disabled="!canEditBoard"
                                     class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-bold"
                                     :class="labelClass(label.color)"
+                                    :style="labelStyle(label.color)"
                                     @click="toggleCardLabel(selectedCard, label)"
                                 >
                                     {{ label.name || label.color }}
                                     <CheckIcon v-if="selectedCard.labels?.some((item) => item.id === label.id)" class="h-4 w-4" />
                                 </button>
                             </div>
+                            <form v-if="canEditBoard" class="mt-3 grid grid-cols-[minmax(0,1fr)_2.5rem_auto] gap-2 border-t border-gray-100 pt-3" @submit.prevent="createLabel(selectedCard)">
+                                <input v-model="labelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="New label">
+                                <input v-model="labelForm.color" type="color" class="h-10 w-10 rounded-lg border border-gray-300 bg-white p-1">
+                                <button type="submit" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">Add</button>
+                            </form>
                         </section>
 
                         <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -1443,16 +1543,25 @@ onUnmounted(() => {
                     </button>
                 </div>
                 <div class="space-y-2">
-                    <div v-for="label in localBoard.labels" :key="label.id" class="flex items-center justify-between rounded-lg border border-gray-200 p-3">
-                        <span class="rounded-full border px-3 py-1 text-xs font-bold" :class="labelClass(label.color)">{{ label.name || label.color }}</span>
-                        <button v-if="canEditBoard" type="button" @click="deleteLabel(label)" class="text-xs font-bold text-red-600">Delete</button>
+                    <div v-for="label in localBoard.labels" :key="label.id" class="rounded-lg border border-gray-200 p-3">
+                        <form v-if="editingLabelId === label.id" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_3rem_auto_auto]" @submit.prevent="updateLabel(label)">
+                            <input v-model="editingLabelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm" placeholder="Label name">
+                            <input v-model="editingLabelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1">
+                            <button type="submit" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Save</button>
+                            <button type="button" class="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200" @click="cancelEditingLabel">Cancel</button>
+                        </form>
+                        <div v-else class="flex items-center justify-between gap-3">
+                            <span class="rounded-full border px-3 py-1 text-xs font-bold" :class="labelClass(label.color)" :style="labelStyle(label.color)">{{ label.name || label.color }}</span>
+                            <div v-if="canEditBoard" class="flex items-center gap-3">
+                                <button type="button" @click="startEditingLabel(label)" class="text-xs font-bold text-blue-600">Edit</button>
+                                <button type="button" @click="deleteLabel(label)" class="text-xs font-bold text-red-600">Delete</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <form v-if="canEditBoard" class="mt-5 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-[minmax(0,1fr)_10rem_auto]" @submit.prevent="createLabel">
+                <form v-if="canEditBoard" class="mt-5 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-[minmax(0,1fr)_3rem_auto]" @submit.prevent="createLabel">
                     <input v-model="labelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm" placeholder="Label name">
-                    <select v-model="labelForm.color" class="h-10 rounded-lg border-gray-300 text-sm">
-                        <option v-for="color in labelColors" :key="color" :value="color">{{ color }}</option>
-                    </select>
+                    <input v-model="labelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1">
                     <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Create</button>
                 </form>
             </div>
