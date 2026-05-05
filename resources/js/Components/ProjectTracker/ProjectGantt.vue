@@ -34,6 +34,9 @@ const { confirm: confirmAction } = useConfirm();
 const isAddingTask = ref(false);
 const isEditing = ref(false);
 const editingTaskId = ref(null);
+const formMode = ref('activity');
+const activeParentTask = ref(null);
+const activeMilestone = ref('');
 const showFilters = ref(false);
 const isApplyingTemplates = ref(false);
 const showTemplateModal = ref(false);
@@ -47,6 +50,7 @@ const mainWorkspaceRef = ref(null);
 
 const form = useForm({
     project_id: props.project.id,
+    parent_task_id: null,
     name: '',
     category: '',
     assigned_to: '',
@@ -54,6 +58,7 @@ const form = useForm({
     task_progress: 0,
     start_date: '',
     end_date: '',
+    order: null,
 });
 
 // Sync status with progress in the form
@@ -124,6 +129,20 @@ const applyActivityTemplates = () => {
     showTemplateModal.value = true;
 };
 
+const resetTaskForm = () => {
+    form.reset();
+    form.project_id = props.project.id;
+    form.parent_task_id = null;
+    form.name = '';
+    form.category = '';
+    form.assigned_to = '';
+    form.status = 'Pending';
+    form.task_progress = 0;
+    form.start_date = '';
+    form.end_date = '';
+    form.order = null;
+};
+
 const confirmApplyTemplate = async () => {
     if (!selectedTemplateId.value) {
         error('Please select a template first.');
@@ -137,7 +156,7 @@ const confirmApplyTemplate = async () => {
 
     const ok = await confirmAction({
         title: 'Apply Template',
-        message: `Are you sure you want to apply "${template.name}"? This will add ${template.activities_count} activities to the project. Existing tasks with the same name will not be duplicated.`,
+        message: `Are you sure you want to apply "${template.name}"? This will add ${template.activities_count} activity rows to the project. Existing activities and sub-tasks with the same name will not be duplicated.`,
         confirmLabel: 'Apply now',
         variant: 'primary'
     });
@@ -164,6 +183,7 @@ const saveTask = () => {
     if (isEditing.value) {
         form.transform((data) => ({
             ...data,
+            parent_task_id: data.parent_task_id || null,
             progress: data.task_progress,
         })).put(route('projects-tasks.update', { 'projects_task': editingTaskId.value, tab: 'gantt' }), {
             preserveScroll: true,
@@ -171,21 +191,26 @@ const saveTask = () => {
                 isAddingTask.value = false;
                 isEditing.value = false;
                 editingTaskId.value = null;
-                form.reset();
-                form.project_id = props.project.id;
+                formMode.value = 'activity';
+                activeParentTask.value = null;
+                activeMilestone.value = '';
+                resetTaskForm();
             }
 
         });
     } else {
         form.transform((data) => ({
             ...data,
+            parent_task_id: data.parent_task_id || null,
             progress: data.task_progress,
         })).post(route('projects-tasks.store', { tab: 'gantt' }), {
             preserveScroll: true,
             onSuccess: () => {
                 isAddingTask.value = false;
-                form.reset();
-                form.project_id = props.project.id;
+                formMode.value = 'activity';
+                activeParentTask.value = null;
+                activeMilestone.value = '';
+                resetTaskForm();
             },
             onError: (errors) => {
                 console.error('Task Creation Failed:', errors);
@@ -194,18 +219,81 @@ const saveTask = () => {
     }
 };
 
+const getNextOrder = (category, parentTaskId = null) => {
+    const normalizedParentId = parentTaskId ? Number(parentTaskId) : null;
+    const siblings = localTasks.value.filter(task => {
+        const taskParentId = task.parent_task_id ? Number(task.parent_task_id) : null;
+
+        if (taskParentId !== normalizedParentId) return false;
+        if (normalizedParentId) return true;
+
+        return (task.category || 'General') === (category || 'General');
+    });
+
+    if (!siblings.length) return 1;
+
+    return Math.max(...siblings.map(task => Number(task.order) || 0)) + 1;
+};
+
+const openMilestoneForm = () => {
+    isEditing.value = false;
+    editingTaskId.value = null;
+    formMode.value = 'milestone';
+    activeParentTask.value = null;
+    activeMilestone.value = '';
+    resetTaskForm();
+    form.order = getNextOrder('', null);
+    isAddingTask.value = true;
+};
+
+const openActivityForm = (category) => {
+    isEditing.value = false;
+    editingTaskId.value = null;
+    formMode.value = 'activity';
+    activeParentTask.value = null;
+    activeMilestone.value = category || 'General';
+    resetTaskForm();
+    form.category = category || 'General';
+    form.order = getNextOrder(form.category, null);
+    isAddingTask.value = true;
+};
+
+const openSubTaskForm = (task) => {
+    isEditing.value = false;
+    editingTaskId.value = null;
+    formMode.value = 'subtask';
+    activeParentTask.value = task;
+    activeMilestone.value = task.category || 'General';
+    resetTaskForm();
+    form.parent_task_id = task.id;
+    form.category = task.category || 'General';
+    form.assigned_to = task.assigned_to || task.external_assignment || '';
+    form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
+    form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
+    form.order = getNextOrder(form.category, task.id);
+    isAddingTask.value = true;
+};
+
 const editTask = (task) => {
     isEditing.value = true;
     editingTaskId.value = task.id;
+    formMode.value = task.parent_task_id ? 'subtask' : 'activity';
+    activeParentTask.value = task.parent_task_id
+        ? localTasks.value.find(candidate => Number(candidate.id) === Number(task.parent_task_id)) || null
+        : null;
+    activeMilestone.value = task.category || 'General';
     isAddingTask.value = true;
     
+    form.project_id = props.project.id;
+    form.parent_task_id = task.parent_task_id || null;
     form.name = task.name;
     form.category = task.category;
-    form.assigned_to = task.assigned_to;
+    form.assigned_to = task.assigned_to || task.external_assignment || '';
     form.status = task.status;
     form.task_progress = task.progress;
     form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
+    form.order = task.order;
 };
 
 const updateTaskField = (task, field, value) => {
@@ -246,8 +334,10 @@ const closeForm = () => {
     isAddingTask.value = false;
     isEditing.value = false;
     editingTaskId.value = null;
-    form.reset();
-    form.project_id = props.project.id;
+    formMode.value = 'activity';
+    activeParentTask.value = null;
+    activeMilestone.value = '';
+    resetTaskForm();
 };
 
 const parseLocalDate = (dateString) => {
@@ -344,15 +434,85 @@ const getGanttBarStyles = (task) => {
     };
 };
 
+const taskLookup = computed(() => {
+    return new Map(localTasks.value.map(task => [Number(task.id), task]));
+});
+
 const groupedTasks = computed(() => {
     if (!localTasks.value.length) return {};
+
+    const childrenByParent = new Map();
+
+    localTasks.value.forEach(task => {
+        const parentId = task.parent_task_id ? Number(task.parent_task_id) : null;
+
+        if (!parentId || !taskLookup.value.has(parentId)) return;
+
+        if (!childrenByParent.has(parentId)) {
+            childrenByParent.set(parentId, []);
+        }
+
+        childrenByParent.get(parentId).push(task);
+    });
+
     return localTasks.value.reduce((groups, task) => {
+        const parentId = task.parent_task_id ? Number(task.parent_task_id) : null;
+
+        if (parentId && taskLookup.value.has(parentId)) {
+            return groups;
+        }
+
         const category = task.category || 'General';
         if (!groups[category]) groups[category] = [];
-        groups[category].push(task);
+        groups[category].push({
+            ...task,
+            subTasks: sortTasks(childrenByParent.get(Number(task.id)) || []),
+        });
         return groups;
     }, {});
 });
+
+const taskRows = (task) => {
+    return [
+        { task, isSubTask: false, parent: null },
+        ...(task.subTasks || []).map(subTask => ({ task: subTask, isSubTask: true, parent: task })),
+    ];
+};
+
+const visibleTaskCount = (tasks = []) => {
+    return tasks.reduce((count, task) => count + 1 + (task.subTasks?.length || 0), 0);
+};
+
+const formTitle = computed(() => {
+    if (isEditing.value) {
+        return formMode.value === 'subtask' ? 'Edit Sub-task' : 'Edit Activity';
+    }
+
+    if (formMode.value === 'milestone') return 'Add Milestone';
+    if (formMode.value === 'subtask') return 'Add Sub-task';
+    return 'Add Activity';
+});
+
+const activityFieldLabel = computed(() => {
+    return formMode.value === 'subtask' ? 'Sub-task' : 'Activity';
+});
+
+const saveButtonLabel = computed(() => {
+    if (isEditing.value) return 'Update';
+    if (formMode.value === 'milestone') return 'Add';
+    return formMode.value === 'subtask' ? 'Add Sub-task' : 'Add Activity';
+});
+
+const getAssigneeName = (task) => {
+    return task.assigned_user?.name
+        || props.users.find(user => user.id == task.assigned_to)?.name
+        || task.external_assignment
+        || '';
+};
+
+const getAssigneeInitial = (task) => {
+    return (getAssigneeName(task) || 'U').charAt(0);
+};
 
 const persistTaskOrder = () => {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -486,11 +646,11 @@ const isWeekend = (date) => {
                     <FunnelIcon class="w-5 h-5" />
                 </button>
                 <button 
-                    @click="isAddingTask = !isAddingTask"
+                    @click="openMilestoneForm"
                     class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95"
                 >
                     <PlusIcon class="w-4 h-4 mr-2" />
-                    New Task
+                    Add Milestone
                 </button>
             </div>
         </div>
@@ -504,14 +664,25 @@ const isWeekend = (date) => {
             leave-to-class="transform -translate-y-4 opacity-0"
         >
             <div v-if="isAddingTask" class="p-6 bg-indigo-50/30 border-b border-indigo-100 z-30">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-black text-indigo-950 uppercase tracking-widest">{{ formTitle }}</h4>
+                        <p v-if="activeParentTask" class="mt-1 text-xs font-semibold text-slate-500">
+                            Under {{ activeParentTask.name }} in {{ activeMilestone }}
+                        </p>
+                        <p v-else-if="activeMilestone" class="mt-1 text-xs font-semibold text-slate-500">
+                            Milestone: {{ activeMilestone }}
+                        </p>
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-x-8 gap-y-4 items-end">
                     <div class="md:col-span-2">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Milestone</label>
-                        <input v-model="form.category" type="text" placeholder="Group Name" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                        <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50">
                         <div v-if="form.errors.category" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.category }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Activity</label>
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">{{ activityFieldLabel }}</label>
                         <input v-model="form.name" type="text" placeholder="What needs to be done?" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
                         <div v-if="form.errors.name" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.name }}</div>
                     </div>
@@ -532,14 +703,14 @@ const isWeekend = (date) => {
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Timeline</label>
                         <div class="flex items-center space-x-2">
                             <input v-model="form.start_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500">
-                            <span class="text-slate-400">→</span>
+                            <span class="text-slate-400">to</span>
                             <input v-model="form.end_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500">
                         </div>
                         <div v-if="form.errors.start_date || form.errors.end_date" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.start_date || form.errors.end_date }}</div>
                     </div>
                     <div class="md:col-span-2 flex items-center space-x-2 pl-4">
                         <button @click="saveTask" :disabled="form.processing" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
-                            {{ isEditing ? 'Update' : 'Add' }}
+                            {{ saveButtonLabel }}
                         </button>
                         <button @click="closeForm" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap">
                             Cancel
@@ -611,100 +782,121 @@ const isWeekend = (date) => {
                     <template v-for="(tasks, category) in groupedTasks" :key="category">
                         <!-- Category Row -->
                         <div class="flex sticky top-14 z-30">
-                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
+                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
                                 <div class="flex items-center space-x-2">
                                     <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90" />
                                     <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider">{{ category }}</span>
-                                    <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold">{{ tasks.length }}</span>
+                                    <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold">{{ visibleTaskCount(tasks) }}</span>
                                 </div>
+                                <button type="button"
+                                        @click.stop="openActivityForm(category)"
+                                        class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors">
+                                    <PlusIcon class="w-3.5 h-3.5 mr-1" />
+                                    Add Activity
+                                </button>
                             </div>
                             <div class="flex-1 h-10 bg-slate-100/30 border-b border-slate-200"></div>
                         </div>
 
                         <!-- Task Rows -->
-                        <div v-for="task in tasks" :key="task.id" @click="editTask(task)"
-                             @dragover.prevent="handleTaskDragOver(task)"
-                             @drop.prevent="handleTaskDrop(task)"
-                             :class="dragOverTaskId === task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200' : ''"
-                             class="flex min-h-[3.5rem] border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10">
-                            
-                            <!-- Left Task Info (Sticky) -->
-                            <div class="sticky left-0 z-30 w-[480px] bg-white group-hover:bg-slate-50 flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
-                                <div class="w-1/2 px-4 flex items-center space-x-3 py-2">
-                                    <div class="relative flex-shrink-0" @click.stop>
-                                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                                             :class="task.status === 'Done' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 group-hover:border-indigo-300'">
-                                            <CheckCircleIcon v-if="task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center self-stretch" @click.stop>
-                                        <button type="button"
-                                                draggable="true"
-                                                @dragstart="handleTaskDragStart(task)"
-                                                @dragend="handleTaskDragEnd"
-                                                class="h-full px-1.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors"
-                                                title="Drag to reorder task">
-                                            <ArrowsPointingOutIcon class="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex items-center justify-between mb-0.5">
-                                            <div class="text-[13px] font-bold text-slate-700 whitespace-normal break-words leading-tight mr-2">
-                                                {{ task.name }}
+                        <template v-for="task in tasks" :key="task.id">
+                            <div v-for="row in taskRows(task)" :key="row.task.id" @click="editTask(row.task)"
+                                 @dragover.prevent="handleTaskDragOver(row.task)"
+                                 @drop.prevent="handleTaskDrop(row.task)"
+                                 :class="[
+                                    dragOverTaskId === row.task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200' : '',
+                                    row.isSubTask ? 'min-h-[3rem]' : 'min-h-[3.5rem]'
+                                 ]"
+                                 class="flex border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10">
+                                
+                                <!-- Left Task Info (Sticky) -->
+                                <div class="sticky left-0 z-30 w-[480px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]"
+                                     :class="row.isSubTask ? 'bg-slate-50 group-hover:bg-slate-100/70' : 'bg-white group-hover:bg-slate-50'">
+                                    <div class="w-1/2 flex items-center space-x-3 py-2" :class="row.isSubTask ? 'pl-9 pr-4' : 'px-4'">
+                                        <div class="relative flex-shrink-0" @click.stop>
+                                            <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
+                                                 :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 group-hover:border-indigo-300'">
+                                                <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
                                             </div>
-                                            <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0">{{ task.progress }}%</span>
                                         </div>
-                                        <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                                            <div class="h-full transition-all duration-500" 
-                                                 :class="getBarColorClass(task.status)" 
-                                                 :style="{ width: task.progress + '%' }"></div>
+                                        <div class="flex items-center self-stretch" @click.stop>
+                                            <button type="button"
+                                                    draggable="true"
+                                                    @dragstart="handleTaskDragStart(row.task)"
+                                                    @dragend="handleTaskDragEnd"
+                                                    class="h-full px-1.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors"
+                                                    title="Drag to reorder task">
+                                                <ArrowsPointingOutIcon class="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center justify-between mb-0.5">
+                                                <div class="font-bold text-slate-700 whitespace-normal break-words leading-tight mr-2"
+                                                     :class="row.isSubTask ? 'text-[12px]' : 'text-[13px]'">
+                                                    <span v-if="row.isSubTask" class="mr-1 text-[10px] font-black text-slate-400 uppercase">Sub</span>
+                                                    {{ row.task.name }}
+                                                </div>
+                                                <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0">{{ row.task.progress }}%</span>
+                                            </div>
+                                            <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                                                <div class="h-full transition-all duration-500" 
+                                                     :class="getBarColorClass(row.task.status)" 
+                                                     :style="{ width: row.task.progress + '%' }"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="w-1/4 px-2 text-center py-2">
+                                         <div v-if="getAssigneeName(row.task)" class="mx-auto h-7 w-7 rounded-lg bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-200" :title="getAssigneeName(row.task)">
+                                            {{ getAssigneeInitial(row.task) }}
+                                        </div>
+                                        <div v-else class="mx-auto h-7 w-7 rounded-lg border border-dashed border-slate-200 flex items-center justify-center text-slate-300">?</div>
+                                    </div>
+                                    <div class="w-1/4 pl-2 pr-6 flex items-center justify-end gap-2 group/actions relative py-2">
+                                        <div class="flex-shrink-0">
+                                            <span class="px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-sm min-w-[70px] inline-block text-center"
+                                                  :class="getStatusStyles(row.task.status)">
+                                                {{ row.task.status }}
+                                            </span>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <button v-if="!row.isSubTask"
+                                                    @click.stop="openSubTaskForm(row.task)"
+                                                    class="p-1 text-indigo-400 hover:text-indigo-700 transition-colors opacity-40 group-hover:opacity-100 flex-shrink-0"
+                                                    title="Add Sub-task">
+                                                <PlusIcon class="w-4 h-4" />
+                                            </button>
+                                            <button @click.stop="deleteTask(row.task.id)" class="p-1 text-red-400 hover:text-red-600 transition-colors opacity-40 group-hover:opacity-100 flex-shrink-0" title="Delete Task">
+                                                <TrashIcon class="w-4 h-4" />
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="w-1/4 px-2 text-center py-2">
-                                     <div v-if="task.assigned_to" class="mx-auto h-7 w-7 rounded-lg bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-200" :title="users.find(u => u.id == task.assigned_to)?.name">
-                                        {{ (users.find(u => u.id == task.assigned_to)?.name || 'U').charAt(0) }}
-                                    </div>
-                                    <div v-else class="mx-auto h-7 w-7 rounded-lg border border-dashed border-slate-200 flex items-center justify-center text-slate-300">?</div>
-                                </div>
-                                <div class="w-1/4 pl-2 pr-6 flex items-center justify-end gap-2 group/actions relative py-2">
-                                    <div class="flex-shrink-0">
-                                        <span class="px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-sm min-w-[70px] inline-block text-center"
-                                              :class="getStatusStyles(task.status)">
-                                            {{ task.status }}
-                                        </span>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <button @click.stop="deleteTask(task.id)" class="p-1 text-red-400 hover:text-red-600 transition-colors opacity-40 group-hover:opacity-100 flex-shrink-0" title="Delete Task">
-                                            <TrashIcon class="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <!-- Right Gantt Bar Area -->
-                            <div class="flex-1 relative">
-                                <div class="absolute inset-0 grid h-full py-2.5 px-[1px]" :style="{ gridTemplateColumns: `repeat(${timelineDays.length}, 48px)` }">
-                                    <div v-if="task.start_date && task.end_date"
-                                         class="h-full rounded-lg relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-lg cursor-pointer z-20"
-                                         :style="getGanttBarStyles(task)"
-                                         @click="isAddingTask = false"
-                                    >
-                                        <div class="absolute inset-0" :class="getBarColorClass(task.status)"></div>
-                                        <div class="absolute top-0 left-0 h-full bg-black/15 flex items-center justify-end pr-2 overflow-hidden" :style="{ width: task.progress + '%' }">
-                                            <div v-if="task.progress > 0" class="h-full w-full bg-gradient-to-r from-transparent to-white/10"></div>
+                                <!-- Right Gantt Bar Area -->
+                                <div class="flex-1 relative">
+                                    <div class="absolute inset-0 grid h-full py-2.5 px-[1px]" :style="{ gridTemplateColumns: `repeat(${timelineDays.length}, 48px)` }">
+                                        <div v-if="row.task.start_date && row.task.end_date"
+                                             class="h-full rounded-lg relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-lg cursor-pointer z-20"
+                                             :class="row.isSubTask ? 'opacity-85' : ''"
+                                             :style="getGanttBarStyles(row.task)"
+                                             @click="isAddingTask = false"
+                                        >
+                                            <div class="absolute inset-0" :class="getBarColorClass(row.task.status)"></div>
+                                            <div class="absolute top-0 left-0 h-full bg-black/15 flex items-center justify-end pr-2 overflow-hidden" :style="{ width: row.task.progress + '%' }">
+                                                <div v-if="row.task.progress > 0" class="h-full w-full bg-gradient-to-r from-transparent to-white/10"></div>
+                                            </div>
+                                            <div class="absolute inset-0 flex items-center px-2 justify-between gap-1.5">
+                                                <span class="text-[10px] font-black text-white truncate shadow-sm tracking-tight flex-1">{{ row.task.name }}</span>
+                                                <span class="text-[9px] font-bold text-white/80 whitespace-nowrap">{{ row.task.progress }}%</span>
+                                            </div>
+                                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[9px] rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 font-bold">
+                                                {{ row.task.name }}: {{ row.task.start_date.split('T')[0] }} to {{ row.task.end_date.split('T')[0] }}
+                                            </div>
                                         </div>
-                                        <div class="absolute inset-0 flex items-center px-2 justify-between gap-1.5">
-                                            <span class="text-[10px] font-black text-white truncate shadow-sm tracking-tight flex-1">{{ task.name }}</span>
-                                            <span class="text-[9px] font-bold text-white/80 whitespace-nowrap">{{ task.progress }}%</span>
-                                        </div>
-                                        <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[9px] rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 font-bold">
-                                            {{ task.name }}: {{ task.start_date.split('T')[0] }} to {{ task.end_date.split('T')[0] }}
-                                        </div>
-                                    </div>
+                                    </div> 
                                 </div>
                             </div>
-                        </div>
+                        </template>
                     </template>
                 </div>
             </div>
@@ -761,7 +953,7 @@ const isWeekend = (date) => {
                                     <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase rounded">{{ template.project_type }}</span>
                                 </div>
                                 <div class="flex items-center text-xs text-slate-500 font-medium space-x-3">
-                                    <span>{{ template.activities_count }} activities</span>
+                                    <span>{{ template.activities_count }} activity rows</span>
                                     <span class="h-1 w-1 bg-slate-300 rounded-full"></span>
                                     <span>{{ template.store_class }} Class</span>
                                 </div>

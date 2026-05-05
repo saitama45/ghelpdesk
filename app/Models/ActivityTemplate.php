@@ -11,6 +11,7 @@ class ActivityTemplate extends Model
 
     protected $fillable = [
         'project_template_id',
+        'parent_activity_template_id',
         'activity',
         'milestone',
         'asset_item',
@@ -30,5 +31,15 @@ class ActivityTemplate extends Model
     public function projectTemplate()
     {
         return $this->belongsTo(ProjectTemplate::class);
+    }
+
+    public function parentActivity()
+    {
+        return $this->belongsTo(ActivityTemplate::class, 'parent_activity_template_id');
+    }
+
+    public function subActivities()
+    {
+        return $this->hasMany(ActivityTemplate::class, 'parent_activity_template_id')->orderBy('order');
     }
 }

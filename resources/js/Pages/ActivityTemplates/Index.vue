@@ -96,7 +96,8 @@
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-xs font-bold text-gray-500">{{ template.activities?.length || 0 }} activities</div>
+                                <div class="text-xs font-bold text-gray-500">{{ template.activities?.length || 0 }} rows</div>
+                                <div v-if="templateSubTaskCount(template)" class="text-[10px] font-black uppercase tracking-wider text-blue-500">{{ templateSubTaskCount(template) }} sub-tasks</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
@@ -190,81 +191,168 @@
                     <!-- Details Repeater -->
                     <div class="space-y-4">
                         <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest">Activities / Task Details</h4>
+                            <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest">Milestone Activities / Sub-tasks</h4>
                             <button 
                                 type="button" 
-                                @click="addActivity"
+                                @click="addMilestone"
                                 class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
                             >
                                 <PlusIcon class="w-3.5 h-3.5 mr-1.5" />
-                                Add Activity
+                                Add Milestone
                             </button>
                         </div>
 
-                        <div class="overflow-x-auto border rounded-xl shadow-sm bg-white">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-16">Ord</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Milestone</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[200px]">Activity</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Asset Item</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Model/Specs</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Qty</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Resp.</th>
-                                        <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Days</th>
-                                        <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-10"></th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    <tr v-for="(act, index) in form.activities" :key="index" class="group hover:bg-slate-50 transition-colors">
-                                        <td class="px-2 py-2">
-                                            <input v-model="act.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500">
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <input v-model="act.milestone" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Milestone...">
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <input 
-                                                ref="activityInputs"
-                                                v-model="act.activity" 
-                                                type="text" 
-                                                class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-800 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" 
-                                                placeholder="Activity name..." 
-                                                required
-                                            >
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <input v-model="act.asset_item" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Asset...">
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <input v-model="act.model_specs" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Specs...">
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <input v-model="act.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <select v-model="act.responsible" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                                <option :value="null">None</option>
-                                                <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                                            </select>
-                                        </td>
-                                        <td class="px-2 py-2">
-                                            <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                        </td>
-                                        <td class="px-2 py-2 text-center">
-                                            <button 
-                                                v-if="form.activities.length > 1"
-                                                type="button" 
-                                                @click="removeActivity(index)"
-                                                class="text-gray-300 hover:text-red-500 transition-colors p-1"
-                                            >
-                                                <TrashIcon class="w-4 h-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="space-y-4">
+                            <div v-for="(activities, milestone) in milestoneGroups" :key="milestone" class="overflow-hidden border rounded-xl shadow-sm bg-white">
+                                <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-50 border-b px-4 py-3">
+                                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                                        <input
+                                            :value="milestone"
+                                            type="text"
+                                            @input="renameMilestone(milestone, $event.target.value)"
+                                            class="w-full max-w-sm text-xs border-gray-200 rounded-lg p-1.5 font-black text-gray-700 uppercase tracking-widest focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="Milestone name"
+                                        >
+                                        <span class="px-2 py-0.5 bg-gray-200 text-gray-500 rounded text-[9px] font-black uppercase whitespace-nowrap">
+                                            {{ activities.reduce((count, activity) => count + 1 + subTasksFor(activity).length, 0) }} rows
+                                        </span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @click="addActivity(milestone)"
+                                        class="inline-flex items-center px-2.5 py-1 bg-white text-blue-700 text-[10px] font-black uppercase tracking-wider rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors"
+                                    >
+                                        <PlusIcon class="w-3.5 h-3.5 mr-1" />
+                                        Add Activity
+                                    </button>
+                                </div>
+
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-200">
+                                        <thead class="bg-white">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-16">Ord</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[220px]">Activity / Sub-task</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Asset Item</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Model/Specs</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Qty</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Resp.</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Days</th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-24"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <template v-for="act in activities" :key="act.client_key">
+                                                <tr class="group hover:bg-slate-50 transition-colors">
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="act.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input 
+                                                            ref="activityInputs"
+                                                            v-model="act.activity" 
+                                                            type="text" 
+                                                            class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-800 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" 
+                                                            placeholder="Activity name..." 
+                                                            required
+                                                            @input="syncSubTaskMilestone(act)"
+                                                        >
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="act.asset_item" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Asset...">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="act.model_specs" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Specs...">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="act.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <select v-model="act.responsible" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                            <option :value="null">None</option>
+                                                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <div class="flex justify-center gap-1">
+                                                            <button 
+                                                                type="button" 
+                                                                @click="addSubActivity(act)"
+                                                                class="text-blue-400 hover:text-blue-700 transition-colors p-1"
+                                                                title="Add Sub-task"
+                                                            >
+                                                                <PlusIcon class="w-4 h-4" />
+                                                            </button>
+                                                            <button 
+                                                                v-if="form.activities.length > 1"
+                                                                type="button" 
+                                                                @click="removeActivity(act)"
+                                                                class="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                                                title="Delete Activity"
+                                                            >
+                                                                <TrashIcon class="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+
+                                                <tr v-for="subTask in subTasksFor(act)" :key="subTask.client_key" class="group bg-slate-50/70 hover:bg-slate-100 transition-colors">
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="subTask.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <div class="flex items-center gap-2 pl-6">
+                                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Sub</span>
+                                                            <input 
+                                                                ref="activityInputs"
+                                                                v-model="subTask.activity" 
+                                                                type="text" 
+                                                                class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-700 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" 
+                                                                placeholder="Sub-task name..." 
+                                                                required
+                                                            >
+                                                        </div>
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="subTask.asset_item" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Asset...">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="subTask.model_specs" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Specs...">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="subTask.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <select v-model="subTask.responsible" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                            <option :value="null">None</option>
+                                                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
+                                                        </select>
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <input v-model="subTask.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <div class="flex justify-center">
+                                                            <button 
+                                                                v-if="form.activities.length > 1"
+                                                                type="button" 
+                                                                @click="removeActivity(subTask)"
+                                                                class="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                                                title="Delete Sub-task"
+                                                            >
+                                                                <TrashIcon class="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                         <div v-if="form.errors.activities" class="text-sm text-red-600">{{ form.errors.activities }}</div>
                     </div>
@@ -284,7 +372,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useForm, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -339,23 +427,31 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const currentTemplate = ref(null)
 const activityInputs = ref([])
+let clientKeySequence = 1
+
+const makeClientKey = () => `activity-${Date.now()}-${clientKeySequence++}`
+
+const createActivityRow = (overrides = {}) => ({
+    id: null,
+    client_key: makeClientKey(),
+    parent_client_key: null,
+    activity: '',
+    milestone: 'General',
+    asset_item: '',
+    model_specs: '',
+    qty: 1,
+    responsible: null,
+    default_duration_days: 1,
+    order: 1,
+    ...overrides
+})
 
 const form = useForm({
     name: '',
     project_type: 'NSO',
     store_class: 'Regular',
     activities: [
-        { 
-            id: null,
-            activity: '', 
-            milestone: '', 
-            asset_item: '', 
-            model_specs: '', 
-            qty: 1, 
-            responsible: null, 
-            default_duration_days: 1, 
-            order: 1 
-        }
+        createActivityRow()
     ]
 })
 
@@ -372,6 +468,7 @@ const openCreateModal = () => {
     currentTemplate.value = null
     form.reset()
     form.store_class = selectedClass.value
+    form.activities = [createActivityRow()]
     showModal.value = true
 }
 
@@ -381,65 +478,173 @@ const editTemplate = (template) => {
     form.name = template.name
     form.project_type = template.project_type || 'NSO'
     form.store_class = template.store_class
-    form.activities = template.activities.map(a => ({
-        id: a.id,
-        activity: a.activity,
-        milestone: a.milestone,
-        asset_item: a.asset_item,
-        model_specs: a.model_specs,
-        qty: a.qty,
-        responsible: a.responsible,
-        default_duration_days: a.default_duration_days,
-        order: a.order
-    }))
+    form.activities = normalizeTemplateActivities(template.activities || [])
+    if (form.activities.length === 0) {
+        form.activities = [createActivityRow()]
+    }
     showModal.value = true
 }
 
 const closeModal = () => {
     showModal.value = false
     form.reset()
+    form.activities = [createActivityRow()]
 }
 
-const addActivity = () => {
-    const lastRow = form.activities.length > 0 ? form.activities[form.activities.length - 1] : null;
-    
-    const lastOrder = form.activities.length > 0 
-        ? Math.max(...form.activities.map(a => Number(a.order) || 0)) 
-        : 0
-    
-    form.activities.push({
-        id: null,
-        activity: '',
-        milestone: lastRow ? lastRow.milestone : '',
-        asset_item: '',
-        model_specs: '',
-        qty: 1,
-        responsible: lastRow ? lastRow.responsible : null,
-        default_duration_days: 1,
-        order: lastOrder + 1
+const normalizeTemplateActivities = (activities) => {
+    const keyById = new Map()
+
+    activities.forEach(activity => {
+        keyById.set(activity.id, makeClientKey())
     })
 
-    nextTick(() => {
-        const index = form.activities.length - 1;
-        if (activityInputs.value[index]) {
-            activityInputs.value[index].focus();
-        }
-    });
+    return [...activities]
+        .sort((a, b) => {
+            const aIsSubTask = a.parent_activity_template_id ? 1 : 0
+            const bIsSubTask = b.parent_activity_template_id ? 1 : 0
+
+            if (aIsSubTask !== bIsSubTask) return aIsSubTask - bIsSubTask
+            return (Number(a.order) || 0) - (Number(b.order) || 0)
+        })
+        .map(activity => createActivityRow({
+            id: activity.id,
+            client_key: keyById.get(activity.id),
+            parent_client_key: activity.parent_activity_template_id ? keyById.get(activity.parent_activity_template_id) : null,
+            activity: activity.activity,
+            milestone: activity.milestone || 'General',
+            asset_item: activity.asset_item,
+            model_specs: activity.model_specs,
+            qty: activity.qty,
+            responsible: activity.responsible,
+            default_duration_days: activity.default_duration_days,
+            order: activity.order
+        }))
 }
 
-const removeActivity = (index) => {
-    form.activities.splice(index, 1)
+const milestoneGroups = computed(() => {
+    const groups = {}
+
+    form.activities.forEach(activity => {
+        if (activity.parent_client_key) return
+
+        const milestone = activity.milestone || 'General'
+        if (!groups[milestone]) groups[milestone] = []
+        groups[milestone].push(activity)
+    })
+
+    return groups
+})
+
+const templateSubTaskCount = (template) => {
+    return (template.activities || []).filter(activity => activity.parent_activity_template_id).length
+}
+
+const subTasksFor = (activity) => {
+    return form.activities
+        .filter(candidate => candidate.parent_client_key === activity.client_key)
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+}
+
+const nextOrderFor = (milestone, parentClientKey = null) => {
+    const siblings = form.activities.filter(activity => {
+        if ((activity.parent_client_key || null) !== (parentClientKey || null)) return false
+        if (parentClientKey) return true
+
+        return (activity.milestone || 'General') === (milestone || 'General')
+    })
+
+    if (!siblings.length) return 1
+
+    return Math.max(...siblings.map(activity => Number(activity.order) || 0)) + 1
+}
+
+const focusLastActivityInput = () => {
+    nextTick(() => {
+        const lastInput = activityInputs.value[activityInputs.value.length - 1]
+        if (lastInput) lastInput.focus()
+    })
+}
+
+const addMilestone = () => {
+    const milestoneName = `Milestone ${Object.keys(milestoneGroups.value).length + 1}`
+    form.activities.push(createActivityRow({
+        milestone: milestoneName,
+        order: nextOrderFor(milestoneName)
+    }))
+    focusLastActivityInput()
+}
+
+const addActivity = (milestone = 'General') => {
+    const lastRow = [...form.activities].reverse().find(activity => !activity.parent_client_key && (activity.milestone || 'General') === (milestone || 'General'))
+
+    form.activities.push(createActivityRow({
+        milestone: milestone || 'General',
+        responsible: lastRow ? lastRow.responsible : null,
+        default_duration_days: lastRow ? lastRow.default_duration_days : 1,
+        order: nextOrderFor(milestone)
+    }))
+
+    focusLastActivityInput()
+}
+
+const addSubActivity = (parentActivity) => {
+    form.activities.push(createActivityRow({
+        parent_client_key: parentActivity.client_key,
+        milestone: parentActivity.milestone || 'General',
+        responsible: parentActivity.responsible,
+        default_duration_days: parentActivity.default_duration_days || 1,
+        order: nextOrderFor(parentActivity.milestone, parentActivity.client_key)
+    }))
+
+    focusLastActivityInput()
+}
+
+const renameMilestone = (currentMilestone, nextMilestone) => {
+    form.activities.forEach(activity => {
+        if ((activity.milestone || 'General') === currentMilestone) {
+            activity.milestone = nextMilestone || 'General'
+        }
+    })
+}
+
+const syncSubTaskMilestone = (parentActivity) => {
+    form.activities.forEach(activity => {
+        if (activity.parent_client_key === parentActivity.client_key) {
+            activity.milestone = parentActivity.milestone || 'General'
+        }
+    })
+}
+
+const removeActivity = (activity) => {
+    const keysToRemove = new Set([activity.client_key])
+
+    if (!activity.parent_client_key) {
+        form.activities
+            .filter(candidate => candidate.parent_client_key === activity.client_key)
+            .forEach(candidate => keysToRemove.add(candidate.client_key))
+    }
+
+    form.activities = form.activities.filter(candidate => !keysToRemove.has(candidate.client_key))
+
+    if (form.activities.length === 0) {
+        form.activities = [createActivityRow()]
+    }
 }
 
 const submitForm = () => {
+    const transformPayload = (data) => ({
+        ...data,
+        activities: data.activities.map(({ subTasks, ...activity }) => activity)
+    })
+
     if (isEditing.value) {
-        form.put(route('activity-templates.update', currentTemplate.value.id), {
+        form.transform(transformPayload).put(route('activity-templates.update', currentTemplate.value.id), {
             onSuccess: () => {
                 closeModal()
             }
         })
     } else {
-        form.post(route('activity-templates.store'), {
+        form.transform(transformPayload).post(route('activity-templates.store'), {
             onSuccess: () => {
                 closeModal()
             }

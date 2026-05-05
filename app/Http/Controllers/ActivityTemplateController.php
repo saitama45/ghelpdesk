@@ -10,6 +10,7 @@ use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ActivityTemplateController extends Controller implements HasMiddleware
 {
@@ -60,6 +61,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'project_type' => 'required|string|in:NSO,Store Closure,Store Renovation',
             'store_class' => 'required|in:Regular,Kitchen,Both,Office',
             'activities' => 'required|array|min:1',
+            'activities.*.id' => 'nullable|exists:activity_templates,id',
+            'activities.*.client_key' => 'nullable|string|max:255',
+            'activities.*.parent_client_key' => 'nullable|string|max:255',
             'activities.*.activity' => 'required|string|max:255',
             'activities.*.milestone' => 'nullable|string|max:255',
             'activities.*.asset_item' => 'nullable|string|max:255',
@@ -77,9 +81,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'store_class' => $validated['store_class'],
             ]);
 
-            foreach ($validated['activities'] as $activityData) {
-                $projectTemplate->activities()->create($activityData);
-            }
+            $this->persistActivities($projectTemplate, $validated['activities']);
         });
 
         return redirect()->back()->with('success', 'Project template created successfully');
@@ -97,6 +99,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'store_class' => 'required|in:Regular,Kitchen,Both,Office',
             'activities' => 'required|array|min:1',
             'activities.*.id' => 'nullable|exists:activity_templates,id',
+            'activities.*.client_key' => 'nullable|string|max:255',
+            'activities.*.parent_client_key' => 'nullable|string|max:255',
             'activities.*.activity' => 'required|string|max:255',
             'activities.*.milestone' => 'nullable|string|max:255',
             'activities.*.asset_item' => 'nullable|string|max:255',
@@ -114,18 +118,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'store_class' => $validated['store_class'],
             ]);
 
-            $activityIds = collect($validated['activities'])->pluck('id')->filter()->all();
-            $activity_template->activities()->whereNotIn('id', $activityIds)->delete();
-
-            foreach ($validated['activities'] as $activityData) {
-                if (isset($activityData['id'])) {
-                    $id = $activityData['id'];
-                    unset($activityData['id']);
-                    ActivityTemplate::where('id', $id)->update($activityData);
-                } else {
-                    $activity_template->activities()->create($activityData);
-                }
-            }
+            $this->persistActivities($activity_template, $validated['activities']);
         });
 
         return redirect()->back()->with('success', 'Project template updated successfully');
@@ -135,5 +128,129 @@ class ActivityTemplateController extends Controller implements HasMiddleware
     {
         $activity_template->delete();
         return redirect()->back()->with('success', 'Project template deleted successfully');
+    }
+
+    private function persistActivities(ProjectTemplate $projectTemplate, array $activities): void
+    {
+        $activities = collect($activities)
+            ->values()
+            ->map(function (array $activity, int $index) {
+                $activity['client_key'] = filled($activity['client_key'] ?? null)
+                    ? (string) $activity['client_key']
+                    : 'activity-' . $index;
+                $activity['parent_client_key'] = filled($activity['parent_client_key'] ?? null)
+                    ? (string) $activity['parent_client_key']
+                    : null;
+
+                return $activity;
+            });
+
+        $this->validateActivityHierarchy($projectTemplate, $activities);
+
+        $submittedIds = $activities->pluck('id')->filter()->map(fn ($id) => (int) $id)->all();
+        $existingIds = $projectTemplate->activities()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $removedIds = array_values(array_diff($existingIds, $submittedIds));
+
+        if (!empty($removedIds)) {
+            $projectTemplate->activities()
+                ->whereIn('id', $removedIds)
+                ->whereNotNull('parent_activity_template_id')
+                ->delete();
+
+            $projectTemplate->activities()
+                ->whereIn('id', $removedIds)
+                ->whereNull('parent_activity_template_id')
+                ->delete();
+        }
+
+        $savedByClientKey = [];
+
+        foreach ($activities->filter(fn ($activity) => empty($activity['parent_client_key']))->sortBy('order') as $activity) {
+            $model = $this->saveActivity($projectTemplate, $activity, null);
+            $savedByClientKey[$activity['client_key']] = $model;
+        }
+
+        foreach ($activities->filter(fn ($activity) => !empty($activity['parent_client_key']))->sortBy('order') as $activity) {
+            $parent = $savedByClientKey[$activity['parent_client_key']] ?? null;
+
+            if (!$parent) {
+                throw ValidationException::withMessages([
+                    'activities' => 'Each sub-task must belong to an activity in the same template.',
+                ]);
+            }
+
+            $model = $this->saveActivity($projectTemplate, $activity, $parent->id);
+            $savedByClientKey[$activity['client_key']] = $model;
+        }
+    }
+
+    private function validateActivityHierarchy(ProjectTemplate $projectTemplate, $activities): void
+    {
+        $existingIds = $projectTemplate->exists
+            ? $projectTemplate->activities()->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : [];
+
+        $clientKeys = $activities->pluck('client_key')->all();
+        $uniqueClientKeys = array_unique($clientKeys);
+
+        if (count($clientKeys) !== count($uniqueClientKeys)) {
+            throw ValidationException::withMessages([
+                'activities' => 'Activity rows must have unique client keys.',
+            ]);
+        }
+
+        $byClientKey = $activities->keyBy('client_key');
+
+        foreach ($activities as $activity) {
+            if (!empty($activity['id']) && !in_array((int) $activity['id'], $existingIds, true)) {
+                throw ValidationException::withMessages([
+                    'activities' => 'One or more activities do not belong to this template.',
+                ]);
+            }
+
+            $parentClientKey = $activity['parent_client_key'] ?? null;
+
+            if (!$parentClientKey) {
+                continue;
+            }
+
+            if ($parentClientKey === $activity['client_key'] || !$byClientKey->has($parentClientKey)) {
+                throw ValidationException::withMessages([
+                    'activities' => 'Each sub-task must belong to an activity in the same template.',
+                ]);
+            }
+
+            $parent = $byClientKey[$parentClientKey];
+
+            if (!empty($parent['parent_client_key'])) {
+                throw ValidationException::withMessages([
+                    'activities' => 'Only one sub-task level is supported.',
+                ]);
+            }
+        }
+    }
+
+    private function saveActivity(ProjectTemplate $projectTemplate, array $activity, ?int $parentActivityId): ActivityTemplate
+    {
+        $attributes = [
+            'parent_activity_template_id' => $parentActivityId,
+            'activity' => $activity['activity'],
+            'milestone' => $activity['milestone'] ?? null,
+            'asset_item' => $activity['asset_item'] ?? null,
+            'model_specs' => $activity['model_specs'] ?? null,
+            'qty' => $activity['qty'],
+            'responsible' => $activity['responsible'] ?? null,
+            'default_duration_days' => $activity['default_duration_days'],
+            'order' => $activity['order'],
+        ];
+
+        if (!empty($activity['id'])) {
+            $model = $projectTemplate->activities()->whereKey($activity['id'])->firstOrFail();
+            $model->update($attributes);
+
+            return $model;
+        }
+
+        return $projectTemplate->activities()->create($attributes);
     }
 }

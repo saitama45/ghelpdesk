@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\ProjectTask;
 use App\Models\Project;
-use App\Models\ActivityTemplate;
 use App\Models\ProjectTemplate;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ProjectTaskController extends Controller
 {
@@ -25,15 +25,50 @@ class ProjectTaskController extends Controller
 
         $addedCount = 0;
 
-        foreach ($activities as $activity) {
-            // Check if task already exists to prevent duplicates
+        $projectTasksByTemplateActivity = [];
+
+        foreach ($activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
+            $task = ProjectTask::where('project_id', $project->id)
+                ->whereNull('parent_task_id')
+                ->where('name', $activity->activity)
+                ->where('category', $activity->milestone)
+                ->first();
+
+            if (!$task) {
+                $task = ProjectTask::create([
+                    'project_id' => $project->id,
+                    'name' => $activity->activity,
+                    'category' => $activity->milestone,
+                    'asset_item' => $activity->asset_item,
+                    'model_specs' => $activity->model_specs,
+                    'qty' => $activity->qty,
+                    'responsible' => $activity->responsible,
+                    'status' => 'Pending',
+                    'progress' => 0,
+                    'order' => $activity->order,
+                ]);
+                $addedCount++;
+            }
+
+            $projectTasksByTemplateActivity[$activity->id] = $task;
+        }
+
+        foreach ($activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
+            $parentTask = $projectTasksByTemplateActivity[$activity->parent_activity_template_id] ?? null;
+
+            if (!$parentTask) {
+                continue;
+            }
+
             $exists = ProjectTask::where('project_id', $project->id)
+                ->where('parent_task_id', $parentTask->id)
                 ->where('name', $activity->activity)
                 ->exists();
 
             if (!$exists) {
                 ProjectTask::create([
                     'project_id' => $project->id,
+                    'parent_task_id' => $parentTask->id,
                     'name' => $activity->activity,
                     'category' => $activity->milestone,
                     'asset_item' => $activity->asset_item,
@@ -59,21 +94,52 @@ class ProjectTaskController extends Controller
     {
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
-            'parent_task_id' => 'nullable',
+            'parent_task_id' => 'nullable|exists:project_tasks,id',
             'name' => 'required|string|max:255',
-            'category' => 'nullable|string',
+            'category' => 'nullable|string|max:255',
             'assigned_to' => 'nullable',
             'support_by' => 'nullable',
             'status' => 'required|string',
             'progress' => 'integer|min:0|max:100',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
-            'order' => 'integer',
+            'order' => 'nullable|integer',
         ]);
 
         // Convert empty strings to null for database foreign keys
         $validated['parent_task_id'] = ($validated['parent_task_id'] ?? null) ?: null;
         $validated['support_by'] = ($validated['support_by'] ?? null) ?: null;
+
+        if ($validated['parent_task_id']) {
+            $parentTask = ProjectTask::findOrFail($validated['parent_task_id']);
+
+            if ((int) $parentTask->project_id !== (int) $validated['project_id']) {
+                throw ValidationException::withMessages([
+                    'parent_task_id' => 'The selected parent task does not belong to this project.',
+                ]);
+            }
+
+            if ($parentTask->parent_task_id) {
+                throw ValidationException::withMessages([
+                    'parent_task_id' => 'Only one sub-task level is supported.',
+                ]);
+            }
+
+            if (blank($validated['category'] ?? null)) {
+                $validated['category'] = $parentTask->category;
+            }
+        }
+
+        if (!array_key_exists('order', $validated) || $validated['order'] === null) {
+            $orderQuery = ProjectTask::where('project_id', $validated['project_id'])
+                ->where('parent_task_id', $validated['parent_task_id']);
+
+            if (!$validated['parent_task_id']) {
+                $orderQuery->where('category', $validated['category'] ?? null);
+            }
+
+            $validated['order'] = ((int) $orderQuery->max('order')) + 1;
+        }
 
         // Logic for Assignment: Handle both User IDs and External Names
         $assignment = ($validated['assigned_to'] ?? null) ?: null;
@@ -99,6 +165,8 @@ class ProjectTaskController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
+            'category' => 'sometimes|nullable|string|max:255',
+            'parent_task_id' => 'sometimes|nullable|exists:project_tasks,id',
             'status' => 'sometimes|required|string',
             'progress' => 'sometimes|integer|min:0|max:100',
             'start_date' => 'nullable|date',
@@ -107,6 +175,38 @@ class ProjectTaskController extends Controller
             'support_by' => 'nullable',
             'order' => 'sometimes|integer',
         ]);
+
+        if (array_key_exists('parent_task_id', $validated)) {
+            $validated['parent_task_id'] = $validated['parent_task_id'] ?: null;
+
+            if ($validated['parent_task_id']) {
+                $parentTask = ProjectTask::findOrFail($validated['parent_task_id']);
+
+                if ((int) $parentTask->id === (int) $projects_task->id) {
+                    throw ValidationException::withMessages([
+                        'parent_task_id' => 'A task cannot be its own parent.',
+                    ]);
+                }
+
+                if ((int) $parentTask->project_id !== (int) $projects_task->project_id) {
+                    throw ValidationException::withMessages([
+                        'parent_task_id' => 'The selected parent task does not belong to this project.',
+                    ]);
+                }
+
+                if ($parentTask->parent_task_id) {
+                    throw ValidationException::withMessages([
+                        'parent_task_id' => 'Only one sub-task level is supported.',
+                    ]);
+                }
+
+                if ($projects_task->subTasks()->exists()) {
+                    throw ValidationException::withMessages([
+                        'parent_task_id' => 'An activity with sub-tasks cannot also be a sub-task.',
+                    ]);
+                }
+            }
+        }
 
         if (array_key_exists('support_by', $validated)) {
             $validated['support_by'] = $validated['support_by'] ?: null;
@@ -139,6 +239,7 @@ class ProjectTaskController extends Controller
 
     public function destroy(ProjectTask $projects_task)
     {
+        $projects_task->subTasks()->delete();
         $projects_task->delete();
 
         return redirect()->back()->with('success', 'Task deleted successfully.');
