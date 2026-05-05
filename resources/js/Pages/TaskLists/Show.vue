@@ -830,29 +830,43 @@ const addChecklist = async () => {
     }
 };
 
-const addChecklistItem = async (checklist) => {
-    const title = (newChecklistItems[checklist.id] || '').trim();
+const checklistInputKey = (checklist, parentItem = null) => parentItem ? `${checklist.id}:${parentItem.id}` : `${checklist.id}`;
+
+const addChecklistItem = async (checklist, parentItem = null) => {
+    const key = checklistInputKey(checklist, parentItem);
+    const title = (newChecklistItems[key] || '').trim();
     if (!title) return;
 
     try {
-        const response = await axios.post(route('task-checklists.items.store', checklist.id), { title });
+        const response = await axios.post(route('task-checklists.items.store', checklist.id), {
+            title,
+            parent_item_id: parentItem?.id || null,
+        });
         replaceCard(response.data.card);
-        newChecklistItems[checklist.id] = '';
+        newChecklistItems[key] = '';
     } catch (error) {
         handleApiError(error, 'Unable to add item');
     }
 };
 
-const toggleChecklistItem = async (item) => {
+const updateChecklistItem = async (item, payload) => {
     try {
-        const response = await axios.put(route('task-checklist-items.update', item.id), {
-            is_complete: !item.is_complete,
-        });
+        const response = await axios.put(route('task-checklist-items.update', item.id), payload);
         replaceCard(response.data.card);
     } catch (error) {
         handleApiError(error, 'Unable to update item');
     }
 };
+
+const toggleChecklistItem = async (item) => {
+    await updateChecklistItem(item, { is_complete: !item.is_complete });
+};
+
+const updateChecklistItemAssignee = async (item, value) => {
+    await updateChecklistItem(item, { assigned_to: value || null });
+};
+
+const itemSubUnit = (item) => item.assignee?.sub_unit || 'No Sub-Unit';
 
 const deleteChecklist = async (checklist) => {
     const ok = await confirm({
@@ -1485,19 +1499,64 @@ onUnmounted(() => {
                                         <h4 class="text-sm font-bold text-gray-900">{{ checklist.title }}</h4>
                                         <button v-if="canEditBoard" type="button" @click="deleteChecklist(checklist)" class="text-xs font-bold text-red-600">Delete</button>
                                     </div>
-                                    <div class="space-y-2">
-                                        <div v-for="item in checklist.items" :key="item.id" class="flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
-                                            <button type="button" @click="toggleChecklistItem(item)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="item.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
-                                                <CheckIcon v-if="item.is_complete" class="h-3.5 w-3.5" />
-                                            </button>
-                                            <span class="flex-1 text-sm" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
-                                            <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(item)" class="text-gray-300 hover:text-red-600">
-                                                <XMarkIcon class="h-4 w-4" />
-                                            </button>
+                                    <div class="space-y-3">
+                                        <div v-for="item in checklist.items" :key="item.id" class="space-y-2">
+                                            <div class="rounded-lg bg-white px-3 py-2 shadow-sm">
+                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                                    <button type="button" @click="toggleChecklistItem(item)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="item.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
+                                                        <CheckIcon v-if="item.is_complete" class="h-3.5 w-3.5" />
+                                                    </button>
+                                                    <span class="min-w-0 flex-1 text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
+                                                    <div class="flex items-center gap-2">
+                                                        <select
+                                                            :value="item.assigned_to || ''"
+                                                            :disabled="!canEditBoard"
+                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                            @change="updateChecklistItemAssignee(item, $event.target.value)"
+                                                        >
+                                                            <option value="">Unassigned</option>
+                                                            <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
+                                                        </select>
+                                                        <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(item) }}</span>
+                                                        <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(item)" class="text-gray-300 hover:text-red-600">
+                                                            <XMarkIcon class="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div v-if="item.children?.length" class="ml-5 space-y-2 border-l border-gray-200 pl-3">
+                                                <div v-for="child in item.children" :key="child.id" class="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center">
+                                                    <button type="button" @click="toggleChecklistItem(child)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="child.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
+                                                        <CheckIcon v-if="child.is_complete" class="h-3.5 w-3.5" />
+                                                    </button>
+                                                    <span class="min-w-0 flex-1 text-sm" :class="child.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ child.title }}</span>
+                                                    <div class="flex items-center gap-2">
+                                                        <select
+                                                            :value="child.assigned_to || ''"
+                                                            :disabled="!canEditBoard"
+                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                            @change="updateChecklistItemAssignee(child, $event.target.value)"
+                                                        >
+                                                            <option value="">Unassigned</option>
+                                                            <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
+                                                        </select>
+                                                        <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(child) }}</span>
+                                                        <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(child)" class="text-gray-300 hover:text-red-600">
+                                                            <XMarkIcon class="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <form v-if="canEditBoard" class="ml-5 flex gap-2 border-l border-gray-200 pl-3" @submit.prevent="addChecklistItem(checklist, item)">
+                                                <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" type="text" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add a subtask...">
+                                                <button type="submit" class="rounded-lg bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100">Add</button>
+                                            </form>
                                         </div>
                                     </div>
                                     <form v-if="canEditBoard" class="mt-2 flex gap-2" @submit.prevent="addChecklistItem(checklist)">
-                                        <input v-model="newChecklistItems[checklist.id]" type="text" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add an item...">
+                                        <input v-model="newChecklistItems[checklistInputKey(checklist)]" type="text" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add an item...">
                                         <button type="submit" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">Add</button>
                                     </form>
                                 </div>

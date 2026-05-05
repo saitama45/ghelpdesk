@@ -22,6 +22,7 @@ class TaskCard extends Model
 
     protected $fillable = [
         'task_board_id',
+        'project_id',
         'project_task_id',
         'title',
         'description',
@@ -54,6 +55,11 @@ class TaskCard extends Model
     public function projectTask(): BelongsTo
     {
         return $this->belongsTo(ProjectTask::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function creator(): BelongsTo
@@ -102,8 +108,14 @@ class TaskCard extends Model
         $complete = 0;
 
         foreach ($this->checklists as $checklist) {
-            $total += $checklist->items->count();
-            $complete += $checklist->items->where('is_complete', true)->count();
+            foreach ($checklist->items as $item) {
+                $total++;
+                $complete += $item->is_complete ? 1 : 0;
+
+                $children = $item->children ?? collect();
+                $total += $children->count();
+                $complete += $children->where('is_complete', true)->count();
+            }
         }
 
         return [

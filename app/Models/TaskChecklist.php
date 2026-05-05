@@ -28,6 +28,15 @@ class TaskChecklist extends Model
 
     public function items(): HasMany
     {
+        return $this->hasMany(TaskChecklistItem::class)
+            ->whereNull('parent_item_id')
+            ->with(['assignee:id,name,profile_photo,sub_unit', 'children.assignee:id,name,profile_photo,sub_unit'])
+            ->orderBy('sort_order')
+            ->orderBy('id');
+    }
+
+    public function allItems(): HasMany
+    {
         return $this->hasMany(TaskChecklistItem::class)->orderBy('sort_order')->orderBy('id');
     }
 }

@@ -48,6 +48,8 @@ class ProjectTaskController extends Controller
                     'model_specs' => $activity->model_specs,
                     'qty' => $activity->qty,
                     'responsible' => $activity->responsible,
+                    'department' => $activity->department,
+                    'sub_unit' => $activity->sub_unit,
                     'status' => 'Pending',
                     'progress' => 0,
                     'order' => $activity->order,
@@ -88,9 +90,7 @@ class ProjectTaskController extends Controller
             }
         }
 
-        if ($project->taskBoard()->exists()) {
-            $this->projectTaskBoards->syncProject($project, $request->user());
-        }
+        $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
 
         if ($addedCount > 0) {
             return redirect()->back()->with('success', "Applied {$addedCount} activities from \"{$template->name}\" template successfully.");
@@ -166,7 +166,7 @@ class ProjectTaskController extends Controller
         }
 
         $task = ProjectTask::create($validated);
-        $this->projectTaskBoards->syncProjectTask($task->fresh(['project.taskBoard', 'assignedUser', 'supportUser', 'parentTask']), $request->user());
+        $this->projectTaskBoards->syncProject($task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
 
         return redirect()->back()->with('success', 'Task added successfully.');
     }
@@ -239,7 +239,7 @@ class ProjectTaskController extends Controller
         }
 
         $projects_task->update($validated);
-        $this->projectTaskBoards->syncProjectTask($projects_task->fresh(['project.taskBoard', 'assignedUser', 'supportUser', 'parentTask']), $request->user());
+        $this->projectTaskBoards->syncProject($projects_task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'task' => $projects_task]);
@@ -250,11 +250,16 @@ class ProjectTaskController extends Controller
 
     public function destroy(Request $request, ProjectTask $projects_task)
     {
+        $project = $projects_task->project;
         $taskIds = $projects_task->subTasks()->pluck('id')->push($projects_task->id);
         $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
 
         $projects_task->subTasks()->delete();
         $projects_task->delete();
+
+        if ($project) {
+            $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
+        }
 
         return redirect()->back()->with('success', 'Task deleted successfully.');
     }
@@ -292,7 +297,7 @@ class ProjectTaskController extends Controller
             }
         }
 
-        $this->projectTaskBoards->syncProjectTaskIds(collect($validated['tasks'])->pluck('id'), $request->user());
+        $this->projectTaskBoards->syncProjectTaskIds(collect($validated['tasks'])->pluck('id'), $request->user(), $request->boolean('auto_create_monthly_boards'));
 
         return response()->json(['success' => true]);
     }

@@ -14,6 +14,8 @@ class ProjectTeamMember extends Model
         'project_id',
         'user_id',
         'external_name',
+        'department',
+        'sub_unit',
         'role_type',
         'team_category',
     ];

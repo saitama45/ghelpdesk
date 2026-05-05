@@ -18,6 +18,8 @@ class ActivityTemplate extends Model
         'model_specs',
         'qty',
         'responsible',
+        'department',
+        'sub_unit',
         'default_duration_days',
         'order',
     ];

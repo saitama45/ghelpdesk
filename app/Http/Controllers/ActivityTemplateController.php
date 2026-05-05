@@ -50,6 +50,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         return Inertia::render('ActivityTemplates/Index', [
             'templates' => $templates,
             'subUnits' => $subUnits,
+            'departmentOptions' => $this->departmentOptions(),
             'filters' => $request->only(['search', 'store_class']),
         ]);
     }
@@ -70,6 +71,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.model_specs' => 'nullable|string|max:255',
             'activities.*.qty' => 'required|integer|min:1',
             'activities.*.responsible' => 'nullable|string|max:255',
+            'activities.*.department' => 'nullable|string|max:255',
+            'activities.*.sub_unit' => 'nullable|string|max:255',
             'activities.*.default_duration_days' => 'required|integer|min:1',
             'activities.*.order' => 'required|integer|min:0',
         ]);
@@ -107,6 +110,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.model_specs' => 'nullable|string|max:255',
             'activities.*.qty' => 'required|integer|min:1',
             'activities.*.responsible' => 'nullable|string|max:255',
+            'activities.*.department' => 'nullable|string|max:255',
+            'activities.*.sub_unit' => 'nullable|string|max:255',
             'activities.*.default_duration_days' => 'required|integer|min:1',
             'activities.*.order' => 'required|integer|min:0',
         ]);
@@ -179,6 +184,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 ]);
             }
 
+            $activity['department'] = blank($activity['department'] ?? null) ? $parent->department : $activity['department'];
+            $activity['sub_unit'] = blank($activity['sub_unit'] ?? null) ? $parent->sub_unit : $activity['sub_unit'];
+
             $model = $this->saveActivity($projectTemplate, $activity, $parent->id);
             $savedByClientKey[$activity['client_key']] = $model;
         }
@@ -240,6 +248,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'model_specs' => $activity['model_specs'] ?? null,
             'qty' => $activity['qty'],
             'responsible' => $activity['responsible'] ?? null,
+            'department' => blank($activity['department'] ?? null) ? null : $activity['department'],
+            'sub_unit' => blank($activity['sub_unit'] ?? null) ? null : $activity['sub_unit'],
             'default_duration_days' => $activity['default_duration_days'],
             'order' => $activity['order'],
         ];
@@ -252,5 +262,32 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         }
 
         return $projectTemplate->activities()->create($attributes);
+    }
+
+    private function departmentOptions(): array
+    {
+        return User::active()
+            ->whereNotNull('department')
+            ->where('department', '!=', '')
+            ->whereNotNull('sub_unit')
+            ->where('sub_unit', '!=', '')
+            ->orderBy('department')
+            ->orderBy('sub_unit')
+            ->get(['department', 'sub_unit'])
+            ->groupBy(fn (User $user) => trim((string) $user->department))
+            ->map(fn ($users, string $department) => [
+                'name' => $department,
+                'sub_units' => $users
+                    ->pluck('sub_unit')
+                    ->map(fn ($subUnit) => trim((string) $subUnit))
+                    ->filter()
+                    ->unique()
+                    ->sort()
+                    ->values()
+                    ->all(),
+            ])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
     }
 }

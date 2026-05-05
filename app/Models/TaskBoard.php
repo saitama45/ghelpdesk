@@ -15,6 +15,12 @@ class TaskBoard extends Model
 
     protected $fillable = [
         'project_id',
+        'board_source',
+        'department',
+        'sub_unit',
+        'board_month',
+        'board_year',
+        'monthly_key',
         'title',
         'description',
         'background_type',
@@ -24,6 +30,8 @@ class TaskBoard extends Model
     ];
 
     protected $casts = [
+        'board_month' => 'integer',
+        'board_year' => 'integer',
         'closed_at' => 'datetime:Y-m-d H:i:s',
     ];
 

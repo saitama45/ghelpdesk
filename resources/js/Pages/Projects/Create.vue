@@ -4,8 +4,11 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import { ChevronLeftIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
-    stores: Array
+    stores: Array,
+    boardYears: Array,
 });
+
+const now = new Date();
 
 const form = useForm({
     store_id: '',
@@ -17,8 +20,25 @@ const form = useForm({
     mock_service_date: '',
     turn_over_to_franchisee_date: '',
     target_go_live: '',
+    board_month: now.getMonth() + 1,
+    board_year: now.getFullYear(),
     remarks: ''
 });
+
+const monthOptions = [
+    { value: 1, label: 'January' },
+    { value: 2, label: 'February' },
+    { value: 3, label: 'March' },
+    { value: 4, label: 'April' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'June' },
+    { value: 7, label: 'July' },
+    { value: 8, label: 'August' },
+    { value: 9, label: 'September' },
+    { value: 10, label: 'October' },
+    { value: 11, label: 'November' },
+    { value: 12, label: 'December' },
+];
 
 const submit = () => {
     form.post(route('projects.store'));
@@ -81,6 +101,26 @@ const submit = () => {
                                 <option value="Delayed">Delayed</option>
                             </select>
                             <div v-if="form.errors.status" class="text-red-500 text-xs mt-1">{{ form.errors.status }}</div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Task List Month</label>
+                            <select
+                                v-model.number="form.board_month"
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option v-for="month in monthOptions" :key="month.value" :value="month.value">{{ month.label }}</option>
+                            </select>
+                            <div v-if="form.errors.board_month" class="text-red-500 text-xs mt-1">{{ form.errors.board_month }}</div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Task List Year</label>
+                            <select
+                                v-model.number="form.board_year"
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                <option v-for="year in boardYears" :key="year" :value="year">{{ year }}</option>
+                            </select>
+                            <div v-if="form.errors.board_year" class="text-red-500 text-xs mt-1">{{ form.errors.board_year }}</div>
                         </div>
                     </div>
 

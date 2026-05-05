@@ -233,11 +233,10 @@
                                             <tr>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-16">Ord</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[220px]">Activity / Sub-task</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Asset Item</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Model/Specs</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px]">Department</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px]">Sub-Unit</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Qty</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Resp.</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Days</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-28">Lead Time Days</th>
                                                 <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-24"></th>
                                             </tr>
                                         </thead>
@@ -259,19 +258,19 @@
                                                         >
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.asset_item" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Asset...">
+                                                        <select v-model="act.department" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500" @change="handleActivityDepartmentChange(act)">
+                                                            <option value="">None</option>
+                                                            <option v-for="department in departmentOptions" :key="department.name" :value="department.name">{{ department.name }}</option>
+                                                        </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.model_specs" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Specs...">
+                                                        <select v-model="act.sub_unit" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500" :disabled="!act.department" @change="syncSubTaskOrganization(act)">
+                                                            <option value="">None</option>
+                                                            <option v-for="subUnit in subUnitsForDepartment(act.department)" :key="subUnit" :value="subUnit">{{ subUnit }}</option>
+                                                        </select>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="act.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                                    </td>
-                                                    <td class="px-2 py-2">
-                                                        <select v-model="act.responsible" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                                            <option :value="null">None</option>
-                                                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                                                        </select>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
@@ -317,19 +316,13 @@
                                                         </div>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.asset_item" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Asset...">
+                                                        <span class="block rounded bg-white px-2 py-1 text-xs font-bold text-gray-500 ring-1 ring-gray-100">{{ act.department || '-' }}</span>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.model_specs" type="text" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" placeholder="Specs...">
+                                                        <span class="block rounded bg-white px-2 py-1 text-xs font-bold text-gray-500 ring-1 ring-gray-100">{{ act.sub_unit || '-' }}</span>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="subTask.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                                    </td>
-                                                    <td class="px-2 py-2">
-                                                        <select v-model="subTask.responsible" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
-                                                            <option :value="null">None</option>
-                                                            <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                                                        </select>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="subTask.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
@@ -401,6 +394,7 @@ import {
 const props = defineProps({
     templates: Object,
     subUnits: Array,
+    departmentOptions: Array,
     filters: Object
 })
 
@@ -441,6 +435,8 @@ const createActivityRow = (overrides = {}) => ({
     model_specs: '',
     qty: 1,
     responsible: null,
+    department: '',
+    sub_unit: '',
     default_duration_days: 1,
     order: 1,
     ...overrides
@@ -516,9 +512,34 @@ const normalizeTemplateActivities = (activities) => {
             model_specs: activity.model_specs,
             qty: activity.qty,
             responsible: activity.responsible,
+            department: activity.department || '',
+            sub_unit: activity.sub_unit || '',
             default_duration_days: activity.default_duration_days,
             order: activity.order
         }))
+}
+
+const departmentOptions = computed(() => props.departmentOptions || [])
+
+const subUnitsForDepartment = (departmentName) => {
+    return departmentOptions.value.find(department => department.name === departmentName)?.sub_units || []
+}
+
+const syncSubTaskOrganization = (parentActivity) => {
+    form.activities.forEach(activity => {
+        if (activity.parent_client_key === parentActivity.client_key) {
+            activity.department = parentActivity.department || ''
+            activity.sub_unit = parentActivity.sub_unit || ''
+        }
+    })
+}
+
+const handleActivityDepartmentChange = (activity) => {
+    if (!subUnitsForDepartment(activity.department).includes(activity.sub_unit)) {
+        activity.sub_unit = ''
+    }
+
+    syncSubTaskOrganization(activity)
 }
 
 const milestoneGroups = computed(() => {
@@ -580,6 +601,8 @@ const addActivity = (milestone = 'General') => {
     form.activities.push(createActivityRow({
         milestone: milestone || 'General',
         responsible: lastRow ? lastRow.responsible : null,
+        department: lastRow ? lastRow.department : '',
+        sub_unit: lastRow ? lastRow.sub_unit : '',
         default_duration_days: lastRow ? lastRow.default_duration_days : 1,
         order: nextOrderFor(milestone)
     }))
@@ -592,6 +615,8 @@ const addSubActivity = (parentActivity) => {
         parent_client_key: parentActivity.client_key,
         milestone: parentActivity.milestone || 'General',
         responsible: parentActivity.responsible,
+        department: parentActivity.department || '',
+        sub_unit: parentActivity.sub_unit || '',
         default_duration_days: parentActivity.default_duration_days || 1,
         order: nextOrderFor(parentActivity.milestone, parentActivity.client_key)
     }))

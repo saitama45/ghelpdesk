@@ -22,6 +22,8 @@ class ProjectTask extends Model
         'model_specs',
         'qty',
         'responsible',
+        'department',
+        'sub_unit',
         'assigned_to',
         'external_assignment',
         'support_by',

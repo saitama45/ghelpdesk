@@ -10,10 +10,12 @@ use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\User;
 use App\Services\ProjectTaskBoardSyncService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TaskBoardController extends Controller implements HasMiddleware
@@ -26,7 +28,7 @@ class TaskBoardController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:task_lists.view', only: ['index', 'show', 'toggleStar', 'toggleWatch', 'openProjectBoard', 'syncProject']),
-            new Middleware('can:task_lists.create', only: ['store']),
+            new Middleware('can:task_lists.create', only: ['store', 'generateMonthly']),
             new Middleware('can:task_lists.edit', only: ['update']),
             new Middleware('can:task_lists.delete', only: ['destroy', 'restore']),
             new Middleware('can:task_lists.manage_members', only: ['storeMember', 'updateMember', 'destroyMember']),
@@ -41,7 +43,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         $boards = TaskBoard::query()
             ->with([
                 'creator:id,name',
-                'members:id,name,profile_photo',
+                'members:id,name,profile_photo,sub_unit',
                 'project.store:id,name',
                 'cards.projectTask:id,project_id,parent_task_id,name,category,status,progress',
             ])
@@ -56,6 +58,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         return Inertia::render('TaskLists/Index', [
             'boards' => $boards,
             'users' => $this->activeUsers(),
+            'monthlyDepartments' => $this->monthlyDepartmentOptions(),
             'filters' => [
                 'closed' => $showClosed,
             ],
@@ -75,6 +78,7 @@ class TaskBoardController extends Controller implements HasMiddleware
 
         $board = DB::transaction(function () use ($request, $validated) {
             $board = TaskBoard::create([
+                'board_source' => 'manual',
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
                 'background_type' => $validated['background_type'] ?? 'color',
@@ -110,6 +114,130 @@ class TaskBoardController extends Controller implements HasMiddleware
         return redirect()->route('task-lists.show', $board)->with('success', 'Task board created successfully.');
     }
 
+    public function generateMonthly(Request $request)
+    {
+        $validated = $request->validate([
+            'department' => 'required|string|max:255',
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2000|max:2100',
+        ]);
+
+        $department = $this->cleanOrgValue($validated['department']);
+        $month = (int) $validated['month'];
+        $year = (int) $validated['year'];
+
+        if ($department === '') {
+            throw ValidationException::withMessages([
+                'department' => 'Select a department.',
+            ]);
+        }
+
+        $usersBySubUnit = $this->activeUsersForDepartment($department)
+            ->groupBy(fn (User $user) => $this->cleanOrgValue($user->sub_unit))
+            ->filter(fn ($users, $subUnit) => (string) $subUnit !== '')
+            ->sortKeys();
+
+        if ($usersBySubUnit->isEmpty()) {
+            throw ValidationException::withMessages([
+                'department' => 'No active sub-units found for this department.',
+            ]);
+        }
+
+        $periodLabel = CarbonImmutable::create($year, $month, 1)->format('F Y');
+        $created = [];
+        $skipped = [];
+
+        DB::transaction(function () use ($request, $department, $month, $year, $periodLabel, $usersBySubUnit, &$created, &$skipped) {
+            foreach ($usersBySubUnit as $subUnit => $subUnitUsers) {
+                $monthlyKey = $this->monthlyBoardKey($department, $subUnit, $month, $year);
+                $title = $this->monthlyBoardTitle($department, $subUnit, $periodLabel);
+
+                $existing = TaskBoard::withTrashed()
+                    ->where('monthly_key', $monthlyKey)
+                    ->first();
+
+                if ($existing) {
+                    $skipped[] = [
+                        'id' => $existing->id,
+                        'title' => $existing->title,
+                        'sub_unit' => $subUnit,
+                    ];
+
+                    continue;
+                }
+
+                $board = TaskBoard::create([
+                    'board_source' => 'monthly',
+                    'department' => $department,
+                    'sub_unit' => $subUnit,
+                    'board_month' => $month,
+                    'board_year' => $year,
+                    'monthly_key' => $monthlyKey,
+                    'title' => $title,
+                    'description' => "Monthly task board for {$department} / {$subUnit} - {$periodLabel}.",
+                    'background_type' => 'color',
+                    'background_value' => '#0f766e',
+                    'created_by' => $request->user()->id,
+                ]);
+
+                $memberIds = $subUnitUsers
+                    ->pluck('id')
+                    ->push($request->user()->id)
+                    ->unique()
+                    ->values();
+
+                foreach ($memberIds as $memberId) {
+                    $board->memberRecords()->create([
+                        'user_id' => $memberId,
+                        'role' => (int) $memberId === (int) $request->user()->id ? 'admin' : 'member',
+                    ]);
+                }
+
+                foreach ($this->defaultLabels() as $index => $label) {
+                    $board->labels()->create([
+                        'name' => $label['name'],
+                        'color' => $label['color'],
+                        'sort_order' => $index,
+                    ]);
+                }
+
+                $this->recordActivity(
+                    $board,
+                    null,
+                    $request->user()->id,
+                    'board.monthly_created',
+                    'generated this monthly board',
+                    [
+                        'department' => $department,
+                        'sub_unit' => $subUnit,
+                        'month' => $month,
+                        'year' => $year,
+                    ]
+                );
+
+                $created[] = [
+                    'id' => $board->id,
+                    'title' => $board->title,
+                    'sub_unit' => $subUnit,
+                ];
+            }
+        });
+
+        $message = count($created) . ' monthly board' . (count($created) === 1 ? '' : 's') . ' created.';
+
+        if (count($skipped) > 0) {
+            $message .= ' ' . count($skipped) . ' existing board' . (count($skipped) === 1 ? '' : 's') . ' skipped.';
+        }
+
+        return redirect()
+            ->route('task-lists.index')
+            ->with('success', $message)
+            ->with('monthly_generation', [
+                'created' => $created,
+                'skipped' => $skipped,
+            ]);
+    }
+
     public function show(Request $request, TaskBoard $taskBoard)
     {
         $this->ensureBoardAccess($taskBoard, $request->user());
@@ -120,7 +248,7 @@ class TaskBoardController extends Controller implements HasMiddleware
 
         $taskBoard->load([
             'creator:id,name',
-            'members:id,name,email,profile_photo',
+            'members:id,name,email,profile_photo,sub_unit',
             'watchers:id,name',
             'project.store:id,name',
             'labels',
@@ -132,10 +260,13 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->reorder()
             ->with([
                 'creator:id,name,profile_photo',
-                'assignees:id,name,email,profile_photo',
+                'assignees:id,name,email,profile_photo,sub_unit',
                 'labels',
                 'watchers:id,name',
-                'checklists.items.assignee:id,name,profile_photo',
+                'project:id,name,status,store_id,board_month,board_year',
+                'project.store:id,name',
+                'checklists.items.assignee:id,name,profile_photo,sub_unit',
+                'checklists.items.children.assignee:id,name,profile_photo,sub_unit',
                 'comments.user:id,name,profile_photo',
                 'attachments.user:id,name,profile_photo',
                 'activities.actor:id,name,profile_photo',
@@ -200,7 +331,7 @@ class TaskBoardController extends Controller implements HasMiddleware
 
     public function openProjectBoard(Request $request, Project $project)
     {
-        $board = $this->projectTaskBoards->openBoard($project, $request->user());
+        $board = $this->projectTaskBoards->openBoard($project, $request->user(), $request->boolean('auto_create_monthly_boards', true));
 
         return redirect()
             ->route('task-lists.show', $board)
@@ -215,7 +346,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             abort(422, 'This board is not linked to a project.');
         }
 
-        $this->projectTaskBoards->syncProject($taskBoard->project, $request->user(), $taskBoard);
+        $this->projectTaskBoards->syncProject($taskBoard->project, $request->user(), $taskBoard, true);
 
         if ($request->wantsJson()) {
             return response()->json(['synced' => true]);
@@ -371,11 +502,17 @@ class TaskBoardController extends Controller implements HasMiddleware
             'closed_at' => $board->closed_at,
             'created_by' => $board->created_by,
             'creator' => $board->creator,
+            'board_source' => $board->board_source ?: ($board->project_id ? 'project' : 'manual'),
+            'department' => $board->department,
+            'sub_unit' => $board->sub_unit,
+            'board_month' => $board->board_month,
+            'board_year' => $board->board_year,
             'members_count' => $board->members->count(),
             'members' => $this->memberPayload($board),
             'my_role' => $this->canSeeAllBoards($user) ? ($memberRecord?->role ?? 'admin') : $memberRecord?->role,
             'starred' => (bool) $memberRecord?->starred,
             'is_project_board' => (bool) $board->project_id,
+            'is_monthly_board' => $board->board_source === 'monthly',
             'project' => $this->boardProjectPayload($board),
             'updated_at' => $board->updated_at,
         ];
@@ -400,6 +537,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         return [
             'id' => $card->id,
             'task_board_id' => $card->task_board_id,
+            'project_id' => $card->project_id,
             'title' => $card->title,
             'description' => $card->description,
             'status' => $card->status,
@@ -422,6 +560,14 @@ class TaskBoardController extends Controller implements HasMiddleware
             'attachments' => $card->attachments,
             'activities' => $card->activities->take(50)->values(),
             'project_task' => $this->projectTaskPayload($card),
+            'project' => $card->project ? [
+                'id' => $card->project->id,
+                'name' => $card->project->name,
+                'status' => $card->project->status,
+                'store' => $card->project->store,
+                'board_month' => $card->project->board_month,
+                'board_year' => $card->project->board_year,
+            ] : null,
             'checklist_totals' => $card->checklist_totals,
         ];
     }
@@ -490,7 +636,9 @@ class TaskBoardController extends Controller implements HasMiddleware
     private function boardMilestones($cards): array
     {
         return $cards
-            ->map(fn (TaskCard $card) => $card->projectTask?->category ?: null)
+            ->flatMap(fn (TaskCard $card) => $card->projectTask
+                ? [$card->projectTask->category ?: null]
+                : ($card->checklists?->pluck('title')->all() ?? []))
             ->filter()
             ->unique()
             ->sort()
@@ -505,16 +653,101 @@ class TaskBoardController extends Controller implements HasMiddleware
             'name' => $member->name,
             'email' => $member->email,
             'profile_photo' => $member->profile_photo,
+            'sub_unit' => $member->sub_unit,
             'role' => $member->pivot->role,
             'starred' => (bool) $member->pivot->starred,
         ])->values()->all();
+    }
+
+    private function monthlyDepartmentOptions(): array
+    {
+        $rows = User::active()
+            ->whereNotNull('department')
+            ->where('department', '!=', '')
+            ->whereNotNull('sub_unit')
+            ->where('sub_unit', '!=', '')
+            ->orderBy('department')
+            ->orderBy('sub_unit')
+            ->orderBy('name')
+            ->get(['id', 'department', 'sub_unit'])
+            ->map(function (User $user) {
+                $department = $this->cleanOrgValue($user->department);
+                $subUnit = $this->cleanOrgValue($user->sub_unit);
+
+                return [
+                    'department' => $department,
+                    'department_key' => $this->normalizeOrgKey($department),
+                    'sub_unit' => $subUnit,
+                    'sub_unit_key' => $this->normalizeOrgKey($subUnit),
+                ];
+            })
+            ->filter(fn (array $row) => $row['department'] !== '' && $row['sub_unit'] !== '');
+
+        return $rows
+            ->groupBy('department_key')
+            ->map(function ($departmentRows) {
+                return [
+                    'name' => $departmentRows->first()['department'],
+                    'sub_units' => $departmentRows
+                        ->groupBy('sub_unit_key')
+                        ->map(fn ($subUnitRows) => [
+                            'name' => $subUnitRows->first()['sub_unit'],
+                            'user_count' => $subUnitRows->count(),
+                        ])
+                        ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    private function activeUsersForDepartment(string $department)
+    {
+        $departmentKey = $this->normalizeOrgKey($department);
+
+        return User::active()
+            ->whereNotNull('department')
+            ->where('department', '!=', '')
+            ->whereNotNull('sub_unit')
+            ->where('sub_unit', '!=', '')
+            ->orderBy('sub_unit')
+            ->orderBy('name')
+            ->get(['id', 'name', 'department', 'sub_unit'])
+            ->filter(fn (User $user) => $this->normalizeOrgKey($user->department) === $departmentKey)
+            ->values();
+    }
+
+    private function monthlyBoardTitle(string $department, string $subUnit, string $periodLabel): string
+    {
+        return "{$subUnit} {$periodLabel}";
+    }
+
+    private function monthlyBoardKey(string $department, string $subUnit, int $month, int $year): string
+    {
+        $monthKey = str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+        $orgKey = $this->normalizeOrgKey($department) . '|' . $this->normalizeOrgKey($subUnit);
+
+        return "monthly:{$year}:{$monthKey}:" . hash('sha256', $orgKey);
+    }
+
+    private function cleanOrgValue(?string $value): string
+    {
+        return trim(preg_replace('/\s+/', ' ', (string) $value) ?? '');
+    }
+
+    private function normalizeOrgKey(?string $value): string
+    {
+        return strtolower($this->cleanOrgValue($value));
     }
 
     private function activeUsers()
     {
         return User::active()
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'profile_photo']);
+            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'sub_unit']);
     }
 
     private function defaultLabels(): array

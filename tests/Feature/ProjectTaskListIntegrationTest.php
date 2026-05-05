@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Project;
+use App\Models\ProjectTeamMember;
 use App\Models\ProjectTask;
 use App\Models\Store;
 use App\Models\TaskBoard;
 use App\Models\TaskCard;
+use App\Models\TaskChecklistItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -25,13 +27,15 @@ class ProjectTaskListIntegrationTest extends TestCase
         ]);
     }
 
-    public function test_opening_project_task_list_creates_one_board_and_cards_for_activities_and_sub_tasks(): void
+    public function test_opening_project_task_list_populates_monthly_boards_with_project_card_checklists_and_subtasks(): void
     {
         $project = $this->createProject();
+        $teamUsers = $this->createProjectTeamTargets($project, ['DS', 'BS', 'SD']);
         $parentTask = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
         $subTask = $this->createProjectTask($project, 'Configure menu', [
             'parent_task_id' => $parentTask->id,
             'category' => 'POS',
+            'assigned_to' => $teamUsers['DS']->id,
         ]);
 
         $user = User::factory()->create();
@@ -40,55 +44,83 @@ class ProjectTaskListIntegrationTest extends TestCase
             ->post(route('projects.task-list', $project))
             ->assertRedirect();
 
-        $board = TaskBoard::where('project_id', $project->id)->firstOrFail();
+        foreach (['DS', 'BS', 'SD'] as $subUnit) {
+            $board = TaskBoard::where([
+                'board_source' => 'monthly',
+                'department' => 'TAS',
+                'sub_unit' => $subUnit,
+                'board_month' => 5,
+                'board_year' => 2026,
+                'title' => "{$subUnit} May 2026",
+            ])->firstOrFail();
 
-        $this->assertDatabaseHas('task_cards', [
-            'task_board_id' => $board->id,
-            'project_task_id' => $parentTask->id,
-            'title' => 'Install POS',
-        ]);
-        $this->assertDatabaseHas('task_cards', [
-            'task_board_id' => $board->id,
-            'project_task_id' => $subTask->id,
-            'title' => 'Configure menu',
-        ]);
+            $card = TaskCard::where([
+                'task_board_id' => $board->id,
+                'project_id' => $project->id,
+                'title' => $project->name,
+            ])->firstOrFail();
+
+            $checklist = $card->checklists()->where('title', 'POS')->firstOrFail();
+            $activityItem = TaskChecklistItem::where([
+                'task_checklist_id' => $checklist->id,
+                'project_task_id' => $parentTask->id,
+                'title' => 'Install POS',
+            ])->whereNull('parent_item_id')->firstOrFail();
+
+            TaskChecklistItem::where([
+                'task_checklist_id' => $checklist->id,
+                'parent_item_id' => $activityItem->id,
+                'project_task_id' => $subTask->id,
+                'title' => 'Configure menu',
+                'assigned_to' => $teamUsers['DS']->id,
+            ])->firstOrFail();
+        }
 
         $this->actingAs($user)
             ->post(route('projects.task-list', $project))
             ->assertRedirect();
 
-        $this->assertSame(1, TaskBoard::where('project_id', $project->id)->count());
-        $this->assertSame(2, TaskCard::where('task_board_id', $board->id)->count());
+        $this->assertSame(3, TaskBoard::where('board_source', 'monthly')->where('department', 'TAS')->count());
+        $this->assertSame(3, TaskCard::where('project_id', $project->id)->count());
+        $this->assertSame(6, TaskChecklistItem::whereIn('project_task_id', [$parentTask->id, $subTask->id])->count());
     }
 
-    public function test_moving_project_card_to_verification_updates_project_task_to_ongoing_ninety_percent(): void
+    public function test_updating_checklist_subtask_assignment_syncs_project_task_and_returns_assignee_sub_unit(): void
     {
         $project = $this->createProject();
+        $teamUsers = $this->createProjectTeamTargets($project, ['DS', 'SD']);
         $task = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
+        $subTask = $this->createProjectTask($project, 'Configure menu', [
+            'parent_task_id' => $task->id,
+            'category' => 'POS',
+            'assigned_to' => $teamUsers['DS']->id,
+        ]);
         $user = User::factory()->create();
 
         $this->actingAs($user)->post(route('projects.task-list', $project));
 
-        $card = TaskCard::where('project_task_id', $task->id)->firstOrFail();
+        $item = TaskChecklistItem::where('project_task_id', $subTask->id)->firstOrFail();
 
         $this->actingAs($user)
-            ->postJson(route('task-cards.move', $card), [
-                'status' => 'For Verification',
-                'ordered_card_ids' => [$card->id],
+            ->putJson(route('task-checklist-items.update', $item), [
+                'assigned_to' => $teamUsers['SD']->id,
+                'is_complete' => true,
             ])
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('card.checklists.0.items.0.children.0.assigned_to', $teamUsers['SD']->id)
+            ->assertJsonPath('card.checklists.0.items.0.children.0.assignee.sub_unit', 'SD');
 
-        $task->refresh();
-        $card->refresh();
+        $subTask->refresh();
 
-        $this->assertSame('Ongoing', $task->status);
-        $this->assertSame(90, $task->progress);
-        $this->assertSame('For Verification', $card->status);
+        $this->assertSame($teamUsers['SD']->id, $subTask->assigned_to);
+        $this->assertSame('Done', $subTask->status);
+        $this->assertSame(100, $subTask->progress);
     }
 
-    public function test_gantt_updates_sync_linked_project_card_fields(): void
+    public function test_gantt_updates_sync_linked_checklist_item_fields(): void
     {
         $project = $this->createProject();
+        $this->createProjectTeamTargets($project, ['DS']);
         $task = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
         $user = User::factory()->create();
 
@@ -105,19 +137,21 @@ class ProjectTaskListIntegrationTest extends TestCase
                         'order' => 5,
                     ],
                 ],
+                'auto_create_monthly_boards' => true,
             ])
             ->assertOk();
 
-        $card = TaskCard::where('project_task_id', $task->id)->firstOrFail();
+        $item = TaskChecklistItem::where('project_task_id', $task->id)->firstOrFail();
 
-        $this->assertSame('Done', $card->status);
-        $this->assertSame('2026-05-10 00:00:00', $card->start_at->format('Y-m-d H:i:s'));
-        $this->assertSame('2026-05-12 23:59:59', $card->due_at->format('Y-m-d H:i:s'));
+        $this->assertTrue($item->is_complete);
+        $this->assertSame('2026-05-12 23:59:59', $item->due_at->format('Y-m-d H:i:s'));
+        $this->assertSame(5, $item->sort_order);
     }
 
-    public function test_deleting_parent_project_activity_archives_linked_parent_and_sub_task_cards(): void
+    public function test_deleting_parent_project_activity_removes_linked_checklist_items_from_monthly_cards(): void
     {
         $project = $this->createProject();
+        $this->createProjectTeamTargets($project, ['DS']);
         $parentTask = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
         $subTask = $this->createProjectTask($project, 'Configure menu', [
             'parent_task_id' => $parentTask->id,
@@ -131,8 +165,8 @@ class ProjectTaskListIntegrationTest extends TestCase
             ->delete(route('projects-tasks.destroy', $parentTask))
             ->assertRedirect();
 
-        $this->assertNotNull(TaskCard::where('project_task_id', $parentTask->id)->firstOrFail()->archived_at);
-        $this->assertNotNull(TaskCard::where('project_task_id', $subTask->id)->firstOrFail()->archived_at);
+        $this->assertSame(0, TaskChecklistItem::whereIn('project_task_id', [$parentTask->id, $subTask->id])->count());
+        $this->assertSame(1, TaskCard::where('project_id', $project->id)->count());
     }
 
     private function createProject(string $storeName = 'Test Store'): Project
@@ -152,7 +186,34 @@ class ProjectTaskListIntegrationTest extends TestCase
             'store_id' => $store->id,
             'name' => $storeName . ' Project',
             'status' => 'Planning',
+            'board_month' => 5,
+            'board_year' => 2026,
         ]);
+    }
+
+    private function createProjectTeamTargets(Project $project, array $subUnits): array
+    {
+        $users = [];
+
+        foreach ($subUnits as $subUnit) {
+            $user = User::factory()->create([
+                'department' => 'TAS',
+                'sub_unit' => $subUnit,
+            ]);
+
+            ProjectTeamMember::create([
+                'project_id' => $project->id,
+                'user_id' => $user->id,
+                'department' => 'TAS',
+                'sub_unit' => $subUnit,
+                'role_type' => 'Implementer',
+                'team_category' => 'CASA Team',
+            ]);
+
+            $users[$subUnit] = $user;
+        }
+
+        return $users;
     }
 
     private function createProjectTask(Project $project, string $name, array $overrides = []): ProjectTask

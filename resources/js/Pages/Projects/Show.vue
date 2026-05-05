@@ -30,6 +30,9 @@ const props = defineProps({
     project: Object,
     users: Array,
     stores: Array,
+    departmentOptions: Array,
+    boardYears: Array,
+    taskListTargets: Object,
     project_templates: Array
 });
 
@@ -70,10 +73,13 @@ const { confirm: confirmAction } = useConfirm();
 
 const showManageTeamModal = ref(false);
 const isOpeningTaskList = ref(false);
+const now = new Date();
 const teamForm = useForm({
     project_id: props.project.id,
     user_id: '',
     external_name: '',
+    department: '',
+    sub_unit: '',
     role_type: '',
     team_category: 'CASA Team',
 });
@@ -93,7 +99,61 @@ const editForm = useForm({
     mock_service_date: formatDateForInput(props.project.mock_service_date),
     turn_over_to_franchisee_date: formatDateForInput(props.project.turn_over_to_franchisee_date),
     target_go_live: formatDateForInput(props.project.target_go_live),
+    board_month: props.project.board_month || now.getMonth() + 1,
+    board_year: props.project.board_year || now.getFullYear(),
     remarks: props.project.remarks,
+});
+
+const monthOptions = [
+    { value: 1, label: 'January' },
+    { value: 2, label: 'February' },
+    { value: 3, label: 'March' },
+    { value: 4, label: 'April' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'June' },
+    { value: 7, label: 'July' },
+    { value: 8, label: 'August' },
+    { value: 9, label: 'September' },
+    { value: 10, label: 'October' },
+    { value: 11, label: 'November' },
+    { value: 12, label: 'December' },
+];
+
+const missingTaskListTargets = computed(() => props.taskListTargets?.missing || []);
+
+const confirmAutoCreateMonthlyBoards = async (extraTarget = null) => {
+    const missing = [...missingTaskListTargets.value];
+
+    if (extraTarget?.department && extraTarget?.sub_unit) {
+        const exists = (props.taskListTargets?.targets || []).some((target) => {
+            return target.department === extraTarget.department && target.sub_unit === extraTarget.sub_unit && target.exists;
+        });
+
+        if (!exists) {
+            missing.push({
+                title: `${extraTarget.department} ${extraTarget.sub_unit}`,
+            });
+        }
+    }
+
+    if (missing.length === 0) {
+        return true;
+    }
+
+    return await confirmAction({
+        title: 'Auto-create Monthly Board',
+        message: `This will automatically create ${missing.length} monthly task list board${missing.length === 1 ? '' : 's'} for this project sync.`,
+        confirmLabel: 'Create and Sync',
+        variant: 'primary',
+    });
+};
+
+const selectedTeamUser = computed(() => {
+    return props.users.find((user) => Number(user.id) === Number(teamForm.user_id)) || null;
+});
+
+const selectedDepartment = computed(() => {
+    return (props.departmentOptions || []).find((department) => department.name === teamForm.department) || null;
 });
 
 const openEditModal = () => {
@@ -106,12 +166,22 @@ const openEditModal = () => {
     editForm.mock_service_date = formatDateForInput(props.project.mock_service_date);
     editForm.turn_over_to_franchisee_date = formatDateForInput(props.project.turn_over_to_franchisee_date);
     editForm.target_go_live = formatDateForInput(props.project.target_go_live);
+    editForm.board_month = props.project.board_month || now.getMonth() + 1;
+    editForm.board_year = props.project.board_year || now.getFullYear();
     editForm.remarks = props.project.remarks;
     showEditProjectModal.value = true;
 };
 
-const updateProject = () => {
-    editForm.put(route('projects.update', props.project.id), {
+const updateProject = async () => {
+    const ok = await confirmAutoCreateMonthlyBoards();
+    if (!ok) return;
+
+    editForm
+        .transform((data) => ({
+            ...data,
+            auto_create_monthly_boards: true,
+        }))
+        .put(route('projects.update', props.project.id), {
         onSuccess: () => {
             showEditProjectModal.value = false;
         },
@@ -119,7 +189,15 @@ const updateProject = () => {
     });
 };
 
-const addTeamMember = () => {
+const syncTeamTargetFromUser = () => {
+    if (!selectedTeamUser.value) return;
+
+    teamForm.department = selectedTeamUser.value.department || teamForm.department;
+    teamForm.sub_unit = selectedTeamUser.value.sub_unit || teamForm.sub_unit;
+    teamForm.external_name = '';
+};
+
+const addTeamMember = async () => {
     teamForm.clearErrors();
     
     if (!teamForm.user_id && !teamForm.external_name) {
@@ -130,9 +208,28 @@ const addTeamMember = () => {
         return;
     }
 
-    teamForm.post(route('projects-team-members.store'), {
+    if (!teamForm.department || !teamForm.sub_unit) {
+        teamForm.setError({
+            department: 'Select a department.',
+            sub_unit: 'Select a sub-unit.',
+        });
+        return;
+    }
+
+    const ok = await confirmAutoCreateMonthlyBoards({
+        department: teamForm.department,
+        sub_unit: teamForm.sub_unit,
+    });
+    if (!ok) return;
+
+    teamForm
+        .transform((data) => ({
+            ...data,
+            auto_create_monthly_boards: true,
+        }))
+        .post(route('projects-team-members.store'), {
         onSuccess: () => {
-            teamForm.reset('user_id', 'external_name', 'role_type');
+            teamForm.reset('user_id', 'external_name', 'department', 'sub_unit', 'role_type');
         },
         preserveScroll: true
     });
@@ -154,7 +251,12 @@ const removeTeamMember = async (id) => {
 const openProjectTaskList = () => {
     if (isOpeningTaskList.value) return;
 
-    router.post(route('projects.task-list', props.project.id), {}, {
+    confirmAutoCreateMonthlyBoards().then((ok) => {
+        if (!ok) return;
+
+        router.post(route('projects.task-list', props.project.id), {
+            auto_create_monthly_boards: true,
+        }, {
         preserveScroll: true,
         onStart: () => {
             isOpeningTaskList.value = true;
@@ -162,6 +264,7 @@ const openProjectTaskList = () => {
         onFinish: () => {
             isOpeningTaskList.value = false;
         },
+        });
     });
 };
 
@@ -289,6 +392,31 @@ const getStatusColor = (status) => {
                                     <InputError :message="editForm.errors.turn_over_to_franchisee_date" />
                                 </div>
                             </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <InputLabel for="edit_board_month" value="Task List Month" />
+                                    <select
+                                        id="edit_board_month"
+                                        v-model.number="editForm.board_month"
+                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                    >
+                                        <option v-for="month in monthOptions" :key="month.value" :value="month.value">{{ month.label }}</option>
+                                    </select>
+                                    <InputError :message="editForm.errors.board_month" />
+                                </div>
+                                <div>
+                                    <InputLabel for="edit_board_year" value="Task List Year" />
+                                    <select
+                                        id="edit_board_year"
+                                        v-model.number="editForm.board_year"
+                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                    >
+                                        <option v-for="year in boardYears" :key="year" :value="year">{{ year }}</option>
+                                    </select>
+                                    <InputError :message="editForm.errors.board_year" />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -339,6 +467,7 @@ const getStatusColor = (status) => {
                                     <div class="ml-3 min-w-0">
                                         <p class="text-sm font-bold text-gray-900 truncate">{{ member.user?.name || member.external_name }}</p>
                                         <p class="text-[10px] text-gray-500 uppercase font-black">{{ member.role_type }}</p>
+                                        <p class="text-[10px] text-blue-600 font-black">{{ member.department || '-' }} / {{ member.sub_unit || '-' }}</p>
                                     </div>
                                 </div>
                                 <button @click="removeTeamMember(member.id)" class="p-1.5 text-gray-400 hover:text-red-600 transition-colors">
@@ -361,10 +490,12 @@ const getStatusColor = (status) => {
                                     v-model="teamForm.user_id" 
                                     id="user_id"
                                     class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                    @change="teamForm.external_name = ''"
+                                    @change="syncTeamTargetFromUser"
                                 >
                                     <option value="">Select a user...</option>
-                                    <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
+                                    <option v-for="user in users" :key="user.id" :value="user.id">
+                                        {{ user.name }}{{ user.department || user.sub_unit ? ` - ${user.department || '-'} / ${user.sub_unit || '-'}` : '' }}
+                                    </option>
                                 </select>
                                 <InputError :message="teamForm.errors.user_id" />
                             </div>
@@ -389,6 +520,40 @@ const getStatusColor = (status) => {
                                     @input="teamForm.user_id = ''"
                                 />
                                 <InputError :message="teamForm.errors.external_name" />
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <InputLabel for="team_department" value="Department" />
+                                    <select
+                                        id="team_department"
+                                        v-model="teamForm.department"
+                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                        required
+                                        @change="teamForm.sub_unit = ''"
+                                    >
+                                        <option value="">Select department...</option>
+                                        <option v-for="department in departmentOptions" :key="department.name" :value="department.name">
+                                            {{ department.name }}
+                                        </option>
+                                    </select>
+                                    <InputError :message="teamForm.errors.department" />
+                                </div>
+                                <div>
+                                    <InputLabel for="team_sub_unit" value="Sub-Unit" />
+                                    <select
+                                        id="team_sub_unit"
+                                        v-model="teamForm.sub_unit"
+                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                        required
+                                    >
+                                        <option value="">Select sub-unit...</option>
+                                        <option v-for="subUnit in (selectedDepartment?.sub_units || [])" :key="subUnit" :value="subUnit">
+                                            {{ subUnit }}
+                                        </option>
+                                    </select>
+                                    <InputError :message="teamForm.errors.sub_unit" />
+                                </div>
                             </div>
 
                             <div>
@@ -595,6 +760,7 @@ const getStatusColor = (status) => {
                                         <div class="ml-3">
                                             <p class="text-sm font-medium text-gray-900">{{ member.user?.name || member.external_name }}</p>
                                             <p class="text-xs text-gray-500">{{ member.role_type }}</p>
+                                            <p class="text-[10px] font-bold text-blue-600">{{ member.department || '-' }} / {{ member.sub_unit || '-' }}</p>
                                         </div>
                                     </div>
                                     <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
@@ -611,7 +777,12 @@ const getStatusColor = (status) => {
 
                 <!-- Gantt Chart Tab -->
                 <div v-if="activeTab === 'gantt'">
-                    <ProjectGantt :project="project" :users="users" :projectTemplates="project_templates" />
+                    <ProjectGantt
+                        :project="project"
+                        :users="users"
+                        :projectTemplates="project_templates"
+                        :taskListTargets="taskListTargets"
+                    />
                 </div>
 
                 <!-- Assets Board Tab -->

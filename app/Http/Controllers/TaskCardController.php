@@ -338,16 +338,27 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
+            'parent_item_id' => 'nullable|integer|exists:task_checklist_items,id',
             'assigned_to' => 'nullable|exists:users,id',
             'due_at' => 'nullable|date',
         ]);
         $validated = $this->normalizeDateTimeFields($validated, ['due_at']);
 
-        $taskChecklist->items()->create([
+        $parentItem = null;
+        if (!empty($validated['parent_item_id'])) {
+            $parentItem = TaskChecklistItem::where('task_checklist_id', $taskChecklist->id)
+                ->whereNull('parent_item_id')
+                ->findOrFail($validated['parent_item_id']);
+        }
+
+        $taskChecklist->allItems()->create([
             'title' => $validated['title'],
+            'parent_item_id' => $parentItem?->id,
             'assigned_to' => $validated['assigned_to'] ?? null,
             'due_at' => $validated['due_at'] ?? null,
-            'sort_order' => ((int) $taskChecklist->items()->max('sort_order')) + 1,
+            'sort_order' => ((int) $taskChecklist->allItems()
+                ->where('parent_item_id', $parentItem?->id)
+                ->max('sort_order')) + 1,
         ]);
 
         return response()->json(['card' => $this->freshCard($taskChecklist->card)], 201);
@@ -367,6 +378,10 @@ class TaskCardController extends Controller implements HasMiddleware
         $validated = $this->normalizeDateTimeFields($validated, ['due_at']);
 
         $taskChecklistItem->update($validated);
+
+        if ($taskChecklistItem->project_task_id) {
+            $this->projectTaskBoards->syncProjectTaskFromChecklistItem($taskChecklistItem->fresh(['projectTask', 'checklist.card.project']), $request->user());
+        }
 
         return response()->json(['card' => $this->freshCard($taskChecklistItem->checklist->card)]);
     }
@@ -518,10 +533,13 @@ class TaskCardController extends Controller implements HasMiddleware
     {
         $card = $card->fresh([
             'creator:id,name,profile_photo',
-            'assignees:id,name,email,profile_photo',
+            'assignees:id,name,email,profile_photo,sub_unit',
             'labels',
             'watchers:id,name',
-            'checklists.items.assignee:id,name,profile_photo',
+            'project:id,name,status,store_id,board_month,board_year',
+            'project.store:id,name',
+            'checklists.items.assignee:id,name,profile_photo,sub_unit',
+            'checklists.items.children.assignee:id,name,profile_photo,sub_unit',
             'comments.user:id,name,profile_photo',
             'attachments.user:id,name,profile_photo',
             'activities.actor:id,name,profile_photo',
@@ -533,6 +551,7 @@ class TaskCardController extends Controller implements HasMiddleware
         return [
             'id' => $card->id,
             'task_board_id' => $card->task_board_id,
+            'project_id' => $card->project_id,
             'title' => $card->title,
             'description' => $card->description,
             'status' => $card->status,
@@ -555,6 +574,14 @@ class TaskCardController extends Controller implements HasMiddleware
             'attachments' => $card->attachments,
             'activities' => $card->activities->take(50)->values(),
             'project_task' => $this->projectTaskPayload($card),
+            'project' => $card->project ? [
+                'id' => $card->project->id,
+                'name' => $card->project->name,
+                'status' => $card->project->status,
+                'store' => $card->project->store,
+                'board_month' => $card->project->board_month,
+                'board_year' => $card->project->board_year,
+            ] : null,
             'checklist_totals' => $card->checklist_totals,
         ];
     }

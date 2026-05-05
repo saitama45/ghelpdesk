@@ -42,6 +42,8 @@ class ProjectActivitySubTaskTest extends TestCase
                         'model_specs' => 'A1',
                         'qty' => 1,
                         'responsible' => 'IT',
+                        'department' => 'TAS',
+                        'sub_unit' => 'DS',
                         'default_duration_days' => 2,
                         'order' => 1,
                     ],
@@ -54,6 +56,8 @@ class ProjectActivitySubTaskTest extends TestCase
                         'model_specs' => null,
                         'qty' => 1,
                         'responsible' => 'IT',
+                        'department' => 'TAS',
+                        'sub_unit' => 'DS',
                         'default_duration_days' => 1,
                         'order' => 1,
                     ],
@@ -66,6 +70,10 @@ class ProjectActivitySubTaskTest extends TestCase
 
         $this->assertNull($parent->parent_activity_template_id);
         $this->assertSame($parent->id, $child->parent_activity_template_id);
+        $this->assertSame('TAS', $parent->department);
+        $this->assertSame('DS', $parent->sub_unit);
+        $this->assertSame('TAS', $child->department);
+        $this->assertSame('DS', $child->sub_unit);
     }
 
     public function test_activity_template_update_keeps_nested_sub_tasks(): void
@@ -109,6 +117,8 @@ class ProjectActivitySubTaskTest extends TestCase
                         'model_specs' => null,
                         'qty' => 1,
                         'responsible' => null,
+                        'department' => 'TAS',
+                        'sub_unit' => 'BS',
                         'default_duration_days' => 2,
                         'order' => 1,
                     ],
@@ -122,6 +132,8 @@ class ProjectActivitySubTaskTest extends TestCase
                         'model_specs' => null,
                         'qty' => 1,
                         'responsible' => null,
+                        'department' => '',
+                        'sub_unit' => '',
                         'default_duration_days' => 1,
                         'order' => 1,
                     ],
@@ -133,12 +145,16 @@ class ProjectActivitySubTaskTest extends TestCase
             'id' => $parent->id,
             'activity' => 'Install POS Updated',
             'parent_activity_template_id' => null,
+            'department' => 'TAS',
+            'sub_unit' => 'BS',
         ]);
 
         $this->assertDatabaseHas('activity_templates', [
             'id' => $child->id,
             'activity' => 'Configure menu Updated',
             'parent_activity_template_id' => $parent->id,
+            'department' => 'TAS',
+            'sub_unit' => 'BS',
         ]);
     }
 
@@ -155,6 +171,8 @@ class ProjectActivitySubTaskTest extends TestCase
             'activity' => 'Install POS',
             'milestone' => 'POS',
             'qty' => 1,
+            'department' => 'TAS',
+            'sub_unit' => 'DS',
             'default_duration_days' => 2,
             'order' => 1,
         ]);
@@ -179,6 +197,9 @@ class ProjectActivitySubTaskTest extends TestCase
         $parentTask = ProjectTask::where('project_id', $project->id)
             ->where('name', 'Install POS')
             ->firstOrFail();
+
+        $this->assertSame('TAS', $parentTask->department);
+        $this->assertSame('DS', $parentTask->sub_unit);
 
         $this->assertDatabaseHas('project_tasks', [
             'project_id' => $project->id,

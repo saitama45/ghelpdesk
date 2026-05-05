@@ -6,11 +6,16 @@ use App\Models\Project;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\ProjectTemplate;
+use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class ProjectController extends Controller
 {
+    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
+    {
+    }
+
     public function index(Request $request)
     {
         $projects = Project::with(['store', 'tasks'])
@@ -26,6 +31,7 @@ class ProjectController extends Controller
     {
         return Inertia::render('Projects/Create', [
             'stores' => Store::all(['id', 'name']),
+            'boardYears' => $this->boardYears(),
         ]);
     }
 
@@ -41,6 +47,8 @@ class ProjectController extends Controller
             'mock_service_date' => 'nullable|date',
             'turn_over_to_franchisee_date' => 'nullable|date',
             'target_go_live' => 'nullable|date',
+            'board_month' => 'nullable|integer|min:1|max:12',
+            'board_year' => 'nullable|integer|min:2000|max:2100',
             'remarks' => 'nullable|string',
         ]);
 
@@ -55,11 +63,11 @@ class ProjectController extends Controller
     {
         $project->load([
             'store',
-            'teamMembers.user:id,name,profile_photo',
+            'teamMembers.user:id,name,profile_photo,department,sub_unit',
             'taskBoard:id,project_id,title,closed_at',
             'tasks',
-            'tasks.assignedUser:id,name,profile_photo',
-            'tasks.supportUser:id,name,profile_photo',
+            'tasks.assignedUser:id,name,profile_photo,sub_unit',
+            'tasks.supportUser:id,name,profile_photo,sub_unit',
             'assets'
         ]);
 
@@ -67,8 +75,11 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Show', [
             'project' => $project,
-            'users' => User::all(['id', 'name']),
+            'users' => User::active()->orderBy('name')->get(['id', 'name', 'department', 'sub_unit']),
             'stores' => Store::all(['id', 'name']),
+            'departmentOptions' => $this->departmentOptions(),
+            'boardYears' => $this->boardYears(),
+            'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
             'project_templates' => ProjectTemplate::whereIn('store_class', [$storeClass, 'Both'])
                 ->withCount('activities')
                 ->get(),
@@ -87,11 +98,17 @@ class ProjectController extends Controller
             'mock_service_date' => 'nullable|date',
             'turn_over_to_franchisee_date' => 'nullable|date',
             'target_go_live' => 'nullable|date',
+            'board_month' => 'nullable|integer|min:1|max:12',
+            'board_year' => 'nullable|integer|min:2000|max:2100',
             'remarks' => 'nullable|string',
         ]);
 
         $project->update($validated);
         $project->recalculateStatus();
+
+        if ($request->boolean('auto_create_monthly_boards')) {
+            $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, true);
+        }
 
         return redirect()->back()->with('success', 'Project updated successfully.');
     }
@@ -102,5 +119,39 @@ class ProjectController extends Controller
 
         return redirect()->route('projects.index')
             ->with('success', 'Project deleted successfully.');
+    }
+
+    private function departmentOptions(): array
+    {
+        return User::active()
+            ->whereNotNull('department')
+            ->where('department', '!=', '')
+            ->whereNotNull('sub_unit')
+            ->where('sub_unit', '!=', '')
+            ->orderBy('department')
+            ->orderBy('sub_unit')
+            ->get(['department', 'sub_unit'])
+            ->groupBy(fn (User $user) => trim((string) $user->department))
+            ->map(fn ($users, string $department) => [
+                'name' => $department,
+                'sub_units' => $users
+                    ->pluck('sub_unit')
+                    ->map(fn ($subUnit) => trim((string) $subUnit))
+                    ->filter()
+                    ->unique()
+                    ->sort()
+                    ->values()
+                    ->all(),
+            ])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
+    private function boardYears(): array
+    {
+        $year = (int) now()->year;
+
+        return range($year - 1, $year + 3);
     }
 }

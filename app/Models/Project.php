@@ -23,6 +23,8 @@ class Project extends Model
         'mock_service_date',
         'turn_over_to_franchisee_date',
         'target_go_live',
+        'board_month',
+        'board_year',
         'remarks',
     ];
 
@@ -33,6 +35,8 @@ class Project extends Model
         'mock_service_date' => 'date',
         'turn_over_to_franchisee_date' => 'date',
         'target_go_live' => 'date',
+        'board_month' => 'integer',
+        'board_year' => 'integer',
     ];
 
     public function store(): BelongsTo

@@ -27,6 +27,7 @@ const props = defineProps({
     project: Object,
     users: Array,
     projectTemplates: Array,
+    taskListTargets: Object,
 });
 
 const { success, info, error } = useToast();
@@ -44,6 +45,21 @@ const selectedTemplateId = ref('');
 const localTasks = ref([]);
 const draggedTaskId = ref(null);
 const dragOverTaskId = ref(null);
+
+const missingTaskListTargets = computed(() => props.taskListTargets?.missing || []);
+
+const ensureTaskListBoards = async () => {
+    if (missingTaskListTargets.value.length === 0) {
+        return true;
+    }
+
+    return await confirmAction({
+        title: 'Auto-create Monthly Board',
+        message: `This will automatically create ${missingTaskListTargets.value.length} monthly task list board${missingTaskListTargets.value.length === 1 ? '' : 's'} for this project sync.`,
+        confirmLabel: 'Create and Sync',
+        variant: 'primary',
+    });
+};
 
 // Refs for scroll syncing (Simplified to single container)
 const mainWorkspaceRef = ref(null);
@@ -162,10 +178,14 @@ const confirmApplyTemplate = async () => {
     });
 
     if (ok) {
+        const syncOk = await ensureTaskListBoards();
+        if (!syncOk) return;
+
         isApplyingTemplates.value = true;
         
         router.post(route('projects.apply-templates', props.project.id), {
-            project_template_id: selectedTemplateId.value
+            project_template_id: selectedTemplateId.value,
+            auto_create_monthly_boards: true,
         }, {
             preserveScroll: true,
             onFinish: () => {
@@ -179,12 +199,16 @@ const confirmApplyTemplate = async () => {
     }
 };
 
-const saveTask = () => {
+const saveTask = async () => {
+    const syncOk = await ensureTaskListBoards();
+    if (!syncOk) return;
+
     if (isEditing.value) {
         form.transform((data) => ({
             ...data,
             parent_task_id: data.parent_task_id || null,
             progress: data.task_progress,
+            auto_create_monthly_boards: true,
         })).put(route('projects-tasks.update', { 'projects_task': editingTaskId.value, tab: 'gantt' }), {
             preserveScroll: true,
             onSuccess: () => {
@@ -203,6 +227,7 @@ const saveTask = () => {
             ...data,
             parent_task_id: data.parent_task_id || null,
             progress: data.task_progress,
+            auto_create_monthly_boards: true,
         })).post(route('projects-tasks.store', { tab: 'gantt' }), {
             preserveScroll: true,
             onSuccess: () => {
@@ -296,10 +321,13 @@ const editTask = (task) => {
     form.order = task.order;
 };
 
-const updateTaskField = (task, field, value) => {
+const updateTaskField = async (task, field, value) => {
     if (task[field] === value) return;
 
-    const data = { [field]: value };
+    const syncOk = await ensureTaskListBoards();
+    if (!syncOk) return;
+
+    const data = { [field]: value, auto_create_monthly_boards: true };
     
     // Auto-update status if progress is changed
     if (field === 'progress') {
@@ -324,7 +352,10 @@ const deleteTask = async (taskId) => {
     });
     
     if (ok) {
-        useForm({}).delete(route('projects-tasks.destroy', { 'projects_task': taskId, tab: 'gantt' }), {
+        const syncOk = await ensureTaskListBoards();
+        if (!syncOk) return;
+
+        useForm({ auto_create_monthly_boards: true }).delete(route('projects-tasks.destroy', { 'projects_task': taskId, tab: 'gantt' }), {
             preserveScroll: true
         });
     }
@@ -514,7 +545,14 @@ const getAssigneeInitial = (task) => {
     return (getAssigneeName(task) || 'U').charAt(0);
 };
 
-const persistTaskOrder = () => {
+const taskOrganizationLabel = (task) => {
+    return [task.department, task.sub_unit].filter(Boolean).join(' / ');
+};
+
+const persistTaskOrder = async () => {
+    const syncOk = await ensureTaskListBoards();
+    if (!syncOk) return;
+
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
     fetch(route('projects.tasks.gantt-update'), {
@@ -528,7 +566,8 @@ const persistTaskOrder = () => {
             tasks: localTasks.value.map((task, index) => ({
                 id: task.id,
                 order: index,
-            }))
+            })),
+            auto_create_monthly_boards: true,
         })
     })
         .then(async (response) => {
@@ -837,6 +876,9 @@ const isWeekend = (date) => {
                                                     {{ row.task.name }}
                                                 </div>
                                                 <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0">{{ row.task.progress }}%</span>
+                                            </div>
+                                            <div v-if="!row.isSubTask && taskOrganizationLabel(row.task)" class="mb-1 truncate text-[10px] font-black uppercase tracking-wider text-indigo-500">
+                                                {{ taskOrganizationLabel(row.task) }}
                                             </div>
                                             <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
                                                 <div class="h-full transition-all duration-500" 

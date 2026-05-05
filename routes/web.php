@@ -86,6 +86,7 @@ Route::middleware('auth')->group(function () {
     Route::post('task-lists/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-lists.star');
     Route::post('task-lists/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-lists.watch');
     Route::post('task-lists/{taskBoard}/sync-project', [\App\Http\Controllers\TaskBoardController::class, 'syncProject'])->name('task-lists.sync-project');
+    Route::post('task-lists/monthly-generate', [\App\Http\Controllers\TaskBoardController::class, 'generateMonthly'])->name('task-lists.monthly-generate');
     Route::post('task-lists/{taskBoard}/members', [\App\Http\Controllers\TaskBoardController::class, 'storeMember'])->name('task-lists.members.store');
     Route::put('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'updateMember'])->name('task-lists.members.update');
     Route::delete('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'destroyMember'])->name('task-lists.members.destroy');
