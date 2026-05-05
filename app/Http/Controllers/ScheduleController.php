@@ -1154,13 +1154,31 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function template(Request $request)
     {
-        $year = (int) $request->input('year', now()->year);
-        $year = max(2020, min(2100, $year));
+        if ($request->filled('start') || $request->filled('end')) {
+            $validated = $request->validate([
+                'start' => ['required', 'date'],
+                'end' => ['required', 'date', 'after_or_equal:start'],
+            ]);
 
-        // Build full-year date list
+            $startDate = Carbon::parse($validated['start'], 'Asia/Manila')->startOfDay();
+            $endDate = Carbon::parse($validated['end'], 'Asia/Manila')->startOfDay();
+        } else {
+            $year = (int) $request->input('year', now()->year);
+            $year = max(2020, min(2100, $year));
+
+            $startDate = Carbon::create($year, 1, 1, 0, 0, 0, 'Asia/Manila')->startOfDay();
+            $endDate = Carbon::create($year, 12, 31, 0, 0, 0, 'Asia/Manila')->startOfDay();
+        }
+
+        $rangeDays = (int) $startDate->diffInDays($endDate) + 1;
+        if ($rangeDays > 366) {
+            throw ValidationException::withMessages([
+                'end' => 'Date range cannot exceed 366 days.',
+            ]);
+        }
+
+        // Build date list for the requested template range.
         $dates = [];
-        $startDate = Carbon::create($year, 1, 1);
-        $endDate   = Carbon::create($year, 12, 31);
         for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
             $dates[] = $d->format('Y-m-d');
         }
@@ -1316,7 +1334,10 @@ class ScheduleController extends Controller implements HasMiddleware
         $spreadsheet->setActiveSheetIndex(0);
 
         $writer   = new Xlsx($spreadsheet);
-        $filename = "schedules-import-{$year}.xlsx";
+        $rangeLabel = $startDate->toDateString() === $endDate->toDateString()
+            ? $startDate->toDateString()
+            : $startDate->toDateString() . '_to_' . $endDate->toDateString();
+        $filename = "schedules-import-{$rangeLabel}.xlsx";
         $httpHeaders = [
             'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",

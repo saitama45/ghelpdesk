@@ -491,13 +491,36 @@
 
                         <!-- Template Download -->
                         <div class="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-5 space-y-4">
-                            <div class="flex items-center justify-between">
+                            <div>
                                 <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">1. Download Template</p>
-                                <select v-model="importYear" class="bg-white border-gray-200 rounded-lg py-1 pl-2 pr-8 text-xs font-bold text-gray-700 focus:ring-blue-500">
-                                    <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
-                                </select>
                             </div>
-                            <a :href="importTemplateUrl" class="flex items-center p-3 bg-white border border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-sm transition-all group">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Start Date</label>
+                                    <input
+                                        v-model="importTemplateRange.start"
+                                        type="date"
+                                        class="block w-full rounded-lg border-gray-200 bg-white text-xs font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                    >
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">End Date</label>
+                                    <input
+                                        v-model="importTemplateRange.end"
+                                        type="date"
+                                        class="block w-full rounded-lg border-gray-200 bg-white text-xs font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                    >
+                                </div>
+                            </div>
+                            <p v-if="importTemplateRangeError" class="text-[10px] font-bold text-red-600">{{ importTemplateRangeError }}</p>
+                            <a
+                                :href="canDownloadImportTemplate ? importTemplateUrl : '#'"
+                                @click="handleTemplateDownloadClick"
+                                :class="[
+                                    'flex items-center p-3 bg-white border border-gray-200 rounded-xl transition-all group',
+                                    canDownloadImportTemplate ? 'hover:border-blue-300 hover:shadow-sm' : 'opacity-60 cursor-not-allowed'
+                                ]"
+                            >
                                 <div class="h-10 w-10 bg-blue-50 group-hover:bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors">
                                     <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -505,7 +528,7 @@
                                 </div>
                                 <div class="ml-4 overflow-hidden">
                                     <div class="text-sm font-bold text-gray-900 truncate">Schedules Template</div>
-                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Year: {{ importYear }}</div>
+                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Range: {{ importTemplateRange.start }} to {{ importTemplateRange.end }}</div>
                                 </div>
                             </a>
                         </div>
@@ -1426,18 +1449,60 @@ const importFile = ref(null)
 const importFileInput = ref(null)
 const isImporting = ref(false)
 const importResult = ref(null)
-const importYear = ref(new Date().getFullYear())
-
-const importTemplateUrl = computed(() =>
-    `/schedules/template?year=${importYear.value}`
-)
-
-const yearOptions = computed(() => {
-    const current = new Date().getFullYear()
-    return Array.from({ length: 5 }, (_, index) => current - 2 + index)
+const importTemplateRange = reactive({
+    start: visibleRange.value.start,
+    end: visibleRange.value.end,
 })
 
-const openImportModal = () => { showImportModal.value = true }
+const parseImportTemplateDate = (value) => {
+    if (!value) return null
+
+    const date = new Date(`${value}T00:00:00`)
+    return Number.isNaN(date.getTime()) ? null : date
+}
+
+const importTemplateRangeDays = computed(() => {
+    const start = parseImportTemplateDate(importTemplateRange.start)
+    const end = parseImportTemplateDate(importTemplateRange.end)
+
+    if (!start || !end || start > end) return 0
+
+    return Math.floor((end - start) / 86400000) + 1
+})
+
+const importTemplateRangeError = computed(() => {
+    const start = parseImportTemplateDate(importTemplateRange.start)
+    const end = parseImportTemplateDate(importTemplateRange.end)
+
+    if (!start || !end) return 'Select a start and end date.'
+    if (start > end) return 'Start date must be on or before end date.'
+    if (importTemplateRangeDays.value > 366) return 'Date range cannot exceed 366 days.'
+
+    return ''
+})
+
+const canDownloadImportTemplate = computed(() => !importTemplateRangeError.value)
+
+const importTemplateUrl = computed(() =>
+    `/schedules/template?start=${encodeURIComponent(importTemplateRange.start)}&end=${encodeURIComponent(importTemplateRange.end)}`
+)
+
+const syncImportTemplateRange = () => {
+    importTemplateRange.start = visibleRange.value.start
+    importTemplateRange.end = visibleRange.value.end
+}
+
+const openImportModal = () => {
+    syncImportTemplateRange()
+    showImportModal.value = true
+}
+
+const handleTemplateDownloadClick = (event) => {
+    if (canDownloadImportTemplate.value) return
+
+    event.preventDefault()
+    showError(importTemplateRangeError.value)
+}
 
 const closeImportModal = () => {
     showImportModal.value = false
