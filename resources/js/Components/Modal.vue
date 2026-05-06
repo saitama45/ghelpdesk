@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import Toast from '@/Components/Toast.vue';
 
 const props = defineProps({
     show: {
@@ -122,5 +123,6 @@ const maxWidthClass = computed(() => {
                 </div>
             </Transition>
         </div>
+        <Toast />
     </dialog>
 </template>

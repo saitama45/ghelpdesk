@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Asset;
 use App\Models\Category;
+use App\Models\InventoryTransaction;
 use App\Models\StockIn;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,6 +14,8 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class InventoryReportController extends Controller implements HasMiddleware
 {
+    private const EXCLUDED_REPORT_LOCATIONS = ['SUPPLIER'];
+
     public static function middleware(): array
     {
         return [
@@ -22,83 +25,163 @@ class InventoryReportController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = StockIn::query()
-            ->where('status', 'Posted')
+        $query = $this->inventoryRowsQuery($request);
+
+        $assets = (clone $query)
+            ->orderBy('inventory_transactions.location')
+            ->orderBy('assets.item_code')
+            ->paginate($request->integer('per_page', 10))
+            ->withQueryString();
+
+        $locationSummaries = DB::query()
+            ->fromSub((clone $query)->toBase(), 'inventory_rows')
             ->select(
-                'asset_id',
-                'destination_location as location',
-                DB::raw('SUM(quantity) as soh'),
-                DB::raw('SUM(quantity * cost) as total_value')
+                'location',
+                DB::raw('COUNT(*) as item_count'),
+                DB::raw('SUM(soh) as total_soh'),
+                DB::raw('SUM(total_value) as total_value')
             )
-            ->groupBy('asset_id', 'destination_location')
+            ->groupBy('location')
+            ->orderBy('location')
+            ->get();
+
+        $internalStockByAsset = InventoryTransaction::query()
+            ->select('asset_id', DB::raw('SUM(quantity) as soh'))
+            ->whereNotIn('location', self::EXCLUDED_REPORT_LOCATIONS)
+            ->groupBy('asset_id');
+
+        // Summary Data for Cards
+        $summary = [
+            'total_items' => Asset::count(),
+            'total_soh' => InventoryTransaction::whereNotIn('location', self::EXCLUDED_REPORT_LOCATIONS)->sum('quantity') ?? 0,
+            'total_inventory_value' => InventoryTransaction::join('assets', 'inventory_transactions.asset_id', '=', 'assets.id')
+                ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS)
+                ->selectRaw('SUM(inventory_transactions.quantity * assets.cost) as total')
+                ->value('total') ?? 0,
+            'out_of_stock_count' => Asset::leftJoinSub($internalStockByAsset, 'internal_stock', function ($join) {
+                $join->on('assets.id', '=', 'internal_stock.asset_id');
+            })
+                ->whereRaw('ISNULL(internal_stock.soh, 0) <= 0')
+                ->count(),
+        ];
+
+        return Inertia::render('Reports/Inventory', [
+            'assets' => $assets,
+            'locationSummaries' => $locationSummaries,
+            'categories' => Category::orderBy('name')->get(),
+            'brands' => Asset::whereNotNull('brand')->distinct()->pluck('brand'),
+            'locations' => InventoryTransaction::whereNotNull('location')
+                ->whereNotIn('location', self::EXCLUDED_REPORT_LOCATIONS)
+                ->distinct()
+                ->orderBy('location')
+                ->pluck('location'),
+            'summary' => $summary,
+            'filters' => $request->only(['category_id', 'sub_category_id', 'type', 'brand', 'location', 'stock_status', 'search'])
+        ]);
+    }
+
+    public function history(Asset $asset, Request $request)
+    {
+        $location = $request->location;
+
+        $history = InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
+            ->where('inventory_transactions.location', $location)
+            ->leftJoin('stock_ins', function($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
+                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->leftJoin('users', 'inventory_transactions.created_by', '=', 'users.id')
+            ->select(
+                'inventory_transactions.transaction_type',
+                'users.name as creator_name',
+                'stock_ins.dr_no',
+                'stock_ins.receive_date',
+                'stock_ins.received_by',
+                'stock_ins.origin_location',
+                'stock_ins.destination_location',
+                DB::raw('SUM(inventory_transactions.quantity) as total_quantity'),
+                DB::raw('COUNT(*) as record_count'),
+                DB::raw('MAX(inventory_transactions.created_at) as latest_tx_at')
+            )
+            ->groupBy(
+                'inventory_transactions.transaction_type',
+                'users.name',
+                'stock_ins.dr_no',
+                'stock_ins.receive_date',
+                'stock_ins.received_by',
+                'stock_ins.origin_location',
+                'stock_ins.destination_location'
+            )
+            ->orderBy('latest_tx_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'asset' => $asset,
+            'location' => $location,
+            'history' => $history
+        ]);
+    }
+
+    private function inventoryRowsQuery(Request $request)
+    {
+        $query = InventoryTransaction::query()
+            ->join('assets', 'inventory_transactions.asset_id', '=', 'assets.id')
+            ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS)
+            ->select(
+                'inventory_transactions.asset_id',
+                'inventory_transactions.location',
+                DB::raw('SUM(inventory_transactions.quantity) as soh'),
+                DB::raw('SUM(inventory_transactions.quantity * assets.cost) as total_value')
+            )
+            ->groupBy('inventory_transactions.asset_id', 'inventory_transactions.location', 'assets.id', 'assets.item_code')
             ->with(['asset.category', 'asset.subCategory']);
 
-        // Filters
         if ($request->filled('category_id')) {
-            $query->whereHas('asset', function($q) use ($request) {
+            $query->whereHas('asset', function ($q) use ($request) {
                 $q->where('category_id', $request->category_id);
             });
         }
 
         if ($request->filled('sub_category_id')) {
-            $query->whereHas('asset', function($q) use ($request) {
+            $query->whereHas('asset', function ($q) use ($request) {
                 $q->where('sub_category_id', $request->sub_category_id);
             });
         }
 
         if ($request->filled('type')) {
-            $query->whereHas('asset', function($q) use ($request) {
+            $query->whereHas('asset', function ($q) use ($request) {
                 $q->where('type', $request->type);
             });
         }
 
         if ($request->filled('brand')) {
-            $query->whereHas('asset', function($q) use ($request) {
+            $query->whereHas('asset', function ($q) use ($request) {
                 $q->where('brand', $request->brand);
             });
         }
 
         if ($request->filled('location')) {
-            $query->where('destination_location', $request->location);
+            $query->where('inventory_transactions.location', $request->location);
         }
 
         if ($request->filled('stock_status')) {
             if ($request->stock_status === 'in_stock') {
-                $query->having(DB::raw('SUM(quantity)'), '>', 0);
+                $query->having(DB::raw('SUM(inventory_transactions.quantity)'), '>', 0);
             } elseif ($request->stock_status === 'out_of_stock') {
-                $query->having(DB::raw('SUM(quantity)'), '<=', 0);
+                $query->having(DB::raw('SUM(inventory_transactions.quantity)'), '<=', 0);
             }
         }
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->whereHas('asset', function($q) use ($search) {
+            $query->whereHas('asset', function ($q) use ($search) {
                 $q->where('item_code', 'like', "%{$search}%")
-                  ->orWhere('brand', 'like', "%{$search}%")
-                  ->orWhere('model', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('brand', 'like', "%{$search}%")
+                    ->orWhere('model', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
             });
         }
 
-        $assets = $query->paginate(10)->withQueryString();
-
-        // Summary Data for Cards
-        $summary = [
-            'total_items' => Asset::count(),
-            'total_soh' => StockIn::where('status', 'Posted')->sum('quantity') ?? 0,
-            'total_inventory_value' => StockIn::where('status', 'Posted')->selectRaw('SUM(quantity * cost) as total')->value('total') ?? 0,
-            'out_of_stock_count' => Asset::where(function ($query) {
-                $query->whereRaw('(SELECT ISNULL(SUM(quantity), 0) FROM stock_ins WHERE stock_ins.asset_id = assets.id AND status = \'Posted\') <= 0');
-            })->count()
-        ];
-
-        return Inertia::render('Reports/Inventory', [
-            'assets' => $assets,
-            'categories' => Category::orderBy('name')->get(),
-            'brands' => Asset::whereNotNull('brand')->distinct()->pluck('brand'),
-            'locations' => StockIn::where('status', 'Posted')->whereNotNull('destination_location')->distinct()->pluck('destination_location'),
-            'summary' => $summary,
-            'filters' => $request->only(['category_id', 'sub_category_id', 'type', 'brand', 'location', 'stock_status', 'search'])
-        ]);
+        return $query;
     }
 }

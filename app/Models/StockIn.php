@@ -12,6 +12,7 @@ class StockIn extends Model
 
     protected $fillable = [
         'receive_date',
+        'source_stock_in_id',
         'dr_no',
         'dr_date',
         'vendor',
@@ -38,6 +39,7 @@ class StockIn extends Model
 
     protected $casts = [
         'asset_id' => 'integer',
+        'source_stock_in_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',
         'receive_date' => 'date',
@@ -64,6 +66,16 @@ class StockIn extends Model
     public function updater()
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function sourceStockIn()
+    {
+        return $this->belongsTo(StockIn::class, 'source_stock_in_id');
+    }
+
+    public function transferChildren()
+    {
+        return $this->hasMany(StockIn::class, 'source_stock_in_id');
     }
 
     protected static function booted()

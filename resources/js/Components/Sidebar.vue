@@ -351,7 +351,7 @@ const canSeeSettings = computed(() => {
                                 route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
-                            <span>Stock In</span>
+                            <span>Stock Transaction</span>
                         </Link>
                         <Link
                             v-if="hasPermission('reports.inventory')"

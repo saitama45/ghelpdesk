@@ -1,10 +1,10 @@
 <template>
-    <AppLayout title="Stock In">
+    <AppLayout title="Stock Transaction">
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 <DataTable
-                    title="Stock In Headers"
-                    subtitle="Manage grouped stock-in header records and their quantity"
+                    title="Stock Transaction Headers"
+                    subtitle="Manage stock movements (In/Transfers) and their quantity"
                     search-placeholder="Search by serial no..."
                     :search="pagination.search.value"
                     :data="pagination.data.value"
@@ -328,18 +328,54 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div
+                            v-if="isTransferMode && form.asset_id && !isEditing"
+                            class="grid grid-cols-1 md:grid-cols-3 gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4"
+                        >
                             <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500">Transfer Origin</p>
+                                <p class="mt-1 text-sm font-semibold text-blue-950">{{ normalizedOriginLocation }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500">Current SOH</p>
+                                <p class="mt-1 text-2xl font-black text-blue-950">
+                                    <span v-if="isLoadingAvailableStock">...</span>
+                                    <span v-else>{{ availableSoh }}</span>
+                                </p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500">Transfer Mode</p>
+                                <p class="mt-1 text-sm font-semibold text-blue-950">
+                                    {{ selectedAsset?.type === 'Fixed' ? 'Select fixed asset units below' : 'Qty is capped by origin SOH' }}
+                                </p>
+                            </div>
+                            <p v-if="availableStockError" class="md:col-span-3 text-xs font-semibold text-red-600">
+                                {{ availableStockError }}
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div v-if="isFixedTransfer && !isEditing">
+                                <label class="block text-sm font-medium text-gray-700">Selected Units</label>
+                                <div class="mt-1 flex min-h-[38px] items-center rounded-md border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 shadow-sm">
+                                    {{ form.entries.length }} selected
+                                </div>
+                                <p class="mt-1 text-[11px] text-gray-500">
+                                    Transfer quantity follows the fixed asset units selected below.
+                                </p>
+                            </div>
+                            <div v-else>
                                 <label class="block text-sm font-medium text-gray-700">Qty</label>
                                 <input
                                     type="number"
                                     v-model.number="form.quantity"
                                     required
                                     min="1"
+                                    :max="isConsumableTransfer && availableSoh > 0 ? availableSoh : null"
                                     class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                                 >
                                 <p class="mt-1 text-[11px] text-gray-500">
-                                    {{ isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.' }}
+                                    {{ isConsumableTransfer && !isEditing ? `Up to ${availableSoh} item(s) can be transferred from the origin.` : (isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.') }}
                                 </p>
                             </div>
                         </div>
@@ -377,6 +413,119 @@
                         </div>
 
                         <div class="max-h-[55vh] overflow-y-auto p-4 space-y-4">
+                            <div v-if="isFixedTransfer && !isEditing" class="space-y-4">
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 rounded-xl border border-gray-200 bg-white p-4">
+                                    <div class="lg:col-span-2">
+                                        <p class="text-sm font-semibold text-gray-900">Available fixed asset units</p>
+                                        <p class="mt-1 text-xs text-gray-500">
+                                            Pick the posted units currently held by {{ normalizedOriginLocation }}. Selected units inherit their serial, barcode, QR code, cost, warranty, and EOL values.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination for Selected</label>
+                                        <Autocomplete
+                                            v-model="bulkDestinationLocation"
+                                            :options="storeOptions"
+                                            label-key="name"
+                                            value-key="value"
+                                            placeholder="Select Destination"
+                                            size="sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div v-if="isLoadingAvailableStock" class="rounded-xl border border-gray-200 bg-white p-6 text-sm font-semibold text-gray-500">
+                                    Loading available stock...
+                                </div>
+
+                                <div v-else-if="availableStockError" class="rounded-xl border border-red-200 bg-red-50 p-6 text-sm font-semibold text-red-700">
+                                    {{ availableStockError }}
+                                </div>
+
+                                <div v-else-if="availableUnits.length === 0" class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
+                                    No available fixed asset units were found at {{ normalizedOriginLocation }}.
+                                </div>
+
+                                <div v-else class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                                    <div class="max-h-80 overflow-y-auto">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50 sticky top-0 z-10">
+                                                <tr>
+                                                    <th class="w-12 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Pick</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Serial / Barcode</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Received</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Cost</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Current Location</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-100 bg-white">
+                                                <tr
+                                                    v-for="unit in availableUnits"
+                                                    :key="unit.id"
+                                                    class="hover:bg-blue-50/60"
+                                                    :class="isSourceSelected(unit) ? 'bg-blue-50' : ''"
+                                                >
+                                                    <td class="px-4 py-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            :checked="isSourceSelected(unit)"
+                                                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                            @change="toggleSourceUnit(unit)"
+                                                        >
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <p class="text-sm font-semibold text-gray-900">{{ unit.serial_no || 'No serial' }}</p>
+                                                        <p class="text-xs font-mono text-gray-500">{{ unit.barcode || 'No barcode' }}</p>
+                                                    </td>
+                                                    <td class="px-4 py-3">
+                                                        <p class="text-sm text-gray-900">{{ formatDate(unit.receive_date) }}</p>
+                                                        <p class="text-xs text-gray-500">{{ unit.dr_no || 'No DR' }}</p>
+                                                    </td>
+                                                    <td class="px-4 py-3 text-sm font-semibold text-gray-900">
+                                                        {{ Number(unit.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+                                                    </td>
+                                                    <td class="px-4 py-3 text-sm text-gray-700">
+                                                        {{ unit.destination_location || normalizedOriginLocation }}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div v-if="form.entries.length" class="rounded-xl border border-blue-200 bg-white p-4">
+                                    <div class="mb-3 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-semibold text-gray-900">Selected transfer rows</p>
+                                            <p class="text-xs text-gray-500">Confirm the destination for each selected unit.</p>
+                                        </div>
+                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-800">{{ form.entries.length }} selected</span>
+                                    </div>
+                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                        <div
+                                            v-for="entry in form.entries"
+                                            :key="entry.uid"
+                                            class="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                                        >
+                                            <div class="mb-3">
+                                                <p class="text-sm font-semibold text-gray-900">{{ entry.serial_no || 'No serial' }}</p>
+                                                <p class="text-xs font-mono text-gray-500">{{ entry.barcode || 'No barcode' }}</p>
+                                            </div>
+                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination Location</label>
+                                            <Autocomplete
+                                                v-model="entry.destination_location"
+                                                :options="storeOptions"
+                                                label-key="name"
+                                                value-key="value"
+                                                placeholder="Select Destination Store"
+                                                size="sm"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <template v-else>
                             <div
                                 v-for="(entry, index) in form.entries"
                                 :key="entry.uid"
@@ -484,6 +633,7 @@
                                     </div>
                                 </div>
                             </div>
+                            </template>
                         </div>
                     </div>
 
@@ -725,9 +875,17 @@ const form = reactive({
 
 let entryUid = 0
 const codeValidationAttempted = ref(false)
+const supplierLocationCode = 'SUPPLIER'
+const availableStock = ref(null)
+const availableStockError = ref('')
+const isLoadingAvailableStock = ref(false)
+const selectedSourceIds = ref([])
+const bulkDestinationLocation = ref('')
+let availableStockRequestId = 0
 
 const createEntry = (overrides = {}) => ({
     uid: `entry-${entryUid++}`,
+    source_stock_in_id: null,
     serial_no: '',
     barcode: '',
     qrcode: '',
@@ -778,6 +936,14 @@ const validateGeneratedCodes = () => {
 
 const selectedAsset = computed(() => normalizedAssets.value.find(asset => asset.id == form.asset_id) || null)
 const selectedAssetLabel = computed(() => selectedAsset.value ? `${selectedAsset.value.item_code} - ${selectedAsset.value.description || selectedAsset.value.model}` : '')
+const normalizedOriginLocation = computed(() => normalizeLocationValue(form.origin_location))
+const isTransferMode = computed(() => !!normalizedOriginLocation.value && normalizedOriginLocation.value !== supplierLocationCode)
+const isFixedTransfer = computed(() => isTransferMode.value && selectedAsset.value?.type === 'Fixed')
+const isConsumableTransfer = computed(() => isTransferMode.value && selectedAsset.value?.type === 'Consumables')
+const availableSoh = computed(() => Number(availableStock.value?.soh || 0))
+const availableUnits = computed(() => availableStock.value?.available_units || [])
+const selectedSourceIdSet = computed(() => new Set(selectedSourceIds.value.map(id => Number(id))))
+const sourceRowsById = computed(() => new Map(availableUnits.value.map(unit => [Number(unit.id), unit])))
 const toDateKey = (value) => {
     if (!value) return ''
     if (value instanceof Date) return toLocalDateKey(value)
@@ -821,9 +987,171 @@ const getEntryDefaults = () => ({
     eol_months: 60,
 })
 
+const clearAvailableStock = () => {
+    availableStock.value = null
+    availableStockError.value = ''
+    selectedSourceIds.value = []
+    bulkDestinationLocation.value = ''
+}
+
+const resetFixedTransferEntries = () => {
+    selectedSourceIds.value = []
+    form.entries = []
+    form.quantity = 0
+}
+
+const unitToTransferEntry = (unit, existing = null) => createEntry({
+    source_stock_in_id: unit.id,
+    serial_no: unit.serial_no || '',
+    barcode: unit.barcode || '',
+    qrcode: unit.qrcode || '',
+    warranty_months: Number(unit.warranty_months || 0),
+    eol_months: Number(unit.eol_months || 0),
+    cost: Number(unit.cost || 0),
+    price: Number(unit.price || 0),
+    destination_location: normalizeLocationValue(existing?.destination_location || bulkDestinationLocation.value || ''),
+    ...(existing?.uid ? { uid: existing.uid } : {}),
+})
+
+const syncFixedTransferEntries = () => {
+    if (!isFixedTransfer.value || isEditing.value) return
+
+    const existingBySource = new Map(
+        form.entries
+            .filter(entry => entry.source_stock_in_id)
+            .map(entry => [Number(entry.source_stock_in_id), entry])
+    )
+
+    form.entries = selectedSourceIds.value
+        .map(id => sourceRowsById.value.get(Number(id)))
+        .filter(Boolean)
+        .map(unit => unitToTransferEntry(unit, existingBySource.get(Number(unit.id))))
+
+    form.quantity = form.entries.length
+}
+
+const isSourceSelected = (unit) => selectedSourceIdSet.value.has(Number(unit.id))
+
+const toggleSourceUnit = (unit) => {
+    const sourceId = Number(unit.id)
+    const current = new Set(selectedSourceIds.value.map(id => Number(id)))
+
+    if (current.has(sourceId)) {
+        current.delete(sourceId)
+    } else {
+        current.add(sourceId)
+    }
+
+    selectedSourceIds.value = Array.from(current)
+    syncFixedTransferEntries()
+}
+
+const applyBulkDestination = () => {
+    if (!isFixedTransfer.value || isEditing.value) return
+
+    const destination = normalizeLocationValue(bulkDestinationLocation.value)
+    form.entries = form.entries.map(entry => ({
+        ...entry,
+        destination_location: destination,
+    }))
+}
+
+const fetchAvailableStock = async () => {
+    const requestId = ++availableStockRequestId
+
+    if (isEditing.value || !isTransferMode.value || !form.asset_id) {
+        isLoadingAvailableStock.value = false
+        clearAvailableStock()
+        return
+    }
+
+    isLoadingAvailableStock.value = true
+    availableStockError.value = ''
+
+    try {
+        const response = await axios.get(route('stock-ins.available-stock'), {
+            params: {
+                asset_id: form.asset_id,
+                origin_location: normalizedOriginLocation.value,
+            },
+        })
+
+        if (requestId !== availableStockRequestId) return
+
+        availableStock.value = response.data
+        selectedSourceIds.value = []
+
+        if (isFixedTransfer.value) {
+            resetFixedTransferEntries()
+        } else if (isConsumableTransfer.value && availableSoh.value > 0 && form.quantity > availableSoh.value) {
+            syncEntriesToQuantity(availableSoh.value)
+        }
+    } catch (error) {
+        if (requestId !== availableStockRequestId) return
+
+        availableStock.value = null
+        availableStockError.value = error.response?.data?.message || 'Unable to load stock on hand for the selected origin.'
+
+        if (isFixedTransfer.value) {
+            resetFixedTransferEntries()
+        }
+    } finally {
+        if (requestId === availableStockRequestId) {
+            isLoadingAvailableStock.value = false
+        }
+    }
+}
+
+const validateTransferStock = () => {
+    if (!isTransferMode.value || isEditing.value) return true
+
+    if (!form.asset_id) {
+        showError('Select an asset item before preparing a transfer.')
+        return false
+    }
+
+    if (isLoadingAvailableStock.value) {
+        showError('Please wait for the current SOH lookup to finish.')
+        return false
+    }
+
+    if (availableStockError.value) {
+        showError(availableStockError.value)
+        return false
+    }
+
+    if (availableSoh.value <= 0) {
+        showError(`No stock on hand is available at ${normalizedOriginLocation.value}.`)
+        return false
+    }
+
+    if (isFixedTransfer.value && form.entries.length === 0) {
+        showError('Select at least one available fixed asset unit to transfer.')
+        return false
+    }
+
+    if (form.entries.length > availableSoh.value) {
+        showError(`Only ${availableSoh.value} item(s) are available at ${normalizedOriginLocation.value}.`)
+        return false
+    }
+
+    const invalidDestination = form.entries.find(entry => {
+        const destination = normalizeLocationValue(entry.destination_location)
+        return !destination || destination === normalizedOriginLocation.value
+    })
+
+    if (invalidDestination) {
+        showError('Select a destination location different from the origin for every transfer row.')
+        return false
+    }
+
+    return true
+}
+
 const onBrandChange = () => {
     form.model = ''
     form.asset_id = ''
+    clearAvailableStock()
     form.entries = form.entries.map(entry => ({
         ...entry,
         barcode: '',
@@ -833,6 +1161,7 @@ const onBrandChange = () => {
 
 const onModelChange = () => {
     form.asset_id = ''
+    clearAvailableStock()
     form.entries = form.entries.map(entry => ({
         ...entry,
         barcode: '',
@@ -841,6 +1170,7 @@ const onModelChange = () => {
 }
 
 const onAssetChange = () => {
+    clearAvailableStock()
     const defaults = getEntryDefaults()
     form.entries = form.entries.map(entry => ({
         ...entry,
@@ -950,6 +1280,7 @@ const computedEolDate = (entry) => {
 
 const resetForm = () => {
     codeValidationAttempted.value = false
+    clearAvailableStock()
     Object.assign(form, {
         receive_date: getToday(),
         dr_no: '',
@@ -1012,6 +1343,7 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
         asset_id: item.asset_id,
         quantity: aggregatedQuantity,
         entries: relatedRows.map(row => createEntry({
+            source_stock_in_id: row.source_stock_in_id || null,
             serial_no: row.serial_no,
             barcode: row.barcode || '',
             qrcode: row.qrcode || '',
@@ -1123,9 +1455,6 @@ const postHeaderItem = async (item) => {
 
     router.post(route('stock-ins.post', item.id), {}, {
         preserveScroll: true,
-        onSuccess: () => {
-            showSuccess('Stock In status updated to Posted')
-        },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'Unable to update stock in status'
             showError(errorMessage)
@@ -1134,6 +1463,7 @@ const postHeaderItem = async (item) => {
 }
 
 const submitForm = (statusOverride = form.status || 'For Posting') => {
+    if (!validateTransferStock()) return
     if (!validateGeneratedCodes()) return
 
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
@@ -1251,6 +1581,34 @@ watch(() => props.stockIns, (newVal) => {
 }, { deep: true })
 
 watch(() => form.quantity, (newVal) => {
+    if (isFixedTransfer.value && !isEditing.value) return
+
+    if (isConsumableTransfer.value && !isEditing.value && availableSoh.value > 0 && Number(newVal || 0) > availableSoh.value) {
+        syncEntriesToQuantity(availableSoh.value)
+        return
+    }
+
     syncEntriesToQuantity(newVal)
+})
+
+watch([() => form.origin_location, () => form.asset_id], () => {
+    if (isEditing.value) return
+
+    if (isFixedTransfer.value) {
+        resetFixedTransferEntries()
+    } else {
+        selectedSourceIds.value = []
+
+        if (!form.entries.length || form.entries.some(entry => entry.source_stock_in_id)) {
+            form.entries = [createEntry(getEntryDefaults())]
+            form.quantity = 1
+        }
+    }
+
+    fetchAvailableStock()
+})
+
+watch(bulkDestinationLocation, () => {
+    applyBulkDestination()
 })
 </script>

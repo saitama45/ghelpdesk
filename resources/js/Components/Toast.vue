@@ -52,7 +52,7 @@ const getIconColor = (type) => {
 </script>
 
 <template>
-    <div class="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full">
+    <div class="fixed top-4 right-4 z-[10000] space-y-2 max-w-sm w-full">
         <transition-group name="toast" tag="div">
             <div
                 v-for="toast in toasts"
