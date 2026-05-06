@@ -55,25 +55,24 @@ const openMenus = ref({
 
 const toggleMenu = (menu) => {
     if (props.isCollapsed) {
-        emit('toggle');
-        // Delay opening the menu until sidebar is expanded
-        setTimeout(() => {
-            Object.keys(openMenus.value).forEach(key => {
-                openMenus.value[key] = key === menu;
-            });
-        }, 300);
-    } else {
-        const isCurrentlyOpen = openMenus.value[menu];
-        // Close all menus and toggle the clicked one
-        Object.keys(openMenus.value).forEach(key => {
-            openMenus.value[key] = key === menu ? !isCurrentlyOpen : false;
-        });
+        return;
     }
+
+    const isCurrentlyOpen = openMenus.value[menu];
+    // Close all menus and toggle the clicked one
+    Object.keys(openMenus.value).forEach(key => {
+        openMenus.value[key] = key === menu ? !isCurrentlyOpen : false;
+    });
 };
 
 const toggleSidebar = () => {
     emit('toggle');
 };
+
+const collapsedFlyoutLinkClass = (isActive) => [
+    'block rounded-md px-3 py-2 text-sm font-medium transition-colors',
+    isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+];
 
 // Auto-expand menus based on current route
 onMounted(() => {
@@ -187,7 +186,12 @@ const canSeeSettings = computed(() => {
         </div>
 
         <!-- Navigation -->
-        <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+        <nav
+            :class="[
+                'flex-1 p-4 space-y-1',
+                isCollapsed ? 'overflow-visible' : 'overflow-y-auto custom-scrollbar'
+            ]"
+        >
                 <!-- Dashboard Link -->
                 <Link
                     :href="route('dashboard')"
@@ -234,7 +238,7 @@ const canSeeSettings = computed(() => {
                 </Link>
 
                 <!-- Services Section -->
-                <div v-if="canSeeServices" class="space-y-1 pt-2">
+                <div v-if="canSeeServices" class="space-y-1 pt-2 collapsed-menu-group">
                     <button
                         @click="toggleMenu('services')"
                         :class="[
@@ -248,10 +252,51 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Services</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.services" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.services" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Services
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Services</p>
+                        </div>
+                        <div class="p-2 space-y-1">
+                            <Link
+                                v-if="hasPermission('tickets.view')"
+                                :href="route('tickets.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('tickets.*'))"
+                            >
+                                Tickets
+                            </Link>
+                            <Link
+                                v-if="hasPermission('task_lists.view')"
+                                :href="route('task-lists.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('task-lists.*'))"
+                            >
+                                Task Lists
+                            </Link>
+                            <Link
+                                v-if="hasPermission('pos_requests.view')"
+                                :href="route('pos-requests.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('pos-requests.*'))"
+                            >
+                                POS Requests
+                            </Link>
+                            <Link
+                                v-if="hasPermission('sap_requests.view')"
+                                :href="route('sap-requests.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))"
+                            >
+                                SAP Requests
+                            </Link>
+                            <Link
+                                v-for="form in visibleDynamicForms"
+                                :key="'collapsed-form-' + form.slug"
+                                :href="route('dynamic-form.index', form.slug)"
+                                :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))"
+                            >
+                                {{ form.name }}
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.services" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
@@ -311,7 +356,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- Inventory Section -->
-                <div v-if="canSeeInventory" class="space-y-1 pt-1">
+                <div v-if="canSeeInventory" class="space-y-1 pt-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('inventory')"
                         :class="[
@@ -327,10 +372,36 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Inventory</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.inventory" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.inventory" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Inventory
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Inventory</p>
+                        </div>
+                        <div class="p-2 space-y-1">
+                            <Link
+                                v-if="hasPermission('assets.view')"
+                                :href="route('assets.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('assets.*'))"
+                            >
+                                Assets
+                            </Link>
+                            <Link
+                                v-if="hasPermission('stock_ins.view')"
+                                :href="route('stock-ins.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('stock-ins.*'))"
+                            >
+                                Stock Transaction
+                            </Link>
+                            <Link
+                                v-if="hasPermission('reports.inventory')"
+                                :href="route('reports.inventory')"
+                                :class="collapsedFlyoutLinkClass(route().current('reports.inventory'))"
+                            >
+                                Inventory Report
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.inventory" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
@@ -367,7 +438,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- Administrative Section -->
-                <div v-if="canSeeAdminTask" class="space-y-1 pt-1">
+                <div v-if="canSeeAdminTask" class="space-y-1 pt-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('adminTask')"
                         :class="[
@@ -381,10 +452,50 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Administrative</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.adminTask" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.adminTask" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Administrative
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Administrative</p>
+                        </div>
+                        <div class="p-2 space-y-1">
+                            <Link
+                                v-if="hasPermission('attendance.view')"
+                                :href="route('attendance.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('attendance.index'))"
+                            >
+                                DTR
+                            </Link>
+                            <Link
+                                v-if="hasPermission('attendance.logs')"
+                                :href="route('attendance.logs')"
+                                :class="collapsedFlyoutLinkClass(route().current('attendance.logs'))"
+                            >
+                                Attendance Logs
+                            </Link>
+                            <Link
+                                v-if="hasPermission('schedules.view')"
+                                :href="route('schedules.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('schedules.*'))"
+                            >
+                                Scheduling
+                            </Link>
+                            <Link
+                                v-if="hasPermission('presence.view')"
+                                :href="route('presence.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('presence.*'))"
+                            >
+                                Presence
+                            </Link>
+                            <Link
+                                v-if="hasPermission('kb_articles.view')"
+                                :href="route('kb-articles.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('kb-articles.*'))"
+                            >
+                                KB Articles
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 space-y-1 mt-1 transition-all duration-300">
                         <Link
@@ -441,7 +552,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- References Section -->
-                <div v-if="canSeeReferences" class="space-y-1 pt-1">
+                <div v-if="canSeeReferences" class="space-y-1 pt-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('references')"
                         :class="[
@@ -455,10 +566,85 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">References</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.references" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.references" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            References
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">References</p>
+                        </div>
+                        <div class="p-2 space-y-1 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            <Link
+                                v-if="hasPermission('companies.view')"
+                                :href="route('companies.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('companies.*'))"
+                            >
+                                Companies
+                            </Link>
+                            <Link
+                                v-if="hasPermission('clusters.view')"
+                                :href="route('clusters.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('clusters.*'))"
+                            >
+                                Clusters
+                            </Link>
+                            <Link
+                                v-if="hasPermission('stores.view')"
+                                :href="route('stores.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('stores.*'))"
+                            >
+                                Stores
+                            </Link>
+                            <Link
+                                v-if="hasPermission('vendors.view')"
+                                :href="route('vendors.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('vendors.*'))"
+                            >
+                                Vendors
+                            </Link>
+                            <Link
+                                v-if="hasPermission('activity_templates.view')"
+                                :href="route('activity-templates.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('activity-templates.*'))"
+                            >
+                                Activity Templates
+                            </Link>
+                            <Link
+                                v-if="hasPermission('categories.view')"
+                                :href="route('categories.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('categories.*'))"
+                            >
+                                Categories
+                            </Link>
+                            <Link
+                                v-if="hasPermission('subcategories.view')"
+                                :href="route('sub-categories.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('sub-categories.*'))"
+                            >
+                                Sub-Categories
+                            </Link>
+                            <Link
+                                v-if="hasPermission('items.view')"
+                                :href="route('items.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('items.*'))"
+                            >
+                                Items
+                            </Link>
+                            <Link
+                                v-if="hasPermission('request_types.view')"
+                                :href="route('request-types.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('request-types.*'))"
+                            >
+                                Request Types
+                            </Link>
+                            <Link
+                                v-if="hasPermission('form_builder.view')"
+                                :href="route('form-builder.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('form-builder.*'))"
+                            >
+                                Form Builder
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.references" class="pl-10 space-y-1 mt-1">
                         <Link
@@ -566,7 +752,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- Reports Section -->
-                <div v-if="canSeeReports" class="space-y-1 pt-1">
+                <div v-if="canSeeReports" class="space-y-1 pt-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('reports')"
                         :class="[
@@ -580,10 +766,36 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Reports</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.reports" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.reports" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Reports
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Reports</p>
+                        </div>
+                        <div class="p-2 space-y-1">
+                            <Link
+                                v-if="hasPermission('reports.store_health')"
+                                :href="route('reports.store-health')"
+                                :class="collapsedFlyoutLinkClass(route().current('reports.store-health'))"
+                            >
+                                Store Health Report
+                            </Link>
+                            <Link
+                                v-if="hasPermission('reports.sla_performance')"
+                                :href="route('reports.sla-performance')"
+                                :class="collapsedFlyoutLinkClass(route().current('reports.sla-performance'))"
+                            >
+                                SLA Performance Report
+                            </Link>
+                            <Link
+                                v-if="hasPermission('reports.assignee_performance')"
+                                :href="route('reports.assignee-performance')"
+                                :class="collapsedFlyoutLinkClass(route().current('reports.assignee-performance'))"
+                            >
+                                Assignee Performance
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.reports" class="pl-10 space-y-1 mt-1">
                         <Link
@@ -620,7 +832,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- User Management Section -->
-                <div v-if="canSeeUserManagement" class="space-y-1 pt-1">
+                <div v-if="canSeeUserManagement" class="space-y-1 pt-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('userManagement')"
                         :class="[
@@ -634,10 +846,29 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">User Management</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.userManagement" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.userManagement" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            User Management
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">User Management</p>
+                        </div>
+                        <div class="p-2 space-y-1">
+                            <Link
+                                v-if="hasPermission('users.view')"
+                                :href="route('users.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('users.*'))"
+                            >
+                                Users
+                            </Link>
+                            <Link
+                                v-if="hasPermission('roles.view')"
+                                :href="route('roles.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('roles.*'))"
+                            >
+                                Roles & Permissions
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 space-y-1 mt-1">
                         <Link
@@ -664,7 +895,7 @@ const canSeeSettings = computed(() => {
                 </div>
 
                 <!-- Settings Section -->
-                <div v-if="canSeeSettings" class="space-y-1 pt-1">
+                <div v-if="canSeeSettings" class="space-y-1 pt-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('settings')"
                         :class="[
@@ -678,10 +909,42 @@ const canSeeSettings = computed(() => {
                         <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Settings</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.settings" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.settings" class="w-4 h-4 ml-2" />
-                        <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                            Settings
-                        </div>
                     </button>
+
+                    <div v-if="isCollapsed" class="collapsed-flyout">
+                        <div class="px-3 py-2 border-b border-gray-700">
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Settings</p>
+                        </div>
+                        <div class="p-2 space-y-1">
+                            <Link
+                                v-if="hasPermission('settings.view')"
+                                :href="route('settings.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('settings.index'))"
+                            >
+                                System Settings
+                            </Link>
+                            <Link
+                                v-if="hasPermission('settings.view')"
+                                :href="route('ticket-archive.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('ticket-archive.*'))"
+                            >
+                                Ticket Archive
+                            </Link>
+                            <Link
+                                v-if="hasPermission('canned_messages.view')"
+                                :href="route('canned-messages.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('canned-messages.*'))"
+                            >
+                                Canned Messages
+                            </Link>
+                            <Link
+                                :href="route('profile.edit')"
+                                :class="collapsedFlyoutLinkClass(route().current('profile.edit'))"
+                            >
+                                My Profile
+                            </Link>
+                        </div>
+                    </div>
 
                     <div v-if="!isCollapsed && openMenus.settings" class="pl-10 space-y-1 mt-1">
                         <Link
@@ -764,5 +1027,44 @@ const canSeeSettings = computed(() => {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #6b7280;
+}
+
+.collapsed-menu-group {
+    position: relative;
+}
+
+.collapsed-flyout {
+    position: absolute;
+    left: calc(100% + 0.5rem);
+    top: 0;
+    z-index: 70;
+    min-width: 14rem;
+    max-width: 18rem;
+    border: 1px solid #374151;
+    border-radius: 0.5rem;
+    background: #111827;
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.28), 0 8px 10px -6px rgb(0 0 0 / 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-0.25rem);
+    visibility: hidden;
+    transition: opacity 150ms ease, transform 150ms ease, visibility 150ms ease;
+}
+
+.collapsed-flyout::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -0.75rem;
+    top: 0;
+    width: 0.75rem;
+}
+
+.collapsed-menu-group:hover > .collapsed-flyout,
+.collapsed-menu-group:focus-within > .collapsed-flyout {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+    visibility: visible;
 }
 </style>

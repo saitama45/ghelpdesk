@@ -22,7 +22,24 @@ defineProps({
 });
 const sidebarOpen = ref(false);
 const isSidebarCollapsed = ref(false);
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ghelpdesk.sidebarCollapsed';
 const { init: initPresence, destroy: destroyPresence, currentStatus } = usePresence();
+
+const loadSidebarCollapsedState = () => {
+    try {
+        return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+    } catch (error) {
+        return false;
+    }
+};
+
+const saveSidebarCollapsedState = (isCollapsed) => {
+    try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, isCollapsed ? 'true' : 'false');
+    } catch (error) {
+        // Ignore storage failures so the layout still works in restricted browsers.
+    }
+};
 
 const toggleSidebar = () => {
     if (window.innerWidth < 1024) {
@@ -62,9 +79,14 @@ const checkFlashMessages = () => {
 };
 
 onMounted(() => {
+    isSidebarCollapsed.value = loadSidebarCollapsedState();
     document.addEventListener('click', handleClickOutside);
     checkFlashMessages();
     initPresence();
+});
+
+watch(isSidebarCollapsed, (isCollapsed) => {
+    saveSidebarCollapsedState(isCollapsed);
 });
 
 watch(() => page.props.flash, () => {
