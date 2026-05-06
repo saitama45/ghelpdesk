@@ -16,6 +16,8 @@ class TicketComment extends Model
         'user_id',
         'sender_email',
         'sender_name',
+        'message_id',
+        'email_body_hash',
         'action_taken',
         'root_cause_analysis',
     ];

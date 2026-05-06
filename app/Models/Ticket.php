@@ -33,6 +33,7 @@ class Ticket extends Model
         'sender_name',
         'department',
         'message_id',
+        'email_body_hash',
         'survey_token',
         'is_deleted',
     ];
