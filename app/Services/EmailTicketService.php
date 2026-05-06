@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Webklex\IMAP\Facades\Client;
 
 class EmailTicketService
@@ -304,13 +305,13 @@ class EmailTicketService
 
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket) {
-                $fileName = time() . '_' . $this->decodeMimeHeader($attachment->getName());
-                $filePath = 'ticket-attachments/' . $fileName;
+                $originalName = $this->decodeMimeHeader((string) $attachment->getName()) ?: 'attachment';
+                $filePath = $this->ticketAttachmentStoragePath($originalName);
                 Storage::disk('public')->put($filePath, $attachment->getContent());
 
                 TicketAttachment::create([
                     'ticket_id' => $ticket->id,
-                    'file_name' => $this->decodeMimeHeader($attachment->getName()),
+                    'file_name' => $originalName,
                     'file_storage_path' => $filePath,
                     'file_size_bytes' => $attachment->size,
                 ]);
@@ -387,14 +388,14 @@ class EmailTicketService
 
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket, $comment) {
-                $fileName = time() . '_' . $this->decodeMimeHeader($attachment->getName());
-                $filePath = 'ticket-attachments/' . $fileName;
+                $originalName = $this->decodeMimeHeader((string) $attachment->getName()) ?: 'attachment';
+                $filePath = $this->ticketAttachmentStoragePath($originalName);
                 Storage::disk('public')->put($filePath, $attachment->getContent());
 
                 TicketAttachment::create([
                     'ticket_id' => $ticket->id,
                     'comment_id' => $comment->id,
-                    'file_name' => $this->decodeMimeHeader($attachment->getName()),
+                    'file_name' => $originalName,
                     'file_storage_path' => $filePath,
                     'file_size_bytes' => $attachment->size,
                 ]);
@@ -504,5 +505,23 @@ class EmailTicketService
         
         // iconv_mime_decode is robust for handling various charsets and malformed strings.
         return iconv_mime_decode($string, 0, 'UTF-8') ?: $string;
+    }
+
+    protected function ticketAttachmentStoragePath(string $originalName): string
+    {
+        $baseName = basename(str_replace('\\', '/', $originalName));
+        $safeName = preg_replace('/[^\pL\pN._-]+/u', '_', $baseName) ?: 'attachment';
+        $safeName = trim($safeName, '._-');
+
+        if ($safeName === '') {
+            $safeName = 'attachment';
+        }
+
+        return 'ticket-attachments/'
+            . now('Asia/Manila')->format('YmdHisv')
+            . '_'
+            . Str::uuid()
+            . '_'
+            . Str::limit($safeName, 160, '');
     }
 }

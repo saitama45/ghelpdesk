@@ -11,7 +11,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -334,6 +334,12 @@ const getThumbnailUrl = (attachment) => {
     // New standard: path is relative to public disk root (ticket-attachments/filename)
     // Map to /serve-storage/ticket-attachments/filename
     return '/serve-storage/' + normalizedPath;
+};
+
+const getAttachmentDownloadUrl = (attachment) => {
+    if (!attachment?.id || String(attachment.id).startsWith('local-')) return '';
+
+    return route('tickets.attachments.download', attachment.id);
 };
 
 const editForm = useForm({
@@ -1965,6 +1971,16 @@ const linkify = (text) => {
                                     <!-- Description Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                            <a
+                                                v-if="getAttachmentDownloadUrl(attachment)"
+                                                :href="getAttachmentDownloadUrl(attachment)"
+                                                class="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-blue-600 hover:text-white"
+                                                title="Download attachment"
+                                                aria-label="Download attachment"
+                                                @click.stop
+                                            >
+                                                <ArrowDownTrayIcon class="h-4 w-4" />
+                                            </a>
                                             <div v-if="isMedia(attachment.file_name) && !failedImages.has(attachment.id)" 
                                                  class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
                                                  @click="openImageViewer(attachment)">
@@ -2011,6 +2027,16 @@ const linkify = (text) => {
                                     <!-- Comment Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                            <a
+                                                v-if="getAttachmentDownloadUrl(attachment)"
+                                                :href="getAttachmentDownloadUrl(attachment)"
+                                                class="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-blue-600 hover:text-white"
+                                                title="Download attachment"
+                                                aria-label="Download attachment"
+                                                @click.stop
+                                            >
+                                                <ArrowDownTrayIcon class="h-4 w-4" />
+                                            </a>
                                             <div v-if="isMedia(attachment.file_name) && !failedImages.has(attachment.id)" 
                                                  class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
                                                  @click="openImageViewer(attachment)">
@@ -2463,6 +2489,16 @@ const linkify = (text) => {
                             <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
                         </button>
                         <div class="w-px h-6 bg-white/30 mx-1 sm:mx-2"></div>
+                        <a
+                            v-if="currentImage && getAttachmentDownloadUrl(currentImage)"
+                            :href="getAttachmentDownloadUrl(currentImage)"
+                            class="p-1 sm:p-2 text-white hover:bg-white/20 rounded-full backdrop-blur-sm"
+                            title="Download attachment"
+                            aria-label="Download attachment"
+                            @click.stop
+                        >
+                            <ArrowDownTrayIcon class="w-5 h-5 sm:w-6 sm:h-6" />
+                        </a>
                         <button @click="closeImageViewer" class="p-1 sm:p-2 text-white hover:bg-red-500/80 rounded-full backdrop-blur-sm transition-colors">
                             <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
