@@ -5,6 +5,7 @@ import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -105,9 +106,25 @@ const defaultCompanyId = computed(() => {
     return availableCompanies.value.length > 0 ? availableCompanies.value[0].id : '';
 });
 
-const filterStatus = ref(props.filters?.status || (isUserRole.value ? 'all' : 'open'));
-const filterSubUnit = ref(props.filters?.sub_unit || '');
-const filterAssignee = ref(props.filters?.assignee_id || '');
+const isBlankFilterValue = (value) => value === null || value === undefined || value === '';
+const normalizeStringFilterValue = (value) => String(value).trim();
+const normalizeFilterValues = (value, fallback = [], mapper = (item) => item) => {
+    const values = (Array.isArray(value) ? value : [value])
+        .filter(value => !isBlankFilterValue(value))
+        .map(mapper)
+        .filter(value => !isBlankFilterValue(value));
+
+    return values.length ? values : [...fallback];
+};
+const defaultStatusFilters = () => [isUserRole.value ? 'all' : 'open'];
+const normalizeAssigneeFilterValue = (value) => {
+    const matchingStaff = props.staff?.find(staff => String(staff.id) === String(value));
+    return matchingStaff?.id ?? value;
+};
+
+const filterStatus = ref(normalizeFilterValues(props.filters?.status, defaultStatusFilters(), normalizeStringFilterValue));
+const filterSubUnit = ref(normalizeFilterValues(props.filters?.sub_unit, [], normalizeStringFilterValue));
+const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [], normalizeAssigneeFilterValue));
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 
@@ -129,26 +146,22 @@ const statusOptions = computed(() => {
 });
 
 const subUnitOptions = computed(() => {
-    return [
-        { id: '', name: 'All Sub-Units' },
-        ...(props.sub_units || []).map(u => ({ id: u, name: u }))
-    ];
+    return (props.sub_units || []).map(u => ({ id: u, name: u }));
 });
 
 const assigneeOptions = computed(() => {
-    return [
-        { id: '', name: 'All Assignees' },
-        ...(props.staff || []).map(s => ({ id: s.id, name: s.name }))
-    ];
+    return (props.staff || []).map(s => ({ id: s.id, name: s.name }));
 });
 
-const pagination = usePagination(props.tickets, 'tickets.index', () => ({ 
+const ticketFilterParams = () => ({
     status: filterStatus.value,
     sub_unit: filterSubUnit.value,
     assignee_id: filterAssignee.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
-}));
+});
+
+const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
 
 const subUnits = computed(() => {
     return props.sub_units || [];
@@ -156,11 +169,7 @@ const subUnits = computed(() => {
 
 const applyFilter = () => {
     router.get(route('tickets.index'), {
-        status: filterStatus.value,
-        sub_unit: filterSubUnit.value,
-        assignee_id: filterAssignee.value,
-        start_date: filterStartDate.value,
-        end_date: filterEndDate.value,
+        ...ticketFilterParams(),
         search: pagination.search.value
     }, {
         preserveState: true,
@@ -171,10 +180,37 @@ const applyFilter = () => {
     });
 };
 
+const handleStatusFilterChange = (value) => {
+    const selectedValues = normalizeFilterValues(value, [], normalizeStringFilterValue);
+
+    if (selectedValues.length === 0) {
+        filterStatus.value = ['all'];
+    } else if (selectedValues.includes('all')) {
+        const statusesWithoutAll = selectedValues.filter(status => status !== 'all');
+        filterStatus.value = filterStatus.value.includes('all') && statusesWithoutAll.length
+            ? statusesWithoutAll
+            : ['all'];
+    } else {
+        filterStatus.value = selectedValues;
+    }
+
+    applyFilter();
+};
+
+const handleSubUnitFilterChange = (value) => {
+    filterSubUnit.value = normalizeFilterValues(value, [], normalizeStringFilterValue);
+    applyFilter();
+};
+
+const handleAssigneeFilterChange = (value) => {
+    filterAssignee.value = normalizeFilterValues(value, [], normalizeAssigneeFilterValue);
+    applyFilter();
+};
+
 const clearFilters = () => {
-    filterStatus.value = isUserRole.value ? 'all' : 'open';
-    filterSubUnit.value = '';
-    filterAssignee.value = '';
+    filterStatus.value = defaultStatusFilters();
+    filterSubUnit.value = [];
+    filterAssignee.value = [];
     filterStartDate.value = '';
     filterEndDate.value = '';
     pagination.search.value = '';
@@ -783,15 +819,15 @@ const toggleDashboardFilter = (filterKey) => {
 const activeFilterBadges = computed(() => {
     const badges = [];
 
-    if (filterStatus.value && filterStatus.value !== 'all') {
-        badges.push(`Status: ${getStatusLabel(filterStatus.value)}`);
+    const selectedStatuses = filterStatus.value.filter(status => status !== 'all');
+    if (selectedStatuses.length) {
+        badges.push(`Status: ${formatFilterBadgeValues(selectedStatuses, getStatusLabel)}`);
     }
-    if (filterSubUnit.value) {
-        badges.push(`Sub-Unit: ${filterSubUnit.value}`);
+    if (filterSubUnit.value.length) {
+        badges.push(`Sub-Unit: ${formatFilterBadgeValues(filterSubUnit.value)}`);
     }
-    if (filterAssignee.value) {
-        const assignee = props.staff?.find(staff => String(staff.id) === String(filterAssignee.value));
-        badges.push(`Assignee: ${assignee?.name || filterAssignee.value}`);
+    if (filterAssignee.value.length) {
+        badges.push(`Assignee: ${formatFilterBadgeValues(filterAssignee.value, getAssigneeFilterLabel)}`);
     }
     if (filterStartDate.value) {
         badges.push(`From: ${filterStartDate.value}`);
@@ -808,6 +844,21 @@ const activeFilterBadges = computed(() => {
 
     return badges;
 });
+
+const formatFilterBadgeValues = (values, formatter = (value) => value) => {
+    const labels = values.map(formatter).filter(Boolean);
+
+    if (labels.length <= 2) {
+        return labels.join(', ');
+    }
+
+    return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
+};
+
+const getAssigneeFilterLabel = (assigneeId) => {
+    const assignee = props.staff?.find(staff => String(staff.id) === String(assigneeId));
+    return assignee?.name || assigneeId;
+};
 
 const hasActiveFilters = computed(() => activeFilterBadges.value.length > 0);
 
@@ -957,37 +1008,40 @@ watch(activeDashboardFilter, () => {
                         <div class="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
                             <div class="flex flex-col gap-1.5">
                                 <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
-                                <Autocomplete
-                                    v-model="filterStatus"
+                                <MultiAutocomplete
+                                    :model-value="filterStatus"
                                     :options="statusOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Filter by status..."
-                                    @update:modelValue="applyFilter"
+                                    placeholder="Filter by statuses..."
+                                    :limit="1"
+                                    @update:modelValue="handleStatusFilterChange"
                                 />
                             </div>
 
-                            <div v-if="subUnitOptions.length > 1" class="flex flex-col gap-1.5">
+                            <div v-if="subUnitOptions.length > 0" class="flex flex-col gap-1.5">
                                 <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Sub-Unit</label>
-                                <Autocomplete
-                                    v-model="filterSubUnit"
+                                <MultiAutocomplete
+                                    :model-value="filterSubUnit"
                                     :options="subUnitOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Filter by sub-unit..."
-                                    @update:modelValue="applyFilter"
+                                    placeholder="All sub-units..."
+                                    :limit="1"
+                                    @update:modelValue="handleSubUnitFilterChange"
                                 />
                             </div>
 
                             <div class="flex flex-col gap-1.5">
                                 <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Assignee</label>
-                                <Autocomplete
-                                    v-model="filterAssignee"
+                                <MultiAutocomplete
+                                    :model-value="filterAssignee"
                                     :options="assigneeOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Filter by assignee..."
-                                    @update:modelValue="applyFilter"
+                                    placeholder="All assignees..."
+                                    :limit="1"
+                                    @update:modelValue="handleAssigneeFilterChange"
                                 />
                             </div>
 

@@ -78,36 +78,57 @@ class TicketController extends Controller
         }
 
         // Apply status filters — User role defaults to 'all' so they see all their own tickets
+        $normalizeFilterValues = function ($value) {
+            return collect(is_array($value) ? $value : [$value])
+                ->filter(fn ($item) => $item !== null && $item !== '')
+                ->map(fn ($item) => is_string($item) ? trim($item) : $item)
+                ->filter(fn ($item) => $item !== null && $item !== '')
+                ->unique(fn ($item) => (string) $item)
+                ->values();
+        };
+
         $defaultStatus = $user->hasRole('User') ? 'all' : 'open';
-        $statusFilter = $request->get('status', $defaultStatus);
+        $statusFilters = $normalizeFilterValues($request->input('status', [$defaultStatus]));
+
+        if ($statusFilters->isEmpty()) {
+            $statusFilters = collect([$defaultStatus]);
+        }
         
-        if ($statusFilter !== 'all') {
-            switch ($statusFilter) {
-                case 'my_tickets':
-                    $query->where(function($q) use ($user) {
+        if (!$statusFilters->contains('all')) {
+            $normalStatusFilters = $statusFilters
+                ->reject(fn ($status) => in_array($status, ['my_tickets', 'unassigned'], true))
+                ->values();
+
+            $query->where(function ($statusQuery) use ($statusFilters, $normalStatusFilters, $user) {
+                if ($normalStatusFilters->isNotEmpty()) {
+                    $statusQuery->whereIn('status', $normalStatusFilters->all());
+                }
+
+                if ($statusFilters->contains('my_tickets')) {
+                    $statusQuery->orWhere(function ($q) use ($user) {
                         $q->where('reporter_id', $user->id)
                           ->orWhere('assignee_id', $user->id);
                     });
-                    break;
-                case 'unassigned':
-                    $query->whereNull('assignee_id');
-                    break;
-                default:
-                    $query->where('status', $statusFilter);
-                    break;
-            }
+                }
+
+                if ($statusFilters->contains('unassigned')) {
+                    $statusQuery->orWhereNull('assignee_id');
+                }
+            });
         }
 
         // Apply Sub-Unit filter
-        if ($request->filled('sub_unit')) {
-            $query->whereHas('assignee', function($q) use ($request) {
-                $q->where('sub_unit', $request->sub_unit);
+        $subUnitFilters = $normalizeFilterValues($request->input('sub_unit'));
+        if ($subUnitFilters->isNotEmpty()) {
+            $query->whereHas('assignee', function ($q) use ($subUnitFilters) {
+                $q->whereIn('sub_unit', $subUnitFilters->all());
             });
         }
 
         // Apply Assignee filter
-        if ($request->filled('assignee_id')) {
-            $query->where('assignee_id', $request->assignee_id);
+        $assigneeFilters = $normalizeFilterValues($request->input('assignee_id'));
+        if ($assigneeFilters->isNotEmpty()) {
+            $query->whereIn('assignee_id', $assigneeFilters->all());
         }
 
         // Apply Date Range filter
@@ -158,10 +179,10 @@ class TicketController extends Controller
             'departments' => $departments,
             'sub_units' => $subUnits,
             'filters' => [
-                'status' => $statusFilter,
+                'status' => $statusFilters->all(),
                 'search' => $request->search,
-                'sub_unit' => $request->sub_unit,
-                'assignee_id' => $request->assignee_id,
+                'sub_unit' => $subUnitFilters->all(),
+                'assignee_id' => $assigneeFilters->all(),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
             ],
