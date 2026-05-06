@@ -979,7 +979,14 @@ const editHeaderItem = async (header) => {
         const response = await axios.get(route('stock-ins.show', header.id))
         const items = response.data
         if (items.length > 0) {
-            editItem(items[0], items.reduce((sum, i) => sum + Number(i.quantity), 0), items, header)
+            const auditSource = {
+                ...header,
+                creator: items[0].creator,
+                created_by: items[0].created_by,
+                updater: items[0].updater,
+                updated_by: items[0].updated_by
+            }
+            editItem(items[0], items.reduce((sum, i) => sum + Number(i.quantity), 0), items, auditSource)
         }
     } catch (error) {
         showError('Could not fetch stock details. Please try again.')
