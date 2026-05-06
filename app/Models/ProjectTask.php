@@ -38,6 +38,10 @@ class ProjectTask extends Model
     ];
 
     protected $casts = [
+        'project_id' => 'integer',
+        'parent_task_id' => 'integer',
+        'assigned_to' => 'integer',
+        'support_by' => 'integer',
         'start_date' => 'date:Y-m-d',
         'end_date' => 'date:Y-m-d',
         'original_end_date' => 'date:Y-m-d',

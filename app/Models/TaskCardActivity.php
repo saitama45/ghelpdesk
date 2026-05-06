@@ -20,6 +20,9 @@ class TaskCardActivity extends Model
     ];
 
     protected $casts = [
+        'task_board_id' => 'integer',
+        'task_card_id' => 'integer',
+        'actor_id' => 'integer',
         'meta' => 'array',
     ];
 

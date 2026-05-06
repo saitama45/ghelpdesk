@@ -23,6 +23,7 @@ class InventoryReportController extends Controller implements HasMiddleware
     public function index(Request $request)
     {
         $query = StockIn::query()
+            ->where('status', 'Posted')
             ->select(
                 'asset_id',
                 'destination_location as location',
@@ -84,10 +85,10 @@ class InventoryReportController extends Controller implements HasMiddleware
         // Summary Data for Cards
         $summary = [
             'total_items' => Asset::count(),
-            'total_soh' => StockIn::sum('quantity') ?? 0,
-            'total_inventory_value' => StockIn::selectRaw('SUM(quantity * cost) as total')->value('total') ?? 0,
+            'total_soh' => StockIn::where('status', 'Posted')->sum('quantity') ?? 0,
+            'total_inventory_value' => StockIn::where('status', 'Posted')->selectRaw('SUM(quantity * cost) as total')->value('total') ?? 0,
             'out_of_stock_count' => Asset::where(function ($query) {
-                $query->whereRaw('(SELECT ISNULL(SUM(quantity), 0) FROM stock_ins WHERE stock_ins.asset_id = assets.id) <= 0');
+                $query->whereRaw('(SELECT ISNULL(SUM(quantity), 0) FROM stock_ins WHERE stock_ins.asset_id = assets.id AND status = \'Posted\') <= 0');
             })->count()
         ];
 
@@ -95,7 +96,7 @@ class InventoryReportController extends Controller implements HasMiddleware
             'assets' => $assets,
             'categories' => Category::orderBy('name')->get(),
             'brands' => Asset::whereNotNull('brand')->distinct()->pluck('brand'),
-            'locations' => StockIn::whereNotNull('destination_location')->distinct()->pluck('destination_location'),
+            'locations' => StockIn::where('status', 'Posted')->whereNotNull('destination_location')->distinct()->pluck('destination_location'),
             'summary' => $summary,
             'filters' => $request->only(['category_id', 'sub_category_id', 'type', 'brand', 'location', 'stock_status', 'search'])
         ]);

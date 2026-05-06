@@ -22,6 +22,9 @@ class SapRequest extends Model
     ];
 
     protected $casts = [
+        'company_id' => 'integer',
+        'request_type_id' => 'integer',
+        'user_id' => 'integer',
         'form_data' => 'array',
         'current_approval_level' => 'integer',
     ];

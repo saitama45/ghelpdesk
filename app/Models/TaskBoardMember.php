@@ -19,6 +19,8 @@ class TaskBoardMember extends Model
     ];
 
     protected $casts = [
+        'task_board_id' => 'integer',
+        'user_id' => 'integer',
         'starred' => 'boolean',
         'last_opened_at' => 'datetime:Y-m-d H:i:s',
     ];

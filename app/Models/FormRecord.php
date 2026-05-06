@@ -16,6 +16,9 @@ class FormRecord extends Model
     ];
 
     protected $casts = [
+        'form_definition_id' => 'integer',
+        'created_by' => 'integer',
+        'updated_by' => 'integer',
         'data' => 'array',
     ];
 

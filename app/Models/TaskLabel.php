@@ -19,6 +19,7 @@ class TaskLabel extends Model
     ];
 
     protected $casts = [
+        'task_board_id' => 'integer',
         'sort_order' => 'integer',
     ];
 

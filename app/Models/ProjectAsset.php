@@ -25,6 +25,8 @@ class ProjectAsset extends Model
     ];
 
     protected $casts = [
+        'project_id' => 'integer',
+        'project_task_id' => 'integer',
         'quantity' => 'integer',
         'store_delivery_date' => 'date',
         'store_setup_date' => 'date',

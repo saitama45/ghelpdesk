@@ -13,6 +13,7 @@ class SapRequestItem extends Model
     ];
 
     protected $casts = [
+        'sap_request_id' => 'integer',
         'item_data' => 'array',
     ];
 

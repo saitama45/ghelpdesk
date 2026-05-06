@@ -35,7 +35,7 @@ return new class extends Migration
             }
         });
 
-        $this->createForeignKey('task_cards', 'project_id', 'projects', 'task_cards_project_id_foreign', 'CASCADE');
+        $this->createForeignKey('task_cards', 'project_id', 'projects', 'task_cards_project_id_foreign', 'NO ACTION');
         $this->createProjectCardIndex();
 
         Schema::table('task_checklist_items', function (Blueprint $table) {

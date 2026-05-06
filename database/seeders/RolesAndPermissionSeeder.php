@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 
@@ -251,10 +252,14 @@ class RolesAndPermissionSeeder extends Seeder
             ]
         );
         $adminUser->assignRole('Admin');
-        $adminUser->forceFill([
-            'created_by' => $adminUser->created_by ?: $adminUser->id,
-            'updated_by' => $adminUser->updated_by ?: $adminUser->id,
-        ])->save();
+
+        // Check if audit columns exist before filling them
+        if (Schema::hasColumns('users', ['created_by', 'updated_by'])) {
+            $adminUser->forceFill([
+                'created_by' => $adminUser->created_by ?: $adminUser->id,
+                'updated_by' => $adminUser->updated_by ?: $adminUser->id,
+            ])->save();
+        }
 
         $techSupportUser = User::firstOrCreate(
             ['email' => 'support@gmail.com'],
@@ -267,10 +272,13 @@ class RolesAndPermissionSeeder extends Seeder
             ]
         );
         $techSupportUser->assignRole('Tech Support');
-        $techSupportUser->forceFill([
-            'created_by' => $techSupportUser->created_by ?: $adminUser->id,
-            'updated_by' => $techSupportUser->updated_by ?: $adminUser->id,
-        ])->save();
+
+        if (Schema::hasColumns('users', ['created_by', 'updated_by'])) {
+            $techSupportUser->forceFill([
+                'created_by' => $techSupportUser->created_by ?: $adminUser->id,
+                'updated_by' => $techSupportUser->updated_by ?: $adminUser->id,
+            ])->save();
+        }
 
         $regularUser = User::firstOrCreate(
             ['email' => 'user@gmail.com'],
@@ -283,10 +291,13 @@ class RolesAndPermissionSeeder extends Seeder
             ]
         );
         $regularUser->assignRole('User');
-        $regularUser->forceFill([
-            'created_by' => $regularUser->created_by ?: $adminUser->id,
-            'updated_by' => $regularUser->updated_by ?: $adminUser->id,
-        ])->save();
+
+        if (Schema::hasColumns('users', ['created_by', 'updated_by'])) {
+            $regularUser->forceFill([
+                'created_by' => $regularUser->created_by ?: $adminUser->id,
+                'updated_by' => $regularUser->updated_by ?: $adminUser->id,
+            ])->save();
+        }
 
         $this->command->info('✅ Roles and permissions created successfully!');
         $this->command->info('  - Admin: admin@gmail.com / admin123');

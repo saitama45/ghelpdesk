@@ -15,6 +15,8 @@ class FormRecordApproval extends Model
     ];
 
     protected $casts = [
+        'form_record_id' => 'integer',
+        'user_id' => 'integer',
         'approver_data' => 'array',
     ];
 

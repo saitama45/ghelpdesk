@@ -20,6 +20,11 @@ class ProjectTeamMember extends Model
         'team_category',
     ];
 
+    protected $casts = [
+        'project_id' => 'integer',
+        'user_id' => 'integer',
+    ];
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

@@ -18,6 +18,8 @@ class ScheduleStore extends Model
     ];
 
     protected $casts = [
+        'schedule_id' => 'integer',
+        'store_id' => 'integer',
         'start_time' => 'datetime',
         'end_time'   => 'datetime',
         'grace_period_minutes' => 'integer',

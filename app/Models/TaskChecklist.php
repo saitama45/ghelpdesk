@@ -18,6 +18,7 @@ class TaskChecklist extends Model
     ];
 
     protected $casts = [
+        'task_card_id' => 'integer',
         'sort_order' => 'integer',
     ];
 

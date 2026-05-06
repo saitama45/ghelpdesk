@@ -16,6 +16,11 @@ class TaskCardComment extends Model
         'comment_text',
     ];
 
+    protected $casts = [
+        'task_card_id' => 'integer',
+        'user_id' => 'integer',
+    ];
+
     public function card(): BelongsTo
     {
         return $this->belongsTo(TaskCard::class, 'task_card_id');

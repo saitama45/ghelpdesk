@@ -18,6 +18,7 @@ class TicketHistory extends Model
     public $timestamps = false; // We manage changed_at manually or via database default
 
     protected $casts = [
+        'user_id' => 'integer',
         'changed_at' => 'datetime:Y-m-d H:i:s',
     ];
 

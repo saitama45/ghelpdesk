@@ -19,6 +19,8 @@ class KbArticle extends Model
     ];
 
     protected $casts = [
+        'kb_category_id' => 'integer',
+        'author_id' => 'integer',
         'is_published' => 'boolean',
     ];
 

@@ -30,6 +30,8 @@ class TaskBoard extends Model
     ];
 
     protected $casts = [
+        'project_id' => 'integer',
+        'created_by' => 'integer',
         'board_month' => 'integer',
         'board_year' => 'integer',
         'closed_at' => 'datetime:Y-m-d H:i:s',

@@ -16,6 +16,7 @@ class UserPresenceLog extends Model
     ];
 
     protected $casts = [
+        'user_id' => 'integer',
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
         'duration_seconds' => 'integer',

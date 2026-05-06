@@ -23,6 +23,10 @@ class TaskChecklistItem extends Model
     ];
 
     protected $casts = [
+        'task_checklist_id' => 'integer',
+        'parent_item_id' => 'integer',
+        'project_task_id' => 'integer',
+        'assigned_to' => 'integer',
         'is_complete' => 'boolean',
         'due_at' => 'datetime:Y-m-d H:i:s',
         'sort_order' => 'integer',

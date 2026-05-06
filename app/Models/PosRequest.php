@@ -26,6 +26,9 @@ class PosRequest extends Model
     ];
 
     protected $casts = [
+        'company_id' => 'integer',
+        'request_type_id' => 'integer',
+        'user_id' => 'integer',
         'stores_covered' => 'array',
         'form_data' => 'array',
         'approver_data' => 'array',

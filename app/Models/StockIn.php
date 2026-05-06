@@ -37,6 +37,9 @@ class StockIn extends Model
     ];
 
     protected $casts = [
+        'asset_id' => 'integer',
+        'created_by' => 'integer',
+        'updated_by' => 'integer',
         'receive_date' => 'date',
         'dr_date' => 'date',
         'posted_date' => 'datetime',

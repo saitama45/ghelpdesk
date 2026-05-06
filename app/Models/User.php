@@ -119,6 +119,9 @@ class User extends Authenticatable
             'last_activity_at' => 'datetime',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
+            'company_id' => 'integer',
+            'created_by' => 'integer',
+            'updated_by' => 'integer',
         ];
     }
 

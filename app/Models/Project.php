@@ -29,6 +29,7 @@ class Project extends Model
     ];
 
     protected $casts = [
+        'store_id' => 'integer',
         'turn_over_date' => 'date',
         'training_date' => 'date',
         'testing_date' => 'date',

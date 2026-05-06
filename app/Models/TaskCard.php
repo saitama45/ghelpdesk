@@ -39,6 +39,10 @@ class TaskCard extends Model
     ];
 
     protected $casts = [
+        'task_board_id' => 'integer',
+        'project_id' => 'integer',
+        'project_task_id' => 'integer',
+        'created_by' => 'integer',
         'start_at' => 'datetime:Y-m-d H:i:s',
         'due_at' => 'datetime:Y-m-d H:i:s',
         'due_complete' => 'boolean',

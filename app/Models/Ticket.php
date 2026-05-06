@@ -100,6 +100,14 @@ class Ticket extends Model
     }
 
     protected $casts = [
+        'reporter_id' => 'integer',
+        'assignee_id' => 'integer',
+        'company_id' => 'integer',
+        'store_id' => 'integer',
+        'category_id' => 'integer',
+        'sub_category_id' => 'integer',
+        'item_id' => 'integer',
+        'vendor_id' => 'integer',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
         'deleted_at' => 'datetime:Y-m-d H:i:s',

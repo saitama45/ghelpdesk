@@ -21,6 +21,7 @@ class TicketComment extends Model
     ];
 
     protected $casts = [
+        'user_id' => 'integer',
         'is_internal' => 'boolean',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',

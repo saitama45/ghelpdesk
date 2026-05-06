@@ -25,6 +25,8 @@ class ActivityTemplate extends Model
     ];
 
     protected $casts = [
+        'project_template_id' => 'integer',
+        'parent_activity_template_id' => 'integer',
         'default_duration_days' => 'integer',
         'order' => 'integer',
         'qty' => 'integer',

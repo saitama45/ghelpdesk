@@ -23,6 +23,8 @@ class Asset extends Model
     ];
 
     protected $casts = [
+        'category_id' => 'integer',
+        'sub_category_id' => 'integer',
         'cost' => 'decimal:2',
         'eol_years' => 'integer',
         'is_active' => 'boolean',

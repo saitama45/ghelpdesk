@@ -18,6 +18,8 @@ class Item extends Model
     ];
 
     protected $casts = [
+        'category_id' => 'integer',
+        'sub_category_id' => 'integer',
         'requires_rca_on_resolve' => 'boolean',
         'is_active' => 'boolean',
     ];

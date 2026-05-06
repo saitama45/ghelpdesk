@@ -24,6 +24,7 @@ class PosRequestDetail extends Model
     ];
 
     protected $casts = [
+        'pos_request_id' => 'integer',
         'validity_date' => 'date:Y-m-d',
     ];
 

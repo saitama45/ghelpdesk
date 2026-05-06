@@ -21,6 +21,9 @@ class Schedule extends Model
     ];
 
     protected $casts = [
+        'user_id' => 'integer',
+        'created_by' => 'integer',
+        'updated_by' => 'integer',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'created_at' => 'datetime:Y-m-d H:i:s',

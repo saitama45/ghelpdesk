@@ -13,6 +13,11 @@ class PosRequestApproval extends Model
         'remarks',
     ];
 
+    protected $casts = [
+        'pos_request_id' => 'integer',
+        'user_id' => 'integer',
+    ];
+
     public function posRequest()
     {
         return $this->belongsTo(PosRequest::class);

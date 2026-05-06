@@ -24,6 +24,9 @@ class AttendanceLog extends Model
     ];
 
     protected $casts = [
+        'user_id' => 'integer',
+        'schedule_id' => 'integer',
+        'schedule_store_id' => 'integer',
         'log_time' => 'datetime',
     ];
 
