@@ -377,6 +377,12 @@
                                 <p class="mt-1 text-[11px] text-gray-500">
                                     {{ isConsumableTransfer && !isEditing ? `Up to ${availableSoh} item(s) can be transferred from the origin.` : (isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.') }}
                                 </p>
+                                <p
+                                    v-if="pendingDetailRemovalCount > 0"
+                                    class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800"
+                                >
+                                    Saving this change will remove {{ pendingDetailRemovalCount }} existing Stock Detail row<span v-if="pendingDetailRemovalCount !== 1">s</span>. You will be asked to confirm before it is saved.
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -944,6 +950,12 @@ const availableSoh = computed(() => Number(availableStock.value?.soh || 0))
 const availableUnits = computed(() => availableStock.value?.available_units || [])
 const selectedSourceIdSet = computed(() => new Set(selectedSourceIds.value.map(id => Number(id))))
 const sourceRowsById = computed(() => new Map(availableUnits.value.map(unit => [Number(unit.id), unit])))
+const normalizedQuantity = computed(() => Math.max(1, parseInt(form.quantity || 1, 10)))
+const pendingDetailRemovalCount = computed(() => {
+    if (!isEditing.value) return 0
+
+    return Math.max(0, form.entries.length - normalizedQuantity.value)
+})
 const toDateKey = (value) => {
     if (!value) return ''
     if (value instanceof Date) return toLocalDateKey(value)
@@ -1462,8 +1474,31 @@ const postHeaderItem = async (item) => {
     })
 }
 
-const submitForm = (statusOverride = form.status || 'For Posting') => {
+const confirmPendingDetailRemoval = async () => {
+    if (pendingDetailRemovalCount.value <= 0) return true
+
+    const target = normalizedQuantity.value
+    const currentRows = form.entries.length
+    const confirmed = await confirm({
+        title: 'Reduce Stock Detail Rows',
+        message: `Qty is set to ${target}, but this header currently has ${currentRows} detail row(s). Saving will remove the last ${pendingDetailRemovalCount.value} row(s) from this stock-in header. Continue?`,
+        confirmLabel: 'Remove Rows and Save',
+        cancelLabel: 'Keep Existing Rows',
+        variant: 'danger',
+    })
+
+    if (!confirmed) {
+        form.quantity = currentRows
+        return false
+    }
+
+    syncEntriesToQuantity(target)
+    return true
+}
+
+const submitForm = async (statusOverride = form.status || 'For Posting') => {
     if (!validateTransferStock()) return
+    if (!(await confirmPendingDetailRemoval())) return
     if (!validateGeneratedCodes()) return
 
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
@@ -1586,6 +1621,18 @@ watch(() => form.quantity, (newVal) => {
     if (isConsumableTransfer.value && !isEditing.value && availableSoh.value > 0 && Number(newVal || 0) > availableSoh.value) {
         syncEntriesToQuantity(availableSoh.value)
         return
+    }
+
+    if (isEditing.value) {
+        const target = Math.max(1, parseInt(newVal || 1, 10))
+
+        if (Number(newVal) !== target) {
+            form.quantity = target
+        }
+
+        if (target < form.entries.length) {
+            return
+        }
     }
 
     syncEntriesToQuantity(newVal)

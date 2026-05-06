@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
 import Toast from '@/Components/Toast.vue';
+import { useConfirm } from '@/Composables/useConfirm.js';
 
 const props = defineProps({
     show: {
@@ -20,6 +22,12 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 const dialog = ref();
 const showSlot = ref(props.show);
+const {
+    showConfirmModal,
+    confirmState,
+    handleConfirm,
+    handleCancel,
+} = useConfirm();
 
 watch(
     () => props.show,
@@ -124,5 +132,16 @@ const maxWidthClass = computed(() => {
             </Transition>
         </div>
         <Toast />
+        <ConfirmModal
+            :show="showConfirmModal"
+            :title="confirmState.title"
+            :message="confirmState.message"
+            :confirm-label="confirmState.confirmLabel"
+            :cancel-label="confirmState.cancelLabel"
+            :variant="confirmState.variant"
+            :teleport="false"
+            @confirm="handleConfirm"
+            @cancel="handleCancel"
+        />
     </dialog>
 </template>

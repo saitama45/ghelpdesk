@@ -1,5 +1,5 @@
 <template>
-    <Teleport to="body">
+    <Teleport to="body" :disabled="!teleport">
         <div v-if="show" class="fixed inset-0 z-[200] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center p-4">
                 <!-- Backdrop -->
@@ -53,7 +53,7 @@
 </template>
 
 <script setup>
-import { watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
     show: Boolean,
@@ -70,6 +70,10 @@ const props = defineProps({
     variant: {
         type: String,
         default: 'danger'
+    },
+    teleport: {
+        type: Boolean,
+        default: true
     }
 })
 
@@ -83,11 +87,17 @@ const cancel = () => {
     emit('cancel')
 }
 
+const previousBodyOverflow = ref(null)
+
 watch(() => props.show, (newVal) => {
+    if (!props.teleport) return
+
     if (newVal) {
+        previousBodyOverflow.value = document.body.style.overflow
         document.body.style.overflow = 'hidden'
     } else {
-        document.body.style.overflow = ''
+        document.body.style.overflow = previousBodyOverflow.value ?? ''
+        previousBodyOverflow.value = null
     }
 }, { immediate: true })
 
