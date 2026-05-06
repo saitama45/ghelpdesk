@@ -29,6 +29,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 class StockInController extends Controller
 {
     private const SUPPLIER_LOCATION = 'SUPPLIER';
+
     private const RESERVED_TRANSFER_STATUSES = ['For Posting', 'Posted'];
 
     public function index()
@@ -45,6 +46,7 @@ class StockInController extends Controller
                 'status',
                 'posted_by',
                 'posted_date',
+                DB::raw("CASE WHEN COUNT(DISTINCT COALESCE(destination_location, '')) > 1 THEN 'Multiple' ELSE MAX(destination_location) END as destination_location"),
                 DB::raw('SUM(quantity) as quantity'),
                 DB::raw('COUNT(*) as record_count'),
                 DB::raw('MAX(id) as id'),
@@ -93,7 +95,7 @@ class StockInController extends Controller
         $originLocation = $this->normalizeStoreCode($validated['origin_location']);
 
         $availableUnits = collect();
-        if ($originLocation && !$this->isSupplierLocation($originLocation) && $this->isFixedAsset($asset)) {
+        if ($originLocation && ! $this->isSupplierLocation($originLocation) && $this->isFixedAsset($asset)) {
             $availableUnits = $this->availableFixedSourceRows($asset, $originLocation)
                 ->get([
                     'id',
@@ -142,7 +144,7 @@ class StockInController extends Controller
         return response()->json([
             'asset' => $asset,
             'origin_location' => $originLocation,
-            'soh' => $originLocation && !$this->isSupplierLocation($originLocation)
+            'soh' => $originLocation && ! $this->isSupplierLocation($originLocation)
                 ? $this->inventorySoh($asset->id, $originLocation)
                 : 0,
             'available_units' => $availableUnits,
@@ -253,7 +255,7 @@ class StockInController extends Controller
         $asset = Asset::findOrFail($validated['asset_id']);
         $originLocation = $this->normalizeStoreCode($validated['origin_location'] ?? null);
 
-        if (!empty($validated['header_mode'])) {
+        if (! empty($validated['header_mode'])) {
             $relatedRows = $this->groupedStockInRows($stockIn)->get();
             $entryDetails = $validated['entries'] ?? [[
                 'source_stock_in_id' => $validated['source_stock_in_id'] ?? null,
@@ -355,9 +357,12 @@ class StockInController extends Controller
 
         $itemsToPost = $affectedRows->get();
         $this->validatePostableTransfers($itemsToPost);
+        $ledgerRowsByItemId = $itemsToPost->mapWithKeys(fn (StockIn $item) => [
+            $item->id => $this->stockInLedgerRows($item, $request->user()->id),
+        ]);
         $now = now();
 
-        DB::transaction(function () use ($itemsToPost, $request, $now) {
+        DB::transaction(function () use ($itemsToPost, $request, $now, $ledgerRowsByItemId) {
             foreach ($itemsToPost as $item) {
                 $item->update([
                     'status' => 'Posted',
@@ -365,45 +370,8 @@ class StockInController extends Controller
                     'posted_date' => $now,
                 ]);
 
-                // Create Ledger Entries
-                $isTransfer = !empty($item->origin_location) && !$this->isSupplierLocation($item->origin_location);
-
-                if ($isTransfer) {
-                    // Out from origin
-                    InventoryTransaction::create([
-                        'asset_id' => $item->asset_id,
-                        'location' => $item->origin_location,
-                        'transaction_type' => 'Transfer Out',
-                        'quantity' => -$item->quantity,
-                        'reference_type' => StockIn::class,
-                        'reference_id' => $item->id,
-                        'created_by' => $request->user()->id,
-                        'updated_by' => $request->user()->id,
-                    ]);
-
-                    // In to destination
-                    InventoryTransaction::create([
-                        'asset_id' => $item->asset_id,
-                        'location' => $item->destination_location ?: $item->location,
-                        'transaction_type' => 'Transfer In',
-                        'quantity' => $item->quantity,
-                        'reference_type' => StockIn::class,
-                        'reference_id' => $item->id,
-                        'created_by' => $request->user()->id,
-                        'updated_by' => $request->user()->id,
-                    ]);
-                } else {
-                    // Standard Stock In
-                    InventoryTransaction::create([
-                        'asset_id' => $item->asset_id,
-                        'location' => $item->destination_location ?: $item->location,
-                        'transaction_type' => 'Stock In',
-                        'quantity' => $item->quantity,
-                        'reference_type' => StockIn::class,
-                        'reference_id' => $item->id,
-                        'created_by' => $request->user()->id,
-                        'updated_by' => $request->user()->id,
-                    ]);
+                foreach ($ledgerRowsByItemId[$item->id] as $ledgerRow) {
+                    InventoryTransaction::create($ledgerRow);
                 }
             }
         });
@@ -424,10 +392,10 @@ class StockInController extends Controller
         $expectedHeaders = $this->stockInImportHeaders();
         $missingHeaders = array_values(array_diff($expectedHeaders, $header));
 
-        if (!empty($missingHeaders)) {
+        if (! empty($missingHeaders)) {
             return response()->json([
                 'imported' => 0,
-                'errors' => ['Template is missing required columns: ' . implode(', ', $missingHeaders)],
+                'errors' => ['Template is missing required columns: '.implode(', ', $missingHeaders)],
             ]);
         }
 
@@ -457,8 +425,9 @@ class StockInController extends Controller
                 ? $assetsByItemCode->get(mb_strtolower($itemCode))
                 : null;
 
-            if (!$asset) {
+            if (! $asset) {
                 $errors[] = "Row {$rowNum}: item_code '{$itemCode}' was not found.";
+
                 continue;
             }
 
@@ -499,7 +468,8 @@ class StockInController extends Controller
             ]);
 
             if ($validator->fails()) {
-                $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
+                $errors[] = "Row {$rowNum}: ".implode(', ', $validator->errors()->all());
+
                 continue;
             }
 
@@ -547,7 +517,7 @@ class StockInController extends Controller
         $stores = Store::where('is_active', true)->orderBy('name')->get(['code', 'name']);
         $vendors = Vendor::active()->orderBy('name')->get(['name']);
 
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
 
         $listsSheet = $spreadsheet->createSheet(1);
         $listsSheet->setTitle('Lists');
@@ -555,17 +525,17 @@ class StockInController extends Controller
 
         $listsSheet->setCellValue('A1', 'Assets');
         foreach ($assets as $index => $asset) {
-            $listsSheet->setCellValue('A' . ($index + 2), $asset->item_code);
+            $listsSheet->setCellValue('A'.($index + 2), $asset->item_code);
         }
 
         $listsSheet->setCellValue('B1', 'Stores');
         foreach ($stores as $index => $store) {
-            $listsSheet->setCellValue('B' . ($index + 2), $store->code);
+            $listsSheet->setCellValue('B'.($index + 2), $store->code);
         }
 
         $listsSheet->setCellValue('C1', 'Vendors');
         foreach ($vendors as $index => $vendor) {
-            $listsSheet->setCellValue('C' . ($index + 2), $vendor->name);
+            $listsSheet->setCellValue('C'.($index + 2), $vendor->name);
         }
 
         $listsSheet->setCellValue('D1', 'Status');
@@ -671,7 +641,7 @@ class StockInController extends Controller
 
     public function printBarcodes(StockIn $stockIn)
     {
-        $barcode = new DNS1D();
+        $barcode = new DNS1D;
         $items = $this->groupedStockInRows($stockIn)
             ->whereNotNull('barcode')
             ->get()
@@ -683,18 +653,18 @@ class StockInController extends Controller
             });
 
         if ($items->isEmpty()) {
-            return "No barcodes generated for this stock group.";
+            return 'No barcodes generated for this stock group.';
         }
 
         $pdf = Pdf::loadView('pdf.stock-in-barcodes', compact('items'))
             ->setPaper('a4', 'portrait');
 
-        return $pdf->stream('barcodes-' . $stockIn->receive_date->format('Y-m-d') . '.pdf');
+        return $pdf->stream('barcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf');
     }
 
     public function printQrcodes(StockIn $stockIn)
     {
-        $qrcode = new DNS2D();
+        $qrcode = new DNS2D;
         $items = $this->groupedStockInRows($stockIn)
             ->whereNotNull('qrcode')
             ->get()
@@ -706,28 +676,30 @@ class StockInController extends Controller
             });
 
         if ($items->isEmpty()) {
-            return "No QR codes generated for this stock group.";
+            return 'No QR codes generated for this stock group.';
         }
 
         $pdf = Pdf::loadView('pdf.stock-in-qrcodes', compact('items'))
             ->setPaper('a4', 'portrait');
 
-        return $pdf->stream('qrcodes-' . $stockIn->receive_date->format('Y-m-d') . '.pdf');
+        return $pdf->stream('qrcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf');
     }
 
     protected function prepareEntriesForSave(Asset $asset, ?string $originLocation, array $entries, array $excludeChildIds = []): array
     {
         $originLocation = $this->normalizeStoreCode($originLocation);
 
-        if (!$this->isInternalTransferLocation($originLocation)) {
+        if (! $this->isInternalTransferLocation($originLocation)) {
             return array_map(function (array $entry) {
                 $entry['source_stock_in_id'] = null;
+
                 return $entry;
             }, $entries);
         }
 
         $entries = array_map(function (array $entry) {
             $entry['destination_location'] = $this->normalizeStoreCode($entry['destination_location'] ?? null);
+
             return $entry;
         }, $entries);
 
@@ -752,9 +724,10 @@ class StockInController extends Controller
             ]);
         }
 
-        if (!$this->isFixedAsset($asset)) {
+        if (! $this->isFixedAsset($asset)) {
             return array_map(function (array $entry) {
                 $entry['source_stock_in_id'] = null;
+
                 return $entry;
             }, $entries);
         }
@@ -815,7 +788,7 @@ class StockInController extends Controller
         }
 
         $transferItems
-            ->groupBy(fn (StockIn $item) => $item->asset_id . '|' . $this->normalizeStoreCode($item->origin_location))
+            ->groupBy(fn (StockIn $item) => $item->asset_id.'|'.$this->normalizeStoreCode($item->origin_location))
             ->each(function ($items) {
                 $firstItem = $items->first();
                 $asset = Asset::findOrFail($firstItem->asset_id);
@@ -835,6 +808,68 @@ class StockInController extends Controller
             });
     }
 
+    protected function stockInLedgerRows(StockIn $item, ?int $userId): array
+    {
+        $base = [
+            'asset_id' => $item->asset_id,
+            'reference_type' => StockIn::class,
+            'reference_id' => $item->id,
+            'created_by' => $userId,
+            'updated_by' => $userId,
+        ];
+
+        if ($this->isInternalTransferLocation($item->origin_location)) {
+            return [
+                [
+                    ...$base,
+                    'location' => $this->requiredLedgerLocation(
+                        $item->origin_location,
+                        'origin_location',
+                        'Origin location is required before posting an internal transfer.'
+                    ),
+                    'transaction_type' => 'Transfer Out',
+                    'quantity' => -$item->quantity,
+                ],
+                [
+                    ...$base,
+                    'location' => $this->requiredLedgerLocation(
+                        $item->destination_location,
+                        'destination_location',
+                        'Destination location is required before posting stock in.'
+                    ),
+                    'transaction_type' => 'Transfer In',
+                    'quantity' => $item->quantity,
+                ],
+            ];
+        }
+
+        return [
+            [
+                ...$base,
+                'location' => $this->requiredLedgerLocation(
+                    $item->destination_location,
+                    'destination_location',
+                    'Destination location is required before posting stock in.'
+                ),
+                'transaction_type' => 'Stock In',
+                'quantity' => $item->quantity,
+            ],
+        ];
+    }
+
+    protected function requiredLedgerLocation(?string $location, string $field, string $message): string
+    {
+        $location = $this->normalizeStoreCode($location);
+
+        if (! $location) {
+            throw ValidationException::withMessages([
+                $field => $message,
+            ]);
+        }
+
+        return $location;
+    }
+
     protected function availableFixedSourceRows(Asset $asset, string $originLocation, array $excludeChildIds = [])
     {
         $originLocation = $this->normalizeStoreCode($originLocation);
@@ -846,7 +881,7 @@ class StockInController extends Controller
             ->whereDoesntHave('transferChildren', function ($query) use ($excludeChildIds) {
                 $query->whereIn('status', self::RESERVED_TRANSFER_STATUSES);
 
-                if (!empty($excludeChildIds)) {
+                if (! empty($excludeChildIds)) {
                     $query->whereNotIn('id', $excludeChildIds);
                 }
             })
@@ -863,7 +898,7 @@ class StockInController extends Controller
 
     protected function isInternalTransferLocation(?string $location): bool
     {
-        return !empty($location) && !$this->isSupplierLocation($location);
+        return ! empty($location) && ! $this->isSupplierLocation($location);
     }
 
     protected function isSupplierLocation(?string $location): bool
@@ -1046,7 +1081,7 @@ class StockInController extends Controller
 
     protected function normalizeStoreCode(?string $value): ?string
     {
-        if (!$value) {
+        if (! $value) {
             return $value;
         }
 

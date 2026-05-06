@@ -74,7 +74,7 @@
                                         {{ item.asset?.description || 'No description' }}
                                     </div>
                                     <div class="mt-1 text-[11px] text-gray-500">
-                                        Vendor: {{ item.vendor || '-' }} | Origin: {{ item.origin_location || '-' }} | Destination: {{ item.destination_location || item.location || '-' }}
+                                        Vendor: {{ item.vendor || '-' }} | Origin: {{ item.origin_location || '-' }} | Destination: {{ item.destination_location || '-' }}
                                     </div>
                                     <div class="mt-2 text-[11px] text-gray-500">
                                         {{ item.record_count }} row<span v-if="item.record_count !== 1">s</span> grouped in this header
