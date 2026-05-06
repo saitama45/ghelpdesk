@@ -19,6 +19,7 @@ const props = defineProps({
     companies: Array,
     stores: Array,
     vendors: Array,
+    cannedMessages: Array,
     filters: Object,
     departments: Array,
     sub_units: Array,
@@ -444,6 +445,118 @@ const submitMerge = () => {
 const getSelectedTickets = computed(() => {
     return pagination.data.value.filter(t => selectedIds.value.includes(t.id));
 });
+
+const showBulkResponseModal = ref(false);
+const showBulkCannedMessages = ref(false);
+const bulkResponseFileInput = ref(null);
+const bulkResponseForm = useForm({
+    ticket_ids: [],
+    comment_text: '',
+    attachments: [],
+});
+
+const selectedClosedTicketKeys = computed(() =>
+    getSelectedTickets.value
+        .filter(ticket => ticket.status === 'closed')
+        .map(ticket => ticket.ticket_key)
+        .filter(Boolean)
+);
+
+const hasBulkResponseContent = computed(() =>
+    Boolean(bulkResponseForm.comment_text.trim() || bulkResponseForm.attachments.length > 0)
+);
+
+const applyBulkCannedMessage = (message) => {
+    bulkResponseForm.comment_text = bulkResponseForm.comment_text
+        ? `${bulkResponseForm.comment_text}\n${message.content}`
+        : message.content;
+    showBulkCannedMessages.value = false;
+};
+
+const openBulkResponseModal = () => {
+    if (selectedIds.value.length === 0) return;
+
+    if (selectedClosedTicketKeys.value.length > 0) {
+        showError(`Closed tickets cannot receive responses. Please deselect: ${selectedClosedTicketKeys.value.join(', ')}`);
+        return;
+    }
+
+    bulkResponseForm.reset();
+    bulkResponseForm.clearErrors();
+    showBulkCannedMessages.value = false;
+    showBulkResponseModal.value = true;
+};
+
+const closeBulkResponseModal = () => {
+    showBulkResponseModal.value = false;
+    showBulkCannedMessages.value = false;
+    bulkResponseForm.reset();
+    bulkResponseForm.clearErrors();
+    if (bulkResponseFileInput.value) bulkResponseFileInput.value.value = '';
+};
+
+const handleBulkResponseFileSelect = (event) => {
+    const files = Array.from(event.target.files);
+    const maxSize = 1000 * 1024 * 1024; // 1GB, matching the ticket response composer
+    const oversizedFiles = files.filter(file => file.size > maxSize);
+    const validFiles = files.filter(file => file.size <= maxSize);
+
+    if (oversizedFiles.length > 0) {
+        showError(`The following files exceed the 1GB limit and were not added: ${oversizedFiles.map(file => file.name).join(', ')}`);
+    }
+
+    bulkResponseForm.attachments = [...bulkResponseForm.attachments, ...validFiles];
+    event.target.value = '';
+};
+
+const handleBulkResponsePaste = (event) => {
+    const items = event.clipboardData?.items || event.originalEvent?.clipboardData?.items || [];
+    const maxSize = 1000 * 1024 * 1024; // 1GB
+
+    for (const item of items) {
+        if (item.type.indexOf('image') !== -1 || item.type.indexOf('video') !== -1) {
+            const blob = item.getAsFile();
+            if (!blob) continue;
+
+            if (blob.size > maxSize) {
+                showError('Pasted media exceeds the 1GB limit.');
+                continue;
+            }
+
+            const ext = item.type.split('/')[1] || 'png';
+            bulkResponseForm.attachments.push(new File([blob], `pasted-media-${Date.now()}.${ext}`, { type: blob.type }));
+        }
+    }
+};
+
+const removeBulkResponseAttachment = (index) => {
+    bulkResponseForm.attachments.splice(index, 1);
+};
+
+const submitBulkResponse = () => {
+    if (!hasBulkResponseContent.value || bulkResponseForm.processing) return;
+
+    if (selectedClosedTicketKeys.value.length > 0) {
+        showError(`Closed tickets cannot receive responses. Please deselect: ${selectedClosedTicketKeys.value.join(', ')}`);
+        return;
+    }
+
+    bulkResponseForm.ticket_ids = [...selectedIds.value];
+    bulkResponseForm.post(route('tickets.bulk-response'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showBulkResponseModal.value = false;
+            showBulkCannedMessages.value = false;
+            bulkResponseForm.reset();
+            selectedIds.value = [];
+            if (bulkResponseFileInput.value) bulkResponseFileInput.value.value = '';
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Bulk response failed';
+            showError(errorMessage);
+        }
+    });
+};
 
 watch(() => selectedIds.value.length > 0, (visible) => {
     if (visible && items.value.length === 0) {
@@ -1125,7 +1238,7 @@ watch(activeDashboardFilter, () => {
                             <div class="rounded-2xl border border-blue-200 bg-white/80 px-4 py-3 h-full">
                                 <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Bulk Selection</div>
                                 <div class="mt-2 text-2xl font-black text-blue-900">{{ selectedIds.length }}</div>
-                                <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for update, split, merge, child creation, or archive.</div>
+                                <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for response, update, split, merge, child creation, or archive.</div>
                             </div>
 
                             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1165,6 +1278,16 @@ watch(activeDashboardFilter, () => {
                             </div>
 
                             <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:w-[340px]">
+                                <button
+                                    v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
+                                    @click="openBulkResponseModal"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                                >
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                    </svg>
+                                    Respond
+                                </button>
                                 <button
                                     v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
                                     @click="openBulkChildModal"
@@ -1639,6 +1762,136 @@ watch(activeDashboardFilter, () => {
                             Accept Ticket
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Response Modal -->
+        <div v-if="showBulkResponseModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4 py-8">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeBulkResponseModal"></div>
+                <div class="relative flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
+                    <div class="mb-6 flex items-start justify-between gap-4">
+                        <div>
+                            <h3 class="text-xl font-bold uppercase tracking-widest text-gray-900">Bulk Response</h3>
+                            <p class="mt-1 text-sm text-gray-600">
+                                Send one public response to {{ selectedIds.length }} selected ticket(s).
+                            </p>
+                        </div>
+                        <button @click="closeBulkResponseModal" class="text-gray-400 transition-colors hover:text-gray-600">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="submitBulkResponse" class="flex min-h-0 flex-1 flex-col gap-5">
+                        <div class="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
+                            This creates the same public response on every selected ticket. Closed tickets are rejected before sending.
+                        </div>
+
+                        <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+                            <label class="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Response</label>
+                            <textarea
+                                v-model="bulkResponseForm.comment_text"
+                                rows="8"
+                                maxlength="65535"
+                                class="block w-full resize-y rounded-xl border-gray-300 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Write your response..."
+                                @paste="handleBulkResponsePaste"
+                            ></textarea>
+
+                            <div v-if="bulkResponseForm.attachments.length > 0" class="mt-4 space-y-2">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Attachments</div>
+                                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <div
+                                        v-for="(file, index) in bulkResponseForm.attachments"
+                                        :key="`${file.name}-${file.size}-${index}`"
+                                        class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                                    >
+                                        <div class="min-w-0">
+                                            <div class="truncate text-sm font-semibold text-gray-800">{{ file.name }}</div>
+                                            <div class="text-xs text-gray-500">{{ formatFileSize(file.size) }}</div>
+                                        </div>
+                                        <button type="button" @click="removeBulkResponseAttachment(index)" class="shrink-0 rounded-full bg-red-500 p-1 text-white shadow-sm transition-colors hover:bg-red-600">
+                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-center gap-2">
+                                <input ref="bulkResponseFileInput" type="file" multiple accept="image/*,video/*" class="hidden" @change="handleBulkResponseFileSelect">
+                                <button type="button" @click="bulkResponseFileInput.click()" class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-blue-200 text-blue-600 transition-colors hover:bg-blue-50" title="Attach Media">
+                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                    </svg>
+                                </button>
+
+                                <div v-if="hasPermission('tickets.canned_messages') || hasPermission('tickets.edit')" class="relative">
+                                    <button
+                                        type="button"
+                                        @click="showBulkCannedMessages = !showBulkCannedMessages"
+                                        class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-orange-200 text-orange-600 transition-colors hover:bg-orange-50"
+                                        title="Canned Messages"
+                                    >
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                        </svg>
+                                    </button>
+
+                                    <div v-if="showBulkCannedMessages" class="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
+                                        <div class="flex items-center justify-between border-b bg-gray-50 p-2">
+                                            <span class="text-xs font-bold uppercase tracking-wider text-gray-700">Canned Messages</span>
+                                            <button type="button" @click="showBulkCannedMessages = false" class="text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div class="max-h-60 overflow-y-auto">
+                                            <template v-if="cannedMessages && cannedMessages.length > 0">
+                                                <button
+                                                    v-for="message in cannedMessages"
+                                                    :key="message.id"
+                                                    type="button"
+                                                    @click="applyBulkCannedMessage(message)"
+                                                    class="w-full border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-blue-50"
+                                                >
+                                                    <div class="mb-1 text-xs font-bold text-blue-700">{{ message.title }}</div>
+                                                    <div class="line-clamp-2 text-[10px] text-gray-600">{{ message.content }}</div>
+                                                </button>
+                                            </template>
+                                            <div v-else class="px-4 py-8 text-center text-xs italic text-gray-500">
+                                                No canned messages found.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
+                                <button type="button" @click="closeBulkResponseModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-200">
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    :disabled="bulkResponseForm.processing || !hasBulkResponseContent"
+                                    class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-2 text-sm font-black uppercase tracking-widest text-white shadow-md transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                    <svg v-if="bulkResponseForm.processing" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Send to {{ selectedIds.length }}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

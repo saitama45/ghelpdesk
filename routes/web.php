@@ -138,6 +138,7 @@ Route::middleware('auth')->group(function () {
     Route::post('tickets/sync', [\App\Http\Controllers\TicketController::class, 'sync'])->name('tickets.sync');
 
     Route::post('tickets/bulk-update', [\App\Http\Controllers\TicketController::class, 'bulkUpdate'])->name('tickets.bulk-update');
+    Route::post('tickets/bulk-response', [\App\Http\Controllers\TicketController::class, 'bulkResponse'])->name('tickets.bulk-response');
     Route::post('tickets/bulk-archive', [\App\Http\Controllers\TicketController::class, 'bulkArchive'])->name('tickets.bulk-archive');
     Route::post('tickets/bulk-child', [\App\Http\Controllers\TicketController::class, 'bulkStoreChild'])->name('tickets.bulk-child');
     Route::post('tickets/merge', [\App\Http\Controllers\TicketController::class, 'merge'])->name('tickets.merge');

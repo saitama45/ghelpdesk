@@ -164,6 +164,7 @@ class TicketController extends Controller
         })->select('id', 'name', 'sub_unit')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
         $subUnits = User::whereNotNull('sub_unit')->distinct()->orderBy('sub_unit')->pluck('sub_unit');
 
@@ -176,6 +177,7 @@ class TicketController extends Controller
             'companies' => $companies,
             'stores' => $stores,
             'vendors' => $vendors,
+            'cannedMessages' => $cannedMessages,
             'departments' => $departments,
             'sub_units' => $subUnits,
             'filters' => [
@@ -777,104 +779,17 @@ class TicketController extends Controller
             }
         }
 
-        // --- SLA UPDATE ---
-        // Only update first response if it's NOT an internal note
-        if (!$comment->is_internal) {
-            $metric = $ticket->slaMetric;
-            if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
-                $now = now('Asia/Manila');
-                $metric->update([
-                    'first_response_at' => $now,
-                    'is_response_breached' => $metric->response_target_at && $now->gt($metric->response_target_at),
-                ]);
-            }
-        }
+        $this->updateFirstResponseMetric($ticket, $comment);
 
         // --- NOTIFICATIONS ---
         // Skip all notifications if it's an internal note
         if ($comment->is_internal) {
-            // Still handle attachments before returning
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $file) {
-                    $fileName = time() . '_' . $file->getClientOriginalName();
-                    $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
-                    
-                    TicketAttachment::create([
-                        'ticket_id' => $ticket->id,
-                        'comment_id' => $comment->id,
-                        'file_name' => $file->getClientOriginalName(),
-                        'file_storage_path' => $filePath,
-                        'file_size_bytes' => $file->getSize(),
-                        'created_at' => now('Asia/Manila'),
-                    ]);
-                }
-            }
+            $this->storeCommentAttachments($request, $ticket, $comment);
             return redirect()->back()->with('success', 'Internal note added.');
         }
 
-        $ticket->load(['reporter', 'assignee', 'comments.user']);
-        $commenterId = auth()->id();
-        $recipients = collect();
-
-        // 1. Add Assignee
-        if ($ticket->assignee && $ticket->assignee->email) {
-            $recipients->push([
-                'email' => strtolower($ticket->assignee->email),
-                'name' => $ticket->assignee->name,
-                'id' => $ticket->assignee->id
-            ]);
-        }
-
-        // 2. Add Reporter (Internal User)
-        if ($ticket->reporter && $ticket->reporter->email) {
-            $recipients->push([
-                'email' => strtolower($ticket->reporter->email),
-                'name' => $ticket->reporter->name,
-                'id' => $ticket->reporter->id
-            ]);
-        } 
-        
-        // 3. Add External Reporter (Sender Email)
-        if ($ticket->sender_email) {
-            $recipients->push([
-                'email' => strtolower($ticket->sender_email),
-                'name' => $ticket->sender_name ?? 'External User',
-                'id' => null
-            ]);
-        }
-
-        // Filter out the person who just commented and ensure email exists
-        $recipients = $recipients->filter(function ($r) use ($commenterId) {
-            return ($r['id'] != $commenterId) && !empty($r['email']);
-        })->unique('email');
-
-        $supportEmail = \App\Models\Setting::get('imap_username');
-        
-        \Illuminate\Support\Facades\Log::info("Notifying recipients for comment on ticket {$ticket->ticket_key}: " . $recipients->pluck('email')->implode(', '));
-
-        foreach ($recipients as $recipient) {
-            $mail = new TicketCommentAdded($ticket, $comment, $recipient['name']);
-            if ($supportEmail) {
-                $mail->replyTo($supportEmail);
-            }
-            Mail::to($recipient['email'])->send($mail);
-        }
-
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                $fileName = time() . '_' . $file->getClientOriginalName();
-                $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
-                
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'comment_id' => $comment->id,
-                    'file_name' => $file->getClientOriginalName(),
-                    'file_storage_path' => $filePath,
-                    'file_size_bytes' => $file->getSize(),
-                    'created_at' => now('Asia/Manila'),
-                ]);
-            }
-        }
+        $this->notifyTicketCommentRecipients($ticket, $comment);
+        $this->storeCommentAttachments($request, $ticket, $comment);
 
         return redirect()->back()->with('success', 'Comment added and status updated.');
     }
@@ -980,6 +895,68 @@ class TicketController extends Controller
         $count = Ticket::whereIn('id', $validated['ticket_ids'])->update($updates);
 
         return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
+    }
+
+    public function bulkResponse(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.edit'), 403);
+
+        $validated = $request->validate([
+            'ticket_ids' => 'required|array|min:1',
+            'ticket_ids.*' => 'exists:tickets,id',
+            'comment_text' => 'nullable|string|max:65535',
+            'attachments' => 'nullable|array',
+            'attachments.*' => 'file|max:1024000',
+        ]);
+
+        $commentText = trim((string) ($validated['comment_text'] ?? ''));
+        $attachments = $request->file('attachments', []) ?: [];
+
+        if ($commentText === '' && count($attachments) === 0) {
+            return redirect()->back()->withErrors(['bulk_response' => 'Response text or at least one attachment is required.']);
+        }
+
+        $ticketIds = collect($validated['ticket_ids'])->unique()->values();
+        $tickets = Ticket::whereIn('id', $ticketIds)
+            ->with(['reporter', 'assignee', 'slaMetric'])
+            ->get();
+
+        $closedTickets = $tickets->where('status', 'closed');
+        if ($closedTickets->isNotEmpty()) {
+            $ticketKeys = $closedTickets->pluck('ticket_key')->filter()->take(5)->implode(', ');
+            $suffix = $ticketKeys ? " Closed ticket(s): {$ticketKeys}." : '';
+
+            return redirect()->back()->withErrors([
+                'bulk_response' => 'Selected tickets include closed tickets. Please deselect closed tickets before responding.' . $suffix,
+            ]);
+        }
+
+        $comments = DB::transaction(function () use ($tickets, $commentText, $request) {
+            return $tickets->map(function (Ticket $ticket) use ($commentText, $request) {
+                $comment = TicketComment::create([
+                    'ticket_id' => $ticket->id,
+                    'comment_text' => $commentText,
+                    'is_internal' => false,
+                    'user_id' => auth()->id(),
+                    'created_at' => now('Asia/Manila'),
+                ]);
+
+                $comment->load('user');
+                $this->updateFirstResponseMetric($ticket, $comment);
+                $this->storeCommentAttachments($request, $ticket, $comment);
+
+                return [
+                    'ticket' => $ticket,
+                    'comment' => $comment,
+                ];
+            });
+        });
+
+        foreach ($comments as $entry) {
+            $this->notifyTicketCommentRecipients($entry['ticket'], $entry['comment']);
+        }
+
+        return redirect()->back()->with('success', "{$comments->count()} ticket response(s) added successfully.");
     }
 
     /**
@@ -1180,6 +1157,94 @@ class TicketController extends Controller
         });
 
         return redirect()->back()->with('success', "Tickets merged successfully into #{$parent->ticket_key}.");
+    }
+
+    private function updateFirstResponseMetric(Ticket $ticket, TicketComment $comment): void
+    {
+        if ($comment->is_internal) {
+            return;
+        }
+
+        $ticket->loadMissing('slaMetric');
+        $metric = $ticket->slaMetric;
+
+        if ($metric && !$metric->first_response_at && auth()->id() !== $ticket->reporter_id) {
+            $now = now('Asia/Manila');
+            $metric->update([
+                'first_response_at' => $now,
+                'is_response_breached' => $metric->response_target_at && $now->gt($metric->response_target_at),
+            ]);
+        }
+    }
+
+    private function storeCommentAttachments(Request $request, Ticket $ticket, TicketComment $comment): void
+    {
+        if (!$request->hasFile('attachments')) {
+            return;
+        }
+
+        foreach ($request->file('attachments') as $file) {
+            $fileName = now('Asia/Manila')->format('YmdHis') . '_' . Str::uuid() . '_' . $file->getClientOriginalName();
+            $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
+
+            TicketAttachment::create([
+                'ticket_id' => $ticket->id,
+                'comment_id' => $comment->id,
+                'file_name' => $file->getClientOriginalName(),
+                'file_storage_path' => $filePath,
+                'file_size_bytes' => $file->getSize(),
+            ]);
+        }
+    }
+
+    private function notifyTicketCommentRecipients(Ticket $ticket, TicketComment $comment): void
+    {
+        $ticket->loadMissing(['reporter', 'assignee']);
+        $comment->loadMissing('user');
+        $commenterId = auth()->id();
+        $recipients = collect();
+
+        if ($ticket->assignee && $ticket->assignee->email) {
+            $recipients->push([
+                'email' => strtolower($ticket->assignee->email),
+                'name' => $ticket->assignee->name,
+                'id' => $ticket->assignee->id,
+            ]);
+        }
+
+        if ($ticket->reporter && $ticket->reporter->email) {
+            $recipients->push([
+                'email' => strtolower($ticket->reporter->email),
+                'name' => $ticket->reporter->name,
+                'id' => $ticket->reporter->id,
+            ]);
+        }
+
+        if ($ticket->sender_email) {
+            $recipients->push([
+                'email' => strtolower($ticket->sender_email),
+                'name' => $ticket->sender_name ?? 'External User',
+                'id' => null,
+            ]);
+        }
+
+        $recipients = $recipients->filter(function ($recipient) use ($commenterId) {
+            return ($recipient['id'] != $commenterId) && !empty($recipient['email']);
+        })->unique('email');
+
+        $supportEmail = \App\Models\Setting::get('imap_username');
+
+        \Illuminate\Support\Facades\Log::info("Notifying recipients for comment on ticket {$ticket->ticket_key}: " . $recipients->pluck('email')->implode(', '));
+
+        foreach ($recipients as $recipient) {
+            $mail = new TicketCommentAdded($ticket, $comment, $recipient['name']);
+
+            if ($supportEmail) {
+                $mail->replyTo($supportEmail);
+            }
+
+            Mail::to($recipient['email'])->send($mail);
+        }
     }
 
     /**
