@@ -268,9 +268,9 @@
                 <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
                     <div class="sticky top-0 z-30 px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center rounded-t-xl">
                         <h3 class="text-lg font-bold text-gray-900">Missing Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Missing Days / Location</span>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Missing Days / Location / Actual Times</span>
                     </div>
-                    <div class="custom-scrollbar">
+                    <div class="overflow-x-auto custom-scrollbar">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-100">
                                 <tr>
@@ -278,18 +278,20 @@
                                     <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
                                     <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Days</th>
                                     <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Location</th>
+                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time In</th>
+                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time Out</th>
                                     <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr v-if="isMissingSchedulesLoading">
-                                    <td colspan="5" class="px-6 py-12 text-center">
+                                    <td colspan="7" class="px-6 py-12 text-center">
                                         <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
                                             </svg>
-                                            Loading unscheduled users...
+                                            Loading missing schedule records...
                                         </div>
                                     </td>
                                 </tr>
@@ -313,11 +315,27 @@
                                                 <span v-if="!user.missing_locations?.length" class="text-gray-300 text-xs">-</span>
                                             </div>
                                         </td>
+                                        <td class="px-6 py-4 text-sm text-emerald-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.missing_actual_time_ins" :key="i" class="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.missing_actual_time_ins?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-orange-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.missing_actual_time_outs" :key="i" class="bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.missing_actual_time_outs?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_total_count ?? user.missing_days_count }}</td>
                                     </tr>
                                     <tr v-if="missingSchedulesData.length === 0">
-                                        <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 italic">
-                                            All users have schedules and locations for this period.
+                                        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                            All users have schedules, locations, and actual times for this period.
                                         </td>
                                     </tr>
                                 </template>

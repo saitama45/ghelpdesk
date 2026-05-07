@@ -1769,17 +1769,46 @@ class ScheduleController extends Controller implements HasMiddleware
             ->where('end_time', '>=', $rangeStart)
             ->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
 
+        $scheduleIds = $schedules->pluck('id')->filter()->values();
+        $attendanceLogs = collect();
+
+        foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
+            $attendanceLogs = $attendanceLogs->concat(
+                AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                    ->orderBy('log_time')
+                    ->get(['schedule_id', 'type', 'log_time'])
+            );
+        }
+
+        $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
         $userScheduledDates = [];
         $userMissingLocationEntries = [];
+        $userMissingActualTimeInEntries = [];
+        $userMissingActualTimeOutEntries = [];
         foreach ($schedules as $s) {
             $sStart = $s->start_time->copy()->timezone('Asia/Manila');
             $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
+            $scheduleLogsByDate = $logsBySchedule
+                ->get($s->id, collect())
+                ->groupBy(fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString());
             
             $curr = $sStart->copy();
             while ($curr->toDateString() <= $sEnd->toDateString()) {
                 $dateStr = $curr->toDateString();
                 if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
                     $userScheduledDates[$s->user_id][$dateStr] = true;
+
+                    if (!in_array($s->status, ['Restday', 'Holiday', 'N/A'], true)) {
+                        $dailyLogs = $scheduleLogsByDate->get($dateStr, collect());
+
+                        if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_in')) {
+                            $userMissingActualTimeInEntries[$s->user_id][$dateStr][$s->status] = true;
+                        }
+
+                        if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_out')) {
+                            $userMissingActualTimeOutEntries[$s->user_id][$dateStr][$s->status] = true;
+                        }
+                    }
                 }
                 $curr->addDay();
             }
@@ -1820,9 +1849,11 @@ class ScheduleController extends Controller implements HasMiddleware
             }
         }
 
-        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $userMissingLocationEntries) {
+        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $userMissingLocationEntries, $userMissingActualTimeInEntries, $userMissingActualTimeOutEntries) {
             $missing = [];
             $missingLocations = [];
+            $missingActualTimeIns = [];
+            $missingActualTimeOuts = [];
             foreach ($allDates as $date) {
                 if (!isset($userScheduledDates[$user->id][$date])) {
                     $missing[] = Carbon::parse($date)->format('M j');
@@ -1840,15 +1871,48 @@ class ScheduleController extends Controller implements HasMiddleware
                         );
                     }
                 }
+
+                if (isset($userMissingActualTimeInEntries[$user->id][$date])) {
+                    $statuses = array_keys($userMissingActualTimeInEntries[$user->id][$date]);
+                    sort($statuses);
+
+                    foreach ($statuses as $status) {
+                        $missingActualTimeIns[] = sprintf(
+                            '%s (%s)',
+                            Carbon::parse($date)->format('M j'),
+                            $status
+                        );
+                    }
+                }
+
+                if (isset($userMissingActualTimeOutEntries[$user->id][$date])) {
+                    $statuses = array_keys($userMissingActualTimeOutEntries[$user->id][$date]);
+                    sort($statuses);
+
+                    foreach ($statuses as $status) {
+                        $missingActualTimeOuts[] = sprintf(
+                            '%s (%s)',
+                            Carbon::parse($date)->format('M j'),
+                            $status
+                        );
+                    }
+                }
             }
             
-            if (empty($missing) && empty($missingLocations)) return null;
+            if (empty($missing) && empty($missingLocations) && empty($missingActualTimeIns) && empty($missingActualTimeOuts)) return null;
 
             $user->missing_days = $missing;
             $user->missing_days_count = count($missing);
             $user->missing_locations = $missingLocations;
             $user->missing_location_count = count($missingLocations);
-            $user->missing_total_count = count($missing) + count($missingLocations);
+            $user->missing_actual_time_ins = $missingActualTimeIns;
+            $user->missing_actual_time_in_count = count($missingActualTimeIns);
+            $user->missing_actual_time_outs = $missingActualTimeOuts;
+            $user->missing_actual_time_out_count = count($missingActualTimeOuts);
+            $user->missing_total_count = count($missing)
+                + count($missingLocations)
+                + count($missingActualTimeIns)
+                + count($missingActualTimeOuts);
             return $user;
         })->filter()->values();
 
