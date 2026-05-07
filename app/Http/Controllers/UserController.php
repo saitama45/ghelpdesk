@@ -31,6 +31,18 @@ class UserController extends Controller
                   ->orWhere('position', 'like', "%{$request->search}%");
             });
         }
+
+        if ($request->filled('status')) {
+            match ($request->status) {
+                'active' => $query->where('is_active', true),
+                'inactive' => $query->where('is_active', false)
+                    ->where(fn ($q) => $q->whereNull('google_id')->orWhereHas('roles')),
+                'pending_approval' => $query->whereNotNull('google_id')
+                    ->where('is_active', false)
+                    ->whereDoesntHave('roles'),
+                default => null,
+            };
+        }
         
         $users = $query->paginate($request->get('per_page', 10))->withQueryString();
         $roles = Role::select('id', 'name')->get();
@@ -49,6 +61,10 @@ class UserController extends Controller
             'departments' => $departments,
             'units' => $units,
             'subUnits' => $subUnits,
+            'filters' => [
+                'search' => $request->input('search', ''),
+                'status' => $request->input('status', ''),
+            ],
         ]);
     }
 
@@ -115,6 +131,7 @@ class UserController extends Controller
             'store_ids.*' => 'exists:stores,id',
             'manager_ids' => 'nullable|array',
             'manager_ids.*' => 'exists:users,id',
+            'notify_user_approval' => 'boolean',
         ]);
 
         $wasPendingGoogleRegistration = $this->isPendingGoogleRegistration($user);
@@ -147,7 +164,11 @@ class UserController extends Controller
             $user->managers()->detach();
         }
 
-        if ($wasPendingGoogleRegistration && $this->isApprovedGoogleRegistration($user)) {
+        if (
+            $wasPendingGoogleRegistration
+            && $this->isApprovedGoogleRegistration($user)
+            && $request->boolean('notify_user_approval')
+        ) {
             $this->notifyGoogleRegistrationApproved($user);
         }
 

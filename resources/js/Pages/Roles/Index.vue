@@ -223,6 +223,14 @@
                                             <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
                                         </div>
                                     </label>
+
+                                    <label class="flex items-center justify-between cursor-pointer group">
+                                        <span class="text-sm font-medium text-gray-700 group-hover:text-emerald-600 transition-colors">On User Registration</span>
+                                        <div class="relative">
+                                            <input type="checkbox" v-model="form.notify_on_user_registration" class="sr-only peer">
+                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -463,7 +471,8 @@ const form = reactive({
     is_assignable: false,
     notify_on_ticket_create: false,
     notify_on_ticket_assign: false,
-    notify_on_urgent_ticket: false
+    notify_on_urgent_ticket: false,
+    notify_on_user_registration: false
 })
 
 onMounted(() => {
@@ -495,6 +504,7 @@ const openCreateModal = () => {
     form.notify_on_ticket_create = false
     form.notify_on_ticket_assign = false
     form.notify_on_urgent_ticket = false
+    form.notify_on_user_registration = false
     permissionSearch.value = ''
     showModal.value = true
 }
@@ -510,6 +520,7 @@ const editRole = (role) => {
     form.notify_on_ticket_create = !!role.notify_on_ticket_create
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket
+    form.notify_on_user_registration = !!role.notify_on_user_registration
     permissionSearch.value = ''
     showModal.value = true
 }
@@ -525,6 +536,7 @@ const copyRole = (role) => {
     form.notify_on_ticket_create = !!role.notify_on_ticket_create;
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign;
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket;
+    form.notify_on_user_registration = !!role.notify_on_user_registration;
     permissionSearch.value = ''
     showModal.value = true;
 };
@@ -539,6 +551,7 @@ const closeModal = () => {
     form.notify_on_ticket_create = false
     form.notify_on_ticket_assign = false
     form.notify_on_urgent_ticket = false
+    form.notify_on_user_registration = false
     permissionSearch.value = ''
 }
 

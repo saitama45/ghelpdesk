@@ -14,6 +14,7 @@ class Role extends SpatieRole
         'notify_on_ticket_create',
         'notify_on_ticket_assign',
         'notify_on_urgent_ticket',
+        'notify_on_user_registration',
     ];
 
     protected $casts = [
@@ -21,6 +22,7 @@ class Role extends SpatieRole
         'notify_on_ticket_create' => 'boolean',
         'notify_on_ticket_assign' => 'boolean',
         'notify_on_urgent_ticket' => 'boolean',
+        'notify_on_user_registration' => 'boolean',
     ];
 
     public function companies()

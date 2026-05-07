@@ -121,7 +121,7 @@ class SocialAuthController extends Controller
         $admins = User::query()
             ->where('is_active', true)
             ->whereNotNull('email')
-            ->whereHas('roles', fn ($query) => $query->whereIn('name', ['Admin', 'Solutions Admin']))
+            ->whereHas('roles', fn ($query) => $query->where('notify_on_user_registration', true))
             ->get()
             ->unique('email');
 

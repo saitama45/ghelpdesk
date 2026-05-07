@@ -45,7 +45,7 @@ class GoogleAuthTest extends TestCase
     {
         Mail::fake();
         $this->configureGoogle();
-        $admin = $this->createAdmin();
+        $admin = $this->createRegistrationNotificationRecipient();
         $this->mockGoogleUser('google-123', 'New Google User', 'new-google@example.com');
 
         $response = $this->get(route('auth.google.callback'));
@@ -62,6 +62,21 @@ class GoogleAuthTest extends TestCase
         Mail::assertSent(GoogleRegistrationPending::class, function (GoogleRegistrationPending $mail) use ($admin, $user) {
             return $mail->hasTo($admin->email) && $mail->user->is($user);
         });
+    }
+
+    public function test_google_callback_does_not_notify_roles_without_registration_toggle(): void
+    {
+        Mail::fake();
+        $this->configureGoogle();
+        $admin = $this->createAdmin();
+        $this->mockGoogleUser('google-untoggled', 'Untoggled User', 'untoggled@example.com');
+
+        $response = $this->get(route('auth.google.callback'));
+
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('info', self::PENDING_MESSAGE);
+        $this->assertFalse($admin->roles()->where('notify_on_user_registration', true)->exists());
+        Mail::assertNotSent(GoogleRegistrationPending::class);
     }
 
     public function test_pending_google_user_cannot_login_from_callback(): void
@@ -143,6 +158,7 @@ class GoogleAuthTest extends TestCase
             'is_manager' => false,
             'store_ids' => [],
             'manager_ids' => [],
+            'notify_user_approval' => true,
         ]);
 
         $response->assertRedirect();
@@ -153,6 +169,37 @@ class GoogleAuthTest extends TestCase
         Mail::assertSent(GoogleRegistrationApproved::class, function (GoogleRegistrationApproved $mail) use ($pendingUser) {
             return $mail->hasTo($pendingUser->email) && $mail->user->is($pendingUser);
         });
+    }
+
+    public function test_approving_pending_google_user_can_skip_approval_email(): void
+    {
+        Mail::fake();
+        $admin = $this->createAdmin();
+        $role = $this->createRole('User');
+        $pendingUser = User::factory()->create([
+            'email' => 'silent-approval@example.com',
+            'google_id' => 'google-silent-approval',
+            'is_active' => false,
+        ]);
+
+        $response = $this->actingAs($admin)->put(route('users.update', $pendingUser), [
+            'name' => $pendingUser->name,
+            'email' => $pendingUser->email,
+            'role' => $role->name,
+            'department' => null,
+            'unit' => null,
+            'sub_unit' => null,
+            'position' => null,
+            'is_active' => true,
+            'is_manager' => false,
+            'store_ids' => [],
+            'manager_ids' => [],
+            'notify_user_approval' => false,
+        ]);
+
+        $response->assertRedirect();
+        $this->assertTrue($pendingUser->fresh()->hasRole($role->name));
+        Mail::assertNotSent(GoogleRegistrationApproved::class);
     }
 
     private function configureGoogle(): void
@@ -184,6 +231,17 @@ class GoogleAuthTest extends TestCase
         $admin->assignRole($adminRole);
 
         return $admin;
+    }
+
+    private function createRegistrationNotificationRecipient(): User
+    {
+        $role = $this->createRole('Registration Notifications');
+        $role->update(['notify_on_user_registration' => true]);
+
+        $user = User::factory()->create(['is_active' => true]);
+        $user->assignRole($role);
+
+        return $user;
     }
 
     private function createRole(string $name): Role

@@ -3,6 +3,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref, computed, onMounted, watch } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
@@ -18,6 +19,7 @@ const props = defineProps({
     departments: Array,
     units: Array,
     subUnits: Array,
+    filters: Object,
 });
 
 const showCreateModal = ref(false);
@@ -27,6 +29,7 @@ const showStoresModal = ref(false);
 const editingUser = ref(null);
 const resetPasswordUser = ref(null);
 const selectedUserStores = ref([]);
+const filterStatus = ref(props.filters?.status || '');
 const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
 const { showError } = useToast();
@@ -68,20 +71,36 @@ const formatAuditDate = (value) => {
 };
 
 const isAllStoresSelected = (storeIds) => allStoreIds.value.length > 0 && allStoreIds.value.every(id => storeIds.includes(id));
+const isPendingApprovalUser = computed(() => editingUser.value?.google_id && !editingUser.value?.is_active && !(editingUser.value?.roles?.length));
+
+const statusFilterOptions = [
+    { label: 'All Statuses', value: '' },
+    { label: 'Active', value: 'active' },
+    { label: 'Inactive', value: 'inactive' },
+    { label: 'Pending Approval', value: 'pending_approval' },
+];
 
 const toggleAllStores = (form) => {
     form.store_ids = isAllStoresSelected(form.store_ids) ? [] : [...allStoreIds.value];
 };
 
-const pagination = usePagination(props.users, 'users.index');
+const pagination = usePagination(props.users, 'users.index', () => ({
+    status: filterStatus.value,
+}));
 
 onMounted(() => {
+    pagination.search.value = props.filters?.search || '';
     pagination.updateData(props.users);
 });
 
 watch(() => props.users, (newUsers) => {
     pagination.updateData(newUsers);
 }, { deep: true });
+
+watch(filterStatus, () => {
+    pagination.currentPage.value = 1;
+    pagination.performSearch();
+});
 
 const createForm = useForm({
     name: '',
@@ -110,6 +129,7 @@ const editForm = useForm({
     is_manager: false,
     store_ids: [],
     manager_ids: [],
+    notify_user_approval: true,
 });
 
 const passwordForm = useForm({
@@ -138,10 +158,11 @@ const editUser = (user) => {
     editForm.unit = user.unit || '';
     editForm.sub_unit = user.sub_unit || '';
     editForm.position = user.position || '';
-    editForm.is_active = !!user.is_active;
+    editForm.is_active = user.google_id && !user.is_active && !(user.roles?.length) ? true : !!user.is_active;
     editForm.is_manager = !!user.is_manager;
     editForm.store_ids = user.stores?.map(s => s.id) || [];
     editForm.manager_ids = user.managers?.map(m => m.id) || [];
+    editForm.notify_user_approval = true;
     showEditModal.value = true;
 };
 
@@ -229,6 +250,16 @@ const updatePassword = () => {
                 @change-per-page="pagination.changePerPage"
             >
                 <template #actions>
+                    <div class="w-full sm:w-48">
+                        <Autocomplete
+                            v-model="filterStatus"
+                            :options="statusFilterOptions"
+                            label-key="label"
+                            value-key="value"
+                            placeholder="Filter status..."
+                            size="sm"
+                        />
+                    </div>
                     <button
                         v-if="hasPermission('users.create')"
                         @click="showCreateModal = true"
@@ -555,6 +586,16 @@ const updatePassword = () => {
                                 <input v-model="editForm.is_manager" type="checkbox" id="is_manager_edit" class="rounded border-gray-300 text-purple-600 shadow-sm focus:ring-purple-500">
                                 <label for="is_manager_edit" class="ml-2 text-sm font-bold text-gray-700">Is Manager</label>
                             </div>
+                        </div>
+                        <div v-if="isPendingApprovalUser" class="flex flex-col justify-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                            <label class="flex items-center justify-between cursor-pointer gap-4">
+                                <span class="text-sm font-bold text-emerald-900">Notify user by email that they can now sign in</span>
+                                <div class="relative shrink-0">
+                                    <input type="checkbox" v-model="editForm.notify_user_approval" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                </div>
+                            </label>
+                            <p class="text-[10px] text-emerald-700 mt-1 uppercase font-bold italic">Only shown for pending Google registrations.</p>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Reports To</label>
