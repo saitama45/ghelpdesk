@@ -776,8 +776,3 @@ const sortPermissions = (permissions) => {
     });
 }
 </script>
-) return -1;
-        return aIndex - bIndex;
-    });
-}
-</script>

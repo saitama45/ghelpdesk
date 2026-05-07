@@ -21,6 +21,7 @@ import {
     FunnelIcon,
     LinkIcon,
     PaperClipIcon,
+    PencilSquareIcon,
     PlusIcon,
     StarIcon,
     TrashIcon,
@@ -56,6 +57,10 @@ const isSyncingProject = ref(false);
 const attachmentInput = ref(null);
 const filterInput = ref(null);
 const cardComposerInputs = ref({});
+const detailsSectionRef = ref(null);
+const lastSavedDetailsSignature = ref('');
+const pendingDetailsSave = ref(null);
+const isAutoSavingDetails = ref(false);
 
 watch(() => props.board, (board) => {
     localBoard.value = JSON.parse(JSON.stringify(board));
@@ -81,6 +86,7 @@ const boardForm = reactive({
 const cardDraft = reactive({
     title: '',
     description: '',
+    status: '',
     start_at: '',
     due_at: '',
     due_complete: false,
@@ -113,6 +119,10 @@ const editingLabelForm = reactive({
 
 const newComment = ref('');
 const newChecklistTitle = ref('Checklist');
+const editingChecklistId = ref(null);
+const editingChecklistTitle = ref('');
+const checklistTitleInputs = ref({});
+const isUpdatingChecklist = ref(false);
 const newSubTaskTitle = ref('');
 const newChecklistItems = reactive({});
 const newCardTitles = reactive(Object.fromEntries((props.statuses || []).map((status) => [status, ''])));
@@ -211,22 +221,6 @@ const activeFilterCount = computed(() => {
     ].filter(Boolean).length;
 });
 
-watch(selectedCard, (card) => {
-    if (!card) return;
-    cardDraft.title = card.title || '';
-    cardDraft.description = card.description || '';
-    cardDraft.start_at = toDateTimeInput(card.start_at);
-    cardDraft.due_at = toDateTimeInput(card.due_at);
-    cardDraft.due_complete = !!card.due_complete;
-    cardDraft.cover_type = card.cover_type || '';
-    cardDraft.cover_value = card.cover_value || '';
-    projectDraft.category = card.project_task?.category || 'General';
-    projectDraft.progress = card.project_task?.progress ?? 0;
-    projectDraft.assigned_to = card.project_task?.assigned_to || '';
-    projectDraft.support_by = card.project_task?.support_by || '';
-    newSubTaskTitle.value = '';
-}, { immediate: true });
-
 const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
 const userAvatar = (user, size = 'h-8 w-8') => {
@@ -237,6 +231,63 @@ const toDateTimeInput = (value) => {
     if (!value) return '';
     return String(value).replace(' ', 'T').slice(0, 16);
 };
+
+const detailsPayloadFromDraft = () => ({
+    description: cardDraft.description || '',
+    status: cardDraft.status || selectedCard.value?.status || props.statuses?.[0] || '',
+    start_at: cardDraft.start_at || null,
+    due_at: cardDraft.due_at || null,
+    due_complete: !!cardDraft.due_complete,
+});
+
+const detailsPayloadFromCard = (card) => ({
+    description: card?.description || '',
+    status: card?.status || props.statuses?.[0] || '',
+    start_at: toDateTimeInput(card?.start_at) || null,
+    due_at: toDateTimeInput(card?.due_at) || null,
+    due_complete: !!card?.due_complete,
+});
+
+const detailsSignature = (payload = detailsPayloadFromDraft()) => JSON.stringify(payload);
+
+const hasPendingDetailsChanges = computed(() => {
+    return !!selectedCard.value && detailsSignature() !== lastSavedDetailsSignature.value;
+});
+
+watch(selectedCard, (card, previousCard) => {
+    if (!card) {
+        lastSavedDetailsSignature.value = '';
+        editingChecklistId.value = null;
+        editingChecklistTitle.value = '';
+        return;
+    }
+
+    const isDifferentCard = previousCard?.id !== card.id;
+
+    if (isDifferentCard) {
+        editingChecklistId.value = null;
+        editingChecklistTitle.value = '';
+    }
+
+    cardDraft.title = card.title || '';
+
+    if (isDifferentCard || !hasPendingDetailsChanges.value) {
+        cardDraft.description = card.description || '';
+        cardDraft.status = card.status || props.statuses?.[0] || '';
+        cardDraft.start_at = toDateTimeInput(card.start_at);
+        cardDraft.due_at = toDateTimeInput(card.due_at);
+        cardDraft.due_complete = !!card.due_complete;
+        lastSavedDetailsSignature.value = detailsSignature(detailsPayloadFromCard(card));
+    }
+
+    cardDraft.cover_type = card.cover_type || '';
+    cardDraft.cover_value = card.cover_value || '';
+    projectDraft.category = card.project_task?.category || 'General';
+    projectDraft.progress = card.project_task?.progress ?? 0;
+    projectDraft.assigned_to = card.project_task?.assigned_to || '';
+    projectDraft.support_by = card.project_task?.support_by || '';
+    newSubTaskTitle.value = '';
+}, { immediate: true });
 
 const assetUrl = (path) => {
     if (!path) return '';
@@ -450,6 +501,9 @@ const waitForCardDialogClose = () => new Promise((resolve) => {
 const closeSelectedCardBeforeConfirm = async (card) => {
     if (!card || selectedCardId.value !== card.id) return false;
 
+    const saved = await autoSaveDetails();
+    if (saved === false) return false;
+
     selectedCardId.value = null;
     await nextTick();
     await waitForCardDialogClose();
@@ -508,7 +562,6 @@ const createCard = async (status) => {
         replaceCard(card);
         newCardTitles[status] = '';
         activeCardComposer.value = '';
-        selectedCardId.value = card.id;
     } catch (error) {
         handleApiError(error, 'Unable to create card');
     } finally {
@@ -542,22 +595,22 @@ const createSubTask = async () => {
     }
 };
 
-const saveCardDetails = async ({ closeModal = true } = {}) => {
-    if (!selectedCard.value || !canEditBoard.value || isSaving.value) return;
-    isSaving.value = true;
+const saveCardDetails = async ({ closeModal = true, silent = false, detailsOnly = false } = {}) => {
+    if (!selectedCard.value || !canEditBoard.value) return false;
+
+    const savingRef = detailsOnly ? isAutoSavingDetails : isSaving;
+    if (savingRef.value) return false;
+    savingRef.value = true;
 
     try {
-        const payload = {
+        const payload = detailsOnly ? detailsPayloadFromDraft() : {
             title: cardDraft.title,
-            description: cardDraft.description,
-            start_at: cardDraft.start_at || null,
-            due_at: cardDraft.due_at || null,
-            due_complete: cardDraft.due_complete,
+            ...detailsPayloadFromDraft(),
             cover_type: cardDraft.cover_type || null,
             cover_value: cardDraft.cover_value || null,
         };
 
-        if (selectedCard.value.project_task) {
+        if (!detailsOnly && selectedCard.value.project_task) {
             payload.project_category = projectDraft.category || 'General';
             payload.project_progress = projectDraft.progress ?? 0;
             payload.project_assigned_to = projectDraft.assigned_to || null;
@@ -566,15 +619,64 @@ const saveCardDetails = async ({ closeModal = true } = {}) => {
 
         const response = await axios.put(route('task-cards.update', selectedCard.value.id), payload);
         replaceCard(response.data.card);
-        showSuccess('Card updated');
+        lastSavedDetailsSignature.value = detailsSignature(detailsPayloadFromCard(response.data.card));
+
+        if (!silent) {
+            showSuccess('Card updated');
+        }
+
         if (closeModal) {
             selectedCardId.value = null;
         }
+
+        return true;
     } catch (error) {
         handleApiError(error, 'Unable to update card');
+        return false;
     } finally {
-        isSaving.value = false;
+        savingRef.value = false;
     }
+};
+
+const autoSaveDetails = () => {
+    if (!selectedCard.value || !canEditBoard.value || !hasPendingDetailsChanges.value) {
+        return Promise.resolve(true);
+    }
+
+    if (pendingDetailsSave.value) {
+        return pendingDetailsSave.value;
+    }
+
+    pendingDetailsSave.value = saveCardDetails({
+        closeModal: false,
+        silent: true,
+        detailsOnly: true,
+    }).finally(() => {
+        pendingDetailsSave.value = null;
+    });
+
+    return pendingDetailsSave.value;
+};
+
+const closeSelectedCardModal = async () => {
+    const saved = await autoSaveDetails();
+    if (saved !== false) {
+        selectedCardId.value = null;
+    }
+};
+
+const isInsideDetailsSection = (target) => {
+    return !!detailsSectionRef.value && !!target && detailsSectionRef.value.contains(target);
+};
+
+const handleDetailsBoundaryPointerDown = (event) => {
+    if (!selectedCard.value || isInsideDetailsSection(event.target)) return;
+    autoSaveDetails();
+};
+
+const handleDetailsBoundaryFocusIn = (event) => {
+    if (!selectedCard.value || isInsideDetailsSection(event.target)) return;
+    autoSaveDetails();
 };
 
 const updateCard = async (card, payload) => {
@@ -830,6 +932,57 @@ const addChecklist = async () => {
     }
 };
 
+const setChecklistTitleInput = (checklistId, el) => {
+    if (el) {
+        checklistTitleInputs.value[checklistId] = el;
+    } else {
+        delete checklistTitleInputs.value[checklistId];
+    }
+};
+
+const startEditingChecklist = async (checklist) => {
+    if (!canEditBoard.value) return;
+
+    editingChecklistId.value = checklist.id;
+    editingChecklistTitle.value = checklist.title || '';
+
+    await nextTick();
+    checklistTitleInputs.value[checklist.id]?.focus();
+    checklistTitleInputs.value[checklist.id]?.select();
+};
+
+const cancelEditingChecklist = () => {
+    editingChecklistId.value = null;
+    editingChecklistTitle.value = '';
+};
+
+const updateChecklist = async (checklist) => {
+    const title = editingChecklistTitle.value.trim();
+    if (!checklist || !canEditBoard.value || isUpdatingChecklist.value) return;
+
+    if (!title) {
+        showError('Enter a checklist title first.');
+        return;
+    }
+
+    if (title === checklist.title) {
+        cancelEditingChecklist();
+        return;
+    }
+
+    isUpdatingChecklist.value = true;
+
+    try {
+        const response = await axios.put(route('task-checklists.update', checklist.id), { title });
+        replaceCard(response.data.card);
+        cancelEditingChecklist();
+    } catch (error) {
+        handleApiError(error, 'Unable to rename checklist');
+    } finally {
+        isUpdatingChecklist.value = false;
+    }
+};
+
 const checklistInputKey = (checklist, parentItem = null) => parentItem ? `${checklist.id}:${parentItem.id}` : `${checklist.id}`;
 
 const addChecklistItem = async (checklist, parentItem = null) => {
@@ -1063,7 +1216,7 @@ const handleKeyboard = (event) => {
     const isTyping = ['input', 'textarea', 'select'].includes(tag);
 
     if (event.key === 'Escape') {
-        selectedCardId.value = null;
+        closeSelectedCardModal();
         showBoardMenu.value = false;
         showMemberModal.value = false;
         showLabelModal.value = false;
@@ -1095,10 +1248,14 @@ const handleKeyboard = (event) => {
 
 onMounted(() => {
     window.addEventListener('keydown', handleKeyboard);
+    document.addEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
+    document.addEventListener('focusin', handleDetailsBoundaryFocusIn, true);
 });
 
 onUnmounted(() => {
     window.removeEventListener('keydown', handleKeyboard);
+    document.removeEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
+    document.removeEventListener('focusin', handleDetailsBoundaryFocusIn, true);
 });
 </script>
 
@@ -1396,15 +1553,15 @@ onUnmounted(() => {
             </div>
         </aside>
 
-        <Modal :show="!!selectedCard" @close="selectedCardId = null" maxWidth="4xl">
+        <Modal :show="!!selectedCard" @close="closeSelectedCardModal" maxWidth="4xl">
             <div v-if="selectedCard" class="max-h-[90vh] overflow-hidden rounded-lg bg-gray-50">
                 <div v-if="selectedCard.cover_type" class="h-36" :style="coverStyle(selectedCard)"></div>
                 <div class="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
                     <div class="min-w-0">
                         <input v-model="cardDraft.title" :disabled="!canEditBoard" class="w-full border-0 bg-transparent p-0 text-xl font-black text-gray-900 focus:ring-0">
-                        <p class="mt-1 text-xs font-bold text-gray-500">in {{ selectedCard.status }}</p>
+                        <p class="mt-1 text-xs font-bold text-gray-500">in {{ cardDraft.status || selectedCard.status }}</p>
                     </div>
-                    <button type="button" @click="selectedCardId = null" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <button type="button" @click="closeSelectedCardModal" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
@@ -1421,22 +1578,22 @@ onUnmounted(() => {
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Milestone</label>
-                                    <input v-model="projectDraft.category" :disabled="!canEditBoard || selectedCard.project_task.is_subtask" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50">
+                                    <input v-model="projectDraft.category" :disabled="!canEditBoard || selectedCard.project_task.is_subtask" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" @change="saveCardDetails({ closeModal: false, silent: true })">
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Progress</label>
-                                    <input v-model="projectDraft.progress" :disabled="!canEditBoard" type="number" min="0" max="100" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <input v-model="projectDraft.progress" :disabled="!canEditBoard" type="number" min="0" max="100" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" @change="saveCardDetails({ closeModal: false, silent: true })">
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Assigned</label>
-                                    <select v-model="projectDraft.assigned_to" :disabled="!canEditBoard || !!selectedCard.project_task.external_assignment" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50">
+                                    <select v-model="projectDraft.assigned_to" :disabled="!canEditBoard || !!selectedCard.project_task.external_assignment" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" @change="saveCardDetails({ closeModal: false, silent: true })">
                                         <option value="">{{ selectedCard.project_task.external_assignment || 'Unassigned' }}</option>
                                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Support</label>
-                                    <select v-model="projectDraft.support_by" :disabled="!canEditBoard" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <select v-model="projectDraft.support_by" :disabled="!canEditBoard" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" @change="saveCardDetails({ closeModal: false, silent: true })">
                                         <option value="">No support</option>
                                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                     </select>
@@ -1453,7 +1610,7 @@ onUnmounted(() => {
                             </form>
                         </section>
 
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <section ref="detailsSectionRef" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                             <div class="mb-3 flex items-center justify-between">
                                 <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Details</h3>
                                 <button v-if="canEditBoard" type="button" @click="saveCardDetails" :disabled="isSaving" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
@@ -1464,7 +1621,7 @@ onUnmounted(() => {
                             <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Status</label>
-                                    <select :value="selectedCard.status" :disabled="!canEditBoard || !!selectedCard.archived_at" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" @change="moveCardToStatus(selectedCard, $event.target.value)">
+                                    <select v-model="cardDraft.status" :disabled="!canEditBoard || !!selectedCard.archived_at" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                         <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
                                     </select>
                                 </div>
@@ -1495,9 +1652,30 @@ onUnmounted(() => {
                             </div>
                             <div class="space-y-4">
                                 <div v-for="checklist in selectedCard.checklists" :key="checklist.id" class="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                                    <div class="mb-2 flex items-center justify-between">
-                                        <h4 class="text-sm font-bold text-gray-900">{{ checklist.title }}</h4>
-                                        <button v-if="canEditBoard" type="button" @click="deleteChecklist(checklist)" class="text-xs font-bold text-red-600">Delete</button>
+                                    <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <form v-if="editingChecklistId === checklist.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="updateChecklist(checklist)">
+                                            <input
+                                                :ref="(el) => setChecklistTitleInput(checklist.id, el)"
+                                                v-model="editingChecklistTitle"
+                                                :disabled="isUpdatingChecklist"
+                                                type="text"
+                                                class="h-9 min-w-0 flex-1 rounded-lg border-gray-300 text-sm font-bold text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                @keydown.esc.prevent="cancelEditingChecklist"
+                                            >
+                                            <button type="submit" :disabled="isUpdatingChecklist || !editingChecklistTitle.trim()" title="Save checklist title" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                                <CheckIcon class="h-4 w-4" />
+                                            </button>
+                                            <button type="button" :disabled="isUpdatingChecklist" title="Cancel rename" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50" @click="cancelEditingChecklist">
+                                                <XMarkIcon class="h-4 w-4" />
+                                            </button>
+                                        </form>
+                                        <div v-else class="flex min-w-0 flex-1 items-center gap-2">
+                                            <h4 class="min-w-0 flex-1 truncate text-sm font-bold text-gray-900">{{ checklist.title }}</h4>
+                                            <button v-if="canEditBoard" type="button" title="Rename checklist" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white hover:text-blue-600" @click="startEditingChecklist(checklist)">
+                                                <PencilSquareIcon class="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                        <button v-if="canEditBoard && editingChecklistId !== checklist.id" type="button" @click="deleteChecklist(checklist)" class="self-start text-xs font-bold text-red-600 sm:self-auto">Delete</button>
                                     </div>
                                     <div class="space-y-3">
                                         <div v-for="item in checklist.items" :key="item.id" class="space-y-2">
@@ -1826,5 +2004,3 @@ onUnmounted(() => {
     border-radius: 999px;
 }
 </style>
->
-style>
