@@ -21,6 +21,9 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
+            'error' => session('error'),
+            'info' => session('info'),
+            'googleConfigured' => $this->googleConfigured(),
         ]);
     }
 
@@ -57,6 +60,15 @@ class AuthenticatedSessionController extends Controller
         }
 
         return redirect()->intended(route($landingPage, absolute: false));
+    }
+
+    private function googleConfigured(): bool
+    {
+        return collect([
+            config('services.google.client_id'),
+            config('services.google.client_secret'),
+            config('services.google.redirect'),
+        ])->every(fn ($value) => filled($value));
     }
 
     /**

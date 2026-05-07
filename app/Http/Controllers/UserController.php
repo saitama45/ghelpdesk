@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\GoogleRegistrationApproved;
 use App\Models\User;
 use App\Http\Services\RoleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
+use Throwable;
 
 class UserController extends Controller
 {
@@ -114,6 +117,8 @@ class UserController extends Controller
             'manager_ids.*' => 'exists:users,id',
         ]);
 
+        $wasPendingGoogleRegistration = $this->isPendingGoogleRegistration($user);
+
         $user->name = $request->name;
         $user->email = $request->email;
         $user->department = $request->department;
@@ -140,6 +145,10 @@ class UserController extends Controller
             $user->managers()->sync($request->manager_ids);
         } else {
             $user->managers()->detach();
+        }
+
+        if ($wasPendingGoogleRegistration && $this->isApprovedGoogleRegistration($user)) {
+            $this->notifyGoogleRegistrationApproved($user);
         }
 
         return redirect()->back()->with('success', 'User updated successfully.');
@@ -234,5 +243,24 @@ class UserController extends Controller
         ]);
 
         return redirect()->back()->with('success', 'Password reset successfully.');
+    }
+
+    private function isPendingGoogleRegistration(User $user): bool
+    {
+        return filled($user->google_id) && ! $user->roles()->exists();
+    }
+
+    private function isApprovedGoogleRegistration(User $user): bool
+    {
+        return filled($user->google_id) && (bool) $user->is_active && $user->roles()->exists();
+    }
+
+    private function notifyGoogleRegistrationApproved(User $user): void
+    {
+        try {
+            Mail::to($user->email)->send(new GoogleRegistrationApproved($user));
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 }

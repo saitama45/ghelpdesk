@@ -304,9 +304,9 @@ const updatePassword = () => {
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span :class="[
                                 'inline-flex px-2 py-1 text-xs font-semibold rounded-full',
-                                user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                user.google_id && !user.is_active && !(user.roles?.length) ? 'bg-amber-100 text-amber-800' : (user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800')
                             ]">
-                                {{ user.is_active ? 'Active' : 'Inactive' }}
+                                {{ user.google_id && !user.is_active && !(user.roles?.length) ? 'Pending Approval' : (user.is_active ? 'Active' : 'Inactive') }}
                             </span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
