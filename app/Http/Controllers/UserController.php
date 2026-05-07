@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 
@@ -146,10 +147,78 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
-        DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
-        DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);
+        DB::transaction(function () use ($user) {
+            // Null out references in tickets
+            DB::table('tickets')->where('reporter_id', $user->id)->update(['reporter_id' => null]);
+            DB::table('tickets')->where('assignee_id', $user->id)->update(['assignee_id' => null]);
 
-        $user->delete();
+            // Null out references in ticket comments and history
+            DB::table('ticket_comments')->where('user_id', $user->id)->update(['user_id' => null]);
+            DB::table('ticket_histories')->where('user_id', $user->id)->update(['user_id' => null]);
+
+            // Null out references in project tasks
+            DB::table('project_tasks')->where('assigned_to', $user->id)->update(['assigned_to' => null]);
+            DB::table('project_tasks')->where('support_by', $user->id)->update(['support_by' => null]);
+
+            // Null out references in inventory transactions
+            if (Schema::hasTable('inventory_transactions')) {
+                DB::table('inventory_transactions')->where('created_by', $user->id)->update(['created_by' => null]);
+                DB::table('inventory_transactions')->where('updated_by', $user->id)->update(['updated_by' => null]);
+            }
+
+            // Cleanup SAP and POS requests
+            if (Schema::hasTable('sap_requests')) {
+                DB::table('sap_requests')->where('user_id', $user->id)->update(['user_id' => null]);
+            }
+            if (Schema::hasTable('sap_request_approvals')) {
+                DB::table('sap_request_approvals')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('pos_requests')) {
+                DB::table('pos_requests')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('pos_request_approvals')) {
+                DB::table('pos_request_approvals')->where('user_id', $user->id)->delete();
+            }
+
+            // Cleanup attendance and schedules (Required fields, manual delete for safety)
+            if (Schema::hasTable('attendance_logs')) {
+                DB::table('attendance_logs')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('schedules')) {
+                DB::table('schedules')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('user_presence_logs')) {
+                DB::table('user_presence_logs')->where('user_id', $user->id)->delete();
+            }
+
+            // Cleanup task board memberships and assignments
+            if (Schema::hasTable('task_board_members')) {
+                DB::table('task_board_members')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('task_board_watchers')) {
+                DB::table('task_board_watchers')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('task_card_assignees')) {
+                DB::table('task_card_assignees')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('task_card_watchers')) {
+                DB::table('task_card_watchers')->where('user_id', $user->id)->delete();
+            }
+            if (Schema::hasTable('task_card_comments')) {
+                DB::table('task_card_comments')->where('user_id', $user->id)->delete();
+            }
+
+            // Remove manager associations
+            DB::table('manager_user')->where('manager_id', $user->id)->delete();
+
+            // Null out audit columns in users table
+            DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
+            DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);
+
+            // Finally delete the user
+            $user->delete();
+        });
+
         return redirect()->back()->with('success', 'User deleted successfully.');
     }
 
