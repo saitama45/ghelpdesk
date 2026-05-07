@@ -55,7 +55,7 @@ const ensureTaskListBoards = async () => {
 
     return await confirmAction({
         title: 'Auto-create Monthly Board',
-        message: `This will automatically create ${missingTaskListTargets.value.length} monthly task list board${missingTaskListTargets.value.length === 1 ? '' : 's'} for this project sync.`,
+        message: `This will automatically create ${missingTaskListTargets.value.length} monthly task board${missingTaskListTargets.value.length === 1 ? '' : 's'} for this project sync.`,
         confirmLabel: 'Create and Sync',
         variant: 'primary',
     });

@@ -50,7 +50,7 @@ class RoleService
         $preferredOrder = [
             'dashboard',
             'tickets',
-            'task lists',
+            'task board',
             'pos_requests',
             'sap_requests',
             'stock in',
@@ -87,8 +87,8 @@ class RoleService
             // We use the raw category for keys that are special like 'Pos_requests'
             if ($category === 'kb_articles') {
                 $categoryDisplay = 'KB Articles';
-            } elseif ($category === 'task_lists') {
-                $categoryDisplay = 'Task Lists';
+            } elseif ($category === 'task_boards') {
+                $categoryDisplay = 'Task Board';
             } elseif ($category === 'stock_ins') {
                 $categoryDisplay = 'Stock In';
             } else {
@@ -208,3 +208,4 @@ class RoleService
         return $user->removeRole($roleName);
     }
 }
+

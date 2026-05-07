@@ -103,7 +103,7 @@ const submit = () => {
                             <div v-if="form.errors.status" class="text-red-500 text-xs mt-1">{{ form.errors.status }}</div>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Task List Month</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Task Board Month</label>
                             <select
                                 v-model.number="form.board_month"
                                 class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
@@ -113,7 +113,7 @@ const submit = () => {
                             <div v-if="form.errors.board_month" class="text-red-500 text-xs mt-1">{{ form.errors.board_month }}</div>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Task List Year</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Task Board Year</label>
                             <select
                                 v-model.number="form.board_year"
                                 class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"

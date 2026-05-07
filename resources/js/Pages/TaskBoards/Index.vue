@@ -243,7 +243,7 @@ const submitBoard = () => {
     if (isSubmitting.value) return;
     isSubmitting.value = true;
 
-    router.post(route('task-lists.store'), form, {
+    router.post(route('task-boards.store'), form, {
         onError: (errors) => {
             showError(Object.values(errors).flat().join(', ') || 'Unable to create board');
         },
@@ -263,7 +263,7 @@ const submitMonthlyBoards = () => {
 
     isGeneratingMonthly.value = true;
 
-    router.post(route('task-lists.monthly-generate'), monthlyForm, {
+    router.post(route('task-boards.monthly-generate'), monthlyForm, {
         preserveScroll: true,
         onSuccess: () => {
             showGenerateMonthlyModal.value = false;
@@ -279,7 +279,7 @@ const submitMonthlyBoards = () => {
 
 const toggleClosed = () => {
     showClosed.value = !showClosed.value;
-    router.get(route('task-lists.index'), { closed: showClosed.value ? 1 : 0 }, {
+    router.get(route('task-boards.index'), { closed: showClosed.value ? 1 : 0 }, {
         preserveScroll: true,
         preserveState: true,
     });
@@ -310,15 +310,15 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
 </script>
 
 <template>
-    <Head title="Task Lists" />
+    <Head title="Task Board" />
 
     <AppLayout>
-        <template #header>Task Lists</template>
+        <template #header>Task Board</template>
 
         <div class="space-y-6">
             <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Task Lists</h1>
+                    <h1 class="text-2xl font-bold text-gray-900">Task Board</h1>
                     <p class="mt-1 text-sm text-gray-500">Kanban boards for service work, follow-ups, and team tasks.</p>
                 </div>
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -331,7 +331,7 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                         {{ showClosed ? 'Open boards' : 'Closed boards' }}
                     </button>
                     <button
-                        v-if="hasPermission('task_lists.create')"
+                        v-if="hasPermission('task_boards.create')"
                         type="button"
                         @click="openGenerateMonthlyModal"
                         class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
@@ -340,7 +340,7 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                         Generate Monthly
                     </button>
                     <button
-                        v-if="hasPermission('task_lists.create')"
+                        v-if="hasPermission('task_boards.create')"
                         type="button"
                         @click="openCreateModal"
                         class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
@@ -420,7 +420,7 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                 <Link
                     v-for="board in sortedBoards"
                     :key="board.id"
-                    :href="route('task-lists.show', board.id)"
+                    :href="route('task-boards.show', board.id)"
                     class="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
                     <div class="h-28 p-4 text-white" :style="boardBackground(board)">

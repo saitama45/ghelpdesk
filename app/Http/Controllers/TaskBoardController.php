@@ -27,11 +27,11 @@ class TaskBoardController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:task_lists.view', only: ['index', 'show', 'toggleStar', 'toggleWatch', 'openProjectBoard', 'syncProject']),
-            new Middleware('can:task_lists.create', only: ['store', 'generateMonthly']),
-            new Middleware('can:task_lists.edit', only: ['update']),
-            new Middleware('can:task_lists.delete', only: ['destroy', 'restore']),
-            new Middleware('can:task_lists.manage_members', only: ['storeMember', 'updateMember', 'destroyMember']),
+            new Middleware('can:task_boards.view', only: ['index', 'show', 'toggleStar', 'toggleWatch', 'openProjectBoard', 'syncProject']),
+            new Middleware('can:task_boards.create', only: ['store', 'generateMonthly']),
+            new Middleware('can:task_boards.edit', only: ['update']),
+            new Middleware('can:task_boards.delete', only: ['destroy', 'restore']),
+            new Middleware('can:task_boards.manage_members', only: ['storeMember', 'updateMember', 'destroyMember']),
         ];
     }
 
@@ -55,7 +55,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->get()
             ->map(fn (TaskBoard $board) => $this->boardSummary($board, $user));
 
-        return Inertia::render('TaskLists/Index', [
+        return Inertia::render('TaskBoards/Index', [
             'boards' => $boards,
             'users' => $this->activeUsers(),
             'monthlyDepartments' => $this->monthlyDepartmentOptions(),
@@ -111,7 +111,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             return $board;
         });
 
-        return redirect()->route('task-lists.show', $board)->with('success', 'Task board created successfully.');
+        return redirect()->route('task-boards.show', $board)->with('success', 'Task board created successfully.');
     }
 
     public function generateMonthly(Request $request)
@@ -230,7 +230,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         }
 
         return redirect()
-            ->route('task-lists.index')
+            ->route('task-boards.index')
             ->with('success', $message)
             ->with('monthly_generation', [
                 'created' => $created,
@@ -279,7 +279,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->orderBy('id')
             ->get();
 
-        return Inertia::render('TaskLists/Show', [
+        return Inertia::render('TaskBoards/Show', [
             'board' => $this->boardDetail($taskBoard, $cards, $request->user()),
             'statuses' => TaskCard::STATUSES,
             'users' => $this->activeUsers(),
@@ -316,7 +316,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         $taskBoard->update(['closed_at' => now()]);
         $this->recordActivity($taskBoard, null, $request->user()->id, 'board.closed', 'closed this board');
 
-        return redirect()->route('task-lists.index')->with('success', 'Task board closed successfully.');
+        return redirect()->route('task-boards.index')->with('success', 'Task board closed successfully.');
     }
 
     public function restore(Request $request, TaskBoard $taskBoard)
@@ -326,7 +326,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         $taskBoard->update(['closed_at' => null]);
         $this->recordActivity($taskBoard, null, $request->user()->id, 'board.restored', 'reopened this board');
 
-        return redirect()->route('task-lists.show', $taskBoard)->with('success', 'Task board restored successfully.');
+        return redirect()->route('task-boards.show', $taskBoard)->with('success', 'Task board restored successfully.');
     }
 
     public function openProjectBoard(Request $request, Project $project)
@@ -334,8 +334,8 @@ class TaskBoardController extends Controller implements HasMiddleware
         $board = $this->projectTaskBoards->openBoard($project, $request->user(), $request->boolean('auto_create_monthly_boards', true));
 
         return redirect()
-            ->route('task-lists.show', $board)
-            ->with('success', 'Project task list is ready.');
+            ->route('task-boards.show', $board)
+            ->with('success', 'Project task board is ready.');
     }
 
     public function syncProject(Request $request, TaskBoard $taskBoard)
@@ -352,7 +352,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             return response()->json(['synced' => true]);
         }
 
-        return redirect()->back()->with('success', 'Project activities synced to this task list.');
+        return redirect()->back()->with('success', 'Project activities synced to this task board.');
     }
 
     public function toggleStar(Request $request, TaskBoard $taskBoard)

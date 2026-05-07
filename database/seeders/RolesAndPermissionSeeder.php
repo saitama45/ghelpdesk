@@ -33,12 +33,12 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.canned_messages' => 'Use canned messages',
             'tickets.internal_notes' => 'Use internal notes',
 
-            // Task Lists
-            'task_lists.view' => 'View task list boards',
-            'task_lists.create' => 'Create task list boards',
-            'task_lists.edit' => 'Edit task list cards and boards',
-            'task_lists.delete' => 'Close and delete task list boards/cards',
-            'task_lists.manage_members' => 'Manage task list board members',
+            // Task Board
+            'task_boards.view' => 'View task boards',
+            'task_boards.create' => 'Create task boards',
+            'task_boards.edit' => 'Edit task cards and boards',
+            'task_boards.delete' => 'Close and delete task boards/cards',
+            'task_boards.manage_members' => 'Manage task board members',
             
             // Users
             'users.view' => 'View users',
@@ -201,7 +201,7 @@ class RolesAndPermissionSeeder extends Seeder
         $techSupport->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
-            'task_lists.view', 'task_lists.create', 'task_lists.edit', 'task_lists.manage_members',
+            'task_boards.view', 'task_boards.create', 'task_boards.edit', 'task_boards.manage_members',
             'attendance.view', 'attendance.logs', 'attendance.create',
             'users.view',
             'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance', 'reports.inventory',
@@ -236,7 +236,7 @@ class RolesAndPermissionSeeder extends Seeder
         $user->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.create',
-            'task_lists.view', 'task_lists.edit',
+            'task_boards.view', 'task_boards.edit',
             'attendance.view', 'attendance.create',
         ]);
 
@@ -303,5 +303,8 @@ class RolesAndPermissionSeeder extends Seeder
         $this->command->info('  - Admin: admin@gmail.com / admin123');
         $this->command->info('  - Tech Support: support@gmail.com / support123');
         $this->command->info('  - User: user@gmail.com / user123');
+    }
+}
+ / user123');
     }
 }

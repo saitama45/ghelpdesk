@@ -83,18 +83,18 @@ Route::middleware('auth')->group(function () {
     Route::get('stock-ins/{stock_in}/print-barcodes', [\App\Http\Controllers\StockInController::class, 'printBarcodes'])->name('stock-ins.print-barcodes');
     Route::get('stock-ins/{stock_in}/print-qrcodes', [\App\Http\Controllers\StockInController::class, 'printQrcodes'])->name('stock-ins.print-qrcodes');
     Route::resource('stock-ins', \App\Http\Controllers\StockInController::class);
-    Route::post('task-lists/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-lists.restore');
-    Route::post('task-lists/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-lists.star');
-    Route::post('task-lists/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-lists.watch');
-    Route::post('task-lists/{taskBoard}/sync-project', [\App\Http\Controllers\TaskBoardController::class, 'syncProject'])->name('task-lists.sync-project');
-    Route::post('task-lists/monthly-generate', [\App\Http\Controllers\TaskBoardController::class, 'generateMonthly'])->name('task-lists.monthly-generate');
-    Route::post('task-lists/{taskBoard}/members', [\App\Http\Controllers\TaskBoardController::class, 'storeMember'])->name('task-lists.members.store');
-    Route::put('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'updateMember'])->name('task-lists.members.update');
-    Route::delete('task-lists/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'destroyMember'])->name('task-lists.members.destroy');
-    Route::post('task-lists/{taskBoard}/cards', [\App\Http\Controllers\TaskCardController::class, 'store'])->name('task-lists.cards.store');
-    Route::post('task-lists/{taskBoard}/labels', [\App\Http\Controllers\TaskCardController::class, 'storeLabel'])->name('task-lists.labels.store');
-    Route::resource('task-lists', \App\Http\Controllers\TaskBoardController::class)
-        ->parameters(['task-lists' => 'taskBoard'])
+    Route::post('task-boards/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-boards.restore');
+    Route::post('task-boards/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-boards.star');
+    Route::post('task-boards/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-boards.watch');
+    Route::post('task-boards/{taskBoard}/sync-project', [\App\Http\Controllers\TaskBoardController::class, 'syncProject'])->name('task-boards.sync-project');
+    Route::post('task-boards/monthly-generate', [\App\Http\Controllers\TaskBoardController::class, 'generateMonthly'])->name('task-boards.monthly-generate');
+    Route::post('task-boards/{taskBoard}/members', [\App\Http\Controllers\TaskBoardController::class, 'storeMember'])->name('task-boards.members.store');
+    Route::put('task-boards/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'updateMember'])->name('task-boards.members.update');
+    Route::delete('task-boards/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'destroyMember'])->name('task-boards.members.destroy');
+    Route::post('task-boards/{taskBoard}/cards', [\App\Http\Controllers\TaskCardController::class, 'store'])->name('task-boards.cards.store');
+    Route::post('task-boards/{taskBoard}/labels', [\App\Http\Controllers\TaskCardController::class, 'storeLabel'])->name('task-boards.labels.store');
+    Route::resource('task-boards', \App\Http\Controllers\TaskBoardController::class)
+        ->parameters(['task-boards' => 'taskBoard'])
         ->except(['create', 'edit']);
     Route::put('task-labels/{taskLabel}', [\App\Http\Controllers\TaskCardController::class, 'updateLabel'])->name('task-labels.update');
     Route::delete('task-labels/{taskLabel}', [\App\Http\Controllers\TaskCardController::class, 'destroyLabel'])->name('task-labels.destroy');
@@ -201,7 +201,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/knowledge-base/{kb_article}/feedback', [\App\Http\Controllers\KbArticleController::class, 'submitFeedback'])->name('knowledge-base.feedback');
 
     // NSO Project Tracker
-    Route::post('projects/{project}/task-list', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-list');
+    Route::post('projects/{project}/task-board', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-board');
     Route::resource('projects', \App\Http\Controllers\ProjectController::class);
     Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->name('projects.apply-templates');
     Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->name('projects.tasks.gantt-update');

@@ -134,18 +134,18 @@ const statusStyles = {
 };
 
 const canEditBoard = computed(() => {
-    return hasPermission('task_lists.edit') &&
+    return hasPermission('task_boards.edit') &&
         !localBoard.value.closed_at &&
         localBoard.value.my_role !== 'observer';
 });
 
 const canManageMembers = computed(() => {
-    return hasPermission('task_lists.manage_members') &&
+    return hasPermission('task_boards.manage_members') &&
         localBoard.value.my_role === 'admin';
 });
 
 const canDeleteBoard = computed(() => {
-    return hasPermission('task_lists.delete') &&
+    return hasPermission('task_boards.delete') &&
         localBoard.value.my_role === 'admin';
 });
 
@@ -503,7 +503,7 @@ const createCard = async (status) => {
             payload.category = filters.milestone || projectMilestones.value[0] || 'General';
         }
 
-        const response = await axios.post(route('task-lists.cards.store', localBoard.value.id), payload);
+        const response = await axios.post(route('task-boards.cards.store', localBoard.value.id), payload);
         const card = response.data.card;
         replaceCard(card);
         newCardTitles[status] = '';
@@ -525,7 +525,7 @@ const createSubTask = async () => {
     isCreatingSubTask.value = true;
 
     try {
-        const response = await axios.post(route('task-lists.cards.store', localBoard.value.id), {
+        const response = await axios.post(route('task-boards.cards.store', localBoard.value.id), {
             title,
             status: 'Backlogs',
             category: parentTask.category || 'General',
@@ -756,7 +756,7 @@ const createLabel = async (card = null) => {
     if (!labelForm.name.trim() || !canEditBoard.value) return;
 
     try {
-        const response = await axios.post(route('task-lists.labels.store', localBoard.value.id), {
+        const response = await axios.post(route('task-boards.labels.store', localBoard.value.id), {
             name: labelForm.name.trim(),
             color: normalizeHexColor(labelForm.color),
         });
@@ -959,7 +959,7 @@ const saveBoardSettings = async () => {
     if (!canManageMembers.value && localBoard.value.my_role !== 'admin') return;
 
     try {
-        const response = await axios.put(route('task-lists.update', localBoard.value.id), boardForm);
+        const response = await axios.put(route('task-boards.update', localBoard.value.id), boardForm);
         localBoard.value = { ...localBoard.value, ...response.data.board };
         showSuccess('Board updated');
     } catch (error) {
@@ -969,7 +969,7 @@ const saveBoardSettings = async () => {
 
 const toggleStar = async () => {
     try {
-        const response = await axios.post(route('task-lists.star', localBoard.value.id), {
+        const response = await axios.post(route('task-boards.star', localBoard.value.id), {
             starred: !localBoard.value.starred,
         });
         localBoard.value.starred = response.data.starred;
@@ -980,7 +980,7 @@ const toggleStar = async () => {
 
 const toggleBoardWatch = async () => {
     try {
-        const response = await axios.post(route('task-lists.watch', localBoard.value.id), {
+        const response = await axios.post(route('task-boards.watch', localBoard.value.id), {
             watching: !localBoard.value.watching,
         });
         localBoard.value.watching = response.data.watching;
@@ -993,7 +993,7 @@ const addBoardMember = async () => {
     if (!memberForm.user_ids.length || !canManageMembers.value) return;
 
     try {
-        const response = await axios.post(route('task-lists.members.store', localBoard.value.id), memberForm);
+        const response = await axios.post(route('task-boards.members.store', localBoard.value.id), memberForm);
         localBoard.value.members = response.data.members;
         memberForm.user_ids = [];
         memberForm.role = 'member';
@@ -1004,7 +1004,7 @@ const addBoardMember = async () => {
 
 const updateBoardMember = async (member, role) => {
     try {
-        const response = await axios.put(route('task-lists.members.update', [localBoard.value.id, member.id]), { role });
+        const response = await axios.put(route('task-boards.members.update', [localBoard.value.id, member.id]), { role });
         localBoard.value.members = response.data.members;
     } catch (error) {
         handleApiError(error, 'Unable to update member');
@@ -1021,7 +1021,7 @@ const removeBoardMember = async (member) => {
     if (!ok) return;
 
     try {
-        const response = await axios.delete(route('task-lists.members.destroy', [localBoard.value.id, member.id]));
+        const response = await axios.delete(route('task-boards.members.destroy', [localBoard.value.id, member.id]));
         localBoard.value.members = response.data.members;
     } catch (error) {
         handleApiError(error, 'Unable to remove member');
@@ -1037,17 +1037,17 @@ const closeBoard = async () => {
     });
     if (!ok) return;
 
-    router.delete(route('task-lists.destroy', localBoard.value.id));
+    router.delete(route('task-boards.destroy', localBoard.value.id));
 };
 
 const restoreBoard = () => {
-    router.post(route('task-lists.restore', localBoard.value.id));
+    router.post(route('task-boards.restore', localBoard.value.id));
 };
 
 const syncProjectBoard = () => {
     if (!isProjectBoard.value || isSyncingProject.value) return;
 
-    router.post(route('task-lists.sync-project', localBoard.value.id), {}, {
+    router.post(route('task-boards.sync-project', localBoard.value.id), {}, {
         preserveScroll: true,
         onStart: () => {
             isSyncingProject.value = true;
@@ -1084,7 +1084,7 @@ const handleKeyboard = (event) => {
 
     if (event.key === 'b') {
         event.preventDefault();
-        router.visit(route('task-lists.index'));
+        router.visit(route('task-boards.index'));
     }
 
     if (event.key === 'c' && selectedCard.value && canEditBoard.value && !selectedCard.value.archived_at) {
@@ -1106,13 +1106,13 @@ onUnmounted(() => {
     <Head :title="localBoard.title" />
 
     <AppLayout content-class="max-w-none px-0 sm:px-0 lg:px-0">
-        <template #header>Task Lists</template>
+        <template #header>Task Board</template>
 
         <div class="flex h-[calc(100vh-6rem)] min-h-[680px] flex-col overflow-hidden text-gray-900" :style="boardStyle">
             <header class="shrink-0 border-b border-white/10 bg-black/20 px-4 py-3 text-white backdrop-blur-md">
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div class="flex min-w-0 items-center gap-3">
-                        <Link :href="route('task-lists.index')" class="rounded-lg p-2 text-white/80 transition-colors hover:bg-white/15 hover:text-white">
+                        <Link :href="route('task-boards.index')" class="rounded-lg p-2 text-white/80 transition-colors hover:bg-white/15 hover:text-white">
                             <ArrowLeftIcon class="h-5 w-5" />
                         </Link>
                         <div class="min-w-0">
@@ -1826,3 +1826,5 @@ onUnmounted(() => {
     border-radius: 999px;
 }
 </style>
+>
+style>

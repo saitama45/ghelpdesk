@@ -29,8 +29,8 @@ class TaskCardController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:task_lists.view', only: ['storeComment', 'destroyComment', 'toggleWatch']),
-            new Middleware('can:task_lists.edit', except: ['storeComment', 'destroyComment', 'toggleWatch']),
+            new Middleware('can:task_boards.view', only: ['storeComment', 'destroyComment', 'toggleWatch']),
+            new Middleware('can:task_boards.edit', except: ['storeComment', 'destroyComment', 'toggleWatch']),
         ];
     }
 

@@ -41,7 +41,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         $user = User::factory()->create();
 
         $this->actingAs($user)
-            ->post(route('projects.task-list', $project))
+            ->post(route('projects.task-board', $project))
             ->assertRedirect();
 
         foreach (['DS', 'BS', 'SD'] as $subUnit) {
@@ -77,7 +77,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         }
 
         $this->actingAs($user)
-            ->post(route('projects.task-list', $project))
+            ->post(route('projects.task-board', $project))
             ->assertRedirect();
 
         $this->assertSame(3, TaskBoard::where('board_source', 'monthly')->where('department', 'TAS')->count());
@@ -97,7 +97,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         ]);
         $user = User::factory()->create();
 
-        $this->actingAs($user)->post(route('projects.task-list', $project));
+        $this->actingAs($user)->post(route('projects.task-board', $project));
 
         $item = TaskChecklistItem::where('project_task_id', $subTask->id)->firstOrFail();
 
@@ -124,7 +124,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         $task = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
         $user = User::factory()->create();
 
-        $this->actingAs($user)->post(route('projects.task-list', $project));
+        $this->actingAs($user)->post(route('projects.task-board', $project));
 
         $this->actingAs($user)
             ->postJson(route('projects.tasks.gantt-update'), [
@@ -159,7 +159,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         ]);
         $user = User::factory()->create();
 
-        $this->actingAs($user)->post(route('projects.task-list', $project));
+        $this->actingAs($user)->post(route('projects.task-board', $project));
 
         $this->actingAs($user)
             ->delete(route('projects-tasks.destroy', $parentTask))

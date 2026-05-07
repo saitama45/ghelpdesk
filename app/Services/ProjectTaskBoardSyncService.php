@@ -371,7 +371,7 @@ class ProjectTaskBoardSyncService
 
         if (!$autoCreateMonthlyBoards || !$actor) {
             throw ValidationException::withMessages([
-                'task_list' => 'The matching monthly board does not exist yet. Confirm auto-create monthly boards and try again.',
+                'task_board' => 'The matching monthly board does not exist yet. Confirm auto-create monthly boards and try again.',
             ]);
         }
 

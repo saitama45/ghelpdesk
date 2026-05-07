@@ -80,7 +80,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('tickets.*') || route().current('task-lists.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
+    if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
     if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*')) {
@@ -114,7 +114,7 @@ const canSeeAdminTask = computed(() => {
 
 const canSeeServices = computed(() => {
     return hasPermission('tickets.view') ||
-           hasPermission('task_lists.view') ||
+           hasPermission('task_boards.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
            visibleDynamicForms.value.length > 0;
@@ -243,7 +243,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('task-lists.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) && !openMenus.services
+                            (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) && !openMenus.services
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -267,11 +267,11 @@ const canSeeSettings = computed(() => {
                                 Tickets
                             </Link>
                             <Link
-                                v-if="hasPermission('task_lists.view')"
-                                :href="route('task-lists.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('task-lists.*'))"
+                                v-if="hasPermission('task_boards.view')"
+                                :href="route('task-boards.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('task-boards.*'))"
                             >
-                                Task Lists
+                                Task Board
                             </Link>
                             <Link
                                 v-if="hasPermission('pos_requests.view')"
@@ -310,14 +310,14 @@ const canSeeSettings = computed(() => {
                             <span>Tickets</span>
                         </Link>
                         <Link
-                            v-if="hasPermission('task_lists.view')"
-                            :href="route('task-lists.index')"
+                            v-if="hasPermission('task_boards.view')"
+                            :href="route('task-boards.index')"
                             :class="[
                                 'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('task-lists.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                                route().current('task-boards.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
                             ]"
                         >
-                            <span>Task Lists</span>
+                            <span>Task Board</span>
                         </Link>
                         <Link
                             v-if="hasPermission('pos_requests.view')"

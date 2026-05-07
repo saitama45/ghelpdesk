@@ -592,7 +592,7 @@ const activeTab = ref('')
 const dynamicForms = computed(() => usePage().props.dynamicForms || []);
 
 const permissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Task Lists', 'Pos_requests', 'Sap_requests'];
+    const servicesCategories = ['Tickets', 'Task Board', 'Pos_requests', 'Sap_requests'];
 
     // Add dynamic form names exactly as the backend RoleService does
     (dynamicForms.value || []).forEach(form => {
@@ -772,6 +772,11 @@ const sortPermissions = (permissions) => {
         if (aIndex === -1 && bIndex === -1) return aAction.localeCompare(bAction);
         if (aIndex === -1) return 1;
         if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+    });
+}
+</script>
+) return -1;
         return aIndex - bIndex;
     });
 }

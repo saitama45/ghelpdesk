@@ -142,7 +142,7 @@ const confirmAutoCreateMonthlyBoards = async (extraTarget = null) => {
 
     return await confirmAction({
         title: 'Auto-create Monthly Board',
-        message: `This will automatically create ${missing.length} monthly task list board${missing.length === 1 ? '' : 's'} for this project sync.`,
+        message: `This will automatically create ${missing.length} monthly task board${missing.length === 1 ? '' : 's'} for this project sync.`,
         confirmLabel: 'Create and Sync',
         variant: 'primary',
     });
@@ -395,7 +395,7 @@ const getStatusColor = (status) => {
 
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <InputLabel for="edit_board_month" value="Task List Month" />
+                                    <InputLabel for="edit_board_month" value="Task Board Month" />
                                     <select
                                         id="edit_board_month"
                                         v-model.number="editForm.board_month"
@@ -406,7 +406,7 @@ const getStatusColor = (status) => {
                                     <InputError :message="editForm.errors.board_month" />
                                 </div>
                                 <div>
-                                    <InputLabel for="edit_board_year" value="Task List Year" />
+                                    <InputLabel for="edit_board_year" value="Task Board Year" />
                                     <select
                                         id="edit_board_year"
                                         v-model.number="editForm.board_year"
@@ -667,7 +667,7 @@ const getStatusColor = (status) => {
                         class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
                     >
                         <ClipboardDocumentCheckIcon class="h-5 w-5" />
-                        {{ project.task_board ? 'Open Task List' : 'Create Task List' }}
+                        {{ project.task_board ? 'Open Task Board' : 'Create Task Board' }}
                     </button>
                 </div>
             </div>

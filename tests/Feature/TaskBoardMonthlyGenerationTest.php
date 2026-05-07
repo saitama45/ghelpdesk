@@ -32,12 +32,12 @@ class TaskBoardMonthlyGenerationTest extends TestCase
         User::factory()->create(['department' => 'OPS', 'sub_unit' => 'DS']);
 
         $this->actingAs($creator)
-            ->post(route('task-lists.monthly-generate'), [
+            ->post(route('task-boards.monthly-generate'), [
                 'department' => 'TAS',
                 'month' => 5,
                 'year' => 2026,
             ])
-            ->assertRedirect(route('task-lists.index'));
+            ->assertRedirect(route('task-boards.index'));
 
         $this->assertSame(3, TaskBoard::where('board_source', 'monthly')->count());
 
@@ -62,7 +62,7 @@ class TaskBoardMonthlyGenerationTest extends TestCase
         $otherDepartmentUser = User::factory()->create(['department' => 'OPS', 'sub_unit' => 'DS']);
 
         $this->actingAs($creator)
-            ->post(route('task-lists.monthly-generate'), [
+            ->post(route('task-boards.monthly-generate'), [
                 'department' => 'TAS',
                 'month' => 5,
                 'year' => 2026,
@@ -106,14 +106,14 @@ class TaskBoardMonthlyGenerationTest extends TestCase
             'year' => 2026,
         ];
 
-        $this->actingAs($creator)->post(route('task-lists.monthly-generate'), $payload);
+        $this->actingAs($creator)->post(route('task-boards.monthly-generate'), $payload);
 
         $closedBoard = TaskBoard::where('title', 'DS May 2026')->firstOrFail();
         $closedBoard->update(['closed_at' => now()]);
 
         $this->actingAs($creator)
-            ->post(route('task-lists.monthly-generate'), $payload)
-            ->assertRedirect(route('task-lists.index'));
+            ->post(route('task-boards.monthly-generate'), $payload)
+            ->assertRedirect(route('task-boards.index'));
 
         $this->assertSame(2, TaskBoard::where('board_source', 'monthly')->count());
         $this->assertNotNull($closedBoard->fresh()->closed_at);
@@ -126,7 +126,7 @@ class TaskBoardMonthlyGenerationTest extends TestCase
         User::factory()->create(['department' => 'TAS', 'sub_unit' => 'DS', 'is_active' => false]);
 
         $this->actingAs($creator)
-            ->post(route('task-lists.monthly-generate'), [
+            ->post(route('task-boards.monthly-generate'), [
                 'department' => 'TAS',
                 'month' => 5,
                 'year' => 2026,
