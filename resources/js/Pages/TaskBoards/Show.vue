@@ -123,6 +123,7 @@ const editingChecklistId = ref(null);
 const editingChecklistTitle = ref('');
 const checklistTitleInputs = ref({});
 const isUpdatingChecklist = ref(false);
+const bulkPasteTarget = ref('');
 const newSubTaskTitle = ref('');
 const newChecklistItems = reactive({});
 const newCardTitles = reactive(Object.fromEntries((props.statuses || []).map((status) => [status, ''])));
@@ -983,6 +984,67 @@ const updateChecklist = async (checklist) => {
     }
 };
 
+const parseClipboardList = (event) => {
+    const text = event.clipboardData?.getData('text/plain') || '';
+    if (!text.includes('\n') && !text.includes('\r')) return [];
+
+    return text
+        .split(/\r\n|\n|\r/)
+        .map((row) => {
+            return row
+                .split('\t')
+                .map((cell) => cell.trim())
+                .find(Boolean) || '';
+        })
+        .filter(Boolean);
+};
+
+const pastedBulkRows = (event) => {
+    const rows = parseClipboardList(event);
+    if (rows.length <= 1) return [];
+
+    event.preventDefault();
+
+    if (rows.some((row) => row.length > 255)) {
+        showError('Pasted checklist rows must be 255 characters or less.');
+        return [];
+    }
+
+    return rows;
+};
+
+const checklistPasteTargetKey = (checklist = null, parentItem = null) => {
+    if (!checklist) return 'checklists';
+    return parentItem ? `subtasks:${checklist.id}:${parentItem.id}` : `items:${checklist.id}`;
+};
+
+const isBulkPastingChecklistTarget = (checklist = null, parentItem = null) => {
+    return bulkPasteTarget.value === checklistPasteTargetKey(checklist, parentItem);
+};
+
+const pasteChecklistTitles = async (event) => {
+    const titles = pastedBulkRows(event);
+    if (!titles.length || !selectedCard.value || !canEditBoard.value || bulkPasteTarget.value) return;
+
+    let lastCard = null;
+    bulkPasteTarget.value = checklistPasteTargetKey();
+
+    try {
+        for (const title of titles) {
+            const response = await axios.post(route('task-cards.checklists.store', selectedCard.value.id), { title });
+            lastCard = response.data.card;
+        }
+
+        if (lastCard) replaceCard(lastCard);
+        newChecklistTitle.value = 'Checklist';
+    } catch (error) {
+        if (lastCard) replaceCard(lastCard);
+        handleApiError(error, 'Unable to paste checklists');
+    } finally {
+        bulkPasteTarget.value = '';
+    }
+};
+
 const checklistInputKey = (checklist, parentItem = null) => parentItem ? `${checklist.id}:${parentItem.id}` : `${checklist.id}`;
 
 const addChecklistItem = async (checklist, parentItem = null) => {
@@ -999,6 +1061,33 @@ const addChecklistItem = async (checklist, parentItem = null) => {
         newChecklistItems[key] = '';
     } catch (error) {
         handleApiError(error, 'Unable to add item');
+    }
+};
+
+const pasteChecklistItems = async (event, checklist, parentItem = null) => {
+    const titles = pastedBulkRows(event);
+    if (!titles.length || !checklist || !canEditBoard.value || bulkPasteTarget.value) return;
+
+    const targetKey = checklistPasteTargetKey(checklist, parentItem);
+    let lastCard = null;
+    bulkPasteTarget.value = targetKey;
+
+    try {
+        for (const title of titles) {
+            const response = await axios.post(route('task-checklists.items.store', checklist.id), {
+                title,
+                parent_item_id: parentItem?.id || null,
+            });
+            lastCard = response.data.card;
+        }
+
+        if (lastCard) replaceCard(lastCard);
+        newChecklistItems[checklistInputKey(checklist, parentItem)] = '';
+    } catch (error) {
+        if (lastCard) replaceCard(lastCard);
+        handleApiError(error, parentItem ? 'Unable to paste subtasks' : 'Unable to paste items');
+    } finally {
+        bulkPasteTarget.value = '';
     }
 };
 
@@ -1646,8 +1735,8 @@ onUnmounted(() => {
                             <div class="mb-3 flex items-center justify-between">
                                 <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Checklists</h3>
                                 <form v-if="canEditBoard" class="flex gap-2" @submit.prevent="addChecklist">
-                                    <input v-model="newChecklistTitle" type="text" class="h-9 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                    <button type="submit" class="rounded-lg bg-gray-900 px-3 text-xs font-bold text-white">Add</button>
+                                    <input v-model="newChecklistTitle" :disabled="isBulkPastingChecklistTarget()" type="text" maxlength="255" class="h-9 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" @paste="pasteChecklistTitles">
+                                    <button type="submit" :disabled="isBulkPastingChecklistTarget()" class="rounded-lg bg-gray-900 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget() ? 'Adding...' : 'Add' }}</button>
                                 </form>
                             </div>
                             <div class="space-y-4">
@@ -1659,6 +1748,7 @@ onUnmounted(() => {
                                                 v-model="editingChecklistTitle"
                                                 :disabled="isUpdatingChecklist"
                                                 type="text"
+                                                maxlength="255"
                                                 class="h-9 min-w-0 flex-1 rounded-lg border-gray-300 text-sm font-bold text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                                 @keydown.esc.prevent="cancelEditingChecklist"
                                             >
@@ -1728,14 +1818,14 @@ onUnmounted(() => {
                                             </div>
 
                                             <form v-if="canEditBoard" class="ml-5 flex gap-2 border-l border-gray-200 pl-3" @submit.prevent="addChecklistItem(checklist, item)">
-                                                <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" type="text" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add a subtask...">
-                                                <button type="submit" class="rounded-lg bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100">Add</button>
+                                                <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" :disabled="isBulkPastingChecklistTarget(checklist, item)" type="text" maxlength="255" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add a subtask..." @paste="pasteChecklistItems($event, checklist, item)">
+                                                <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist, item)" class="rounded-lg bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist, item) ? 'Adding...' : 'Add' }}</button>
                                             </form>
                                         </div>
                                     </div>
                                     <form v-if="canEditBoard" class="mt-2 flex gap-2" @submit.prevent="addChecklistItem(checklist)">
-                                        <input v-model="newChecklistItems[checklistInputKey(checklist)]" type="text" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add an item...">
-                                        <button type="submit" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white">Add</button>
+                                        <input v-model="newChecklistItems[checklistInputKey(checklist)]" :disabled="isBulkPastingChecklistTarget(checklist)" type="text" maxlength="255" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add an item..." @paste="pasteChecklistItems($event, checklist)">
+                                        <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist)" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist) ? 'Adding...' : 'Add' }}</button>
                                     </form>
                                 </div>
                             </div>
