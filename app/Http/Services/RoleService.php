@@ -62,6 +62,7 @@ class RoleService
             'roles',
             'reports',
             'companies',
+            'departments',
             'clusters',
             'categories',
             'subcategories',
@@ -208,4 +209,3 @@ class RoleService
         return $user->removeRole($roleName);
     }
 }
-

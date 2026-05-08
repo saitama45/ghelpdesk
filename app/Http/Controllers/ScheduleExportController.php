@@ -84,38 +84,159 @@ class ScheduleExportController extends Controller
             $userIds = $users->pluck('id');
 
             // Fetch all schedules for these users in range
-            $schedules = Schedule::whereIn('user_id', $userIds)
+            $schedules = Schedule::with(['scheduleStores:id,schedule_id,store_id,start_time,end_time'])
                 ->where('start_time', '<=', $rangeEnd)
                 ->where('end_time', '>=', $rangeStart)
-                ->get(['user_id', 'start_time', 'end_time']);
+                ->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
+
+            $scheduleIds = $schedules->pluck('id')->filter()->values();
+            $attendanceLogs = collect();
+
+            foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
+                $attendanceLogs = $attendanceLogs->concat(
+                    AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                        ->orderBy('log_time')
+                        ->get(['schedule_id', 'type', 'log_time'])
+                );
+            }
+
+            $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
 
             $userScheduledDates = [];
+            $userMissingLocationEntries = [];
+            $userMissingActualTimeInEntries = [];
+            $userMissingActualTimeOutEntries = [];
+            $actualTimeOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
+
             foreach ($schedules as $s) {
                 $sStart = $s->start_time->copy()->timezone('Asia/Manila');
                 $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
+                $scheduleLogsByDate = $logsBySchedule
+                    ->get($s->id, collect())
+                    ->groupBy(fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString());
                 
                 $curr = $sStart->copy();
                 while ($curr->toDateString() <= $sEnd->toDateString()) {
                     $dateStr = $curr->toDateString();
                     if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
                         $userScheduledDates[$s->user_id][$dateStr] = true;
+
+                        if (!in_array($s->status, $actualTimeOptionalStatuses, true)) {
+                            $dailyLogs = $scheduleLogsByDate->get($dateStr, collect());
+
+                            if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_in')) {
+                                $userMissingActualTimeInEntries[$s->user_id][$dateStr][$s->status] = true;
+                            }
+
+                            if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_out')) {
+                                $userMissingActualTimeOutEntries[$s->user_id][$dateStr][$s->status] = true;
+                            }
+                        }
                     }
                     $curr->addDay();
                 }
+
+                if (in_array($s->status, ['Restday', 'Holiday', 'N/A'], true)) {
+                    continue;
+                }
+
+                if ($s->scheduleStores->isEmpty()) {
+                    $curr = $sStart->copy();
+                    while ($curr->toDateString() <= $sEnd->toDateString()) {
+                        $dateStr = $curr->toDateString();
+                        if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                            $userMissingLocationEntries[$s->user_id][$dateStr][$s->status] = true;
+                        }
+                        $curr->addDay();
+                    }
+
+                    continue;
+                }
+
+                foreach ($s->scheduleStores as $scheduleStore) {
+                    if ($scheduleStore->store_id) {
+                        continue;
+                    }
+
+                    $segmentStart = ($scheduleStore->start_time ?? $s->start_time)->copy()->timezone('Asia/Manila');
+                    $segmentEnd = ($scheduleStore->end_time ?? $s->end_time)->copy()->timezone('Asia/Manila');
+
+                    $curr = $segmentStart->copy();
+                    while ($curr->toDateString() <= $segmentEnd->toDateString()) {
+                        $dateStr = $curr->toDateString();
+                        if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                            $userMissingLocationEntries[$s->user_id][$dateStr][$s->status] = true;
+                        }
+                        $curr->addDay();
+                    }
+                }
             }
 
-            $results = $users->map(function ($user) use ($allDates, $userScheduledDates) {
+            $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $userMissingLocationEntries, $userMissingActualTimeInEntries, $userMissingActualTimeOutEntries) {
                 $missing = [];
+                $missingLocations = [];
+                $missingActualTimeIns = [];
+                $missingActualTimeOuts = [];
+
                 foreach ($allDates as $date) {
                     if (!isset($userScheduledDates[$user->id][$date])) {
                         $missing[] = Carbon::parse($date)->format('M j');
                     }
+
+                    if (isset($userMissingLocationEntries[$user->id][$date])) {
+                        $statuses = array_keys($userMissingLocationEntries[$user->id][$date]);
+                        sort($statuses);
+
+                        foreach ($statuses as $status) {
+                            $missingLocations[] = sprintf(
+                                '%s (%s)',
+                                Carbon::parse($date)->format('M j'),
+                                $status
+                            );
+                        }
+                    }
+
+                    if (isset($userMissingActualTimeInEntries[$user->id][$date])) {
+                        $statuses = array_keys($userMissingActualTimeInEntries[$user->id][$date]);
+                        sort($statuses);
+
+                        foreach ($statuses as $status) {
+                            $missingActualTimeIns[] = sprintf(
+                                '%s (%s)',
+                                Carbon::parse($date)->format('M j'),
+                                $status
+                            );
+                        }
+                    }
+
+                    if (isset($userMissingActualTimeOutEntries[$user->id][$date])) {
+                        $statuses = array_keys($userMissingActualTimeOutEntries[$user->id][$date]);
+                        sort($statuses);
+
+                        foreach ($statuses as $status) {
+                            $missingActualTimeOuts[] = sprintf(
+                                '%s (%s)',
+                                Carbon::parse($date)->format('M j'),
+                                $status
+                            );
+                        }
+                    }
                 }
                 
-                if (empty($missing)) return null;
+                if (empty($missing) && empty($missingLocations) && empty($missingActualTimeIns) && empty($missingActualTimeOuts)) return null;
 
                 $user->missing_days = $missing;
                 $user->missing_days_count = count($missing);
+                $user->missing_locations = $missingLocations;
+                $user->missing_location_count = count($missingLocations);
+                $user->missing_actual_time_ins = $missingActualTimeIns;
+                $user->missing_actual_time_in_count = count($missingActualTimeIns);
+                $user->missing_actual_time_outs = $missingActualTimeOuts;
+                $user->missing_actual_time_out_count = count($missingActualTimeOuts);
+                $user->missing_total_count = count($missing)
+                    + count($missingLocations)
+                    + count($missingActualTimeIns)
+                    + count($missingActualTimeOuts);
                 return $user;
             })->filter()->values();
 
@@ -125,7 +246,7 @@ class ScheduleExportController extends Controller
                 'rangeEnd' => $rangeEnd,
             ]);
 
-            return $pdf->stream('missing-schedules.pdf');
+            return $pdf->setPaper('a4', 'landscape')->stream('missing-schedules.pdf');
         }
 
         $query = Schedule::with(['user', 'scheduleStores.store'])

@@ -86,7 +86,7 @@ onMounted(() => {
     if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*')) {
         openMenus.value.inventory = true;
     }
-    if (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
+    if (route().current('companies.*') || route().current('departments.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
         openMenus.value.references = true;
     }
     if (route().current('users.*') || route().current('roles.*')) {
@@ -130,6 +130,7 @@ const canSeeForms = computed(() => {
 
 const canSeeReferences = computed(() => {
     return hasPermission('companies.view') ||
+           hasPermission('departments.view') ||
            hasPermission('clusters.view') ||
            hasPermission('stores.view') ||
            hasPermission('vendors.view') ||
@@ -557,7 +558,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('references')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('companies.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && !openMenus.references
+                            (route().current('companies.*') || route().current('departments.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && !openMenus.references
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -579,6 +580,13 @@ const canSeeSettings = computed(() => {
                                 :class="collapsedFlyoutLinkClass(route().current('companies.*'))"
                             >
                                 Companies
+                            </Link>
+                            <Link
+                                v-if="hasPermission('departments.view')"
+                                :href="route('departments.index')"
+                                :class="collapsedFlyoutLinkClass(route().current('departments.*'))"
+                            >
+                                Departments
                             </Link>
                             <Link
                                 v-if="hasPermission('clusters.view')"
@@ -656,6 +664,16 @@ const canSeeSettings = computed(() => {
                             ]"
                         >
                             <span>Companies</span>
+                        </Link>
+                        <Link
+                            v-if="hasPermission('departments.view')"
+                            :href="route('departments.index')"
+                            :class="[
+                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
+                                route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
+                            ]"
+                        >
+                            <span>Departments</span>
                         </Link>
                         <Link
                             v-if="hasPermission('clusters.view')"

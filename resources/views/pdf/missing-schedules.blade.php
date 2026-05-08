@@ -62,17 +62,36 @@
         .sub-unit-cell {
             font-weight: bold;
             color: #64748b;
-            width: 15%;
+            width: 11%;
         }
         .name-cell {
             font-weight: bold;
             color: #1e293b;
-            width: 20%;
+            width: 14%;
         }
         .days-cell {
             color: #dc2626;
             font-size: 9pt;
             line-height: 1.4;
+        }
+        .location-cell {
+            color: #b45309;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+        .time-in-cell {
+            color: #047857;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+        .time-out-cell {
+            color: #ea580c;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+        .empty-cell {
+            color: #cbd5e1;
+            font-style: italic;
         }
         .count-cell {
             font-weight: bold;
@@ -97,23 +116,57 @@
                 <th>Sub-Unit</th>
                 <th>User Name</th>
                 <th>Missing Days</th>
+                <th>Missing Location</th>
+                <th>Missing Actual Time In</th>
+                <th>Missing Actual Time Out</th>
                 <th style="text-align: center;">Count</th>
             </tr>
         </thead>
         <tbody>
             @forelse($users as $user)
+                @php
+                    $missingDays = $user->missing_days ?? [];
+                    $missingLocations = $user->missing_locations ?? [];
+                    $missingActualTimeIns = $user->missing_actual_time_ins ?? [];
+                    $missingActualTimeOuts = $user->missing_actual_time_outs ?? [];
+                @endphp
                 <tr>
                     <td class="sub-unit-cell">{{ $user->sub_unit ?? '-' }}</td>
                     <td class="name-cell">{{ $user->name }}</td>
                     <td class="days-cell">
-                        {{ implode(', ', $user->missing_days) }}
+                        @if(count($missingDays))
+                            {{ implode(', ', $missingDays) }}
+                        @else
+                            <span class="empty-cell">-</span>
+                        @endif
                     </td>
-                    <td class="count-cell">{{ $user->missing_days_count }}</td>
+                    <td class="location-cell">
+                        @if(count($missingLocations))
+                            {{ implode(', ', $missingLocations) }}
+                        @else
+                            <span class="empty-cell">-</span>
+                        @endif
+                    </td>
+                    <td class="time-in-cell">
+                        @if(count($missingActualTimeIns))
+                            {{ implode(', ', $missingActualTimeIns) }}
+                        @else
+                            <span class="empty-cell">-</span>
+                        @endif
+                    </td>
+                    <td class="time-out-cell">
+                        @if(count($missingActualTimeOuts))
+                            {{ implode(', ', $missingActualTimeOuts) }}
+                        @else
+                            <span class="empty-cell">-</span>
+                        @endif
+                    </td>
+                    <td class="count-cell">{{ $user->missing_total_count ?? $user->missing_days_count }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" style="text-align: center; padding: 20px; color: #94a3b8; font-style: italic;">
-                        All users have schedules for this period.
+                    <td colspan="7" style="text-align: center; padding: 20px; color: #94a3b8; font-style: italic;">
+                        No missing schedule records found for this period.
                     </td>
                 </tr>
             @endforelse

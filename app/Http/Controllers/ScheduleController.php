@@ -1785,6 +1785,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $userMissingLocationEntries = [];
         $userMissingActualTimeInEntries = [];
         $userMissingActualTimeOutEntries = [];
+        $actualTimeOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
         foreach ($schedules as $s) {
             $sStart = $s->start_time->copy()->timezone('Asia/Manila');
             $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
@@ -1798,7 +1799,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
                     $userScheduledDates[$s->user_id][$dateStr] = true;
 
-                    if (!in_array($s->status, ['Restday', 'Holiday', 'N/A'], true)) {
+                    if (!in_array($s->status, $actualTimeOptionalStatuses, true)) {
                         $dailyLogs = $scheduleLogsByDate->get($dateStr, collect());
 
                         if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_in')) {

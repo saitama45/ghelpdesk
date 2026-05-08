@@ -47,6 +47,7 @@ class GlobalSearchController extends Controller
             ['name' => 'Inventory Report', 'url' => route('reports.inventory', [], false), 'path' => 'Inventory > Inventory Report', 'permission' => 'reports.inventory'],
             ['name' => 'Scheduling', 'url' => route('schedules.index', [], false), 'path' => 'Administrative > Scheduling', 'permission' => 'schedules.view'],
             ['name' => 'SLA Performance Report', 'url' => route('reports.sla-performance', [], false), 'path' => 'Reports > SLA Performance', 'permission' => 'reports.sla_performance'],
+            ['name' => 'Departments', 'url' => route('departments.index', [], false), 'path' => 'References > Departments', 'permission' => 'departments.view'],
             ['name' => 'Users', 'url' => route('users.index', [], false), 'path' => 'User Management > Users', 'permission' => 'users.view'],
             ['name' => 'Roles & Permissions', 'url' => route('roles.index', [], false), 'path' => 'User Management > Roles & Permissions', 'permission' => 'roles.view'],
             ['name' => 'System Settings', 'url' => route('settings.index', [], false), 'path' => 'Settings > System Settings', 'permission' => 'settings.view'],

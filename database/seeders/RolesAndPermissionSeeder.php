@@ -63,6 +63,12 @@ class RolesAndPermissionSeeder extends Seeder
             'companies.create' => 'Create companies',
             'companies.edit' => 'Edit companies',
 
+            // Departments
+            'departments.view' => 'View departments',
+            'departments.create' => 'Create departments',
+            'departments.edit' => 'Edit departments',
+            'departments.delete' => 'Delete departments',
+
             // Clusters
             'clusters.view' => 'View clusters',
             'clusters.create' => 'Create clusters',
@@ -206,6 +212,7 @@ class RolesAndPermissionSeeder extends Seeder
             'users.view',
             'reports.view', 'reports.store_health', 'reports.sla_performance', 'reports.assignee_performance', 'reports.inventory',
             'companies.view',
+            'departments.view',
             'clusters.view',
             'categories.view',
             'subcategories.view',
@@ -299,12 +306,9 @@ class RolesAndPermissionSeeder extends Seeder
             ])->save();
         }
 
-        $this->command->info('✅ Roles and permissions created successfully!');
+        $this->command->info('Roles and permissions created successfully!');
         $this->command->info('  - Admin: admin@gmail.com / admin123');
         $this->command->info('  - Tech Support: support@gmail.com / support123');
         $this->command->info('  - User: user@gmail.com / user123');
-    }
-}
- / user123');
     }
 }

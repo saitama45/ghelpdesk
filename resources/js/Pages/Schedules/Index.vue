@@ -265,22 +265,22 @@
                 </div>
 
                 <!-- Missing Schedules View -->
-                <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
-                    <div class="sticky top-0 z-30 px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center rounded-t-xl">
+                <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                         <h3 class="text-lg font-bold text-gray-900">Missing Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
                         <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Missing Days / Location / Actual Times</span>
                     </div>
-                    <div class="overflow-x-auto custom-scrollbar">
+                    <div class="max-h-[60vh] min-h-[140px] overflow-auto custom-scrollbar">
                         <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-100">
+                            <thead class="sticky top-0 z-20 bg-gray-100 shadow-sm">
                                 <tr>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Days</th>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Location</th>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time In</th>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time Out</th>
-                                    <th class="sticky top-[61px] z-20 bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Days</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Location</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time In</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time Out</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">

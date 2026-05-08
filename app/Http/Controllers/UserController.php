@@ -5,27 +5,44 @@ namespace App\Http\Controllers;
 use App\Mail\GoogleRegistrationApproved;
 use App\Models\User;
 use App\Http\Services\RoleService;
+use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
 use Throwable;
 
 class UserController extends Controller
 {
+    public function __construct(private OrganizationReferenceService $organizationReferences)
+    {
+    }
+
     public function index(Request $request)
     {
-        $query = User::with(['roles:id,name', 'stores:id,name,code', 'managers:id,name', 'creator:id,name,email', 'updater:id,name,email']);
+        $query = User::with([
+            'roles:id,name',
+            'stores:id,name,code',
+            'managers:id,name',
+            'creator:id,name,email',
+            'updater:id,name,email',
+            'departmentReference:id,name',
+            'departmentSection:id,name',
+            'departmentUnit:id,name',
+            'departmentSubUnit:id,name',
+        ]);
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")
                   ->orWhere('email', 'like', "%{$request->search}%")
                   ->orWhere('department', 'like', "%{$request->search}%")
+                  ->orWhere('section', 'like', "%{$request->search}%")
                   ->orWhere('unit', 'like', "%{$request->search}%")
                   ->orWhere('sub_unit', 'like', "%{$request->search}%")
                   ->orWhere('position', 'like', "%{$request->search}%");
@@ -49,18 +66,12 @@ class UserController extends Controller
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         $managers = User::where('is_manager', true)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
         
-        $departments = User::whereNotNull('department')->where('department', '!=', '')->distinct()->pluck('department');
-        $units = User::whereNotNull('unit')->where('unit', '!=', '')->distinct()->pluck('unit');
-        $subUnits = User::whereNotNull('sub_unit')->where('sub_unit', '!=', '')->distinct()->pluck('sub_unit');
-
         return Inertia::render('Users/Index', [
             'users' => $users,
             'roles' => $roles,
             'stores' => $stores,
             'managers' => $managers,
-            'departments' => $departments,
-            'units' => $units,
-            'subUnits' => $subUnits,
+            'departmentTree' => $this->organizationReferences->tree(activeOnly: true),
             'filters' => [
                 'search' => $request->input('search', ''),
                 'status' => $request->input('status', ''),
@@ -75,9 +86,10 @@ class UserController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
             'role' => 'required|string|exists:roles,name',
-            'department' => 'nullable|string|max:255',
-            'unit' => 'nullable|string|max:255',
-            'sub_unit' => 'nullable|string|max:255',
+            'department_id' => 'nullable|integer|exists:departments,id',
+            'department_section_id' => 'nullable|integer|exists:department_sections,id',
+            'department_unit_id' => 'nullable|integer|exists:department_units,id',
+            'department_sub_unit_id' => 'nullable|integer|exists:department_sub_units,id',
             'position' => 'nullable|string|max:255',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
@@ -87,13 +99,13 @@ class UserController extends Controller
             'manager_ids.*' => 'exists:users,id',
         ]);
 
+        $organizationPayload = $this->organizationPayloadFromRequest($request);
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'department' => $request->department,
-            'unit' => $request->unit,
-            'sub_unit' => $request->sub_unit,
+            ...$organizationPayload,
             'position' => $request->position,
             'is_active' => $request->input('is_active', true),
             'is_manager' => $request->input('is_manager', false),
@@ -121,9 +133,10 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
             'role' => 'required|string|exists:roles,name',
-            'department' => 'nullable|string|max:255',
-            'unit' => 'nullable|string|max:255',
-            'sub_unit' => 'nullable|string|max:255',
+            'department_id' => 'nullable|integer|exists:departments,id',
+            'department_section_id' => 'nullable|integer|exists:department_sections,id',
+            'department_unit_id' => 'nullable|integer|exists:department_units,id',
+            'department_sub_unit_id' => 'nullable|integer|exists:department_sub_units,id',
             'position' => 'nullable|string|max:255',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
@@ -134,13 +147,12 @@ class UserController extends Controller
             'notify_user_approval' => 'boolean',
         ]);
 
+        $organizationPayload = $this->organizationPayloadFromRequest($request);
         $wasPendingGoogleRegistration = $this->isPendingGoogleRegistration($user);
 
         $user->name = $request->name;
         $user->email = $request->email;
-        $user->department = $request->department;
-        $user->unit = $request->unit;
-        $user->sub_unit = $request->sub_unit;
+        $user->forceFill($organizationPayload);
         $user->position = $request->position;
         $user->is_active = $request->boolean('is_active');
         $user->is_manager = $request->boolean('is_manager');
@@ -274,6 +286,44 @@ class UserController extends Controller
     private function isApprovedGoogleRegistration(User $user): bool
     {
         return filled($user->google_id) && (bool) $user->is_active && $user->roles()->exists();
+    }
+
+    private function organizationPayloadFromRequest(Request $request): array
+    {
+        $orgIds = collect([
+            $request->input('department_id'),
+            $request->input('department_section_id'),
+            $request->input('department_unit_id'),
+            $request->input('department_sub_unit_id'),
+        ])->filter(fn ($value) => filled($value));
+
+        if ($orgIds->isEmpty()) {
+            return $this->organizationReferences->clearPayload();
+        }
+
+        $payload = $this->organizationReferences->payloadFromIds(
+            $request->input('department_id') ? (int) $request->input('department_id') : null,
+            $request->input('department_section_id') ? (int) $request->input('department_section_id') : null,
+            $request->input('department_unit_id') ? (int) $request->input('department_unit_id') : null,
+            $request->input('department_sub_unit_id') ? (int) $request->input('department_sub_unit_id') : null
+        );
+
+        if ($request->filled('department_id') && is_null($payload['department_id'])) {
+            throw ValidationException::withMessages([
+                'department_id' => 'Selected department is invalid or inactive.',
+            ]);
+        }
+
+        // Check that any other provided IDs were successfully resolved
+        foreach (['department_section_id', 'department_unit_id', 'department_sub_unit_id'] as $key) {
+            if ($request->filled($key) && is_null($payload[$key])) {
+                throw ValidationException::withMessages([
+                    $key => 'Selected organization entity is invalid or inactive.',
+                ]);
+            }
+        }
+
+        return $payload;
     }
 
     private function notifyGoogleRegistrationApproved(User $user): void

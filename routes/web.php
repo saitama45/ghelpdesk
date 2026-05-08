@@ -4,6 +4,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\DepartmentController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -46,6 +47,18 @@ Route::middleware('auth')->group(function () {
     
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::resource('companies', CompanyController::class)->except(['show', 'create', 'edit']);
+    Route::resource('departments', DepartmentController::class)->except(['show', 'create', 'edit']);
+    Route::post('departments/{department}/sections', [DepartmentController::class, 'storeSection'])->name('departments.sections.store');
+    Route::put('department-sections/{departmentSection}', [DepartmentController::class, 'updateSection'])->name('departments.sections.update');
+    Route::delete('department-sections/{departmentSection}', [DepartmentController::class, 'destroySection'])->name('departments.sections.destroy');
+    Route::post('department-sections/{departmentSection}/units', [DepartmentController::class, 'storeUnit'])->name('departments.units.store');
+    Route::put('department-units/{departmentUnit}', [DepartmentController::class, 'updateUnit'])->name('departments.units.update');
+    Route::delete('department-units/{departmentUnit}', [DepartmentController::class, 'destroyUnit'])->name('departments.units.destroy');
+    Route::post('department-units/{departmentUnit}/sub-units', [DepartmentController::class, 'storeSubUnit'])->name('departments.sub-units.store');
+    Route::put('department-sub-units/{departmentSubUnit}', [DepartmentController::class, 'updateSubUnit'])->name('departments.sub-units.update');
+    Route::delete('department-sub-units/{departmentSubUnit}', [DepartmentController::class, 'destroySubUnit'])->name('departments.sub-units.destroy');
+    Route::put('departments/users/reorder', [DepartmentController::class, 'reorderUsers'])->name('departments.users.reorder');
+    Route::put('departments/users/{user}/placement', [DepartmentController::class, 'updateUserPlacement'])->name('departments.users.placement');
     Route::resource('clusters', \App\Http\Controllers\ClusterController::class)->except(['show', 'create', 'edit']);
     Route::post('clusters/{cluster}/assign-stores', [\App\Http\Controllers\ClusterController::class, 'assignStores'])->name('clusters.assign-stores');
     Route::get('categories/template', [\App\Http\Controllers\CategoryController::class, 'template'])->name('categories.template');

@@ -428,6 +428,7 @@ const landingPageOptions = [
         group: 'References',
         options: [
             { label: 'Companies', value: 'companies.index' },
+            { label: 'Departments', value: 'departments.index' },
             { label: 'Clusters', value: 'clusters.index' },
             { label: 'Stores', value: 'stores.index' },
             { label: 'Vendors', value: 'vendors.index' },
@@ -605,7 +606,7 @@ const permissionGroups = computed(() => {
         { name: 'Services', categories: servicesCategories },
         { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Reports'] },
         { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
-        { name: 'References', categories: ['Companies', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
+        { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },
         { name: 'Settings', categories: ['Settings', 'Canned_messages'] }

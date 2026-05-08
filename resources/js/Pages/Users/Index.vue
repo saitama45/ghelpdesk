@@ -16,9 +16,7 @@ const props = defineProps({
     roles: Array,
     stores: Array,
     managers: Array,
-    departments: Array,
-    units: Array,
-    subUnits: Array,
+    departmentTree: Array,
     filters: Object,
 });
 
@@ -36,6 +34,44 @@ const { showError } = useToast();
 const { hasPermission } = usePermission();
 
 const allStoreIds = computed(() => props.stores.map(s => s.id));
+const departmentOptions = computed(() => props.departmentTree || []);
+
+const sectionsFor = (form) => {
+    const department = departmentOptions.value.find(item => Number(item.id) === Number(form.department_id));
+    return department?.sections || [];
+};
+
+const unitsFor = (form) => {
+    const section = sectionsFor(form).find(item => Number(item.id) === Number(form.department_section_id));
+    return section?.units || [];
+};
+
+const subUnitsFor = (form) => {
+    const unit = unitsFor(form).find(item => Number(item.id) === Number(form.department_unit_id));
+    return unit?.sub_units || [];
+};
+
+const handleDepartmentChange = (form) => {
+    form.department_section_id = '';
+    form.department_unit_id = '';
+    form.department_sub_unit_id = '';
+};
+
+const handleSectionChange = (form) => {
+    form.department_unit_id = '';
+    form.department_sub_unit_id = '';
+};
+
+const handleUnitChange = (form) => {
+    form.department_sub_unit_id = '';
+};
+
+const formatOrganisation = (user) => {
+    const parts = [user.department, user.section, user.unit, user.sub_unit]
+        .filter(part => part && String(part).trim() !== '');
+
+    return parts.length ? parts.join(' / ') : '-';
+};
 
 const auditUserLabel = (user, userId = null) => {
     if (user?.name || user?.email) {
@@ -107,9 +143,10 @@ const createForm = useForm({
     email: '',
     password: '',
     role: '',
-    department: '',
-    unit: '',
-    sub_unit: '',
+    department_id: '',
+    department_section_id: '',
+    department_unit_id: '',
+    department_sub_unit_id: '',
     position: '',
     is_active: true,
     is_manager: false,
@@ -121,9 +158,10 @@ const editForm = useForm({
     name: '',
     email: '',
     role: '',
-    department: '',
-    unit: '',
-    sub_unit: '',
+    department_id: '',
+    department_section_id: '',
+    department_unit_id: '',
+    department_sub_unit_id: '',
     position: '',
     is_active: true,
     is_manager: false,
@@ -154,9 +192,10 @@ const editUser = (user) => {
     editForm.name = user.name;
     editForm.email = user.email;
     editForm.role = user.roles[0]?.name || '';
-    editForm.department = user.department || '';
-    editForm.unit = user.unit || '';
-    editForm.sub_unit = user.sub_unit || '';
+    editForm.department_id = user.department_id || '';
+    editForm.department_section_id = user.department_section_id || '';
+    editForm.department_unit_id = user.department_unit_id || '';
+    editForm.department_sub_unit_id = user.department_sub_unit_id || '';
     editForm.position = user.position || '';
     editForm.is_active = user.google_id && !user.is_active && !(user.roles?.length) ? true : !!user.is_active;
     editForm.is_manager = !!user.is_manager;
@@ -276,9 +315,8 @@ const updatePassword = () => {
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organisation</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reports To</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub-Unit</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Stores</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -303,8 +341,10 @@ const updatePassword = () => {
                                 {{ user.roles[0]?.name || 'No Role' }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {{ user.department || '-' }}
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            <div class="max-w-[260px] font-medium leading-5">
+                                {{ formatOrganisation(user) }}
+                            </div>
                         </td>
                         <td class="px-6 py-4">
                             <div v-if="user.managers?.length > 0" class="flex flex-wrap gap-1 max-w-[200px]">
@@ -315,9 +355,6 @@ const updatePassword = () => {
                                 </span>
                             </div>
                             <span v-else class="text-xs text-gray-400 italic">No Manager</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                            {{ user.sub_unit || '-' }}
                         </td>
                         <td class="px-6 py-4">
                             <button 
@@ -415,26 +452,36 @@ const updatePassword = () => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
-                            <input v-model="createForm.department" type="text" list="departments-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            <datalist id="departments-list">
-                                <option v-for="dept in departments" :key="dept" :value="dept" />
-                            </datalist>
+                            <select v-model="createForm.department_id" @change="handleDepartmentChange(createForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <option value="">No Organisation</option>
+                                <option v-for="department in departmentOptions" :key="department.id" :value="department.id">{{ department.name }}</option>
+                            </select>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
-                                <input v-model="createForm.unit" type="text" list="units-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                <datalist id="units-list">
-                                    <option v-for="u in units" :key="u" :value="u" />
-                                </datalist>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Section</label>
+                                <select v-model="createForm.department_section_id" :disabled="!createForm.department_id" @change="handleSectionChange(createForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                    <option value="">Select Section</option>
+                                    <option v-for="section in sectionsFor(createForm)" :key="section.id" :value="section.id">{{ section.name }}</option>
+                                </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                                <input v-model="createForm.sub_unit" type="text" list="subunits-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                <datalist id="subunits-list">
-                                    <option v-for="su in subUnits" :key="su" :value="su" />
-                                </datalist>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
+                                <select v-model="createForm.department_unit_id" :disabled="!createForm.department_section_id" @change="handleUnitChange(createForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                    <option value="">Select Unit</option>
+                                    <option v-for="unit in unitsFor(createForm)" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
+                                </select>
                             </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
+                            <select v-model="createForm.department_sub_unit_id" :disabled="!createForm.department_unit_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                <option value="">Select Sub-Unit</option>
+                                <option v-for="subUnit in subUnitsFor(createForm)" :key="subUnit.id" :value="subUnit.id">{{ subUnit.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="createForm.department_id && !createForm.department_section_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                            You have selected a Department. Section, Unit, and Sub-Unit are optional.
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Position</label>
@@ -527,26 +574,36 @@ const updatePassword = () => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
-                            <input v-model="editForm.department" type="text" list="edit-departments-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            <datalist id="edit-departments-list">
-                                <option v-for="dept in departments" :key="dept" :value="dept" />
-                            </datalist>
+                            <select v-model="editForm.department_id" @change="handleDepartmentChange(editForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <option value="">No Organisation</option>
+                                <option v-for="department in departmentOptions" :key="department.id" :value="department.id">{{ department.name }}</option>
+                            </select>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
-                                <input v-model="editForm.unit" type="text" list="edit-units-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                <datalist id="edit-units-list">
-                                    <option v-for="u in units" :key="u" :value="u" />
-                                </datalist>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Section</label>
+                                <select v-model="editForm.department_section_id" :disabled="!editForm.department_id" @change="handleSectionChange(editForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                    <option value="">Select Section</option>
+                                    <option v-for="section in sectionsFor(editForm)" :key="section.id" :value="section.id">{{ section.name }}</option>
+                                </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                                <input v-model="editForm.sub_unit" type="text" list="edit-subunits-list" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                <datalist id="edit-subunits-list">
-                                    <option v-for="su in subUnits" :key="su" :value="su" />
-                                </datalist>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
+                                <select v-model="editForm.department_unit_id" :disabled="!editForm.department_section_id" @change="handleUnitChange(editForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                    <option value="">Select Unit</option>
+                                    <option v-for="unit in unitsFor(editForm)" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
+                                </select>
                             </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
+                            <select v-model="editForm.department_sub_unit_id" :disabled="!editForm.department_unit_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                <option value="">Select Sub-Unit</option>
+                                <option v-for="subUnit in subUnitsFor(editForm)" :key="subUnit.id" :value="subUnit.id">{{ subUnit.name }}</option>
+                            </select>
+                        </div>
+                        <div v-if="editForm.department_id && !editForm.department_section_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                            You have selected a Department. Section, Unit, and Sub-Unit are optional.
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Position</label>
