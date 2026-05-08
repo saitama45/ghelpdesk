@@ -6,20 +6,25 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
-import { 
-    Cog6ToothIcon, 
-    EnvelopeIcon, 
-    ShieldCheckIcon, 
-    MapIcon, 
-    EyeIcon, 
-    EyeSlashIcon, 
-    ChartBarIcon, 
+import draggable from 'vuedraggable';
+import { useSidebarOrder, SECTION_LABELS, CHILD_LABELS, DEFAULT_SECTION_ORDER, DEFAULT_CHILD_ORDER } from '@/Composables/useSidebarOrder.js';
+import {
+    Cog6ToothIcon,
+    EnvelopeIcon,
+    ShieldCheckIcon,
+    MapIcon,
+    EyeIcon,
+    EyeSlashIcon,
+    ChartBarIcon,
     PaperAirplaneIcon,
     ServerIcon,
     AdjustmentsHorizontalIcon,
     CheckCircleIcon,
     ClockIcon,
-    ArchiveBoxIcon
+    ArchiveBoxIcon,
+    Bars3BottomLeftIcon,
+    ChevronDownIcon,
+    ChevronRightIcon,
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -39,7 +44,54 @@ const tabs = [
     { id: 'ticket_retention', name: 'Ticket Retention', icon: ArchiveBoxIcon, description: 'Control when archived tickets become eligible for permanent purge.' },
     { id: 'integrations', name: 'Integrations', icon: MapIcon, description: 'External API keys and third-party services.' },
     { id: 'thresholds', name: 'Health Thresholds', icon: ChartBarIcon, description: 'Ticket count limits and status labels.' },
+    { id: 'sidebar_layout', name: 'Sidebar Layout', icon: Bars3BottomLeftIcon, description: 'Drag to reorder sidebar sections and sub-menu items.' },
 ];
+
+// Sidebar layout drag state
+const { state: sidebarState, save: saveSidebarOrder, reset: resetSidebarOrder } = useSidebarOrder();
+
+const sectionItems = ref(
+    sidebarState.sections.map(id => ({ id, label: SECTION_LABELS[id] || id }))
+);
+const expandedSidebarSection = ref(null);
+const expandedChildItems = ref([]);
+
+const toggleSidebarSection = (sectionId) => {
+    if (expandedSidebarSection.value === sectionId) {
+        expandedSidebarSection.value = null;
+        expandedChildItems.value = [];
+        return;
+    }
+    expandedSidebarSection.value = sectionId;
+    expandedChildItems.value = (sidebarState.children[sectionId] || []).map(id => ({
+        id,
+        label: CHILD_LABELS[sectionId]?.[id] || id,
+    }));
+};
+
+const onSectionUpdate = () => {
+    sidebarState.sections.splice(0, sidebarState.sections.length, ...sectionItems.value.map(s => s.id));
+};
+
+const onChildUpdate = () => {
+    if (expandedSidebarSection.value) {
+        sidebarState.children[expandedSidebarSection.value] = expandedChildItems.value.map(c => c.id);
+    }
+};
+
+const sidebarSaved = ref(false);
+const saveSidebarLayout = () => {
+    saveSidebarOrder();
+    sidebarSaved.value = true;
+    setTimeout(() => { sidebarSaved.value = false; }, 2500);
+};
+
+const resetSidebarLayout = () => {
+    resetSidebarOrder();
+    sectionItems.value = sidebarState.sections.map(id => ({ id, label: SECTION_LABELS[id] || id }));
+    expandedSidebarSection.value = null;
+    expandedChildItems.value = [];
+};
 
 const currentTab = computed(() => tabs.find(t => t.id === activeTab.value) || tabs[0]);
 
@@ -808,10 +860,90 @@ const syncEmails = () => {
                                 </div>
                             </div>
 
+                            <!-- Sidebar Layout Tab -->
+                            <div v-if="activeTab === 'sidebar_layout'" class="p-6 space-y-5">
+                                <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex items-start space-x-3">
+                                    <Bars3BottomLeftIcon class="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p class="text-sm font-black text-indigo-900">Sidebar Menu Layout</p>
+                                        <p class="text-xs text-indigo-600 mt-0.5">Drag parent sections or sub-items to reorder. Changes apply instantly to the sidebar and are saved per browser.</p>
+                                    </div>
+                                </div>
+
+                                <draggable
+                                    v-model="sectionItems"
+                                    item-key="id"
+                                    handle=".section-drag-handle"
+                                    @update="onSectionUpdate"
+                                    class="space-y-2"
+                                >
+                                    <template #item="{ element: section }">
+                                        <div class="border border-gray-200 rounded-lg overflow-hidden select-none">
+                                            <div class="flex items-center bg-gray-50 px-4 py-3 gap-3">
+                                                <span class="section-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to reorder">
+                                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+                                                </span>
+                                                <span class="flex-1 text-sm font-semibold text-gray-800">{{ section.label }}</span>
+                                                <button
+                                                    type="button"
+                                                    @click="toggleSidebarSection(section.id)"
+                                                    class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                                >
+                                                    <span>Sub-items</span>
+                                                    <ChevronDownIcon v-if="expandedSidebarSection === section.id" class="w-3.5 h-3.5" />
+                                                    <ChevronRightIcon v-else class="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+
+                                            <div v-if="expandedSidebarSection === section.id" class="px-4 py-3 bg-white border-t border-gray-100">
+                                                <draggable
+                                                    v-model="expandedChildItems"
+                                                    item-key="id"
+                                                    handle=".child-drag-handle"
+                                                    @update="onChildUpdate"
+                                                    class="space-y-1"
+                                                >
+                                                    <template #item="{ element: child }">
+                                                        <div class="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 select-none">
+                                                            <span class="child-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to reorder">
+                                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+                                                            </span>
+                                                            <span class="text-sm text-gray-700">{{ child.label }}</span>
+                                                        </div>
+                                                    </template>
+                                                </draggable>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </draggable>
+
+                                <div class="flex items-center gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        @click="saveSidebarLayout"
+                                        class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+                                    >
+                                        Save Layout
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="resetSidebarLayout"
+                                        class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition-colors"
+                                    >
+                                        Reset to Default
+                                    </button>
+                                    <Transition enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0" leave-active-class="transition ease-in-out duration-300" leave-to-class="opacity-0">
+                                        <span v-if="sidebarSaved" class="text-sm font-bold text-green-600 flex items-center gap-1">
+                                            <CheckCircleIcon class="w-4 h-4" /> Layout saved!
+                                        </span>
+                                    </Transition>
+                                </div>
+                            </div>
+
                         </div>
 
                         <!-- Sticky Footer -->
-                        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <div v-if="activeTab !== 'sidebar_layout'" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
                             <div>
                                 <Transition enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0" leave-active-class="transition ease-in-out duration-300" leave-to-class="opacity-0">
                                     <div v-if="form.recentlySuccessful" class="text-sm font-bold text-green-600 flex items-center">

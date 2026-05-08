@@ -24,6 +24,7 @@
         "@heroicons/vue": "^2.2.0",
         "@vueup/vue-quill": "^1.2.0",
         "html-to-image": "^1.11.13",
-        "html2canvas": "^1.4.1"
+        "html2canvas": "^1.4.1",
+        "vuedraggable": "^4.1.0"
     }
 }

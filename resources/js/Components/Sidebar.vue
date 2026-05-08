@@ -18,6 +18,7 @@ import {
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 import { usePresence } from '@/Composables/usePresence.js';
+import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import UserStatus from '@/Components/UserStatus.vue';
 
 const props = defineProps({
@@ -34,13 +35,12 @@ const user = computed(() => page.props.auth?.user || {});
 const dynamicForms = computed(() => page.props.dynamicForms || []);
 const { hasPermission } = usePermission();
 
-// Filter forms that the user has permission to view
 const visibleDynamicForms = computed(() => {
     return dynamicForms.value.filter(form => hasPermission(form.slug + '.view'));
 });
 const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
+const { getSectionOrder, getChildOrder } = useSidebarOrder();
 
-// For Laravel ziggy route helper if not global
 const route = window.route;
 
 const openMenus = ref({
@@ -59,7 +59,6 @@ const toggleMenu = (menu) => {
     }
 
     const isCurrentlyOpen = openMenus.value[menu];
-    // Close all menus and toggle the clicked one
     Object.keys(openMenus.value).forEach(key => {
         openMenus.value[key] = key === menu ? !isCurrentlyOpen : false;
     });
@@ -74,7 +73,9 @@ const collapsedFlyoutLinkClass = (isActive) => [
     isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
 ];
 
-// Auto-expand menus based on current route
+const so = (s) => ({ order: getSectionOrder(s) });
+const co = (s, c) => ({ order: getChildOrder(s, c) });
+
 onMounted(() => {
     initPresence();
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
@@ -149,8 +150,8 @@ const canSeeUserManagement = computed(() => {
 
 const canSeeReports = computed(() => {
     return hasPermission('reports.view') && (
-        hasPermission('reports.store_health') || 
-        hasPermission('reports.sla_performance') || 
+        hasPermission('reports.store_health') ||
+        hasPermission('reports.sla_performance') ||
         hasPermission('reports.assignee_performance')
     );
 });
@@ -189,7 +190,7 @@ const canSeeSettings = computed(() => {
         <!-- Navigation -->
         <nav
             :class="[
-                'flex-1 p-4 space-y-1',
+                'flex-1 p-4 flex flex-col gap-1',
                 isCollapsed ? 'overflow-visible' : 'overflow-y-auto custom-scrollbar'
             ]"
         >
@@ -202,6 +203,7 @@ const canSeeSettings = computed(() => {
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     ]"
+                    style="order: 0"
                 >
                     <HomeIcon
                         :class="[
@@ -225,6 +227,7 @@ const canSeeSettings = computed(() => {
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     ]"
+                    style="order: 0"
                 >
                     <ClipboardDocumentListIcon
                         :class="[
@@ -239,12 +242,12 @@ const canSeeSettings = computed(() => {
                 </Link>
 
                 <!-- Services Section -->
-                <div v-if="canSeeServices" class="space-y-1 pt-2 collapsed-menu-group">
+                <div v-if="canSeeServices" :style="so('services')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stock-ins.*') || route().current('dynamic-form.*')) && !openMenus.services
+                            (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) && (isCollapsed || !openMenus.services)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -259,110 +262,51 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">Services</p>
                         </div>
-                        <div class="p-2 space-y-1">
-                            <Link
-                                v-if="hasPermission('tickets.view')"
-                                :href="route('tickets.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('tickets.*'))"
-                            >
-                                Tickets
-                            </Link>
-                            <Link
-                                v-if="hasPermission('task_boards.view')"
-                                :href="route('task-boards.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('task-boards.*'))"
-                            >
-                                Task Board
-                            </Link>
-                            <Link
-                                v-if="hasPermission('pos_requests.view')"
-                                :href="route('pos-requests.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('pos-requests.*'))"
-                            >
-                                POS Requests
-                            </Link>
-                            <Link
-                                v-if="hasPermission('sap_requests.view')"
-                                :href="route('sap-requests.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))"
-                            >
-                                SAP Requests
-                            </Link>
-                            <Link
-                                v-for="form in visibleDynamicForms"
-                                :key="'collapsed-form-' + form.slug"
-                                :href="route('dynamic-form.index', form.slug)"
-                                :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))"
-                            >
-                                {{ form.name }}
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5">
+                            <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
+                                <Link :href="route('tickets.index')" :class="collapsedFlyoutLinkClass(route().current('tickets.*'))">Tickets</Link>
+                            </div>
+                            <div v-if="hasPermission('task_boards.view')" :style="co('services', 'task-boards')">
+                                <Link :href="route('task-boards.index')" :class="collapsedFlyoutLinkClass(route().current('task-boards.*'))">Task Board</Link>
+                            </div>
+                            <div v-if="hasPermission('pos_requests.view')" :style="co('services', 'pos-requests')">
+                                <Link :href="route('pos-requests.index')" :class="collapsedFlyoutLinkClass(route().current('pos-requests.*'))">POS Requests</Link>
+                            </div>
+                            <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
+                                <Link :href="route('sap-requests.index')" :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))">SAP Requests</Link>
+                            </div>
+                            <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" style="order: 999">
+                                <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ form.name }}</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.services" class="pl-10 space-y-1 mt-1 transition-all duration-300">
-                        <Link
-                            v-if="hasPermission('tickets.view')"
-                            :href="route('tickets.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('tickets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Tickets</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('task_boards.view')"
-                            :href="route('task-boards.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('task-boards.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Task Board</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('pos_requests.view')"
-                            :href="route('pos-requests.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('pos-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>POS Requests</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('sap_requests.view')"
-                            :href="route('sap-requests.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>SAP Requests</span>
-                        </Link>
-
-                        <!-- Nested Dynamic Forms -->
-                        <Link
-                            v-for="form in visibleDynamicForms"
-                            :key="form.slug"
-                            :href="route('dynamic-form.index', form.slug)"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>{{ form.name }}</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.services" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
+                        <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
+                            <Link :href="route('tickets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('tickets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Tickets</span></Link>
+                        </div>
+                        <div v-if="hasPermission('task_boards.view')" :style="co('services', 'task-boards')">
+                            <Link :href="route('task-boards.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('task-boards.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Task Board</span></Link>
+                        </div>
+                        <div v-if="hasPermission('pos_requests.view')" :style="co('services', 'pos-requests')">
+                            <Link :href="route('pos-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('pos-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>POS Requests</span></Link>
+                        </div>
+                        <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
+                            <Link :href="route('sap-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>SAP Requests</span></Link>
+                        </div>
+                        <div v-for="form in visibleDynamicForms" :key="form.slug" style="order: 999">
+                            <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ form.name }}</span></Link>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Inventory Section -->
-                <div v-if="canSeeInventory" class="space-y-1 pt-1 collapsed-menu-group">
+                <div v-if="canSeeInventory" :style="so('inventory')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('inventory')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('stock-ins.*') || route().current('reports.inventory')) && !openMenus.inventory
+                            (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*')) && (isCollapsed || !openMenus.inventory)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -379,72 +323,39 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">Inventory</p>
                         </div>
-                        <div class="p-2 space-y-1">
-                            <Link
-                                v-if="hasPermission('assets.view')"
-                                :href="route('assets.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('assets.*'))"
-                            >
-                                Assets
-                            </Link>
-                            <Link
-                                v-if="hasPermission('stock_ins.view')"
-                                :href="route('stock-ins.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('stock-ins.*'))"
-                            >
-                                Stock Transaction
-                            </Link>
-                            <Link
-                                v-if="hasPermission('reports.inventory')"
-                                :href="route('reports.inventory')"
-                                :class="collapsedFlyoutLinkClass(route().current('reports.inventory'))"
-                            >
-                                Inventory Report
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5">
+                            <div v-if="hasPermission('assets.view')" :style="co('inventory', 'assets')">
+                                <Link :href="route('assets.index')" :class="collapsedFlyoutLinkClass(route().current('assets.*'))">Assets</Link>
+                            </div>
+                            <div v-if="hasPermission('stock_ins.view')" :style="co('inventory', 'stock-ins')">
+                                <Link :href="route('stock-ins.index')" :class="collapsedFlyoutLinkClass(route().current('stock-ins.*'))">Stock Transaction</Link>
+                            </div>
+                            <div v-if="hasPermission('reports.inventory')" :style="co('inventory', 'inventory-report')">
+                                <Link :href="route('reports.inventory')" :class="collapsedFlyoutLinkClass(route().current('reports.inventory'))">Inventory Report</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.inventory" class="pl-10 space-y-1 mt-1 transition-all duration-300">
-                        <Link
-                            v-if="hasPermission('assets.view')"
-                            :href="route('assets.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Assets</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('stock_ins.view')"
-                            :href="route('stock-ins.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Stock Transaction</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('reports.inventory')"
-                            :href="route('reports.inventory')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('reports.inventory') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Inventory Report</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.inventory" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
+                        <div v-if="hasPermission('assets.view')" :style="co('inventory', 'assets')">
+                            <Link :href="route('assets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Assets</span></Link>
+                        </div>
+                        <div v-if="hasPermission('stock_ins.view')" :style="co('inventory', 'stock-ins')">
+                            <Link :href="route('stock-ins.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Stock Transaction</span></Link>
+                        </div>
+                        <div v-if="hasPermission('reports.inventory')" :style="co('inventory', 'inventory-report')">
+                            <Link :href="route('reports.inventory')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.inventory') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Inventory Report</span></Link>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Administrative Section -->
-                <div v-if="canSeeAdminTask" class="space-y-1 pt-1 collapsed-menu-group">
+                <div v-if="canSeeAdminTask" :style="so('adminTask')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('adminTask')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*')) && !openMenus.adminTask
+                            (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) && (isCollapsed || !openMenus.adminTask)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -459,106 +370,51 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">Administrative</p>
                         </div>
-                        <div class="p-2 space-y-1">
-                            <Link
-                                v-if="hasPermission('attendance.view')"
-                                :href="route('attendance.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('attendance.index'))"
-                            >
-                                DTR
-                            </Link>
-                            <Link
-                                v-if="hasPermission('attendance.logs')"
-                                :href="route('attendance.logs')"
-                                :class="collapsedFlyoutLinkClass(route().current('attendance.logs'))"
-                            >
-                                Attendance Logs
-                            </Link>
-                            <Link
-                                v-if="hasPermission('schedules.view')"
-                                :href="route('schedules.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('schedules.*'))"
-                            >
-                                Scheduling
-                            </Link>
-                            <Link
-                                v-if="hasPermission('presence.view')"
-                                :href="route('presence.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('presence.*'))"
-                            >
-                                Presence
-                            </Link>
-                            <Link
-                                v-if="hasPermission('kb_articles.view')"
-                                :href="route('kb-articles.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('kb-articles.*'))"
-                            >
-                                KB Articles
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5">
+                            <div v-if="hasPermission('attendance.view')" :style="co('adminTask', 'dtr')">
+                                <Link :href="route('attendance.index')" :class="collapsedFlyoutLinkClass(route().current('attendance.index'))">DTR</Link>
+                            </div>
+                            <div v-if="hasPermission('attendance.logs')" :style="co('adminTask', 'attendance-logs')">
+                                <Link :href="route('attendance.logs')" :class="collapsedFlyoutLinkClass(route().current('attendance.logs'))">Attendance Logs</Link>
+                            </div>
+                            <div v-if="hasPermission('schedules.view')" :style="co('adminTask', 'scheduling')">
+                                <Link :href="route('schedules.index')" :class="collapsedFlyoutLinkClass(route().current('schedules.*'))">Scheduling</Link>
+                            </div>
+                            <div v-if="hasPermission('presence.view')" :style="co('adminTask', 'presence')">
+                                <Link :href="route('presence.index')" :class="collapsedFlyoutLinkClass(route().current('presence.*'))">Presence</Link>
+                            </div>
+                            <div v-if="hasPermission('kb_articles.view')" :style="co('adminTask', 'kb-articles')">
+                                <Link :href="route('kb-articles.index')" :class="collapsedFlyoutLinkClass(route().current('kb-articles.*'))">KB Articles</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 space-y-1 mt-1 transition-all duration-300">
-                        <Link
-                            v-if="hasPermission('attendance.view')"
-                            :href="route('attendance.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>DTR</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('attendance.logs')"
-                            :href="route('attendance.logs')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Attendance Logs</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('schedules.view')"
-                            :href="route('schedules.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Scheduling</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('presence.view')"
-                            :href="route('presence.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Presence</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('kb_articles.view')"
-                            :href="route('kb-articles.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>KB Articles</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
+                        <div v-if="hasPermission('attendance.view')" :style="co('adminTask', 'dtr')">
+                            <Link :href="route('attendance.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>DTR</span></Link>
+                        </div>
+                        <div v-if="hasPermission('attendance.logs')" :style="co('adminTask', 'attendance-logs')">
+                            <Link :href="route('attendance.logs')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Attendance Logs</span></Link>
+                        </div>
+                        <div v-if="hasPermission('schedules.view')" :style="co('adminTask', 'scheduling')">
+                            <Link :href="route('schedules.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Scheduling</span></Link>
+                        </div>
+                        <div v-if="hasPermission('presence.view')" :style="co('adminTask', 'presence')">
+                            <Link :href="route('presence.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Presence</span></Link>
+                        </div>
+                        <div v-if="hasPermission('kb_articles.view')" :style="co('adminTask', 'kb-articles')">
+                            <Link :href="route('kb-articles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>KB Articles</span></Link>
+                        </div>
                     </div>
                 </div>
 
                 <!-- References Section -->
-                <div v-if="canSeeReferences" class="space-y-1 pt-1 collapsed-menu-group">
+                <div v-if="canSeeReferences" :style="so('references')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('references')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('companies.*') || route().current('departments.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && !openMenus.references
+                            (route().current('companies.*') || route().current('departments.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('assets.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) && (isCollapsed || !openMenus.references)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -573,209 +429,87 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">References</p>
                         </div>
-                        <div class="p-2 space-y-1 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                            <Link
-                                v-if="hasPermission('companies.view')"
-                                :href="route('companies.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('companies.*'))"
-                            >
-                                Companies
-                            </Link>
-                            <Link
-                                v-if="hasPermission('departments.view')"
-                                :href="route('departments.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('departments.*'))"
-                            >
-                                Departments
-                            </Link>
-                            <Link
-                                v-if="hasPermission('clusters.view')"
-                                :href="route('clusters.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('clusters.*'))"
-                            >
-                                Clusters
-                            </Link>
-                            <Link
-                                v-if="hasPermission('stores.view')"
-                                :href="route('stores.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('stores.*'))"
-                            >
-                                Stores
-                            </Link>
-                            <Link
-                                v-if="hasPermission('vendors.view')"
-                                :href="route('vendors.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('vendors.*'))"
-                            >
-                                Vendors
-                            </Link>
-                            <Link
-                                v-if="hasPermission('activity_templates.view')"
-                                :href="route('activity-templates.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('activity-templates.*'))"
-                            >
-                                Activity Templates
-                            </Link>
-                            <Link
-                                v-if="hasPermission('categories.view')"
-                                :href="route('categories.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('categories.*'))"
-                            >
-                                Categories
-                            </Link>
-                            <Link
-                                v-if="hasPermission('subcategories.view')"
-                                :href="route('sub-categories.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('sub-categories.*'))"
-                            >
-                                Sub-Categories
-                            </Link>
-                            <Link
-                                v-if="hasPermission('items.view')"
-                                :href="route('items.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('items.*'))"
-                            >
-                                Items
-                            </Link>
-                            <Link
-                                v-if="hasPermission('request_types.view')"
-                                :href="route('request-types.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('request-types.*'))"
-                            >
-                                Request Types
-                            </Link>
-                            <Link
-                                v-if="hasPermission('form_builder.view')"
-                                :href="route('form-builder.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('form-builder.*'))"
-                            >
-                                Form Builder
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            <div v-if="hasPermission('companies.view')" :style="co('references', 'companies')">
+                                <Link :href="route('companies.index')" :class="collapsedFlyoutLinkClass(route().current('companies.*'))">Companies</Link>
+                            </div>
+                            <div v-if="hasPermission('departments.view')" :style="co('references', 'departments')">
+                                <Link :href="route('departments.index')" :class="collapsedFlyoutLinkClass(route().current('departments.*'))">Departments</Link>
+                            </div>
+                            <div v-if="hasPermission('clusters.view')" :style="co('references', 'clusters')">
+                                <Link :href="route('clusters.index')" :class="collapsedFlyoutLinkClass(route().current('clusters.*'))">Clusters</Link>
+                            </div>
+                            <div v-if="hasPermission('stores.view')" :style="co('references', 'stores')">
+                                <Link :href="route('stores.index')" :class="collapsedFlyoutLinkClass(route().current('stores.*'))">Stores</Link>
+                            </div>
+                            <div v-if="hasPermission('vendors.view')" :style="co('references', 'vendors')">
+                                <Link :href="route('vendors.index')" :class="collapsedFlyoutLinkClass(route().current('vendors.*'))">Vendors</Link>
+                            </div>
+                            <div v-if="hasPermission('activity_templates.view')" :style="co('references', 'activity-templates')">
+                                <Link :href="route('activity-templates.index')" :class="collapsedFlyoutLinkClass(route().current('activity-templates.*'))">Activity Templates</Link>
+                            </div>
+                            <div v-if="hasPermission('categories.view')" :style="co('references', 'categories')">
+                                <Link :href="route('categories.index')" :class="collapsedFlyoutLinkClass(route().current('categories.*'))">Categories</Link>
+                            </div>
+                            <div v-if="hasPermission('subcategories.view')" :style="co('references', 'sub-categories')">
+                                <Link :href="route('sub-categories.index')" :class="collapsedFlyoutLinkClass(route().current('sub-categories.*'))">Sub-Categories</Link>
+                            </div>
+                            <div v-if="hasPermission('items.view')" :style="co('references', 'items')">
+                                <Link :href="route('items.index')" :class="collapsedFlyoutLinkClass(route().current('items.*'))">Items</Link>
+                            </div>
+                            <div v-if="hasPermission('request_types.view')" :style="co('references', 'request-types')">
+                                <Link :href="route('request-types.index')" :class="collapsedFlyoutLinkClass(route().current('request-types.*'))">Request Types</Link>
+                            </div>
+                            <div v-if="hasPermission('form_builder.view')" :style="co('references', 'form-builder')">
+                                <Link :href="route('form-builder.index')" :class="collapsedFlyoutLinkClass(route().current('form-builder.*'))">Form Builder</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.references" class="pl-10 space-y-1 mt-1">
-                        <Link
-                            v-if="hasPermission('companies.view')"
-                            :href="route('companies.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('companies.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Companies</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('departments.view')"
-                            :href="route('departments.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Departments</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('clusters.view')"
-                            :href="route('clusters.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('clusters.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Clusters</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('stores.view')"
-                            :href="route('stores.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('stores.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Stores</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('vendors.view')"
-                            :href="route('vendors.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('vendors.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Vendors</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('activity_templates.view')"
-                            :href="route('activity-templates.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('activity-templates.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Activity Templates</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('categories.view')"
-                            :href="route('categories.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Categories</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('subcategories.view')"
-                            :href="route('sub-categories.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('sub-categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Sub-Categories</span>
-                        </Link>
-
-                        <Link
-                            v-if="hasPermission('items.view')"
-                            :href="route('items.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('items.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Items</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('request_types.view')"
-                            :href="route('request-types.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('request-types.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Request Types</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('form_builder.view')"
-                            :href="route('form-builder.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('form-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Form Builder</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.references" class="pl-10 flex flex-col gap-0.5 mt-1">
+                        <div v-if="hasPermission('companies.view')" :style="co('references', 'companies')">
+                            <Link :href="route('companies.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('companies.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Companies</span></Link>
+                        </div>
+                        <div v-if="hasPermission('departments.view')" :style="co('references', 'departments')">
+                            <Link :href="route('departments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Departments</span></Link>
+                        </div>
+                        <div v-if="hasPermission('clusters.view')" :style="co('references', 'clusters')">
+                            <Link :href="route('clusters.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('clusters.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Clusters</span></Link>
+                        </div>
+                        <div v-if="hasPermission('stores.view')" :style="co('references', 'stores')">
+                            <Link :href="route('stores.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stores.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Stores</span></Link>
+                        </div>
+                        <div v-if="hasPermission('vendors.view')" :style="co('references', 'vendors')">
+                            <Link :href="route('vendors.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('vendors.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Vendors</span></Link>
+                        </div>
+                        <div v-if="hasPermission('activity_templates.view')" :style="co('references', 'activity-templates')">
+                            <Link :href="route('activity-templates.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('activity-templates.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Activity Templates</span></Link>
+                        </div>
+                        <div v-if="hasPermission('categories.view')" :style="co('references', 'categories')">
+                            <Link :href="route('categories.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Categories</span></Link>
+                        </div>
+                        <div v-if="hasPermission('subcategories.view')" :style="co('references', 'sub-categories')">
+                            <Link :href="route('sub-categories.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sub-categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Sub-Categories</span></Link>
+                        </div>
+                        <div v-if="hasPermission('items.view')" :style="co('references', 'items')">
+                            <Link :href="route('items.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('items.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Items</span></Link>
+                        </div>
+                        <div v-if="hasPermission('request_types.view')" :style="co('references', 'request-types')">
+                            <Link :href="route('request-types.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('request-types.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Request Types</span></Link>
+                        </div>
+                        <div v-if="hasPermission('form_builder.view')" :style="co('references', 'form-builder')">
+                            <Link :href="route('form-builder.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('form-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Form Builder</span></Link>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Reports Section -->
-                <div v-if="canSeeReports" class="space-y-1 pt-1 collapsed-menu-group">
+                <div v-if="canSeeReports" :style="so('reports')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('reports')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            route().current('reports.*') && !openMenus.reports
+                            route().current('reports.*') && !route().current('reports.inventory') && (isCollapsed || !openMenus.reports)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -790,72 +524,39 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">Reports</p>
                         </div>
-                        <div class="p-2 space-y-1">
-                            <Link
-                                v-if="hasPermission('reports.store_health')"
-                                :href="route('reports.store-health')"
-                                :class="collapsedFlyoutLinkClass(route().current('reports.store-health'))"
-                            >
-                                Store Health Report
-                            </Link>
-                            <Link
-                                v-if="hasPermission('reports.sla_performance')"
-                                :href="route('reports.sla-performance')"
-                                :class="collapsedFlyoutLinkClass(route().current('reports.sla-performance'))"
-                            >
-                                SLA Performance Report
-                            </Link>
-                            <Link
-                                v-if="hasPermission('reports.assignee_performance')"
-                                :href="route('reports.assignee-performance')"
-                                :class="collapsedFlyoutLinkClass(route().current('reports.assignee-performance'))"
-                            >
-                                Assignee Performance
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5">
+                            <div v-if="hasPermission('reports.store_health')" :style="co('reports', 'store-health')">
+                                <Link :href="route('reports.store-health')" :class="collapsedFlyoutLinkClass(route().current('reports.store-health'))">Store Health Report</Link>
+                            </div>
+                            <div v-if="hasPermission('reports.sla_performance')" :style="co('reports', 'sla-performance')">
+                                <Link :href="route('reports.sla-performance')" :class="collapsedFlyoutLinkClass(route().current('reports.sla-performance'))">SLA Performance Report</Link>
+                            </div>
+                            <div v-if="hasPermission('reports.assignee_performance')" :style="co('reports', 'assignee-performance')">
+                                <Link :href="route('reports.assignee-performance')" :class="collapsedFlyoutLinkClass(route().current('reports.assignee-performance'))">Assignee Performance</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.reports" class="pl-10 space-y-1 mt-1">
-                        <Link
-                            v-if="hasPermission('reports.store_health')"
-                            :href="route('reports.store-health')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('reports.store-health') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Store Health Report</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('reports.sla_performance')"
-                            :href="route('reports.sla-performance')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('reports.sla-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>SLA Performance Report</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('reports.assignee_performance')"
-                            :href="route('reports.assignee-performance')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('reports.assignee-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Assignee Performance</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.reports" class="pl-10 flex flex-col gap-0.5 mt-1">
+                        <div v-if="hasPermission('reports.store_health')" :style="co('reports', 'store-health')">
+                            <Link :href="route('reports.store-health')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.store-health') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Store Health Report</span></Link>
+                        </div>
+                        <div v-if="hasPermission('reports.sla_performance')" :style="co('reports', 'sla-performance')">
+                            <Link :href="route('reports.sla-performance')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.sla-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>SLA Performance Report</span></Link>
+                        </div>
+                        <div v-if="hasPermission('reports.assignee_performance')" :style="co('reports', 'assignee-performance')">
+                            <Link :href="route('reports.assignee-performance')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.assignee-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Assignee Performance</span></Link>
+                        </div>
                     </div>
                 </div>
 
                 <!-- User Management Section -->
-                <div v-if="canSeeUserManagement" class="space-y-1 pt-1 collapsed-menu-group">
+                <div v-if="canSeeUserManagement" :style="so('userManagement')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('userManagement')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('users.*') || route().current('roles.*')) && !openMenus.userManagement
+                            (route().current('users.*') || route().current('roles.*')) && (isCollapsed || !openMenus.userManagement)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -870,55 +571,33 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">User Management</p>
                         </div>
-                        <div class="p-2 space-y-1">
-                            <Link
-                                v-if="hasPermission('users.view')"
-                                :href="route('users.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('users.*'))"
-                            >
-                                Users
-                            </Link>
-                            <Link
-                                v-if="hasPermission('roles.view')"
-                                :href="route('roles.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('roles.*'))"
-                            >
-                                Roles & Permissions
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5">
+                            <div v-if="hasPermission('users.view')" :style="co('userManagement', 'users')">
+                                <Link :href="route('users.index')" :class="collapsedFlyoutLinkClass(route().current('users.*'))">Users</Link>
+                            </div>
+                            <div v-if="hasPermission('roles.view')" :style="co('userManagement', 'roles')">
+                                <Link :href="route('roles.index')" :class="collapsedFlyoutLinkClass(route().current('roles.*'))">Roles &amp; Permissions</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 space-y-1 mt-1">
-                        <Link
-                            v-if="hasPermission('users.view')"
-                            :href="route('users.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Users</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('roles.view')"
-                            :href="route('roles.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Roles & Permissions</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 flex flex-col gap-0.5 mt-1">
+                        <div v-if="hasPermission('users.view')" :style="co('userManagement', 'users')">
+                            <Link :href="route('users.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Users</span></Link>
+                        </div>
+                        <div v-if="hasPermission('roles.view')" :style="co('userManagement', 'roles')">
+                            <Link :href="route('roles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Roles &amp; Permissions</span></Link>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Settings Section -->
-                <div v-if="canSeeSettings" class="space-y-1 pt-1 collapsed-menu-group">
+                <div v-if="canSeeSettings" :style="so('settings')" class="space-y-1 collapsed-menu-group">
                     <button
                         @click="toggleMenu('settings')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            route().current('profile.edit') && !openMenus.settings
+                            (route().current('profile.edit') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*')) && (isCollapsed || !openMenus.settings)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -933,102 +612,60 @@ const canSeeSettings = computed(() => {
                         <div class="px-3 py-2 border-b border-gray-700">
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400">Settings</p>
                         </div>
-                        <div class="p-2 space-y-1">
-                            <Link
-                                v-if="hasPermission('settings.view')"
-                                :href="route('settings.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('settings.index'))"
-                            >
-                                System Settings
-                            </Link>
-                            <Link
-                                v-if="hasPermission('settings.view')"
-                                :href="route('ticket-archive.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('ticket-archive.*'))"
-                            >
-                                Ticket Archive
-                            </Link>
-                            <Link
-                                v-if="hasPermission('canned_messages.view')"
-                                :href="route('canned-messages.index')"
-                                :class="collapsedFlyoutLinkClass(route().current('canned-messages.*'))"
-                            >
-                                Canned Messages
-                            </Link>
-                            <Link
-                                :href="route('profile.edit')"
-                                :class="collapsedFlyoutLinkClass(route().current('profile.edit'))"
-                            >
-                                My Profile
-                            </Link>
+                        <div class="p-2 flex flex-col gap-0.5">
+                            <div v-if="hasPermission('settings.view')" :style="co('settings', 'system-settings')">
+                                <Link :href="route('settings.index')" :class="collapsedFlyoutLinkClass(route().current('settings.index'))">System Settings</Link>
+                            </div>
+                            <div v-if="hasPermission('settings.view')" :style="co('settings', 'ticket-archive')">
+                                <Link :href="route('ticket-archive.index')" :class="collapsedFlyoutLinkClass(route().current('ticket-archive.*'))">Ticket Archive</Link>
+                            </div>
+                            <div v-if="hasPermission('canned_messages.view')" :style="co('settings', 'canned-messages')">
+                                <Link :href="route('canned-messages.index')" :class="collapsedFlyoutLinkClass(route().current('canned-messages.*'))">Canned Messages</Link>
+                            </div>
+                            <div :style="co('settings', 'profile')">
+                                <Link :href="route('profile.edit')" :class="collapsedFlyoutLinkClass(route().current('profile.edit'))">My Profile</Link>
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="!isCollapsed && openMenus.settings" class="pl-10 space-y-1 mt-1">
-                        <Link
-                            v-if="hasPermission('settings.view')"
-                            :href="route('settings.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('settings.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>System Settings</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('settings.view')"
-                            :href="route('ticket-archive.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('ticket-archive.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Ticket Archive</span>
-                        </Link>
-                        <Link
-                            v-if="hasPermission('canned_messages.view')"
-                            :href="route('canned-messages.index')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('canned-messages.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>Canned Messages</span>
-                        </Link>
-                        <Link
-                            :href="route('profile.edit')"
-                            :class="[
-                                'flex items-center p-2 rounded-lg text-sm transition-all duration-200',
-                                route().current('profile.edit') ? 'text-white font-bold' : 'text-gray-400 hover:text-white'
-                            ]"
-                        >
-                            <span>My Profile</span>
-                        </Link>
+                    <div v-if="!isCollapsed && openMenus.settings" class="pl-10 flex flex-col gap-0.5 mt-1">
+                        <div v-if="hasPermission('settings.view')" :style="co('settings', 'system-settings')">
+                            <Link :href="route('settings.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('settings.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>System Settings</span></Link>
+                        </div>
+                        <div v-if="hasPermission('settings.view')" :style="co('settings', 'ticket-archive')">
+                            <Link :href="route('ticket-archive.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('ticket-archive.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Ticket Archive</span></Link>
+                        </div>
+                        <div v-if="hasPermission('canned_messages.view')" :style="co('settings', 'canned-messages')">
+                            <Link :href="route('canned-messages.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('canned-messages.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Canned Messages</span></Link>
+                        </div>
+                        <div :style="co('settings', 'profile')">
+                            <Link :href="route('profile.edit')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('profile.edit') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>My Profile</span></Link>
+                        </div>
                     </div>
                 </div>
 
-            </nav>
+        </nav>
 
-            <!-- User Section -->
-            <div class="p-4 border-t border-gray-800 shrink-0">
-                <div class="flex items-center">
-                    <div class="relative">
-                        <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
-                            <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
-                        </div>
-                        <div v-else class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-                            <span class="text-sm font-medium">
-                                {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
-                            </span>
-                        </div>
-                        <UserStatus :status="currentStatus" size="lg" class="absolute -bottom-0.5 -right-0.5 border-2 border-gray-900" />
+        <!-- User Section -->
+        <div class="p-4 border-t border-gray-800 shrink-0">
+            <div class="flex items-center">
+                <div class="relative">
+                    <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
+                        <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
                     </div>
-                    <div v-if="!isCollapsed" class="ml-3 flex-1 min-w-0">
-                        <p class="text-sm font-medium truncate">{{ user.name || 'User' }}</p>
-                        <p class="text-xs text-gray-400 truncate">{{ user.email || 'user@example.com' }}</p>
+                    <div v-else class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                        <span class="text-sm font-medium">
+                            {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
+                        </span>
                     </div>
+                    <UserStatus :status="currentStatus" size="lg" class="absolute -bottom-0.5 -right-0.5 border-2 border-gray-900" />
+                </div>
+                <div v-if="!isCollapsed" class="ml-3 flex-1 min-w-0">
+                    <p class="text-sm font-medium truncate">{{ user.name || 'User' }}</p>
+                    <p class="text-xs text-gray-400 truncate">{{ user.email || 'user@example.com' }}</p>
                 </div>
             </div>
+        </div>
     </aside>
 </template>
 
