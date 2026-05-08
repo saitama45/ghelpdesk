@@ -351,8 +351,15 @@ class StockInController extends Controller
     public function destroy(Request $request, StockIn $stockIn)
     {
         if ($request->boolean('delete_group')) {
+            $ids = $this->groupedStockInRows($stockIn)->pluck('id');
+            InventoryTransaction::whereIn('reference_id', $ids)
+                ->where('reference_type', StockIn::class)
+                ->delete();
             $this->groupedStockInRows($stockIn)->delete();
         } else {
+            InventoryTransaction::where('reference_id', $stockIn->id)
+                ->where('reference_type', StockIn::class)
+                ->delete();
             $stockIn->delete();
         }
 
@@ -1009,6 +1016,9 @@ class StockInController extends Controller
         }
 
         foreach ($relatedRows->slice(count($entries)) as $extraRow) {
+            InventoryTransaction::where('reference_id', $extraRow->id)
+                ->where('reference_type', StockIn::class)
+                ->delete();
             $extraRow->delete();
         }
     }

@@ -45,17 +45,24 @@ class InventoryReportController extends Controller implements HasMiddleware
             ->orderBy('location')
             ->get();
 
-        $internalStockByAsset = InventoryTransaction::query()
-            ->select('asset_id', DB::raw('SUM(quantity) as soh'))
-            ->whereNotIn('location', self::EXCLUDED_REPORT_LOCATIONS)
-            ->groupBy('asset_id');
+        $postedTransactionsBase = fn () => InventoryTransaction::query()
+            ->join('stock_ins', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
+                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where('stock_ins.status', 'Posted')
+            ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS);
+
+        $internalStockByAsset = $postedTransactionsBase()
+            ->select('inventory_transactions.asset_id', DB::raw('SUM(inventory_transactions.quantity) as soh'))
+            ->groupBy('inventory_transactions.asset_id');
 
         // Summary Data for Cards
         $summary = [
             'total_items' => Asset::count(),
-            'total_soh' => InventoryTransaction::whereNotIn('location', self::EXCLUDED_REPORT_LOCATIONS)->sum('quantity') ?? 0,
-            'total_inventory_value' => InventoryTransaction::join('assets', 'inventory_transactions.asset_id', '=', 'assets.id')
-                ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS)
+            'total_soh' => $postedTransactionsBase()->sum('inventory_transactions.quantity') ?? 0,
+            'total_inventory_value' => $postedTransactionsBase()
+                ->join('assets', 'inventory_transactions.asset_id', '=', 'assets.id')
                 ->selectRaw('SUM(inventory_transactions.quantity * assets.cost) as total')
                 ->value('total') ?? 0,
             'out_of_stock_count' => Asset::leftJoinSub($internalStockByAsset, 'internal_stock', function ($join) {
@@ -126,6 +133,11 @@ class InventoryReportController extends Controller implements HasMiddleware
     {
         $query = InventoryTransaction::query()
             ->join('assets', 'inventory_transactions.asset_id', '=', 'assets.id')
+            ->join('stock_ins', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
+                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where('stock_ins.status', 'Posted')
             ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS)
             ->select(
                 'inventory_transactions.asset_id',
