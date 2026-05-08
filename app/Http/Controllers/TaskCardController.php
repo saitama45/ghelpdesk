@@ -396,6 +396,74 @@ class TaskCardController extends Controller implements HasMiddleware
         return response()->json(['card' => $this->freshCard($card)]);
     }
 
+    public function duplicateChecklist(Request $request, TaskChecklist $taskChecklist)
+    {
+        $this->ensureBoardEditor($taskChecklist->card->board, $request->user());
+
+        $card = $taskChecklist->card;
+        $newSortOrder = ((int) $card->checklists()->max('sort_order')) + 1;
+
+        $newChecklist = $card->checklists()->create([
+            'title' => $taskChecklist->title . ' (Copy)',
+            'sort_order' => $newSortOrder,
+        ]);
+
+        foreach ($taskChecklist->items as $item) {
+            $newItem = $newChecklist->allItems()->create([
+                'title' => $item->title,
+                'is_complete' => false,
+                'assigned_to' => $item->assigned_to,
+                'due_at' => $item->due_at,
+                'sort_order' => $item->sort_order,
+            ]);
+
+            foreach ($item->children as $child) {
+                $newChecklist->allItems()->create([
+                    'title' => $child->title,
+                    'is_complete' => false,
+                    'assigned_to' => $child->assigned_to,
+                    'due_at' => $child->due_at,
+                    'sort_order' => $child->sort_order,
+                    'parent_item_id' => $newItem->id,
+                ]);
+            }
+        }
+
+        return response()->json(['card' => $this->freshCard($card)], 201);
+    }
+
+    public function duplicateChecklistItem(Request $request, TaskChecklistItem $taskChecklistItem)
+    {
+        $this->ensureBoardEditor($taskChecklistItem->checklist->card->board, $request->user());
+
+        $checklist = $taskChecklistItem->checklist;
+        $card = $checklist->card;
+
+        $newItem = $checklist->allItems()->create([
+            'title' => $taskChecklistItem->title,
+            'is_complete' => false,
+            'assigned_to' => $taskChecklistItem->assigned_to,
+            'due_at' => $taskChecklistItem->due_at,
+            'sort_order' => $taskChecklistItem->sort_order + 1,
+            'parent_item_id' => $taskChecklistItem->parent_item_id,
+        ]);
+
+        if (!$taskChecklistItem->parent_item_id) {
+            foreach ($taskChecklistItem->children as $child) {
+                $checklist->allItems()->create([
+                    'title' => $child->title,
+                    'is_complete' => false,
+                    'assigned_to' => $child->assigned_to,
+                    'due_at' => $child->due_at,
+                    'sort_order' => $child->sort_order,
+                    'parent_item_id' => $newItem->id,
+                ]);
+            }
+        }
+
+        return response()->json(['card' => $this->freshCard($card)], 201);
+    }
+
     public function storeComment(Request $request, TaskCard $taskCard)
     {
         $this->ensureBoardAccess($taskCard->board, $request->user());

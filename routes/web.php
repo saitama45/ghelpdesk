@@ -126,9 +126,11 @@ Route::middleware('auth')->group(function () {
     Route::post('task-cards/{taskCard}/attachments', [\App\Http\Controllers\TaskCardController::class, 'storeAttachment'])->name('task-cards.attachments.store');
     Route::put('task-checklists/{taskChecklist}', [\App\Http\Controllers\TaskCardController::class, 'updateChecklist'])->name('task-checklists.update');
     Route::delete('task-checklists/{taskChecklist}', [\App\Http\Controllers\TaskCardController::class, 'destroyChecklist'])->name('task-checklists.destroy');
+    Route::post('task-checklists/{taskChecklist}/duplicate', [\App\Http\Controllers\TaskCardController::class, 'duplicateChecklist'])->name('task-checklists.duplicate');
     Route::post('task-checklists/{taskChecklist}/items', [\App\Http\Controllers\TaskCardController::class, 'storeChecklistItem'])->name('task-checklists.items.store');
     Route::put('task-checklist-items/{taskChecklistItem}', [\App\Http\Controllers\TaskCardController::class, 'updateChecklistItem'])->name('task-checklist-items.update');
     Route::delete('task-checklist-items/{taskChecklistItem}', [\App\Http\Controllers\TaskCardController::class, 'destroyChecklistItem'])->name('task-checklist-items.destroy');
+    Route::post('task-checklist-items/{taskChecklistItem}/duplicate', [\App\Http\Controllers\TaskCardController::class, 'duplicateChecklistItem'])->name('task-checklist-items.duplicate');
     Route::delete('task-card-comments/{taskCardComment}', [\App\Http\Controllers\TaskCardController::class, 'destroyComment'])->name('task-card-comments.destroy');
     Route::delete('task-card-attachments/{taskCardAttachment}', [\App\Http\Controllers\TaskCardController::class, 'destroyAttachment'])->name('task-card-attachments.destroy');
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');

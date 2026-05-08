@@ -16,7 +16,9 @@ import {
     ChatBubbleLeftRightIcon,
     CheckCircleIcon,
     CheckIcon,
+    ChevronDownIcon,
     ClipboardDocumentCheckIcon,
+    DocumentDuplicateIcon,
     EyeIcon,
     FunnelIcon,
     LinkIcon,
@@ -127,6 +129,10 @@ const bulkPasteTarget = ref('');
 const newSubTaskTitle = ref('');
 const newChecklistItems = reactive({});
 const newCardTitles = reactive(Object.fromEntries((props.statuses || []).map((status) => [status, ''])));
+
+const collapsedChecklists = reactive({});
+const activitySectionOpen = ref(true);
+const collapsedSubTaskItems = reactive({});
 
 const colorOptions = [
     '#0f766e',
@@ -1136,6 +1142,40 @@ const deleteChecklistItem = async (item) => {
     }
 };
 
+const toggleChecklist = (id) => {
+    collapsedChecklists[id] = !collapsedChecklists[id];
+};
+
+const isChecklistOpen = (id) => !collapsedChecklists[id];
+
+const toggleSubTaskItems = (id) => {
+    collapsedSubTaskItems[id] = !collapsedSubTaskItems[id];
+};
+
+const isSubTaskOpen = (id) => collapsedSubTaskItems[id] === undefined || !collapsedSubTaskItems[id];
+
+const duplicateChecklist = async (checklist) => {
+    if (!selectedCard.value || !canEditBoard.value) return;
+
+    try {
+        const response = await axios.post(route('task-checklists.duplicate', checklist.id));
+        replaceCard(response.data.card);
+    } catch (error) {
+        handleApiError(error, 'Unable to duplicate checklist');
+    }
+};
+
+const duplicateChecklistItem = async (item) => {
+    if (!selectedCard.value || !canEditBoard.value) return;
+
+    try {
+        const response = await axios.post(route('task-checklist-items.duplicate', item.id));
+        replaceCard(response.data.card);
+    } catch (error) {
+        handleApiError(error, 'Unable to duplicate item');
+    }
+};
+
 const addComment = async () => {
     if (!selectedCard.value || !newComment.value.trim()) return;
 
@@ -1760,14 +1800,23 @@ onUnmounted(() => {
                                             </button>
                                         </form>
                                         <div v-else class="flex min-w-0 flex-1 items-center gap-2">
-                                            <h4 class="min-w-0 flex-1 truncate text-sm font-bold text-gray-900">{{ checklist.title }}</h4>
+                                            <button type="button" class="shrink-0 text-gray-400 hover:text-gray-600" @click="toggleChecklist(checklist.id)">
+                                                <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isChecklistOpen(checklist.id) ? '' : '-rotate-90'" />
+                                            </button>
+                                            <h4 class="min-w-0 flex-1 cursor-pointer truncate text-sm font-bold text-gray-900" @click="toggleChecklist(checklist.id)">{{ checklist.title }}</h4>
                                             <button v-if="canEditBoard" type="button" title="Rename checklist" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white hover:text-blue-600" @click="startEditingChecklist(checklist)">
                                                 <PencilSquareIcon class="h-4 w-4" />
                                             </button>
                                         </div>
-                                        <button v-if="canEditBoard && editingChecklistId !== checklist.id" type="button" @click="deleteChecklist(checklist)" class="self-start text-xs font-bold text-red-600 sm:self-auto">Delete</button>
+                                        <div v-if="canEditBoard && editingChecklistId !== checklist.id" class="flex items-center gap-2 self-start sm:self-auto">
+                                            <button type="button" title="Duplicate checklist" class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800" @click="duplicateChecklist(checklist)">
+                                                <DocumentDuplicateIcon class="h-3.5 w-3.5" />
+                                                Duplicate
+                                            </button>
+                                            <button type="button" @click="deleteChecklist(checklist)" class="text-xs font-bold text-red-600">Delete</button>
+                                        </div>
                                     </div>
-                                    <div class="space-y-3">
+                                    <div v-show="isChecklistOpen(checklist.id)" class="space-y-3">
                                         <div v-for="item in checklist.items" :key="item.id" class="space-y-2">
                                             <div class="rounded-lg bg-white px-3 py-2 shadow-sm">
                                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1776,6 +1825,9 @@ onUnmounted(() => {
                                                     </button>
                                                     <span class="min-w-0 flex-1 text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
                                                     <div class="flex items-center gap-2">
+                                                        <button v-if="item.children?.length" type="button" class="text-gray-400 hover:text-gray-600" @click="toggleSubTaskItems(item.id)">
+                                                            <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isSubTaskOpen(item.id) ? '' : '-rotate-90'" />
+                                                        </button>
                                                         <select
                                                             :value="item.assigned_to || ''"
                                                             :disabled="!canEditBoard"
@@ -1786,6 +1838,9 @@ onUnmounted(() => {
                                                             <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                                         </select>
                                                         <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(item) }}</span>
+                                                        <button v-if="canEditBoard" type="button" title="Duplicate item" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(item)">
+                                                            <DocumentDuplicateIcon class="h-4 w-4" />
+                                                        </button>
                                                         <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(item)" class="text-gray-300 hover:text-red-600">
                                                             <XMarkIcon class="h-4 w-4" />
                                                         </button>
@@ -1793,7 +1848,7 @@ onUnmounted(() => {
                                                 </div>
                                             </div>
 
-                                            <div v-if="item.children?.length" class="ml-5 space-y-2 border-l border-gray-200 pl-3">
+                                            <div v-show="item.children?.length && isSubTaskOpen(item.id)" class="ml-5 space-y-2 border-l border-gray-200 pl-3">
                                                 <div v-for="child in item.children" :key="child.id" class="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center">
                                                     <button type="button" @click="toggleChecklistItem(child)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="child.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
                                                         <CheckIcon v-if="child.is_complete" class="h-3.5 w-3.5" />
@@ -1810,6 +1865,9 @@ onUnmounted(() => {
                                                             <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                                         </select>
                                                         <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(child) }}</span>
+                                                        <button v-if="canEditBoard" type="button" title="Duplicate sub-task" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(child)">
+                                                            <DocumentDuplicateIcon class="h-4 w-4" />
+                                                        </button>
                                                         <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(child)" class="text-gray-300 hover:text-red-600">
                                                             <XMarkIcon class="h-4 w-4" />
                                                         </button>
@@ -1823,7 +1881,7 @@ onUnmounted(() => {
                                             </form>
                                         </div>
                                     </div>
-                                    <form v-if="canEditBoard" class="mt-2 flex gap-2" @submit.prevent="addChecklistItem(checklist)">
+                                    <form v-if="canEditBoard && isChecklistOpen(checklist.id)" class="mt-2 flex gap-2" @submit.prevent="addChecklistItem(checklist)">
                                         <input v-model="newChecklistItems[checklistInputKey(checklist)]" :disabled="isBulkPastingChecklistTarget(checklist)" type="text" maxlength="255" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add an item..." @paste="pasteChecklistItems($event, checklist)">
                                         <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist)" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist) ? 'Adding...' : 'Add' }}</button>
                                     </form>
@@ -1853,7 +1911,11 @@ onUnmounted(() => {
                         </section>
 
                         <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                            <h3 class="mb-3 text-sm font-black uppercase tracking-wider text-gray-700">Comments and Activity</h3>
+                            <button type="button" class="mb-3 flex w-full items-center gap-2 text-left" @click="activitySectionOpen = !activitySectionOpen">
+                                <ChevronDownIcon class="h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200" :class="activitySectionOpen ? '' : '-rotate-90'" />
+                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Comments and Activity</h3>
+                            </button>
+                            <div v-show="activitySectionOpen">
                             <form class="mb-4 flex gap-2" @submit.prevent="addComment">
                                 <input v-model="newComment" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Write a comment...">
                                 <button type="submit" class="rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Comment</button>
@@ -1883,6 +1945,7 @@ onUnmounted(() => {
                                         <p class="text-xs text-gray-400">{{ formatDateTime(activity.created_at) }}</p>
                                     </div>
                                 </div>
+                            </div>
                             </div>
                         </section>
                     </div>
