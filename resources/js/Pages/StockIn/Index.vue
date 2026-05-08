@@ -1,7 +1,117 @@
 <template>
     <AppLayout title="Stock Transaction">
         <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Stock Units</p>
+                                <p class="text-2xl font-black text-gray-900 mt-1">{{ summary.total_qty }}</p>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-lg">
+                                <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Posted Units</p>
+                                <p class="text-2xl font-black text-emerald-600 mt-1">{{ summary.posted_qty }}</p>
+                            </div>
+                            <div class="p-3 bg-emerald-50 rounded-lg">
+                                <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">For Posting Units</p>
+                                <p class="text-2xl font-black text-amber-600 mt-1">{{ summary.for_posting_qty }}</p>
+                            </div>
+                            <div class="p-3 bg-amber-50 rounded-lg">
+                                <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Records</p>
+                                <p class="text-2xl font-black text-blue-600 mt-1">{{ summary.total_records }}</p>
+                            </div>
+                            <div class="p-3 bg-blue-50 rounded-lg">
+                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters Panel -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                            <select v-model="filterForm.category_id" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option :value="null">All Categories</option>
+                                <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
+                            <select v-model="filterForm.brand" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option :value="null">All Brands</option>
+                                <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type</label>
+                            <select v-model="filterForm.type" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option :value="null">All Types</option>
+                                <option value="Fixed">Fixed</option>
+                                <option value="Consumables">Consumables</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination</label>
+                            <select v-model="filterForm.location" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option :value="null">All Locations</option>
+                                <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
+                            <MultiAutocomplete
+                                v-model="statusFilter"
+                                :options="statusOptions"
+                                label-key="label"
+                                value-key="value"
+                                placeholder="All statuses..."
+                            />
+                        </div>
+                        <div class="flex items-end">
+                            <button @click="resetFilters" class="w-full px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                                Reset Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <DataTable
                     title="Stock Transaction Headers"
                     subtitle="Manage stock movements (In/Transfers) and their quantity"
@@ -38,29 +148,6 @@
                         </div>
                     </template>
 
-                    <template #filters>
-                        <div class="flex flex-wrap items-center gap-3">
-                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Filter by Status:</span>
-                            <div class="w-64">
-                                <MultiAutocomplete
-                                    v-model="statusFilter"
-                                    :options="statusOptions"
-                                    label-key="label"
-                                    value-key="value"
-                                    placeholder="All statuses..."
-                                />
-                            </div>
-                            <button
-                                v-if="statusFilter.length"
-                                type="button"
-                                class="text-xs font-semibold text-red-500 hover:text-red-700 whitespace-nowrap"
-                                @click="statusFilter = []"
-                            >
-                                Clear
-                            </button>
-                        </div>
-                    </template>
-
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Receive Date</th>
@@ -73,77 +160,118 @@
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="item in data" :key="item.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(item.receive_date) }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                <div class="flex flex-col">
-                                    <span class="font-semibold text-gray-900">{{ item.dr_no || '-' }}</span>
-                                    <span class="mt-1 inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                                          :class="item.status === 'Posted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
-                                        {{ item.status || 'For Posting' }}
-                                    </span>
-                                    <span v-if="item.status === 'Posted'" class="mt-1 text-[11px] text-gray-500">
-                                        Posted by {{ item.posted_by || '-' }}<span v-if="item.posted_date"> on {{ formatAuditDate(item.posted_date) }}</span>
-                                    </span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">{{ item.asset?.item_code }}</td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
-                                <div class="flex flex-col">
-                                    <div class="font-semibold text-gray-900">
-                                        {{ [item.asset?.brand, item.asset?.model].filter(Boolean).join(' ') || 'Unnamed Stock Header' }}
+                        <template v-for="group in groupRowsByLocation(data)" :key="group.location">
+                            <!-- Location Group Header -->
+                            <tr class="bg-slate-50">
+                                <td colspan="6" class="px-6 py-3 border-y border-slate-200">
+                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                        <button
+                                            type="button"
+                                            @click="toggleLocation(group.location)"
+                                            class="flex w-fit items-center gap-2 text-left"
+                                            :aria-expanded="!isLocationCollapsed(group.location)"
+                                        >
+                                            <svg class="h-4 w-4 text-slate-500 transition-transform"
+                                                 :class="isLocationCollapsed(group.location) ? '-rotate-90' : 'rotate-0'"
+                                                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                            <span class="text-sm font-black uppercase tracking-wide text-slate-900">{{ group.location }}</span>
+                                        </button>
+
+                                        <div class="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3 lg:min-w-[520px]">
+                                            <div class="rounded-md border border-slate-200 bg-white px-3 py-2">
+                                                <span class="block font-bold uppercase tracking-wider text-slate-400">Items</span>
+                                                <span class="font-black text-slate-900">{{ group.summary.item_count }}</span>
+                                            </div>
+                                            <div class="rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2">
+                                                <span class="block font-bold uppercase tracking-wider text-emerald-600">Stock on Hand</span>
+                                                <span class="font-black text-emerald-800">{{ group.summary.total_soh }}</span>
+                                            </div>
+                                            <div class="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2">
+                                                <span class="block font-bold uppercase tracking-wider text-indigo-600">Inventory Value</span>
+                                                <span class="font-black text-indigo-800">{{ formatCurrency(group.summary.total_value) }}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="text-xs text-gray-500 max-w-md truncate" :title="item.asset?.description">
-                                        {{ item.asset?.description || 'No description' }}
-                                    </div>
-                                    <div class="mt-1 text-[11px] text-gray-500">
-                                        Vendor: {{ item.vendor || '-' }} | Origin: {{ item.origin_location || '-' }} | Destination: {{ item.destination_location || '-' }}
-                                    </div>
-                                    <div class="mt-2 text-[11px] text-gray-500">
-                                        {{ item.record_count }} row<span v-if="item.record_count !== 1">s</span> grouped in this header
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
-                                    {{ item.quantity }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <div class="flex justify-end space-x-1">
-                                    <button
-                                        v-if="hasPermission('stock_ins.post') && item.status !== 'Posted'"
-                                        @click="postHeaderItem(item)"
-                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
-                                        title="Post"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </button>
-                                    <button 
-                                        v-if="hasPermission('stock_ins.edit')" 
-                                        @click="editHeaderItem(item)" 
-                                        class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
-                                        title="Edit"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        v-if="hasPermission('stock_ins.delete')"
-                                        @click="deleteItem(item)"
-                                        class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
-                                        title="Delete"
-                                    >
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
+                                </td>
+                            </tr>
+
+                            <!-- Group Rows -->
+                            <template v-if="!isLocationCollapsed(group.location)">
+                                <tr v-for="item in group.rows" :key="item.id" class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(item.receive_date) }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                        <div class="flex flex-col">
+                                            <span class="font-semibold text-gray-900">{{ item.dr_no || '-' }}</span>
+                                            <span class="mt-1 inline-flex w-fit items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                                                  :class="item.status === 'Posted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                                                {{ item.status || 'For Posting' }}
+                                            </span>
+                                            <span v-if="item.status === 'Posted'" class="mt-1 text-[11px] text-gray-500">
+                                                Posted by {{ item.posted_by || '-' }}<span v-if="item.posted_date"> on {{ formatAuditDate(item.posted_date) }}</span>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">{{ item.asset?.item_code }}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-900">
+                                        <div class="flex flex-col">
+                                            <div class="font-semibold text-gray-900">
+                                                {{ [item.asset?.brand, item.asset?.model].filter(Boolean).join(' ') || 'Unnamed Stock Header' }}
+                                            </div>
+                                            <div class="text-xs text-gray-500 max-w-md truncate" :title="item.asset?.description">
+                                                {{ item.asset?.description || 'No description' }}
+                                            </div>
+                                            <div class="mt-1 text-[11px] text-gray-500">
+                                                Vendor: {{ item.vendor || '-' }} | Origin: {{ item.origin_location || '-' }} | Destination: {{ item.destination_location || '-' }}
+                                            </div>
+                                            <div class="mt-2 text-[11px] text-gray-500">
+                                                {{ item.record_count }} row<span v-if="item.record_count !== 1">s</span> grouped in this header
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
+                                            {{ item.quantity }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div class="flex justify-end space-x-1">
+                                            <button
+                                                v-if="hasPermission('stock_ins.post') && item.status !== 'Posted'"
+                                                @click="postHeaderItem(item)"
+                                                class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
+                                                title="Post"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                v-if="hasPermission('stock_ins.edit')"
+                                                @click="editHeaderItem(item)"
+                                                class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
+                                                title="Edit"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button
+                                                v-if="hasPermission('stock_ins.delete')"
+                                                @click="deleteItem(item)"
+                                                class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
+                                                title="Delete"
+                                            >
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </template>
                     </template>
                 </DataTable>
             </div>
@@ -780,7 +908,12 @@ const props = defineProps({
     stockIns: Object,
     assets: Array,
     stores: Array,
-    vendors: Array
+    vendors: Array,
+    categories: Array,
+    brands: Array,
+    locations: Array,
+    summary: Object,
+    filters: Object,
 })
 
 const { showSuccess, showError } = useToast()
@@ -794,8 +927,21 @@ const statusOptions = [
     { value: 'Posted', label: 'Posted' },
 ]
 
+const filterForm = reactive({
+    category_id: props.filters?.category_id || null,
+    brand: props.filters?.brand || null,
+    type: props.filters?.type || null,
+    location: props.filters?.location || null,
+})
+
+const summary = computed(() => props.summary || { total_qty: 0, posted_qty: 0, for_posting_qty: 0, total_records: 0 })
+
 const pagination = usePagination(props.stockIns, 'stock-ins.index', () => ({
     statuses: statusFilter.value,
+    category_id: filterForm.category_id,
+    brand: filterForm.brand,
+    type: filterForm.type,
+    location: filterForm.location,
 }))
 
 watch(() => props.stockIns, (newData) => {
@@ -806,6 +952,63 @@ watch(statusFilter, () => {
     pagination.currentPage.value = 1
     pagination.performSearch()
 }, { deep: true })
+
+const applyFilters = () => {
+    pagination.currentPage.value = 1
+    pagination.performSearch()
+}
+
+const resetFilters = () => {
+    Object.assign(filterForm, { category_id: null, brand: null, type: null, location: null })
+    statusFilter.value = []
+    pagination.search.value = ''
+    pagination.currentPage.value = 1
+    pagination.performSearch()
+}
+
+const collapsedLocations = ref(new Set())
+
+const normalizeLocation = (value) => value || 'N/A'
+
+const groupRowsByLocation = (rows = []) => {
+    const groups = new Map()
+
+    rows.forEach(row => {
+        const location = normalizeLocation(row.destination_location)
+        if (!groups.has(location)) {
+            groups.set(location, { location, rows: [] })
+        }
+        groups.get(location).rows.push(row)
+    })
+
+    return Array.from(groups.values()).map(group => ({
+        ...group,
+        summary: {
+            item_count: group.rows.length,
+            total_soh: group.rows.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+            total_value: group.rows.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.asset?.cost || 0), 0),
+        },
+    }))
+}
+
+const isLocationCollapsed = (location) => collapsedLocations.value.has(normalizeLocation(location))
+
+const toggleLocation = (location) => {
+    const key = normalizeLocation(location)
+    const next = new Set(collapsedLocations.value)
+    if (next.has(key)) {
+        next.delete(key)
+    } else {
+        next.add(key)
+    }
+    collapsedLocations.value = next
+}
+
+const formatCurrency = (value) => {
+    if (!value) return 'PHP 0.00'
+    return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
+}
+
 const page = usePage()
 const authUserName = computed(() => page.props.auth?.user?.name || '')
 

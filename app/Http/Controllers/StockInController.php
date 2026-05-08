@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Asset;
+use App\Models\Category;
 use App\Models\InventoryTransaction;
 use App\Models\StockIn;
 use App\Models\Store;
@@ -34,9 +35,38 @@ class StockInController extends Controller
 
     public function index(Request $request)
     {
-        $search   = trim((string) $request->input('search', ''));
-        $perPage  = max(1, min(200, (int) $request->input('per_page', 10)));
-        $statuses = array_values(array_filter((array) $request->input('statuses', [])));
+        $search     = trim((string) $request->input('search', ''));
+        $perPage    = max(1, min(200, (int) $request->input('per_page', 10)));
+        $statuses   = array_values(array_filter((array) $request->input('statuses', [])));
+        $categoryId = $request->input('category_id');
+        $brand      = $request->input('brand');
+        $type       = $request->input('type');
+        $location   = $request->input('location');
+
+        $applyFilters = function ($query) use ($search, $statuses, $categoryId, $brand, $type, $location) {
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->where('dr_no', 'like', "%{$search}%")
+                      ->orWhere('vendor', 'like', "%{$search}%")
+                      ->orWhere('received_by', 'like', "%{$search}%");
+                });
+            }
+            if (! empty($statuses)) {
+                $query->whereIn('status', $statuses);
+            }
+            if ($categoryId) {
+                $query->whereHas('asset', fn ($q) => $q->where('category_id', $categoryId));
+            }
+            if ($brand) {
+                $query->whereHas('asset', fn ($q) => $q->where('brand', $brand));
+            }
+            if ($type) {
+                $query->whereHas('asset', fn ($q) => $q->where('type', $type));
+            }
+            if ($location) {
+                $query->where('destination_location', $location);
+            }
+        };
 
         $query = StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])
             ->select(
@@ -72,25 +102,34 @@ class StockInController extends Controller
                 'posted_date'
             );
 
-        if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('dr_no', 'like', "%{$search}%")
-                  ->orWhere('vendor', 'like', "%{$search}%")
-                  ->orWhere('received_by', 'like', "%{$search}%");
-            });
-        }
+        $applyFilters($query);
 
-        if (!empty($statuses)) {
-            $query->whereIn('status', $statuses);
-        }
+        $flatBase = StockIn::query();
+        $applyFilters($flatBase);
+
+        $summary = [
+            'total_qty'       => (clone $flatBase)->sum('quantity'),
+            'posted_qty'      => (clone $flatBase)->where('status', 'Posted')->sum('quantity'),
+            'for_posting_qty' => (clone $flatBase)->where('status', 'For Posting')->sum('quantity'),
+            'total_records'   => (clone $flatBase)->count(),
+        ];
 
         $stockIns = $query->latest('receive_date')->paginate($perPage);
 
         return Inertia::render('StockIn/Index', [
-            'stockIns' => $stockIns,
-            'assets' => Asset::all(),
-            'stores' => Store::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'vendors' => Vendor::active()->orderBy('name')->get(['id', 'code', 'name']),
+            'stockIns'   => $stockIns,
+            'assets'     => Asset::all(),
+            'stores'     => Store::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'vendors'    => Vendor::active()->orderBy('name')->get(['id', 'code', 'name']),
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'brands'     => Asset::whereNotNull('brand')->distinct()->orderBy('brand')->pluck('brand'),
+            'locations'  => StockIn::whereNotNull('destination_location')
+                ->where('status', 'Posted')
+                ->distinct()
+                ->orderBy('destination_location')
+                ->pluck('destination_location'),
+            'summary'    => $summary,
+            'filters'    => $request->only(['category_id', 'brand', 'type', 'location', 'statuses', 'search']),
         ]);
     }
 
