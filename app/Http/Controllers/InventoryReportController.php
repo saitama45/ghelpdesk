@@ -28,7 +28,7 @@ class InventoryReportController extends Controller implements HasMiddleware
         $query = $this->inventoryRowsQuery($request);
 
         $assets = (clone $query)
-            ->orderBy('inventory_transactions.location')
+            ->orderBy('stock_ins.destination_location')
             ->orderBy('assets.item_code')
             ->paginate($request->integer('per_page', 10))
             ->withQueryString();
@@ -77,11 +77,12 @@ class InventoryReportController extends Controller implements HasMiddleware
             'locationSummaries' => $locationSummaries,
             'categories' => Category::orderBy('name')->get(),
             'brands' => Asset::whereNotNull('brand')->distinct()->pluck('brand'),
-            'locations' => InventoryTransaction::whereNotNull('location')
-                ->whereNotIn('location', self::EXCLUDED_REPORT_LOCATIONS)
+            'locations' => StockIn::whereNotNull('destination_location')
+                ->where('status', 'Posted')
+                ->whereNotIn('destination_location', self::EXCLUDED_REPORT_LOCATIONS)
                 ->distinct()
-                ->orderBy('location')
-                ->pluck('location'),
+                ->orderBy('destination_location')
+                ->pluck('destination_location'),
             'summary' => $summary,
             'filters' => $request->only(['category_id', 'sub_category_id', 'type', 'brand', 'location', 'stock_status', 'search'])
         ]);
@@ -138,14 +139,14 @@ class InventoryReportController extends Controller implements HasMiddleware
                      ->where('inventory_transactions.reference_type', '=', StockIn::class);
             })
             ->where('stock_ins.status', 'Posted')
-            ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS)
+            ->whereNotIn('stock_ins.destination_location', self::EXCLUDED_REPORT_LOCATIONS)
             ->select(
                 'inventory_transactions.asset_id',
-                'inventory_transactions.location',
+                'stock_ins.destination_location as location',
                 DB::raw('SUM(inventory_transactions.quantity) as soh'),
                 DB::raw('SUM(inventory_transactions.quantity * assets.cost) as total_value')
             )
-            ->groupBy('inventory_transactions.asset_id', 'inventory_transactions.location', 'assets.id', 'assets.item_code')
+            ->groupBy('inventory_transactions.asset_id', 'stock_ins.destination_location', 'assets.id', 'assets.item_code')
             ->with(['asset.category', 'asset.subCategory']);
 
         if ($request->filled('category_id')) {
@@ -173,7 +174,7 @@ class InventoryReportController extends Controller implements HasMiddleware
         }
 
         if ($request->filled('location')) {
-            $query->where('inventory_transactions.location', $request->location);
+            $query->where('stock_ins.destination_location', $request->location);
         }
 
         if ($request->filled('stock_status')) {
