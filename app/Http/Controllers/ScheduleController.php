@@ -190,7 +190,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ];
         });
         
-        $users = User::active()->with('managers:id')->orderBy('name')->get();
+        $users = User::active()->with(['managers:id', 'departmentReference:id,code,name'])->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
         // Pivot report metadata (cheap — just year lists, no schedule data)

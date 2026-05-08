@@ -192,6 +192,7 @@
                 <div v-if="currentView === 'calendar'">
                     <Calendar
                         :events="calendarSchedules"
+                        :users="calendarUsers"
                         v-model:statusFilter="filterStatus"
                         v-model:concernTypeFilter="filterConcernType"
                         v-model:priorityFilter="filterPriority"
@@ -1114,6 +1115,12 @@ const reportTitle = computed(() => {
 })
 const currentView = useRemember('calendar', 'schedules.currentView')
 const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
+
+const calendarUsers = computed(() => {
+    const authDeptId = page.props.auth?.user?.department_id
+    if (!authDeptId) return (props.users ?? []).filter(u => !u.is_vacant)
+    return (props.users ?? []).filter(u => u.department_id === authDeptId && !u.is_vacant)
+})
 
 const calendarSchedules = computed(() => {
     return (props.schedules ?? []).flatMap(schedule => {

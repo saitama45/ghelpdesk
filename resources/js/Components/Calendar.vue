@@ -18,6 +18,10 @@ const props = defineProps({
     priorityFilter: {
         type: Array,
         default: () => []
+    },
+    users: {
+        type: Array,
+        default: () => []
     }
 });
 
@@ -119,6 +123,23 @@ const toggleAllConcernTypes = () => {
 const toggleAllPriorities = () => {
     emit('update:priorityFilter', allPrioritySelected.value ? [] : ['none', ...PRIORITY_FILTERS.map(p => p.key)]);
 };
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Unscheduled users ─────────────────────────────────────────────────────────
+const allEventsByDate = computed(() => {
+    const grouped = new Map()
+    for (const event of props.events) {
+        let cursor = parseDateKey(toDateKey(event.start_time))
+        const end = parseDateKey(toDateKey(event.end_time))
+        while (cursor <= end) {
+            const key = toDateKey(cursor)
+            if (!grouped.has(key)) grouped.set(key, new Set())
+            grouped.get(key).add(event.user_id)
+            cursor.setDate(cursor.getDate() + 1)
+        }
+    }
+    return grouped
+})
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Day view state ────────────────────────────────────────────────────────────
@@ -461,15 +482,19 @@ const isToday = (date) => {
 const showDayModal = ref(false);
 const selectedDayDate = ref(null);
 const selectedDayEvents = ref([]);
+const unscheduledUsers = ref([]);
 
 const openDayModal = (date) => {
     selectedDayDate.value = date;
     selectedDayEvents.value = getEventsForDate(date);
+    const scheduledIds = allEventsByDate.value.get(toDateKey(date)) ?? new Set();
+    unscheduledUsers.value = props.users.filter(u => !scheduledIds.has(u.id));
     showDayModal.value = true;
 };
 
 const closeDayModal = () => {
     showDayModal.value = false;
+    unscheduledUsers.value = [];
 };
 
 const formatDateLong = (date) => {
@@ -814,8 +839,8 @@ const formatDateLong = (date) => {
                         </button>
                     </div>
                     <div class="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-2">
-                        <div 
-                            v-for="event in selectedDayEvents" 
+                        <div
+                            v-for="event in selectedDayEvents"
                             :key="event.id"
                             @click="() => { emit('event-click', { event, date: selectedDayDate }); closeDayModal(); }"
                             class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group"
@@ -852,6 +877,28 @@ const formatDateLong = (date) => {
                                             Actual Out: {{ formatTime(getActualTimesForDate(event, selectedDayDate).actual_time_out) }}
                                         </span>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Unscheduled Users (No Schedule Plotted) -->
+                        <div v-if="unscheduledUsers.length > 0" class="mt-2 pt-3 border-t border-dashed border-gray-200">
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                <span class="inline-block w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
+                                No Schedule Plotted ({{ unscheduledUsers.length }})
+                            </p>
+                            <div class="space-y-1">
+                                <div
+                                    v-for="user in unscheduledUsers"
+                                    :key="user.id"
+                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    <div class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></div>
+                                    <span class="text-xs text-gray-600 font-medium flex-1 truncate">{{ user.name }}</span>
+                                    <span
+                                        v-if="user.department_reference?.code"
+                                        class="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded shrink-0"
+                                    >{{ user.department_reference.code }}</span>
                                 </div>
                             </div>
                         </div>
