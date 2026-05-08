@@ -28,6 +28,8 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
         }
     }
 
+    const toCamelCase = (str) => str.replace(/[-_](\w)/g, (_, c) => c.toUpperCase())
+
     const performSearch = (url = null, additionalParams = {}) => {
         const searchUrl = url || route(routeName)
         const globalParams = typeof extraParams === 'function' ? extraParams() : extraParams
@@ -44,16 +46,19 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
             preserveState: true,
             preserveScroll: true,
             onSuccess: (page) => {
-                // Try to find the data in props using several potential keys
                 const routeParts = routeName.split('.')
+                const base = routeParts[0]
+                const underscored = base.replace(/-/g, '_')
                 const potentialKeys = [
-                    routeParts[0],                        // e.g. 'form-builder'
-                    routeParts[0].replace(/-/g, '_'),     // e.g. 'form_builder'
-                    routeParts[0].replace(/s$/, ''),      // e.g. 'form' (if route was forms.index)
+                    base,
+                    underscored,
+                    toCamelCase(base),
+                    toCamelCase(underscored),
+                    base.replace(/s$/, ''),
                     'forms',
                     'records',
                     'tables',
-                    'data'
+                    'data',
                 ]
 
                 let responseData = null

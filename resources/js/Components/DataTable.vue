@@ -46,6 +46,11 @@
             </div>
         </div>
 
+        <!-- Optional Filters Row -->
+        <div v-if="$slots.filters" class="px-4 sm:px-6 py-3 border-b border-gray-200 bg-gray-50/60">
+            <slot name="filters"></slot>
+        </div>
+
         <!-- Table Content -->
         <div class="overflow-x-auto -mx-0">
             <table class="min-w-full divide-y divide-gray-200">

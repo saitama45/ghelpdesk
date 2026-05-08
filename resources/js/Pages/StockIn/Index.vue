@@ -38,6 +38,29 @@
                         </div>
                     </template>
 
+                    <template #filters>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Filter by Status:</span>
+                            <div class="w-64">
+                                <MultiAutocomplete
+                                    v-model="statusFilter"
+                                    :options="statusOptions"
+                                    label-key="label"
+                                    value-key="value"
+                                    placeholder="All statuses..."
+                                />
+                            </div>
+                            <button
+                                v-if="statusFilter.length"
+                                type="button"
+                                class="text-xs font-semibold text-red-500 hover:text-red-700 whitespace-nowrap"
+                                @click="statusFilter = []"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </template>
+
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Receive Date</th>
@@ -288,6 +311,17 @@
                                     placeholder="Select Origin Store"
                                 />
                             </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Memo / Remarks</label>
+                            <textarea
+                                v-model="form.memo_remarks"
+                                rows="3"
+                                maxlength="2000"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none"
+                                placeholder="Optional notes or remarks for this stock transaction..."
+                            ></textarea>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -734,6 +768,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
@@ -750,8 +785,27 @@ const props = defineProps({
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
-const pagination = usePagination(props.stockIns, 'stock-ins.index')
 const { hasPermission } = usePermission()
+
+const statusFilter = ref([])
+
+const statusOptions = [
+    { value: 'For Posting', label: 'For Posting' },
+    { value: 'Posted', label: 'Posted' },
+]
+
+const pagination = usePagination(props.stockIns, 'stock-ins.index', () => ({
+    statuses: statusFilter.value,
+}))
+
+watch(() => props.stockIns, (newData) => {
+    pagination.updateData(newData)
+})
+
+watch(statusFilter, () => {
+    pagination.currentPage.value = 1
+    pagination.performSearch()
+}, { deep: true })
 const page = usePage()
 const authUserName = computed(() => page.props.auth?.user?.name || '')
 
@@ -871,6 +925,7 @@ const form = reactive({
     vendor: '',
     origin_location: '',
     received_by: authUserName.value,
+    memo_remarks: '',
     status: 'For Posting',
     brand: '',
     model: '',
@@ -1300,6 +1355,7 @@ const resetForm = () => {
         vendor: '',
         origin_location: '',
         received_by: authUserName.value,
+        memo_remarks: '',
         status: 'For Posting',
         brand: '',
         model: '',
@@ -1349,6 +1405,7 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
         vendor: item.vendor || '',
         origin_location: normalizeLocationValue(item.origin_location),
         received_by: item.received_by || authUserName.value,
+        memo_remarks: item.memo_remarks || '',
         status: item.status || 'For Posting',
         brand: asset?.brand || '',
         model: asset?.model || '',
@@ -1510,6 +1567,7 @@ const submitForm = async (statusOverride = form.status || 'For Posting') => {
         vendor: form.vendor,
         origin_location: form.origin_location || null,
         received_by: form.received_by,
+        memo_remarks: form.memo_remarks || null,
         status: statusOverride,
         brand: form.brand,
         model: form.model,

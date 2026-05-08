@@ -19,6 +19,7 @@ class StockIn extends Model
         'origin_location',
         'destination_location',
         'received_by',
+        'memo_remarks',
         'posted_by',
         'posted_date',
         'status',

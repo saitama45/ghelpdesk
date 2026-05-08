@@ -32,9 +32,13 @@ class StockInController extends Controller
 
     private const RESERVED_TRANSFER_STATUSES = ['For Posting', 'Posted'];
 
-    public function index()
+    public function index(Request $request)
     {
-        $stockIns = StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])
+        $search   = trim((string) $request->input('search', ''));
+        $perPage  = max(1, min(200, (int) $request->input('per_page', 10)));
+        $statuses = array_values(array_filter((array) $request->input('statuses', [])));
+
+        $query = StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email'])
             ->select(
                 'asset_id',
                 'receive_date',
@@ -43,6 +47,7 @@ class StockInController extends Controller
                 'vendor',
                 'origin_location',
                 'received_by',
+                'memo_remarks',
                 'status',
                 'posted_by',
                 'posted_date',
@@ -61,12 +66,25 @@ class StockInController extends Controller
                 'vendor',
                 'origin_location',
                 'received_by',
+                'memo_remarks',
                 'status',
                 'posted_by',
                 'posted_date'
-            )
-            ->latest('receive_date')
-            ->paginate(10);
+            );
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('dr_no', 'like', "%{$search}%")
+                  ->orWhere('vendor', 'like', "%{$search}%")
+                  ->orWhere('received_by', 'like', "%{$search}%");
+            });
+        }
+
+        if (!empty($statuses)) {
+            $query->whereIn('status', $statuses);
+        }
+
+        $stockIns = $query->latest('receive_date')->paginate($perPage);
 
         return Inertia::render('StockIn/Index', [
             'stockIns' => $stockIns,
@@ -160,6 +178,7 @@ class StockInController extends Controller
             'vendor' => 'nullable|string|max:255',
             'origin_location' => 'nullable|string|max:255',
             'received_by' => 'nullable|string|max:255',
+            'memo_remarks' => 'nullable|string|max:2000',
             'posted_by' => 'nullable|string|max:255',
             'status' => 'required|in:For Posting,Posted',
             'asset_id' => 'required|exists:assets,id',
@@ -194,6 +213,7 @@ class StockInController extends Controller
                 'vendor' => $validated['vendor'] ?? null,
                 'origin_location' => $originLocation,
                 'received_by' => $validated['received_by'] ?? null,
+                'memo_remarks' => $validated['memo_remarks'] ?? null,
                 'posted_by' => $validated['posted_by'] ?? null,
                 'status' => $validated['status'],
                 'asset_id' => $validated['asset_id'],
@@ -226,6 +246,7 @@ class StockInController extends Controller
             'vendor' => 'nullable|string|max:255',
             'origin_location' => 'nullable|string|max:255',
             'received_by' => 'nullable|string|max:255',
+            'memo_remarks' => 'nullable|string|max:2000',
             'posted_by' => 'nullable|string|max:255',
             'status' => 'required|in:For Posting,Posted',
             'asset_id' => 'required|exists:assets,id',
@@ -958,6 +979,7 @@ class StockInController extends Controller
                 'vendor' => $validated['vendor'] ?? null,
                 'origin_location' => $this->normalizeStoreCode($validated['origin_location'] ?? null),
                 'received_by' => $validated['received_by'] ?? null,
+                'memo_remarks' => $validated['memo_remarks'] ?? null,
                 'posted_by' => $validated['posted_by'] ?? null,
                 'status' => $validated['status'],
                 'asset_id' => $validated['asset_id'],
