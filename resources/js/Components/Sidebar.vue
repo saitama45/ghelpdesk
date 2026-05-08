@@ -203,7 +203,7 @@ const canSeeSettings = computed(() => {
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     ]"
-                    style="order: 0"
+                    :style="so('dashboard')"
                 >
                     <HomeIcon
                         :class="[
@@ -227,7 +227,7 @@ const canSeeSettings = computed(() => {
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     ]"
-                    style="order: 0"
+                    :style="so('projectTracker')"
                 >
                     <ClipboardDocumentListIcon
                         :class="[

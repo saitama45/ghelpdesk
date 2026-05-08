@@ -11,13 +11,17 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    concernTypeFilter: {
+        type: Array,
+        default: () => []
+    },
     priorityFilter: {
         type: Array,
         default: () => []
     }
 });
 
-const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:priorityFilter']);
+const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:concernTypeFilter', 'update:priorityFilter']);
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
@@ -34,6 +38,12 @@ const STATUS_FILTERS = [
     { status: 'Offset',   label: 'Offset',   bg: 'bg-cyan-600'    },
 ];
 
+// ── Concern Type filter ───────────────────────────────────────────────────────
+const CONCERN_TYPE_FILTERS = [
+    { key: 'Incident',        label: 'Incident',        bg: 'bg-amber-500'  },
+    { key: 'Service Request', label: 'Service Request', bg: 'bg-cyan-600'   },
+];
+
 // ── Priority filter ──────────────────────────────────────────────────────────
 const PRIORITY_FILTERS = [
     { key: 'urgent', label: 'P1 - Urgent', bg: 'bg-red-600'    },
@@ -45,22 +55,27 @@ const PRIORITY_FILTERS = [
 const filteredEvents = computed(() => {
     return props.events.filter(e => {
         const matchesStatus = props.statusFilter.includes(e.status);
-        
-        // Priority logic: 
+
+        // Concern Type logic: 'none' covers schedules with no ticket / no concern_type
+        const concernKey = e.ticket?.concern_type ?? 'none';
+        const matchesConcernType = props.concernTypeFilter.includes(concernKey);
+
+        // Priority logic:
         // 1. If no ticket exists, it is strictly 'none' (No Priority).
-        // 2. If a ticket exists, it MUST be one of the priority keys. 
+        // 2. If a ticket exists, it MUST be one of the priority keys.
         //    We default to 'low' if the ticket has no priority set.
-        const priorityKey = e.ticket 
-            ? String(e.ticket.priority || 'low').toLowerCase() 
+        const priorityKey = e.ticket
+            ? String(e.ticket.priority || 'low').toLowerCase()
             : 'none';
-            
+
         const matchesPriority = props.priorityFilter.includes(priorityKey);
-        
-        return matchesStatus && matchesPriority;
+
+        return matchesStatus && matchesConcernType && matchesPriority;
     });
 });
 
 const allStatusSelected = computed(() => props.statusFilter.length === STATUS_FILTERS.length);
+const allConcernTypeSelected = computed(() => props.concernTypeFilter.length === (CONCERN_TYPE_FILTERS.length + 1));
 const allPrioritySelected = computed(() => props.priorityFilter.length === (PRIORITY_FILTERS.length + 1));
 
 const toggleStatus = (status) => {
@@ -85,6 +100,20 @@ const togglePriority = (priority) => {
 
 const toggleAllStatuses = () => {
     emit('update:statusFilter', allStatusSelected.value ? [] : STATUS_FILTERS.map(s => s.status));
+};
+
+const toggleConcernType = (key) => {
+    let newVal = [...props.concernTypeFilter];
+    if (newVal.includes(key)) {
+        newVal = newVal.filter(c => c !== key);
+    } else {
+        newVal.push(key);
+    }
+    emit('update:concernTypeFilter', newVal);
+};
+
+const toggleAllConcernTypes = () => {
+    emit('update:concernTypeFilter', allConcernTypeSelected.value ? [] : ['none', ...CONCERN_TYPE_FILTERS.map(c => c.key)]);
 };
 
 const toggleAllPriorities = () => {
@@ -533,6 +562,34 @@ const formatDateLong = (date) => {
                 @click="toggleAllStatuses"
                 class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
             >{{ allStatusSelected ? 'Clear all' : 'Select all' }}</button>
+        </div>
+
+        <!-- Concern Type Filter Strip -->
+        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/30 flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Concern Type:</span>
+            <button
+                v-for="c in CONCERN_TYPE_FILTERS"
+                :key="c.key"
+                @click="toggleConcernType(c.key)"
+                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                :class="concernTypeFilter.includes(c.key)
+                    ? [c.bg, 'text-white border-transparent shadow-sm']
+                    : 'bg-white text-gray-400 border-gray-200'"
+            >{{ c.label }}</button>
+
+            <!-- None Option (for schedules without a ticket/concern type) -->
+            <button
+                @click="toggleConcernType('none')"
+                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                :class="concernTypeFilter.includes('none')
+                    ? ['bg-slate-500', 'text-white border-transparent shadow-sm']
+                    : 'bg-white text-gray-400 border-gray-200'"
+            >No Ticket</button>
+
+            <button
+                @click="toggleAllConcernTypes"
+                class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
+            >{{ allConcernTypeSelected ? 'Clear all' : 'Select all' }}</button>
         </div>
 
         <!-- Priority Filter Strip -->

@@ -885,6 +885,7 @@ const syncEmails = () => {
                                                 </span>
                                                 <span class="flex-1 text-sm font-semibold text-gray-800">{{ section.label }}</span>
                                                 <button
+                                                    v-if="(sidebarState.children[section.id] || []).length > 0"
                                                     type="button"
                                                     @click="toggleSidebarSection(section.id)"
                                                     class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
@@ -893,6 +894,7 @@ const syncEmails = () => {
                                                     <ChevronDownIcon v-if="expandedSidebarSection === section.id" class="w-3.5 h-3.5" />
                                                     <ChevronRightIcon v-else class="w-3.5 h-3.5" />
                                                 </button>
+                                                <span v-else class="text-xs text-gray-400 italic px-2">No sub-items</span>
                                             </div>
 
                                             <div v-if="expandedSidebarSection === section.id" class="px-4 py-3 bg-white border-t border-gray-100">

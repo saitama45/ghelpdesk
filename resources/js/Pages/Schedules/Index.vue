@@ -190,9 +190,10 @@
 
                 <!-- Calendar View -->
                 <div v-if="currentView === 'calendar'">
-                    <Calendar 
+                    <Calendar
                         :events="calendarSchedules"
                         v-model:statusFilter="filterStatus"
+                        v-model:concernTypeFilter="filterConcernType"
                         v-model:priorityFilter="filterPriority"
                         @visible-range-change="handleVisibleRangeChange"
                         @date-click="handleDateClick"
@@ -1092,6 +1093,10 @@ const filterStore = useRemember(props.filters?.store_id || '', 'schedules.filter
 const filterStatus = useRemember(
     props.filters?.status ? (Array.isArray(props.filters.status) ? props.filters.status : [props.filters.status]) : ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Holiday', 'Offset', 'N/A'],
     'schedules.filterStatus'
+)
+const filterConcernType = useRemember(
+    props.filters?.concern_type ? (Array.isArray(props.filters.concern_type) ? props.filters.concern_type : [props.filters.concern_type]) : ['none', 'Incident', 'Service Request'],
+    'schedules.filterConcernType'
 )
 const filterPriority = useRemember(
     props.filters?.priority ? (Array.isArray(props.filters.priority) ? props.filters.priority : [props.filters.priority]) : ['none', 'urgent', 'high', 'medium', 'low'],

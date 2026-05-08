@@ -168,22 +168,24 @@ class ScheduleController extends Controller implements HasMiddleware
                         'actual_time_out'      => $segLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String(),
                         'actual_times_by_date' => $segmentActualTimesByDate,
                         'ticket'               => $ss->ticket ? [
-                            'id'         => $ss->ticket->id,
-                            'ticket_key' => $ss->ticket->ticket_key,
-                            'title'      => $ss->ticket->title,
-                            'priority'   => $ss->ticket->item ? $ss->ticket->item->priority : $ss->ticket->priority,
-                            'status'     => $ss->ticket->status,
+                            'id'           => $ss->ticket->id,
+                            'ticket_key'   => $ss->ticket->ticket_key,
+                            'title'        => $ss->ticket->title,
+                            'priority'     => $ss->ticket->item ? $ss->ticket->item->priority : $ss->ticket->priority,
+                            'concern_type' => $ss->ticket->item?->concern_type,
+                            'status'       => $ss->ticket->status,
                         ] : null,
                     ];
                 }),
                 'ticket' => $schedule->scheduleStores->whereNotNull('ticket_id')->first()?->ticket ? [
-                    'id'         => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->id,
-                    'ticket_key' => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->ticket_key,
-                    'title'      => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->title,
-                    'priority'   => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item 
-                                    ? $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item->priority 
-                                    : $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->priority,
-                    'status'     => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->status,
+                    'id'           => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->id,
+                    'ticket_key'   => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->ticket_key,
+                    'title'        => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->title,
+                    'priority'     => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item
+                                        ? $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item->priority
+                                        : $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->priority,
+                    'concern_type' => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->item?->concern_type,
+                    'status'       => $schedule->scheduleStores->whereNotNull('ticket_id')->first()->ticket->status,
                 ] : null,
             ];
         });

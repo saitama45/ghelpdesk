@@ -3,6 +3,8 @@ import { reactive } from 'vue'
 const STORAGE_KEY = 'sidebar_order'
 
 export const SECTION_LABELS = {
+    dashboard: 'Dashboard',
+    projectTracker: 'Project Tracker',
     services: 'Services',
     inventory: 'Inventory',
     adminTask: 'Administrative',
@@ -13,10 +15,12 @@ export const SECTION_LABELS = {
 }
 
 export const DEFAULT_SECTION_ORDER = [
-    'services', 'inventory', 'adminTask', 'references', 'reports', 'userManagement', 'settings',
+    'dashboard', 'projectTracker', 'services', 'inventory', 'adminTask', 'references', 'reports', 'userManagement', 'settings',
 ]
 
 export const DEFAULT_CHILD_ORDER = {
+    dashboard: [],
+    projectTracker: [],
     services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests'],
     inventory: ['assets', 'stock-ins', 'inventory-report'],
     adminTask: ['dtr', 'attendance-logs', 'scheduling', 'presence', 'kb-articles'],
@@ -87,10 +91,21 @@ function loadFromStorage() {
     return null
 }
 
+function mergedSections(stored) {
+    if (!stored) return [...DEFAULT_SECTION_ORDER]
+    const result = [...stored]
+    DEFAULT_SECTION_ORDER.forEach((id, defaultIdx) => {
+        if (!result.includes(id)) {
+            result.splice(Math.min(defaultIdx, result.length), 0, id)
+        }
+    })
+    return result
+}
+
 const _stored = loadFromStorage()
 
 const _state = reactive({
-    sections: _stored?.sections ?? [...DEFAULT_SECTION_ORDER],
+    sections: mergedSections(_stored?.sections),
     children: _stored?.children
         ? { ...cloneChildren(DEFAULT_CHILD_ORDER), ...cloneChildren(_stored.children) }
         : cloneChildren(DEFAULT_CHILD_ORDER),
