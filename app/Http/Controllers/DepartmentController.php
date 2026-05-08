@@ -23,8 +23,9 @@ class DepartmentController extends Controller implements HasMiddleware
         return [
             new Middleware('can:departments.view', only: ['index']),
             new Middleware('can:departments.create', only: ['store', 'storeSection', 'storeUnit', 'storeSubUnit']),
-            new Middleware('can:departments.edit', only: ['update', 'updateSection', 'updateUnit', 'updateSubUnit', 'updateUserPlacement']),
-            new Middleware('can:departments.delete', only: ['destroy', 'destroySection', 'destroyUnit', 'destroySubUnit']),
+            new Middleware('can:departments.edit', only: ['update', 'updateSection', 'updateUnit', 'updateSubUnit', 'updateUserPlacement', 'updateVacant', 'reorderStructure']),
+            new Middleware('can:departments.delete', only: ['destroy', 'destroySection', 'destroyUnit', 'destroySubUnit', 'destroyVacant']),
+            new Middleware('can:departments.create', only: ['storeVacant']),
         ];
     }
 
@@ -52,6 +53,7 @@ class DepartmentController extends Controller implements HasMiddleware
                 'department_sub_unit_id',
                 'is_active',
                 'is_manager',
+                'is_vacant',
                 'profile_photo',
                 'org_sort_order',
             ]);
@@ -68,12 +70,14 @@ class DepartmentController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         Department::create([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active', true),
         ]);
@@ -85,12 +89,14 @@ class DepartmentController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->ignore($department->id)],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $department->update([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active'),
         ]);
@@ -121,12 +127,14 @@ class DepartmentController extends Controller implements HasMiddleware
                 Rule::unique('department_sections', 'name')
                     ->where(fn ($query) => $query->where('department_id', $department->id)),
             ],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $department->sections()->create([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active', true),
         ]);
@@ -145,12 +153,14 @@ class DepartmentController extends Controller implements HasMiddleware
                     ->where(fn ($query) => $query->where('department_id', $departmentSection->department_id))
                     ->ignore($departmentSection->id),
             ],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $departmentSection->update([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active'),
         ]);
@@ -181,12 +191,14 @@ class DepartmentController extends Controller implements HasMiddleware
                 Rule::unique('department_units', 'name')
                     ->where(fn ($query) => $query->where('department_section_id', $departmentSection->id)),
             ],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $departmentSection->units()->create([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active', true),
         ]);
@@ -205,12 +217,14 @@ class DepartmentController extends Controller implements HasMiddleware
                     ->where(fn ($query) => $query->where('department_section_id', $departmentUnit->department_section_id))
                     ->ignore($departmentUnit->id),
             ],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $departmentUnit->update([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active'),
         ]);
@@ -241,12 +255,14 @@ class DepartmentController extends Controller implements HasMiddleware
                 Rule::unique('department_sub_units', 'name')
                     ->where(fn ($query) => $query->where('department_unit_id', $departmentUnit->id)),
             ],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $departmentUnit->subUnits()->create([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active', true),
         ]);
@@ -265,12 +281,14 @@ class DepartmentController extends Controller implements HasMiddleware
                     ->where(fn ($query) => $query->where('department_unit_id', $departmentSubUnit->department_unit_id))
                     ->ignore($departmentSubUnit->id),
             ],
+            'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
         $departmentSubUnit->update([
             'name' => trim($validated['name']),
+            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active'),
         ]);
@@ -378,6 +396,107 @@ class DepartmentController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'User placement updated successfully.');
     }
 
+    public function storeVacant(Request $request)
+    {
+        $validated = $request->validate([
+            'title'                  => ['nullable', 'string', 'max:255'],
+            'department_id'          => ['nullable', 'integer', 'exists:departments,id'],
+            'department_section_id'  => ['nullable', 'integer', 'exists:department_sections,id'],
+            'department_unit_id'     => ['nullable', 'integer', 'exists:department_units,id'],
+            'department_sub_unit_id' => ['nullable', 'integer', 'exists:department_sub_units,id'],
+            'manager_ids'            => ['nullable', 'array'],
+            'manager_ids.*'          => ['integer', 'exists:users,id'],
+            'org_sort_order'         => ['nullable', 'integer'],
+        ]);
+
+        $managerIds = collect($validated['manager_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values();
+
+        $payload = [];
+        if ($validated['department_id'] ?? null) {
+            $payload = $this->organizationReferences->payloadFromIds(
+                (int) $validated['department_id'],
+                $validated['department_section_id'] ? (int) $validated['department_section_id'] : null,
+                $validated['department_unit_id']    ? (int) $validated['department_unit_id']    : null,
+                $validated['department_sub_unit_id'] ? (int) $validated['department_sub_unit_id'] : null,
+            );
+        }
+
+        DB::transaction(function () use ($validated, $payload, $managerIds) {
+            $title = filled($validated['title'] ?? null) ? $validated['title'] : 'Vacant Position';
+            $user = User::create([
+                'name'       => $title,
+                'email'      => 'vacant.' . uniqid() . '@placeholder.internal',
+                'password'   => bcrypt(str()->random(32)),
+                'is_vacant'  => true,
+                'is_active'  => true,
+                'is_manager' => false,
+                'position'   => $title,
+                ...$payload,
+                'org_sort_order' => (int) ($validated['org_sort_order'] ?? 0),
+                'created_by' => auth()->id(),
+            ]);
+            $user->managers()->sync($managerIds->all());
+        });
+
+        return redirect()->back()->with('success', 'Vacant position added to org chart.');
+    }
+
+    public function updateVacant(Request $request, User $user)
+    {
+        abort_if(! $user->is_vacant, 403);
+
+        $validated = $request->validate([
+            'title'                  => ['nullable', 'string', 'max:255'],
+            'department_id'          => ['nullable', 'integer', 'exists:departments,id'],
+            'department_section_id'  => ['nullable', 'integer', 'exists:department_sections,id'],
+            'department_unit_id'     => ['nullable', 'integer', 'exists:department_units,id'],
+            'department_sub_unit_id' => ['nullable', 'integer', 'exists:department_sub_units,id'],
+            'manager_ids'            => ['nullable', 'array'],
+            'manager_ids.*'          => ['integer', 'exists:users,id'],
+            'org_sort_order'         => ['nullable', 'integer'],
+        ]);
+
+        $managerIds = collect($validated['manager_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values();
+
+        $orgIds = collect([
+            $validated['department_id'] ?? null,
+            $validated['department_section_id'] ?? null,
+            $validated['department_unit_id'] ?? null,
+            $validated['department_sub_unit_id'] ?? null,
+        ])->filter(fn ($v) => filled($v));
+
+        $payload = $orgIds->isEmpty()
+            ? $this->organizationReferences->clearPayload()
+            : $this->organizationReferences->payloadFromIds(
+                $validated['department_id'] ? (int) $validated['department_id'] : null,
+                $validated['department_section_id'] ? (int) $validated['department_section_id'] : null,
+                $validated['department_unit_id']    ? (int) $validated['department_unit_id']    : null,
+                $validated['department_sub_unit_id'] ? (int) $validated['department_sub_unit_id'] : null,
+            );
+
+        DB::transaction(function () use ($user, $validated, $payload, $managerIds) {
+            $title = filled($validated['title'] ?? null) ? $validated['title'] : 'Vacant Position';
+            $user->forceFill([
+                'name'     => $title,
+                'position' => $title,
+                ...$payload,
+                'org_sort_order' => (int) ($validated['org_sort_order'] ?? 0),
+                'updated_by' => auth()->id(),
+            ])->save();
+            $user->managers()->sync($managerIds->all());
+        });
+
+        return redirect()->back()->with('success', 'Vacant position updated.');
+    }
+
+    public function destroyVacant(User $user)
+    {
+        abort_if(! $user->is_vacant, 403);
+        $user->managers()->detach();
+        $user->delete();
+        return redirect()->back()->with('success', 'Vacant position removed from org chart.');
+    }
+
     public function reorderUsers(Request $request)
     {
         $validated = $request->validate([
@@ -393,5 +512,31 @@ class DepartmentController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Organisation chart order updated.');
+    }
+
+    public function reorderStructure(Request $request)
+    {
+        $validated = $request->validate([
+            'type'              => ['required', 'in:section,unit,sub_unit'],
+            'items'             => ['required', 'array'],
+            'items.*.id'        => ['required', 'integer'],
+            'items.*.sort_order' => ['required', 'integer'],
+        ]);
+
+        $table = match ($validated['type']) {
+            'section'  => 'department_sections',
+            'unit'     => 'department_units',
+            'sub_unit' => 'department_sub_units',
+        };
+
+        DB::transaction(function () use ($validated, $table) {
+            foreach ($validated['items'] as $item) {
+                DB::table($table)
+                    ->where('id', (int) $item['id'])
+                    ->update(['sort_order' => (int) $item['sort_order']]);
+            }
+        });
+
+        return redirect()->back()->with('success', 'Structure order updated.');
     }
 }

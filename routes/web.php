@@ -58,7 +58,11 @@ Route::middleware('auth')->group(function () {
     Route::put('department-sub-units/{departmentSubUnit}', [DepartmentController::class, 'updateSubUnit'])->name('departments.sub-units.update');
     Route::delete('department-sub-units/{departmentSubUnit}', [DepartmentController::class, 'destroySubUnit'])->name('departments.sub-units.destroy');
     Route::put('departments/users/reorder', [DepartmentController::class, 'reorderUsers'])->name('departments.users.reorder');
+    Route::put('departments/structure/reorder', [DepartmentController::class, 'reorderStructure'])->name('departments.structure.reorder');
     Route::put('departments/users/{user}/placement', [DepartmentController::class, 'updateUserPlacement'])->name('departments.users.placement');
+    Route::post('departments/users/vacant', [DepartmentController::class, 'storeVacant'])->name('departments.users.vacant.store');
+    Route::put('departments/users/vacant/{user}', [DepartmentController::class, 'updateVacant'])->name('departments.users.vacant.update');
+    Route::delete('departments/users/vacant/{user}', [DepartmentController::class, 'destroyVacant'])->name('departments.users.vacant.destroy');
     Route::resource('clusters', \App\Http\Controllers\ClusterController::class)->except(['show', 'create', 'edit']);
     Route::post('clusters/{cluster}/assign-stores', [\App\Http\Controllers\ClusterController::class, 'assignStores'])->name('clusters.assign-stores');
     Route::get('categories/template', [\App\Http\Controllers\CategoryController::class, 'template'])->name('categories.template');

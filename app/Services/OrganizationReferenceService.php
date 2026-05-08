@@ -14,11 +14,14 @@ class OrganizationReferenceService
             ->when($activeOnly, fn ($query) => $query->where('is_active', true))
             ->with([
                 'sections' => fn ($query) => $query
-                    ->when($activeOnly, fn ($sectionQuery) => $sectionQuery->where('is_active', true)),
+                    ->when($activeOnly, fn ($q) => $q->where('is_active', true))
+                    ->reorder()->orderBy('sort_order')->orderBy('name'),
                 'sections.units' => fn ($query) => $query
-                    ->when($activeOnly, fn ($unitQuery) => $unitQuery->where('is_active', true)),
+                    ->when($activeOnly, fn ($q) => $q->where('is_active', true))
+                    ->reorder()->orderBy('sort_order')->orderBy('name'),
                 'sections.units.subUnits' => fn ($query) => $query
-                    ->when($activeOnly, fn ($subUnitQuery) => $subUnitQuery->where('is_active', true)),
+                    ->when($activeOnly, fn ($q) => $q->where('is_active', true))
+                    ->reorder()->orderBy('sort_order')->orderBy('name'),
             ])
             ->orderBy('name')
             ->get();
@@ -26,26 +29,33 @@ class OrganizationReferenceService
         return $departments->map(fn (Department $department) => [
             'id' => $department->id,
             'name' => $department->name,
+            'code' => $department->code,
             'description' => $department->description,
             'is_active' => $department->is_active,
             'sections' => $department->sections->map(fn ($section) => [
                 'id' => $section->id,
                 'department_id' => $section->department_id,
                 'name' => $section->name,
+                'code' => $section->code,
                 'description' => $section->description,
                 'is_active' => $section->is_active,
+                'sort_order' => $section->sort_order,
                 'units' => $section->units->map(fn ($unit) => [
                     'id' => $unit->id,
                     'department_section_id' => $unit->department_section_id,
                     'name' => $unit->name,
+                    'code' => $unit->code,
                     'description' => $unit->description,
                     'is_active' => $unit->is_active,
+                    'sort_order' => $unit->sort_order,
                     'sub_units' => $unit->subUnits->map(fn ($subUnit) => [
                         'id' => $subUnit->id,
                         'department_unit_id' => $subUnit->department_unit_id,
                         'name' => $subUnit->name,
+                        'code' => $subUnit->code,
                         'description' => $subUnit->description,
                         'is_active' => $subUnit->is_active,
+                        'sort_order' => $subUnit->sort_order,
                     ])->values(),
                 ])->values(),
             ])->values(),

@@ -11,6 +11,7 @@ class DepartmentSection extends Model
     protected $fillable = [
         'department_id',
         'name',
+        'code',
         'description',
         'is_active',
     ];

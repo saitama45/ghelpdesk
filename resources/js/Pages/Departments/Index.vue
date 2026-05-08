@@ -6,15 +6,29 @@ const reorderForm = useForm({
     users: [], // Array of { id, org_sort_order }
 })
 
-const dragState = reactive({ active: false, draggedId: null, targetId: null, x: 0, y: 0 })
+const dragState = reactive({
+    active: false,
+    kind: null,         // 'user' | 'structure'
+    draggedId: null,    // user DB id (number) OR structure composite id (string)
+    draggedDbId: null,  // structure actual DB id (number), null for user drags
+    draggedType: null,  // structure type: 'section' | 'unit' | 'sub_unit', null for user drags
+    targetId: null,
+    targetDbId: null,
+    x: 0,
+    y: 0,
+})
 
 const startCardDrag = (e, node) => {
-    if (node.type !== 'user') return
+    if (node.type !== 'user' && node.type !== 'structure') return
     e.preventDefault()
     e.stopPropagation()
     dragState.active = true
+    dragState.kind = node.type
     dragState.draggedId = node.id
+    dragState.draggedDbId = node.type === 'structure' ? node.structureDbId : null
+    dragState.draggedType = node.type === 'structure' ? node.structureType : null
     dragState.targetId = null
+    dragState.targetDbId = null
     dragState.x = e.clientX
     dragState.y = e.clientY
 }
@@ -25,81 +39,157 @@ const onGlobalMouseMove = (e) => {
     dragState.y = e.clientY
 }
 
-const onGlobalMouseUp = () => {
-    if (!dragState.active) return
-    const fromId = Number(dragState.draggedId)
-
-    // Primary: use tracked target; fallback: find card under cursor via DOM
-    let toId = dragState.targetId ? Number(dragState.targetId) : null
-    if (!toId) {
-        const el = document.elementFromPoint(dragState.x, dragState.y)
-        const card = el?.closest('[data-user-id]')
-        if (card) toId = Number(card.dataset.userId)
+const findStructureSiblings = (nodeId, structureType, nodes) => {
+    const directSiblings = nodes.filter(n => n.type === 'structure' && n.structureType === structureType)
+    if (directSiblings.some(n => n.id === nodeId)) return directSiblings
+    for (const node of nodes) {
+        if (node.children?.length) {
+            const found = findStructureSiblings(nodeId, structureType, node.children)
+            if (found) return found
+        }
     }
-
-    dragState.active = false
-    dragState.draggedId = null
-    dragState.targetId = null
-
-    if (!toId || fromId === toId) return
-
-    // Build ordered list of all users currently rendered in the chart
-    const chartUsers = (props.users || [])
-        .filter(u => userCardRefs.has(Number(u.id)))
-        .slice()
-        .sort((a, b) => (a.org_sort_order ?? 0) - (b.org_sort_order ?? 0) || a.name.localeCompare(b.name))
-
-    const fromIdx = chartUsers.findIndex(u => Number(u.id) === fromId)
-    const toIdx   = chartUsers.findIndex(u => Number(u.id) === toId)
-
-    if (fromIdx === -1 || toIdx === -1) return
-
-    // Swap the two users in the ordered array
-    ;[chartUsers[fromIdx], chartUsers[toIdx]] = [chartUsers[toIdx], chartUsers[fromIdx]]
-
-    // Assign sequential values (1-based) so every user gets a unique, non-zero order
-    reorderForm.users = chartUsers.map((u, i) => ({ id: Number(u.id), org_sort_order: i + 1 }))
-    reorderForm.put(route('departments.users.reorder'), {
-        preserveScroll: true,
-        onSuccess: () => refreshChartLinks(),
-    })
+    return null
 }
 
-const enterCardTarget = (nodeId) => {
-    if (!dragState.active || Number(nodeId) === Number(dragState.draggedId)) return
-    dragState.targetId = nodeId
+const onGlobalMouseUp = () => {
+    if (!dragState.active) return
+
+    const kind = dragState.kind
+
+    if (kind === 'user') {
+        const fromId = Number(dragState.draggedId)
+        let toId = dragState.targetId ? Number(dragState.targetId) : null
+        if (!toId) {
+            const el = document.elementFromPoint(dragState.x, dragState.y)
+            const card = el?.closest('[data-user-id]')
+            if (card) toId = Number(card.dataset.userId)
+        }
+
+        dragState.active = false
+        dragState.draggedId = null
+        dragState.targetId = null
+        dragState.kind = null
+
+        if (!toId || fromId === toId) return
+
+        const chartUsers = (props.users || [])
+            .filter(u => userCardRefs.has(Number(u.id)))
+            .slice()
+            .sort((a, b) => (a.org_sort_order ?? 0) - (b.org_sort_order ?? 0) || a.name.localeCompare(b.name))
+
+        const fromIdx = chartUsers.findIndex(u => Number(u.id) === fromId)
+        const toIdx   = chartUsers.findIndex(u => Number(u.id) === toId)
+        if (fromIdx === -1 || toIdx === -1) return
+
+        ;[chartUsers[fromIdx], chartUsers[toIdx]] = [chartUsers[toIdx], chartUsers[fromIdx]]
+        reorderForm.users = chartUsers.map((u, i) => ({ id: Number(u.id), org_sort_order: i + 1 }))
+        reorderForm.put(route('departments.users.reorder'), {
+            preserveScroll: true,
+            onSuccess: () => refreshChartLinks(),
+        })
+    } else if (kind === 'structure') {
+        const fromNodeId = dragState.draggedId
+        const fromDbId = dragState.draggedDbId
+        const structureType = dragState.draggedType
+        let toDbId = dragState.targetDbId
+
+        if (!toDbId) {
+            const el = document.elementFromPoint(dragState.x, dragState.y)
+            const structEl = el?.closest('[data-struct-node-id]')
+            if (structEl && structEl.dataset.structType === structureType) {
+                toDbId = Number(structEl.dataset.structDbId)
+            }
+        }
+
+        dragState.active = false
+        dragState.draggedId = null
+        dragState.draggedDbId = null
+        dragState.draggedType = null
+        dragState.targetId = null
+        dragState.targetDbId = null
+        dragState.kind = null
+
+        if (!toDbId || fromDbId === toDbId) return
+
+        const siblings = findStructureSiblings(fromNodeId, structureType, userHierarchy.value)
+        if (!siblings || siblings.length < 2) return
+
+        const fromIdx = siblings.findIndex(s => s.structureDbId === fromDbId)
+        const toIdx   = siblings.findIndex(s => s.structureDbId === toDbId)
+        if (fromIdx === -1 || toIdx === -1) return
+
+        const ordered = [...siblings]
+        ;[ordered[fromIdx], ordered[toIdx]] = [ordered[toIdx], ordered[fromIdx]]
+        const items = ordered.map((s, i) => ({ id: s.structureDbId, sort_order: i + 1 }))
+
+        put(route('departments.structure.reorder'), { type: structureType, items }, {
+            preserveScroll: true,
+            onSuccess: () => refreshChartLinks(),
+        })
+    } else {
+        dragState.active = false
+        dragState.draggedId = null
+        dragState.targetId = null
+        dragState.kind = null
+    }
+}
+
+const enterCardTarget = (node) => {
+    if (!dragState.active) return
+    if (dragState.kind === 'user') {
+        if (node.type !== 'user' || Number(node.id) === Number(dragState.draggedId)) return
+        dragState.targetId = node.id
+        dragState.targetDbId = null
+    } else if (dragState.kind === 'structure') {
+        if (node.type !== 'structure') return
+        if (node.structureType !== dragState.draggedType) return
+        if (node.id === dragState.draggedId) return
+        dragState.targetId = node.id
+        dragState.targetDbId = node.structureDbId
+    }
 }
 
 const leaveCardTarget = () => {
     if (!dragState.active) return
     dragState.targetId = null
+    dragState.targetDbId = null
 }
 
 const UserNode = defineComponent({
     name: 'UserNode',
-    props: ['node', 'getOrgPath', 'hasPermission', 'openEditPlacementModal', 'openQuickAddModal', 'setUserCardRef', 'startCardDrag', 'enterCardTarget', 'leaveCardTarget', 'draggedId', 'dragTargetId'],
+    props: ['node', 'getOrgPath', 'hasPermission', 'openEditPlacementModal', 'openQuickAddModal', 'openAddVacantModal', 'openEditVacantModal', 'destroyVacant', 'setUserCardRef', 'startCardDrag', 'enterCardTarget', 'leaveCardTarget', 'draggedId', 'dragTargetId', 'dragKind'],
     setup(props) {
         const isUser = props.node.type === 'user'
         const isStructure = props.node.type === 'structure'
 
         return () => {
-            const isDragSource = isUser && Number(props.node.id) === Number(props.draggedId)
-            const isDragTarget = isUser && Number(props.node.id) === Number(props.dragTargetId)
+            const isDragSource = isUser && Number(props.node.id) === Number(props.draggedId) && props.dragKind === 'user'
+            const isDragTarget = isUser && Number(props.node.id) === Number(props.dragTargetId) && props.dragKind === 'user'
+            const isVacant = isUser && props.node.data?.is_vacant
+            const isStructureDragSource = isStructure && props.node.id === props.draggedId && props.dragKind === 'structure'
+            const isStructureDragTarget = isStructure && props.node.id === props.dragTargetId && props.dragKind === 'structure'
 
             return h('div', { class: 'flex flex-col items-center' }, [
                 h('div', {
                     ref: el => props.setUserCardRef(props.node.id, el),
                     'data-user-id': isUser ? props.node.id : undefined,
-                    onMousedown: isUser ? (e) => props.startCardDrag(e, props.node) : undefined,
-                    onMouseenter: isUser ? () => props.enterCardTarget(props.node.id) : undefined,
-                    onMouseleave: isUser ? () => props.leaveCardTarget() : undefined,
+                    'data-struct-node-id': isStructure ? props.node.id : undefined,
+                    'data-struct-db-id': isStructure ? props.node.structureDbId : undefined,
+                    'data-struct-type': isStructure ? props.node.structureType : undefined,
+                    onMousedown: (isUser || isStructure) ? (e) => props.startCardDrag(e, props.node) : undefined,
+                    onMouseenter: (isUser || isStructure) ? () => props.enterCardTarget(props.node) : undefined,
+                    onMouseleave: (isUser || isStructure) ? () => props.leaveCardTarget() : undefined,
                     class: [
                         'relative flex-shrink-0 transition-all duration-200 z-10 select-none',
-                        isUser ? 'w-64 rounded-xl border bg-white p-4 shadow-sm cursor-grab' : '',
-                        isUser && !isDragSource && !isDragTarget ? 'border-gray-200 hover:border-blue-400 hover:shadow-md' : '',
+                        isUser ? 'w-64 rounded-xl border p-4 shadow-sm cursor-grab' : '',
+                        isVacant ? 'border-dashed border-gray-400 bg-gray-50/80' : (isUser ? 'bg-white' : ''),
+                        isUser && !isDragSource && !isDragTarget && !isVacant ? 'border-gray-200 hover:border-blue-400 hover:shadow-md' : '',
+                        isUser && !isDragSource && !isDragTarget && isVacant ? 'hover:border-amber-400 hover:shadow-md' : '',
                         isDragSource ? 'opacity-30 scale-95 border-blue-200' : '',
                         isDragTarget ? 'ring-2 ring-blue-500 ring-offset-2 border-blue-400 shadow-lg scale-[1.03]' : '',
-                        isStructure ? 'px-6 py-2.5 rounded-lg border-2 border-dashed bg-slate-50 text-center min-w-[200px] shadow-sm' : ''
+                        isStructure ? 'px-6 py-2.5 rounded-lg border-2 border-dashed text-center min-w-[200px] shadow-sm cursor-grab' : '',
+                        isStructureDragSource ? 'opacity-30 scale-95' : '',
+                        isStructureDragTarget ? 'ring-2 ring-offset-2 ring-blue-400 shadow-lg scale-105' : '',
                     ],
                     style: isStructure ? {
                         backgroundColor: props.node.structureType === 'section' ? '#bae6fd' :
@@ -110,8 +200,10 @@ const UserNode = defineComponent({
                                props.node.structureType === 'unit' ? '#334155' : '#475569'
                     } : {}
                 }, isUser ? [
+                    // Action buttons
                     props.hasPermission('departments.edit') ? h('div', { class: 'absolute top-1 right-1 flex items-center' }, [
-                        h('button', {
+                        // For non-vacant: quick-add real subordinate
+                        !isVacant ? h('button', {
                             type: 'button',
                             onMousedown: (e) => e.stopPropagation(),
                             onClick: () => props.openQuickAddModal(props.node.data),
@@ -121,30 +213,65 @@ const UserNode = defineComponent({
                             h('svg', { class: 'h-3.5 w-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
                                 h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M12 4v16m8-8H4' })
                             ])
-                        ]),
+                        ]) : null,
+                        // For non-vacant: add vacant subordinate
+                        !isVacant ? h('button', {
+                            type: 'button',
+                            onMousedown: (e) => e.stopPropagation(),
+                            onClick: () => props.openAddVacantModal(props.node.data),
+                            class: 'rounded p-1 text-gray-300 hover:bg-amber-50 hover:text-amber-500 transition-colors z-30',
+                            title: 'Add Vacant Subordinate'
+                        }, [
+                            h('svg', { class: 'h-3.5 w-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
+                                h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }),
+                                h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M22 12h-4m2-2v4' })
+                            ])
+                        ]) : null,
+                        // Edit button
                         h('button', {
                             type: 'button',
                             onMousedown: (e) => e.stopPropagation(),
-                            onClick: () => props.openEditPlacementModal(props.node.data),
+                            onClick: () => isVacant ? props.openEditVacantModal(props.node.data) : props.openEditPlacementModal(props.node.data),
                             class: 'rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors z-30',
-                            title: 'Edit Placement'
+                            title: isVacant ? 'Edit Vacant Position' : 'Edit Placement'
                         }, [
                             h('svg', { class: 'h-3.5 w-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
                                 h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' })
                             ])
-                        ])
+                        ]),
+                        // Delete button for vacant
+                        isVacant && props.hasPermission('departments.delete') ? h('button', {
+                            type: 'button',
+                            onMousedown: (e) => e.stopPropagation(),
+                            onClick: () => props.destroyVacant(props.node.data),
+                            class: 'rounded p-1 text-gray-300 hover:bg-rose-50 hover:text-rose-500 transition-colors z-30',
+                            title: 'Remove Vacant Position'
+                        }, [
+                            h('svg', { class: 'h-3.5 w-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
+                                h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M6 18L18 6M6 6l12 12' })
+                            ])
+                        ]) : null,
                     ]) : null,
 
                     h('div', { class: 'flex items-center gap-3' }, [
-                        h('div', { class: 'shrink-0 h-12 w-12 rounded-full border-2 border-white shadow-sm overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-black' },
-                            props.node.data.profile_photo
-                                ? h('img', { src: `/serve-storage/${props.node.data.profile_photo}`, class: 'h-full w-full object-cover' })
-                                : props.node.data.name.charAt(0).toUpperCase()
-                        ),
+                        // Avatar / vacant placeholder
+                        isVacant
+                            ? h('div', { class: 'shrink-0 h-12 w-12 rounded-full border-2 border-dashed border-gray-300 bg-gray-100 flex items-center justify-center text-gray-400' }, [
+                                h('svg', { class: 'h-6 w-6', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
+                                    h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '1.5', d: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' })
+                                ])
+                              ])
+                            : h('div', { class: 'shrink-0 h-12 w-12 rounded-full border-2 border-white shadow-sm overflow-hidden bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-black' },
+                                props.node.data.profile_photo
+                                    ? h('img', { src: `/serve-storage/${props.node.data.profile_photo}`, class: 'h-full w-full object-cover' })
+                                    : props.node.data.name.charAt(0).toUpperCase()
+                              ),
                         h('div', { class: 'min-w-0 flex-1 text-left' }, [
-                            h('div', { class: 'truncate text-sm font-black text-gray-900 leading-tight' }, props.node.data.name),
-                            h('div', { class: 'truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight' }, props.node.data.position || 'No position'),
-                            !props.node.data.is_active ? h('div', { class: 'mt-1' }, [
+                            h('div', { class: ['truncate text-sm font-black leading-tight', isVacant ? 'text-gray-500 italic' : 'text-gray-900'] }, props.node.data.name),
+                            isVacant
+                                ? h('span', { class: 'mt-1 inline-block rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-600' }, 'Vacant')
+                                : h('div', { class: 'truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight' }, props.node.data.position || 'No position'),
+                            !props.node.data.is_active && !isVacant ? h('div', { class: 'mt-1' }, [
                                 h('span', { class: 'rounded-full bg-rose-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-700' }, 'Inactive')
                             ]) : null
                         ])
@@ -161,12 +288,16 @@ const UserNode = defineComponent({
                         hasPermission: props.hasPermission,
                         openEditPlacementModal: props.openEditPlacementModal,
                         openQuickAddModal: props.openQuickAddModal,
+                        openAddVacantModal: props.openAddVacantModal,
+                        openEditVacantModal: props.openEditVacantModal,
+                        destroyVacant: props.destroyVacant,
                         setUserCardRef: props.setUserCardRef,
                         startCardDrag: props.startCardDrag,
                         enterCardTarget: props.enterCardTarget,
                         leaveCardTarget: props.leaveCardTarget,
                         draggedId: props.draggedId,
                         dragTargetId: props.dragTargetId,
+                        dragKind: props.dragKind,
                     }))
                 ) : null
             ])
@@ -346,16 +477,21 @@ const userHierarchy = computed(() => {
         })
         
         groups.forEach(group => {
+            const sortOrder = structureSortOrderMap.value.get(`${group.info.type}-${group.info.id}`) ?? 0
             result.push({
                 id: `struct-${group.info.type}-${group.info.id}-${group.items[0].id}`,
                 type: 'structure',
                 structureType: group.info.type,
+                structureDbId: group.info.id,
                 name: group.info.name,
+                sortOrder,
                 children: injectStructure(group.items, group.fullPath)
             })
         })
-        
-        return result
+
+        const userNodes = result.filter(n => n.type !== 'structure')
+        const structureNodes = result.filter(n => n.type === 'structure').sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        return [...userNodes, ...structureNodes]
     }
 
     const rootNodes = Array.from(userMap.values()).filter(node => {
@@ -387,6 +523,39 @@ const managerOptions = computed(() => {
 })
 
 const activeDepartmentOptions = computed(() => props.activeDepartments || [])
+
+// Lookup: 'section-{id}' | 'unit-{id}' | 'sub_unit-{id}' → sort_order
+const structureSortOrderMap = computed(() => {
+    const map = new Map()
+    for (const dept of activeDepartmentOptions.value) {
+        for (const section of dept.sections || []) {
+            map.set(`section-${section.id}`, section.sort_order ?? 0)
+            for (const unit of section.units || []) {
+                map.set(`unit-${unit.id}`, unit.sort_order ?? 0)
+                for (const subUnit of unit.sub_units || []) {
+                    map.set(`sub_unit-${subUnit.id}`, subUnit.sort_order ?? 0)
+                }
+            }
+        }
+    }
+    return map
+})
+
+const draggedStructureData = computed(() => {
+    if (dragState.kind !== 'structure' || !dragState.draggedDbId || !dragState.draggedType) return null
+    for (const dept of activeDepartmentOptions.value) {
+        for (const section of dept.sections || []) {
+            if (dragState.draggedType === 'section' && section.id === dragState.draggedDbId) return { name: section.name, type: 'section' }
+            for (const unit of section.units || []) {
+                if (dragState.draggedType === 'unit' && unit.id === dragState.draggedDbId) return { name: unit.name, type: 'unit' }
+                for (const subUnit of unit.sub_units || []) {
+                    if (dragState.draggedType === 'sub_unit' && subUnit.id === dragState.draggedDbId) return { name: subUnit.name, type: 'sub_unit' }
+                }
+            }
+        }
+    }
+    return null
+})
 
 const placementSections = computed(() => {
     const department = activeDepartmentOptions.value.find(item => Number(item.id) === Number(placementForm.department_id))
@@ -536,6 +705,7 @@ const refreshChartLinks = async () => {
 
 const nodeForm = useForm({
     name: '',
+    code: '',
     description: '',
     is_active: true,
 })
@@ -545,6 +715,7 @@ const nodeMode = ref('create')
 const nodeType = ref('department')
 const nodeParent = ref(null)
 const editingNode = ref(null)
+const createNodeSource = ref('') // 'vacant' | 'placement' | ''
 
 const nodeTitle = computed(() => {
     const action = nodeMode.value === 'create' ? 'Create' : 'Edit'
@@ -559,6 +730,7 @@ const nodeLabel = (type) => ({
 })[type] || 'Node'
 
 const openCreateNode = (type, parent = null) => {
+    createNodeSource.value = showVacantModal.value ? 'vacant' : (showPlacementModal.value ? 'placement' : '')
     nodeMode.value = 'create'
     nodeType.value = type
     nodeParent.value = parent
@@ -576,6 +748,7 @@ const openEditNode = (type, node) => {
     editingNode.value = node
     nodeParent.value = null
     nodeForm.name = node.name || ''
+    nodeForm.code = node.code || ''
     nodeForm.description = node.description || ''
     nodeForm.is_active = !!node.is_active
     showNodeModal.value = true
@@ -589,36 +762,51 @@ const closeNodeModal = () => {
 }
 
 const autoSelectNewNode = (type, name) => {
-    nextTick(() => {
+    // Capture source synchronously before any async work — by the time nextTick fires
+    // Inertia may have already updated the page and changed modal state.
+    const source = createNodeSource.value
+    // Double nextTick: first tick lets Inertia flush prop updates into Vue's reactive
+    // system; second tick lets computed values re-evaluate before we read them.
+    nextTick(() => nextTick(() => {
         const trimmed = name.trim()
+        const useVacant = source === 'vacant'
+        const form = useVacant ? vacantForm : placementForm
+        const sections = useVacant ? vacantSections.value : placementSections.value
+        const units = useVacant ? vacantUnits.value : placementUnits.value
+        const subUnits = useVacant ? vacantSubUnits.value : placementSubUnits.value
+
         if (type === 'section') {
-            const created = placementSections.value.find(s => s.name.trim() === trimmed)
+            const created = sections.find(s => s.name.trim() === trimmed)
             if (created) {
-                placementForm.department_section_id = created.id
-                placementForm.department_unit_id = ''
-                placementForm.department_sub_unit_id = ''
+                form.department_section_id = created.id
+                form.department_unit_id = ''
+                form.department_sub_unit_id = ''
             }
         } else if (type === 'unit') {
-            const created = placementUnits.value.find(u => u.name.trim() === trimmed)
+            const created = units.find(u => u.name.trim() === trimmed)
             if (created) {
-                placementForm.department_unit_id = created.id
-                placementForm.department_sub_unit_id = ''
+                form.department_unit_id = created.id
+                form.department_sub_unit_id = ''
             }
         } else if (type === 'subUnit') {
-            const created = placementSubUnits.value.find(su => su.name.trim() === trimmed)
-            if (created) placementForm.department_sub_unit_id = created.id
+            const created = subUnits.find(su => su.name.trim() === trimmed)
+            if (created) form.department_sub_unit_id = created.id
         }
-    })
+    }))
 }
 
 const submitNode = () => {
     const payload = nodeForm.data()
-    const isPlacementCreate = nodeMode.value === 'create' && showPlacementModal.value
+    // Capture synchronously — after the async round-trip these refs may be reset
+    const isFromModal = showPlacementModal.value || showVacantModal.value
+    const isPlacementCreate = nodeMode.value === 'create' && isFromModal
     const createdType = nodeType.value
     const createdName = nodeForm.name
 
     const options = {
         preserveScroll: true,
+        // Keep component state so the parent modal stays open after Inertia's redirect
+        preserveState: isFromModal,
         onSuccess: () => {
             closeNodeModal()
             if (isPlacementCreate) autoSelectNewNode(createdType, createdName)
@@ -716,6 +904,104 @@ const closePlacementModal = () => {
     placementForm.clearErrors()
     photoPreview.value = null
 }
+
+// ── Vacant position form ────────────────────────────────────────────────────
+
+const vacantForm = useForm({
+    title: '',
+    department_id: '',
+    department_section_id: '',
+    department_unit_id: '',
+    department_sub_unit_id: '',
+    manager_ids: [],
+    org_sort_order: 0,
+})
+
+const showVacantModal = ref(false)
+const vacantMode = ref('create')
+const editingVacantUser = ref(null)
+
+const vacantSections = computed(() => {
+    const dept = activeDepartmentOptions.value.find(d => Number(d.id) === Number(vacantForm.department_id))
+    return dept?.sections || []
+})
+const vacantUnits = computed(() => {
+    const sect = vacantSections.value.find(s => Number(s.id) === Number(vacantForm.department_section_id))
+    return sect?.units || []
+})
+const vacantSubUnits = computed(() => {
+    const unit = vacantUnits.value.find(u => Number(u.id) === Number(vacantForm.department_unit_id))
+    return unit?.sub_units || []
+})
+
+const selectedVacantDepartment = computed(() =>
+    activeDepartmentOptions.value.find(d => Number(d.id) === Number(vacantForm.department_id)) || null
+)
+const selectedVacantSection = computed(() =>
+    vacantSections.value.find(s => Number(s.id) === Number(vacantForm.department_section_id)) || null
+)
+const selectedVacantUnit = computed(() =>
+    vacantUnits.value.find(u => Number(u.id) === Number(vacantForm.department_unit_id)) || null
+)
+const selectedVacantSubUnit = computed(() =>
+    vacantSubUnits.value.find(su => Number(su.id) === Number(vacantForm.department_sub_unit_id)) || null
+)
+
+const openAddVacantModal = (parentUser = null) => {
+    vacantMode.value = 'create'
+    editingVacantUser.value = null
+    vacantForm.reset()
+    if (parentUser) {
+        vacantForm.department_id = parentUser.department_id ? Number(parentUser.department_id) : (selectedDepartment.value?.id || '')
+        vacantForm.department_section_id = parentUser.department_section_id ? Number(parentUser.department_section_id) : ''
+        vacantForm.department_unit_id = parentUser.department_unit_id ? Number(parentUser.department_unit_id) : ''
+        vacantForm.department_sub_unit_id = parentUser.department_sub_unit_id ? Number(parentUser.department_sub_unit_id) : ''
+        vacantForm.manager_ids = [Number(parentUser.id)]
+    } else {
+        vacantForm.department_id = selectedDepartment.value ? selectedDepartment.value.id : ''
+    }
+    showVacantModal.value = true
+}
+
+const openEditVacantModal = (user) => {
+    vacantMode.value = 'edit'
+    editingVacantUser.value = user
+    vacantForm.title = user.name
+    vacantForm.department_id = user.department_id ? Number(user.department_id) : ''
+    vacantForm.department_section_id = user.department_section_id ? Number(user.department_section_id) : ''
+    vacantForm.department_unit_id = user.department_unit_id ? Number(user.department_unit_id) : ''
+    vacantForm.department_sub_unit_id = user.department_sub_unit_id ? Number(user.department_sub_unit_id) : ''
+    vacantForm.manager_ids = (user.managers || []).map(m => Number(m.id))
+    vacantForm.org_sort_order = user.org_sort_order || 0
+    showVacantModal.value = true
+}
+
+const closeVacantModal = () => {
+    showVacantModal.value = false
+    editingVacantUser.value = null
+    vacantForm.clearErrors()
+}
+
+const submitVacant = () => {
+    const opts = { preserveScroll: true, onSuccess: closeVacantModal, onError: handleErrors }
+    if (vacantMode.value === 'create') {
+        return post(route('departments.users.vacant.store'), vacantForm.data(), opts)
+    }
+    return put(route('departments.users.vacant.update', editingVacantUser.value.id), vacantForm.data(), opts)
+}
+
+const destroyVacant = async (user) => {
+    const confirmed = await confirm({
+        title: 'Remove Vacant Position',
+        message: `Remove "${user.name}" from the org chart?`,
+        confirmLabel: 'Remove',
+        variant: 'danger',
+    })
+    if (!confirmed) return
+    destroy(route('departments.users.vacant.destroy', user.id), { preserveScroll: true, onError: handleErrors })
+}
+
+// ── End vacant position form ─────────────────────────────────────────────────
 
 const clearPlacementOrg = () => {
     placementForm.department_id = ''
@@ -872,6 +1158,14 @@ const downloadChart = async () => {
                                 Edit Dept
                             </button>
                             <button
+                                v-if="hasPermission('departments.edit')"
+                                type="button"
+                                @click="openAddVacantModal"
+                                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-100"
+                            >
+                                + Vacant Position
+                            </button>
+                            <button
                                 v-if="hasPermission('departments.delete')"
                                 type="button"
                                 @click="deleteNode('department', selectedDepartment)"
@@ -960,12 +1254,16 @@ const downloadChart = async () => {
                                             :hasPermission="hasPermission"
                                             :openEditPlacementModal="openEditPlacementModal"
                                             :openQuickAddModal="openQuickAddModal"
+                                            :openAddVacantModal="openAddVacantModal"
+                                            :openEditVacantModal="openEditVacantModal"
+                                            :destroyVacant="destroyVacant"
                                             :setUserCardRef="setUserCardRef"
                                             :startCardDrag="startCardDrag"
                                             :enterCardTarget="enterCardTarget"
                                             :leaveCardTarget="leaveCardTarget"
                                             :draggedId="dragState.draggedId"
                                             :dragTargetId="dragState.targetId"
+                                            :dragKind="dragState.kind"
                                         />
                                     </div>
                                     
@@ -996,9 +1294,17 @@ const downloadChart = async () => {
                     </div>
 
                     <form class="space-y-4" @submit.prevent="submitNode">
-                        <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Name</label>
-                            <input v-model="nodeForm.name" type="text" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Name <span class="text-rose-500">*</span></label>
+                                <input v-model="nodeForm.name" type="text" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <p v-if="nodeForm.errors.name" class="mt-1 text-xs text-rose-600">{{ nodeForm.errors.name }}</p>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Code</label>
+                                <input v-model="nodeForm.code" type="text" maxlength="50" placeholder="e.g. HR, IT-OPS" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <p v-if="nodeForm.errors.code" class="mt-1 text-xs text-rose-600">{{ nodeForm.errors.code }}</p>
+                            </div>
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Description</label>
@@ -1180,10 +1486,163 @@ const downloadChart = async () => {
                 </div>
             </div>
         </div>
+        <!-- Vacant Position Modal -->
+        <div v-if="showVacantModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeVacantModal"></div>
+                <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
+                    <div class="mb-6 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-xl font-black text-gray-900">{{ vacantMode === 'create' ? 'Add Vacant Position' : 'Edit Vacant Position' }}</h3>
+                            <p class="mt-0.5 text-xs font-medium text-gray-500">Placeholder node for an unfilled role in the org chart.</p>
+                        </div>
+                        <button type="button" @click="closeVacantModal" class="text-gray-400 transition-colors hover:text-gray-600">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form class="space-y-4" @submit.prevent="submitVacant">
+                        <div>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Position Title</label>
+                            <input
+                                v-model="vacantForm.title"
+                                type="text"
+                                placeholder="e.g. Head of Marketing"
+                                class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                            >
+                            <p v-if="vacantForm.errors.title" class="mt-1 text-xs text-rose-600">{{ vacantForm.errors.title }}</p>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
+                                <select
+                                    v-model="vacantForm.department_id"
+                                    @change="vacantForm.department_section_id = ''; vacantForm.department_unit_id = ''; vacantForm.department_sub_unit_id = ''"
+                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                                >
+                                    <option value="">No Department</option>
+                                    <option v-for="dept in activeDepartmentOptions" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Section</label>
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="hasPermission('departments.create')"
+                                            type="button"
+                                            :disabled="!selectedVacantDepartment"
+                                            @click="openCreateNode('section', selectedVacantDepartment)"
+                                            class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline disabled:text-gray-300 disabled:no-underline"
+                                        >Add</button>
+                                        <button
+                                            v-if="hasPermission('departments.edit') && selectedVacantSection"
+                                            type="button"
+                                            @click="openEditNode('section', selectedVacantSection)"
+                                            class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                        >Edit</button>
+                                    </div>
+                                </div>
+                                <select
+                                    v-model="vacantForm.department_section_id"
+                                    :disabled="!vacantForm.department_id"
+                                    @change="vacantForm.department_unit_id = ''; vacantForm.department_sub_unit_id = ''"
+                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 disabled:bg-gray-100"
+                                >
+                                    <option value="">Select Section</option>
+                                    <option v-for="sect in vacantSections" :key="sect.id" :value="sect.id">{{ sect.name }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Unit</label>
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="hasPermission('departments.create')"
+                                            type="button"
+                                            :disabled="!selectedVacantSection"
+                                            @click="openCreateNode('unit', selectedVacantSection)"
+                                            class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline disabled:text-gray-300 disabled:no-underline"
+                                        >Add</button>
+                                        <button
+                                            v-if="hasPermission('departments.edit') && selectedVacantUnit"
+                                            type="button"
+                                            @click="openEditNode('unit', selectedVacantUnit)"
+                                            class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                        >Edit</button>
+                                    </div>
+                                </div>
+                                <select
+                                    v-model="vacantForm.department_unit_id"
+                                    :disabled="!vacantForm.department_section_id"
+                                    @change="vacantForm.department_sub_unit_id = ''"
+                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 disabled:bg-gray-100"
+                                >
+                                    <option value="">Select Unit</option>
+                                    <option v-for="unit in vacantUnits" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Sub-Unit (Optional)</label>
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="hasPermission('departments.create')"
+                                            type="button"
+                                            :disabled="!selectedVacantUnit"
+                                            @click="openCreateNode('subUnit', selectedVacantUnit)"
+                                            class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline disabled:text-gray-300 disabled:no-underline"
+                                        >Add</button>
+                                        <button
+                                            v-if="hasPermission('departments.edit') && selectedVacantSubUnit"
+                                            type="button"
+                                            @click="openEditNode('subUnit', selectedVacantSubUnit)"
+                                            class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                        >Edit</button>
+                                    </div>
+                                </div>
+                                <select
+                                    v-model="vacantForm.department_sub_unit_id"
+                                    :disabled="!vacantForm.department_unit_id"
+                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 disabled:bg-gray-100"
+                                >
+                                    <option value="">No Sub-Unit</option>
+                                    <option v-for="subUnit in vacantSubUnits" :key="subUnit.id" :value="subUnit.id">{{ subUnit.name }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Reports To</label>
+                            <MultiAutocomplete
+                                v-model="vacantForm.manager_ids"
+                                :options="managerOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select managers..."
+                                :limit="5"
+                            />
+                        </div>
+
+                        <div class="flex justify-end gap-3 border-t pt-5">
+                            <button type="button" @click="closeVacantModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200">Cancel</button>
+                            <button type="submit" :disabled="vacantForm.processing" class="rounded-lg bg-amber-500 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:opacity-50">
+                                {{ vacantMode === 'create' ? 'Add to Chart' : 'Save Changes' }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
         <!-- Drag ghost card -->
         <Teleport to="body">
+            <!-- User drag ghost -->
             <div
-                v-if="dragState.active && draggedUserData"
+                v-if="dragState.active && dragState.kind === 'user' && draggedUserData"
                 class="pointer-events-none fixed z-[9999] w-56 rounded-xl border border-blue-300 bg-white p-3 shadow-2xl"
                 :style="{ left: dragState.x + 'px', top: dragState.y + 'px', transform: 'translate(-50%, -60%) rotate(2deg)', opacity: 0.92 }"
             >
@@ -1197,6 +1656,22 @@ const downloadChart = async () => {
                         <div class="truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight">{{ draggedUserData.position || 'No position' }}</div>
                     </div>
                 </div>
+            </div>
+            <!-- Structure drag ghost -->
+            <div
+                v-else-if="dragState.active && dragState.kind === 'structure' && draggedStructureData"
+                class="pointer-events-none fixed z-[9999] rounded-lg border-2 border-dashed px-5 py-2.5 shadow-2xl text-xs font-black text-center"
+                :style="{
+                    left: dragState.x + 'px',
+                    top: dragState.y + 'px',
+                    transform: 'translate(-50%, -60%) rotate(2deg)',
+                    opacity: 0.92,
+                    backgroundColor: draggedStructureData.type === 'section' ? '#bae6fd' : draggedStructureData.type === 'unit' ? '#e2e8f0' : '#f1f5f9',
+                    borderColor: draggedStructureData.type === 'section' ? '#0ea5e9' : draggedStructureData.type === 'unit' ? '#64748b' : '#cbd5e1',
+                    color: draggedStructureData.type === 'section' ? '#0369a1' : draggedStructureData.type === 'unit' ? '#334155' : '#475569',
+                }"
+            >
+                {{ draggedStructureData.name }}
             </div>
         </Teleport>
 
