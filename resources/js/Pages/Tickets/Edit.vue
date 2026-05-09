@@ -72,6 +72,21 @@ const hasDifferentInternalRequester = (ticket) => {
 
 // Canned Messages State
 const showCannedMessages = ref(false);
+const cannedMessageSearch = ref('');
+const filteredCannedMessages = computed(() => {
+    if (!cannedMessageSearch.value) return props.cannedMessages;
+    const s = cannedMessageSearch.value.toLowerCase();
+    return (props.cannedMessages || []).filter(m => 
+        (m.title && m.title.toLowerCase().includes(s)) || 
+        (m.content && m.content.toLowerCase().includes(s))
+    );
+});
+
+watch(showCannedMessages, (newVal) => {
+    if (!newVal) {
+        cannedMessageSearch.value = '';
+    }
+});
 
 const applyCannedMessage = (message) => {
     if (commentForm.comment_text) {
@@ -2217,10 +2232,19 @@ const linkify = (text) => {
                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                                             </button>
                                                         </div>
+                                                        <div class="p-2 border-b bg-white">
+                                                            <input 
+                                                                v-model="cannedMessageSearch" 
+                                                                type="text" 
+                                                                placeholder="Search messages..." 
+                                                                class="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                                @click.stop
+                                                            >
+                                                        </div>
                                                         <div class="max-h-60 overflow-y-auto">
-                                                            <template v-if="cannedMessages && cannedMessages.length > 0">
+                                                            <template v-if="filteredCannedMessages && filteredCannedMessages.length > 0">
                                                                 <button 
-                                                                    v-for="message in cannedMessages" 
+                                                                    v-for="message in filteredCannedMessages" 
                                                                     :key="message.id"
                                                                     @click="applyCannedMessage(message)"
                                                                     class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
@@ -2230,7 +2254,7 @@ const linkify = (text) => {
                                                                 </button>
                                                             </template>
                                                             <div v-else class="px-4 py-8 text-center text-gray-500 text-xs italic">
-                                                                No canned messages found.
+                                                                {{ cannedMessageSearch ? 'No matching messages found.' : 'No canned messages found.' }}
                                                             </div>
                                                         </div>
                                                     </div>
