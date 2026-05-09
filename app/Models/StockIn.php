@@ -24,6 +24,8 @@ class StockIn extends Model
         'posted_date',
         'status',
         'asset_id',
+        'asset_type',
+        'is_allocation',
         'quantity',
         'serial_no',
         'barcode',
@@ -40,6 +42,7 @@ class StockIn extends Model
 
     protected $casts = [
         'asset_id' => 'integer',
+        'is_allocation' => 'boolean',
         'source_stock_in_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',

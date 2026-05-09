@@ -714,7 +714,24 @@
                                     </button>
                                 </div>
 
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Asset Type</label>
+                                        <select v-model="entry.asset_type" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white">
+                                            <option value="New">New</option>
+                                            <option value="Used">Used</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Allocation</label>
+                                        <div class="mt-1 flex items-center h-[38px]">
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" v-model="entry.is_allocation" class="sr-only peer">
+                                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                                <span class="ml-3 text-sm font-bold text-gray-900">{{ entry.is_allocation ? 'Yes' : 'No' }}</span>
+                                            </label>
+                                        </div>
+                                    </div>
                                     <div>
                                         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Serial No</label>
                                         <input type="text" v-model="entry.serial_no" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
@@ -1153,6 +1170,8 @@ const createEntry = (overrides = {}) => ({
     serial_no: '',
     barcode: '',
     qrcode: '',
+    asset_type: 'New',
+    is_allocation: false,
     warranty_months: 12,
     eol_months: 60,
     cost: 0,
@@ -1619,6 +1638,8 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
             serial_no: row.serial_no,
             barcode: row.barcode || '',
             qrcode: row.qrcode || '',
+            asset_type: row.asset_type || 'New',
+            is_allocation: !!row.is_allocation,
             warranty_months: row.warranty_months,
             eol_months: row.eol_months,
             cost: Number(row.cost || 0),

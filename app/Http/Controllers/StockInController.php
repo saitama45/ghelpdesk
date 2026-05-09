@@ -227,6 +227,8 @@ class StockInController extends Controller
             'entries.*.serial_no' => 'nullable|string',
             'entries.*.barcode' => 'required|string',
             'entries.*.qrcode' => 'required|string',
+            'entries.*.asset_type' => 'required|string|in:New,Used',
+            'entries.*.is_allocation' => 'required|boolean',
             'entries.*.warranty_months' => 'required|integer|min:0',
             'entries.*.eol_months' => 'required|integer|min:0',
             'entries.*.cost' => 'required|numeric|min:0',
@@ -264,6 +266,8 @@ class StockInController extends Controller
                     'serial_no',
                     'barcode',
                     'qrcode',
+                    'asset_type',
+                    'is_allocation',
                     'warranty_months',
                     'eol_months',
                     'cost',
@@ -310,6 +314,8 @@ class StockInController extends Controller
             'cost' => 'required_without:entries|numeric|min:0',
             'price' => 'required_without:entries|numeric|min:0',
             'destination_location' => 'nullable|string|max:255',
+            'asset_type' => 'required_without:entries|string|in:New,Used',
+            'is_allocation' => 'required_without:entries|boolean',
         ], $this->stockInCodeValidationMessages());
 
         $asset = Asset::findOrFail($validated['asset_id']);
@@ -322,6 +328,8 @@ class StockInController extends Controller
                 'serial_no' => $validated['serial_no'] ?? null,
                 'barcode' => $validated['barcode'] ?? null,
                 'qrcode' => $validated['qrcode'] ?? null,
+                'asset_type' => $validated['asset_type'],
+                'is_allocation' => $validated['is_allocation'],
                 'warranty_months' => $validated['warranty_months'],
                 'eol_months' => $validated['eol_months'],
                 'cost' => $validated['cost'],
@@ -371,6 +379,8 @@ class StockInController extends Controller
                     'serial_no',
                     'barcode',
                     'qrcode',
+                    'asset_type',
+                    'is_allocation',
                     'warranty_months',
                     'eol_months',
                     'cost',
@@ -383,7 +393,6 @@ class StockInController extends Controller
             ]),
             'updated_by' => $request->user()?->id,
         ]);
-
         return redirect()->back()->with('success', 'Stock In updated successfully');
     }
 
@@ -1008,6 +1017,8 @@ class StockInController extends Controller
             'serial_no' => $validated['serial_no'] ?? null,
             'barcode' => $validated['barcode'] ?? null,
             'qrcode' => $validated['qrcode'] ?? null,
+            'asset_type' => $validated['asset_type'],
+            'is_allocation' => $validated['is_allocation'],
             'warranty_months' => $validated['warranty_months'],
             'eol_months' => $validated['eol_months'],
             'cost' => $validated['cost'],
@@ -1036,6 +1047,8 @@ class StockInController extends Controller
                     'serial_no',
                     'barcode',
                     'qrcode',
+                    'asset_type',
+                    'is_allocation',
                     'warranty_months',
                     'eol_months',
                     'cost',
