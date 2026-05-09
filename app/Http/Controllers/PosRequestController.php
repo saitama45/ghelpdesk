@@ -40,7 +40,7 @@ class PosRequestController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = PosRequest::with(['company', 'requestType', 'user', 'ticket']);
+        $query = PosRequest::with(['company', 'requestType', 'user', 'ticket', 'details']);
         
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
@@ -97,6 +97,7 @@ class PosRequestController extends Controller implements HasMiddleware
             ],
             'categories' => PosRequestDetail::distinct()->whereNotNull('category')->pluck('category'),
             'sub_categories' => PosRequestDetail::distinct()->whereNotNull('sub_category')->pluck('sub_category'),
+            'copyTransferPayload' => session('copy_transfer_payload'),
         ]);
     }
 

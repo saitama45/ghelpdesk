@@ -8,6 +8,7 @@ import { usePermission } from '@/Composables/usePermission'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
+import CopyRecordModal from '@/Components/CopyRecordModal.vue'
 
 const props = defineProps({
     posRequests: Object,
@@ -25,6 +26,14 @@ const pagination = usePagination(props.posRequests, 'pos-requests.index', () => 
     company_id: entityDeptId.value,
 }))
 const { hasPermission } = usePermission()
+
+const showCopyModal = ref(false)
+const recordToCopy = ref(null)
+
+const openCopyModal = (request) => {
+    recordToCopy.value = request
+    showCopyModal.value = true
+}
 
 onMounted(() => {
     pagination.updateData(props.posRequests)
@@ -248,6 +257,16 @@ const getStageDisplay = (request) => {
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                         </svg>
                                     </Link>
+
+                                    <button
+                                        @click="openCopyModal(request)"
+                                        class="p-2 text-blue-600 hover:text-white hover:bg-blue-600 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+                                        title="Copy to Module"
+                                    >
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 011.414.293l4.414 4.414a1 1 0 01.293 1.414V17a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 01-2 2v2a2 2 0 002 2h10a2 2 0 002-2v-2" />
+                                        </svg>
+                                    </button>
                                     
                                     <Link
                                         v-if="hasPermission('pos_requests.edit') && request.status === 'Open'"
@@ -276,5 +295,12 @@ const getStageDisplay = (request) => {
                     </template>
             </DataTable>
         </div>
+
+        <CopyRecordModal
+            :show="showCopyModal"
+            :source-record="recordToCopy"
+            source-type="pos"
+            @close="showCopyModal = false; recordToCopy = null"
+        />
     </AppLayout>
 </template>

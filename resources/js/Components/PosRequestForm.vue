@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { router, useForm, Link } from '@inertiajs/vue3'
 import { useToast } from '@/Composables/useToast'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
@@ -15,6 +15,10 @@ const props = defineProps({
     isPublic: {
         type: Boolean,
         default: false
+    },
+    preFillPayload: {
+        type: Object,
+        default: null
     }
 })
 
@@ -72,6 +76,19 @@ const form = useForm({
             sc: '', local_tax: '', mgr_meal: false, printer: ''
         }]
     })()
+})
+
+onMounted(async () => {
+    if (props.preFillPayload && !props.posRequest) {
+        await nextTick()
+        if (props.preFillPayload.company_id) form.company_id = props.preFillPayload.company_id
+        if (props.preFillPayload.requester_name) form.requester_name = props.preFillPayload.requester_name
+        if (props.preFillPayload.requester_email) form.requester_email = props.preFillPayload.requester_email
+        if (props.preFillPayload.launch_date) form.launch_date = props.preFillPayload.launch_date
+        if (props.preFillPayload.stores_covered) form.stores_covered = JSON.parse(JSON.stringify(props.preFillPayload.stores_covered))
+        if (props.preFillPayload.form_data) form.form_data = JSON.parse(JSON.stringify(props.preFillPayload.form_data))
+        if (props.preFillPayload.items) form.details = JSON.parse(JSON.stringify(props.preFillPayload.items))
+    }
 })
 
 // Autocomplete Logic

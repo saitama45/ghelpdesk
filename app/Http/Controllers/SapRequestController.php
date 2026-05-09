@@ -36,7 +36,7 @@ class SapRequestController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = SapRequest::with(['company', 'requestType', 'user', 'ticket']);
+        $query = SapRequest::with(['company', 'requestType', 'user', 'ticket', 'items']);
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -76,6 +76,7 @@ class SapRequestController extends Controller implements HasMiddleware
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'SAP')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
+            'copyTransferPayload' => session('copy_transfer_payload'),
         ]);
     }
 

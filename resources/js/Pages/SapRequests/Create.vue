@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import SapRequestForm from '@/Components/SapRequest/SapRequestForm.vue'
@@ -9,6 +9,7 @@ const props = defineProps({
     companies: Array,
     requestTypes: Array,
     sapRequest: { type: Object, default: null },
+    copyTransferPayload: { type: Object, default: null },
 })
 
 const page = usePage()
@@ -34,6 +35,7 @@ const submitRoute = computed(() =>
                 :submit-route="submitRoute"
                 :method="isEdit ? 'put' : 'post'"
                 :initial-request-type-id="initialTypeId"
+                :pre-fill-payload="copyTransferPayload"
             />
         </SapRequestLayoutWrapper>
     </AppLayout>

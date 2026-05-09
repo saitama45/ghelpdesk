@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, markRaw } from 'vue'
+import { ref, computed, watch, markRaw, onMounted, nextTick } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 import NewItemRequestForm from './Forms/NewItemRequestForm.vue'
@@ -19,6 +19,7 @@ const props = defineProps({
     submitRoute: { type: String, required: true },
     method: { type: String, default: 'post' },
     initialRequestTypeId: { type: [String, Number], default: '' },
+    preFillPayload: { type: Object, default: null },
 })
 
 // Inline confirmation dialog state
@@ -59,6 +60,17 @@ const form = useForm({
     request_type_id: props.sapRequest?.request_type_id ?? props.initialRequestTypeId ?? '',
     form_data: props.sapRequest?.form_data ?? {},
     items: props.sapRequest?.items?.map(i => i.item_data) ?? [],
+})
+
+onMounted(async () => {
+    if (props.preFillPayload && !props.sapRequest) {
+        await nextTick()
+        if (props.preFillPayload.company_id) form.company_id = props.preFillPayload.company_id
+        if (props.preFillPayload.requester_name) form.requester_name = props.preFillPayload.requester_name
+        if (props.preFillPayload.requester_email) form.requester_email = props.preFillPayload.requester_email
+        if (props.preFillPayload.form_data) form.form_data = JSON.parse(JSON.stringify(props.preFillPayload.form_data))
+        if (props.preFillPayload.items) form.items = JSON.parse(JSON.stringify(props.preFillPayload.items))
+    }
 })
 
 const selectedRequestType = computed(() =>

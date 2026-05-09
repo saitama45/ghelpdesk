@@ -13,6 +13,7 @@ import { usePermission } from '@/Composables/usePermission'
 const props = defineProps({
     form: Object, // Includes requestTypes relation
     records: Object,
+    copyTransferPayload: { type: Object, default: null },
 })
 
 const { showSuccess, showError } = useToast()
@@ -74,24 +75,51 @@ const buildBlankItemRow = (formData = dynamicForm.form_data) => {
     return row
 }
 
-const initForm = (record = null) => {
+const initForm = (record = null, preFill = null) => {
     const schema = effectiveSchema.value || {}
     const fields = schema.fields || []
     
     const initialFormData = {}
     fields.forEach(field => {
-        initialFormData[field.key] = record?.data ? record.data[field.key] : (field.type === 'checkbox_group' ? [] : '')
+        if (record?.data) {
+            initialFormData[field.key] = record.data[field.key]
+        } else if (preFill?.form_data) {
+            initialFormData[field.key] = preFill.form_data[field.key] !== undefined ? preFill.form_data[field.key] : (field.type === 'checkbox_group' ? [] : '')
+        } else {
+            initialFormData[field.key] = field.type === 'checkbox_group' ? [] : ''
+        }
     })
     
     dynamicForm.request_type_id = record ? record.request_type_id : (selectedRequestType.value?.id || null)
     dynamicForm.form_data = initialFormData
-    dynamicForm.items = record?.data?.items
-        ? JSON.parse(JSON.stringify(record.data.items))
+    
+    const sourceItems = record?.data?.items || preFill?.items
+    dynamicForm.items = sourceItems
+        ? JSON.parse(JSON.stringify(sourceItems))
         : (schema.has_items && getActiveItemColumns(initialFormData).length ? [buildBlankItemRow(initialFormData)] : [])
 }
 
-onMounted(() => {
+onMounted(async () => {
     updateData(props.records)
+
+    // Handle pre-fill if payload exists
+    if (props.copyTransferPayload && hasPermission(props.form.slug + '.create')) {
+        await nextTick()
+        // If the payload has a request_type_id that belongs to this form, use it
+        if (props.copyTransferPayload.request_type_id) {
+            const rt = props.form.request_types?.find(t => t.id === props.copyTransferPayload.request_type_id)
+            if (rt) selectedRequestType.value = rt
+        }
+        
+        initForm(null, JSON.parse(JSON.stringify(props.copyTransferPayload)))
+        showModal.value = true
+    }
+    
+    // Auto-open create modal if query param is present
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('create') === '1' && !showModal.value && hasPermission(props.form.slug + '.create')) {
+        openCreateModal()
+    }
 })
 
 watch(() => props.records, (newRecords) => {

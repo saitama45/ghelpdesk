@@ -83,6 +83,10 @@ Route::middleware('auth')->group(function () {
     // Dynamic Forms
     Route::get('forms', [\App\Http\Controllers\DynamicFormController::class, 'list'])->name('dynamic-form.list');
     Route::get('forms/{slug}', [\App\Http\Controllers\DynamicFormController::class, 'index'])->name('dynamic-form.index');
+
+    // Copy Transfer Routes
+    Route::get('copy/targets', [\App\Http\Controllers\CopyRecordController::class, 'targets'])->name('copy.targets');
+    Route::post('copy/transfer', [\App\Http\Controllers\CopyRecordController::class, 'transfer'])->name('copy.transfer');
     Route::post('forms/{slug}', [\App\Http\Controllers\DynamicFormController::class, 'store'])->name('dynamic-form.store');
     Route::get('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'show'])->name('dynamic-form.show');
     Route::put('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'update'])->name('dynamic-form.update');

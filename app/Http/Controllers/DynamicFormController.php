@@ -37,6 +37,7 @@ class DynamicFormController extends Controller
             'records' => $records,
             'forms' => FormDefinition::where('is_active', true)->get(['id', 'name', 'slug', 'description', 'icon', 'approval_levels']),
             'filters' => $request->only(['search', 'status']),
+            'copyTransferPayload' => session('copy_transfer_payload'),
         ]);
     }
 
@@ -60,6 +61,7 @@ class DynamicFormController extends Controller
         return Inertia::render('DynamicForm/Index', [
             'form' => $form,
             'records' => $records,
+            'copyTransferPayload' => session('copy_transfer_payload'),
         ]);
     }
 
