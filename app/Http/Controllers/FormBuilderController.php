@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FormDefinition;
+use App\Models\RequestType;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -25,7 +26,7 @@ class FormBuilderController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = FormDefinition::query();
+        $query = FormDefinition::query()->with('requestTypes');
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
@@ -39,12 +40,15 @@ class FormBuilderController extends Controller implements HasMiddleware
         return Inertia::render('FormBuilder/Index', [
             'forms' => $forms,
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
+            'requestTypes' => RequestType::where('is_active', true)->orderBy('name')->get(['id', 'name', 'approval_levels', 'approver_matrix', 'form_schema']),
         ]);
     }
 
     public function store(Request $request)
     {
         $request->validate([
+            'request_type_ids' => 'nullable|array',
+            'request_type_ids.*' => 'exists:request_types,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:255',
             'icon' => 'nullable|string|max:50',
@@ -54,7 +58,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             'is_active' => 'boolean',
         ]);
 
-        FormDefinition::create([
+        $formDefinition = FormDefinition::create([
             'name' => $request->name,
             'slug' => Str::slug($request->name),
             'description' => $request->description,
@@ -73,6 +77,10 @@ class FormBuilderController extends Controller implements HasMiddleware
             ],
         ]);
 
+        if ($request->has('request_type_ids')) {
+            $formDefinition->requestTypes()->sync($request->request_type_ids);
+        }
+
         Cache::forget('active_form_definitions');
         Cache::increment('permissions_version');
 
@@ -82,6 +90,8 @@ class FormBuilderController extends Controller implements HasMiddleware
     public function update(Request $request, FormDefinition $formBuilder)
     {
         $request->validate([
+            'request_type_ids' => 'nullable|array',
+            'request_type_ids.*' => 'exists:request_types,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:255',
             'icon' => 'nullable|string|max:50',
@@ -102,6 +112,10 @@ class FormBuilderController extends Controller implements HasMiddleware
             'is_active' => $request->boolean('is_active'),
         ]);
 
+        if ($request->has('request_type_ids')) {
+            $formBuilder->requestTypes()->sync($request->request_type_ids);
+        }
+
         Cache::forget('active_form_definitions');
         Cache::increment('permissions_version');
 
@@ -114,12 +128,13 @@ class FormBuilderController extends Controller implements HasMiddleware
             'form_schema' => 'required|array',
         ]);
 
-        $formBuilder->update(['form_schema' => $request->form_schema]);
+        $formBuilder->update([
+            'form_schema' => $request->form_schema,
+        ]);
 
         Cache::forget('active_form_definitions');
-        Cache::increment('permissions_version');
 
-        return redirect()->back()->with('success', 'Form schema saved successfully');
+        return redirect()->back()->with('success', 'Form Schema updated successfully');
     }
 
     public function destroy(FormDefinition $formBuilder)

@@ -11,7 +11,7 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    form: Object,
+    form: Object, // Includes requestTypes relation
     records: Object,
 })
 
@@ -19,7 +19,6 @@ const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy: deleteRequest } = useErrorHandler()
 
-// Destructure pagination for cleaner template usage
 const { 
     data: paginatedData, 
     search: paginationSearch, 
@@ -38,19 +37,30 @@ const { hasPermission } = usePermission()
 const showModal = ref(false)
 const isEditing = ref(false)
 const currentRecord = ref(null)
+const showCreateSection = ref(false)
+const selectedRequestType = ref(null)
 
 // Use Inertia useForm for better error handling and file uploads
 const dynamicForm = useForm({
+    request_type_id: null,
     form_data: {},
     items: [],
 })
 
-const schemaItemsTemplateSource = computed(() => props.form.form_schema?.items_template_source || null)
-const schemaItemsTemplates = computed(() => props.form.form_schema?.items_templates || {})
+// Determine which schema to use
+const effectiveSchema = computed(() => {
+    if (isEditing.value && currentRecord.value?.request_type) {
+        return currentRecord.value.request_type.form_schema
+    }
+    return selectedRequestType.value ? selectedRequestType.value.form_schema : props.form.form_schema
+})
+
+const schemaItemsTemplateSource = computed(() => effectiveSchema.value?.items_template_source || null)
+const schemaItemsTemplates = computed(() => effectiveSchema.value?.items_templates || {})
 
 const getActiveItemColumns = (formData = dynamicForm.form_data) => {
     const source = schemaItemsTemplateSource.value
-    if (!source) return props.form.form_schema?.items_columns || []
+    if (!source) return effectiveSchema.value?.items_columns || []
 
     const selected = String(formData?.[source] ?? '')
     return selected ? (schemaItemsTemplates.value[selected]?.columns || []) : []
@@ -65,7 +75,7 @@ const buildBlankItemRow = (formData = dynamicForm.form_data) => {
 }
 
 const initForm = (record = null) => {
-    const schema = props.form.form_schema || {}
+    const schema = effectiveSchema.value || {}
     const fields = schema.fields || []
     
     const initialFormData = {}
@@ -73,6 +83,7 @@ const initForm = (record = null) => {
         initialFormData[field.key] = record?.data ? record.data[field.key] : (field.type === 'checkbox_group' ? [] : '')
     })
     
+    dynamicForm.request_type_id = record ? record.request_type_id : (selectedRequestType.value?.id || null)
     dynamicForm.form_data = initialFormData
     dynamicForm.items = record?.data?.items
         ? JSON.parse(JSON.stringify(record.data.items))
@@ -87,9 +98,10 @@ watch(() => props.records, (newRecords) => {
     updateData(newRecords)
 }, { deep: true })
 
-const openCreateModal = () => {
+const openCreateModal = (requestType = null) => {
     isEditing.value = false
     currentRecord.value = null
+    selectedRequestType.value = requestType
     initForm()
     showModal.value = true
 }
@@ -97,12 +109,14 @@ const openCreateModal = () => {
 const editRecord = (record) => {
     isEditing.value = true
     currentRecord.value = record
+    selectedRequestType.value = record.request_type || null
     initForm(record)
     showModal.value = true
 }
 
 const closeModal = () => {
     showModal.value = false
+    selectedRequestType.value = null
     dynamicForm.clearErrors()
 }
 
@@ -111,7 +125,6 @@ const submitForm = () => {
         ? route('dynamic-form.update', { slug: props.form.slug, id: currentRecord.value.id }) 
         : route('dynamic-form.store', props.form.slug)
     
-    // Use POST with _method spoofing for updates to support multipart/form-data
     if (isEditing.value) {
         dynamicForm.transform((data) => ({
             ...data,
@@ -150,29 +163,25 @@ const deleteRecord = async (record) => {
     }
 }
 
-const formColumns = computed(() => {
+// Columns to show in the data table
+const tableColumns = computed(() => {
+    // If most records have a request type, show the Request Type column
+    // Otherwise show first few fields from the base form schema
     const fields = props.form.form_schema?.fields || []
-    return fields.slice(0, 4) // Show first 4 fields in the form table
+    return fields.slice(0, 3)
 })
 
 const getDisplayValue = (record, col) => {
     const value = record.data ? record.data[col.key] : null
     if (value === null || value === undefined || value === '') return '—'
 
-    // Handle File type
     if (col.type === 'file') {
-        if (Array.isArray(value)) {
-            return value.map(f => typeof f === 'object' ? f.name : f).join(', ')
-        }
+        if (Array.isArray(value)) return value.map(f => typeof f === 'object' ? f.name : f).join(', ')
         return typeof value === 'object' ? value.name || value.path.split('/').pop() : value
     }
 
-    // Handle Toggle
-    if (col.type === 'toggle') {
-        return value ? 'Yes' : 'No'
-    }
+    if (col.type === 'toggle') return value ? 'Yes' : 'No'
 
-    // Handle Options (Select, Radio, Checkbox Group)
     if (col.options && col.options.length > 0) {
         if (Array.isArray(value)) {
             return value.map(v => {
@@ -184,9 +193,7 @@ const getDisplayValue = (record, col) => {
         return opt ? opt.label : value
     }
 
-    // Default array handling
     if (Array.isArray(value)) return value.join(', ')
-
     return value
 }
 
@@ -194,6 +201,7 @@ const STATUS_COLORS = {
     'Open': 'bg-blue-100 text-blue-700',
     'Approved': 'bg-emerald-100 text-emerald-700',
     'Cancelled': 'bg-rose-100 text-rose-700',
+    'Rejected': 'bg-red-100 text-red-700',
     'In Progress': 'bg-amber-100 text-amber-700',
 }
 
@@ -209,12 +217,67 @@ function statusClass(s) {
 
     <AppLayout :title="form.name">
         <div class="py-12 bg-gray-50/50 min-h-screen">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <!-- Header with Tile Toggle -->
+                <div class="flex items-center justify-between mb-8">
+                    <div>
+                        <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ form.name }}</h1>
+                        <p class="text-sm text-gray-500 font-medium mt-1">{{ form.description || 'Submit and track your requests.' }}</p>
+                    </div>
+                    <button v-if="hasPermission(form.slug + '.create')" 
+                        @click="showCreateSection = !showCreateSection"
+                        :class="showCreateSection ? 'bg-gray-200 text-gray-700' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700'"
+                        class="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all">
+                        <svg class="w-4 h-4 transition-transform" :class="showCreateSection ? 'rotate-45' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        {{ showCreateSection ? 'Close' : 'New Submission' }}
+                    </button>
+                </div>
+
+                <!-- Tile Selection Section -->
+                <div v-if="showCreateSection" class="mb-10 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="h-px flex-1 bg-gray-200"></div>
+                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Select Request Type</h2>
+                        <div class="h-px flex-1 bg-gray-200"></div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Default Form Tile (if it has fields) -->
+                        <button v-if="form.form_schema?.fields?.length"
+                            @click="openCreateModal(null)"
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group">
+                            <div class="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-sm font-black text-gray-900 mb-1">Standard {{ form.name }}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Default Schema</p>
+                        </button>
+
+                        <!-- Request Type Tiles -->
+                        <button v-for="rt in form.request_types" :key="rt.id"
+                            @click="openCreateModal(rt)"
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group">
+                            <div class="w-12 h-12 bg-teal-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-all">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-sm font-black text-gray-900 mb-1">{{ rt.name }}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                {{ rt.approval_levels > 0 ? `${rt.approval_levels} Approval Steps` : 'No Approval Required' }}
+                            </p>
+                        </button>
+                    </div>
+                </div>
+
                 <DataTable
-                    :title="form.name"
-                    :subtitle="form.description"
+                    :title="form.name + ' Submissions'"
                     search-placeholder="Search records..."
-                    empty-message="Get started by adding your first record."
                     :search="paginationSearch"
                     :data="paginatedData"
                     :current-page="currentPage"
@@ -226,26 +289,14 @@ function statusClass(s) {
                     @go-to-page="goToPage"
                     @change-per-page="changePerPage"
                 >
-                    <template #actions>
-                        <button
-                            v-if="hasPermission(form.slug + '.create')"
-                            @click="openCreateModal"
-                            class="group relative inline-flex items-center px-6 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 shadow-md hover:shadow-indigo-200 whitespace-nowrap"
-                        >
-                            <svg class="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            <span>Add {{ form.name }}</span>
-                        </button>
-                    </template>
-
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th v-for="col in formColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-left">
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Request Type</th>
+                            <th v-for="col in tableColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">
                                 {{ col.label }}
                             </th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-left">Status</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-left">Created By</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Status</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Created By</th>
                             <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
                         </tr>
                     </template>
@@ -254,12 +305,18 @@ function statusClass(s) {
                         <tr v-for="record in data" :key="record.id" 
                             class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
                         >
-                            <td v-for="col in formColumns" :key="col.key" class="px-6 py-5 whitespace-nowrap text-left">
+                            <td class="px-6 py-5 whitespace-nowrap">
+                                <span v-if="record.request_type" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tight">
+                                    {{ record.request_type.name }}
+                                </span>
+                                <span v-else class="text-xs text-gray-400 font-bold uppercase tracking-widest">Standard</span>
+                            </td>
+                            <td v-for="col in tableColumns" :key="col.key" class="px-6 py-5 whitespace-nowrap text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     {{ getDisplayValue(record, col) }}
                                 </div>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap text-left">
+                            <td class="px-6 py-5 whitespace-nowrap text-center">
                                 <span :class="statusClass(record.status)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
                                     {{ record.status }}
                                 </span>
@@ -282,7 +339,7 @@ function statusClass(s) {
                                         </svg>
                                     </Link>
                                     <button
-                                        v-if="hasPermission(form.slug + '.edit')"
+                                        v-if="hasPermission(form.slug + '.edit') && record.status === 'Open'"
                                         @click="editRecord(record)"
                                         class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="Edit"
@@ -292,7 +349,7 @@ function statusClass(s) {
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission(form.slug + '.delete')"
+                                        v-if="hasPermission(form.slug + '.delete') && record.status === 'Open'"
                                         @click="deleteRecord(record)"
                                         class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="Delete"
@@ -325,9 +382,9 @@ function statusClass(s) {
                     <div class="flex justify-between items-center mb-8">
                         <div>
                             <h3 class="text-2xl font-black text-gray-900 tracking-tight">
-                                {{ isEditing ? 'Update ' + form.name : 'New ' + form.name }}
+                                {{ isEditing ? 'Update ' + form.name : 'New ' + (selectedRequestType ? selectedRequestType.name : form.name) }}
                             </h3>
-                            <p class="text-sm text-gray-500 mt-1">Fill in the details below.</p>
+                            <p class="text-sm text-gray-500 mt-1">Please fill in the required information.</p>
                         </div>
                         <button @click="closeModal" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -337,15 +394,27 @@ function statusClass(s) {
                     </div>
 
                     <form @submit.prevent="submitForm" class="space-y-6">
+                        <!-- Notice about request type -->
+                        <div v-if="selectedRequestType" class="flex items-center gap-3 p-3 bg-teal-50 border border-teal-100 rounded-2xl mb-4">
+                            <div class="h-8 w-8 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-xs font-black text-teal-800 uppercase tracking-tight">Using {{ selectedRequestType.name }} schema</p>
+                                <p class="text-[10px] text-teal-600 font-medium">Fields and approvals are defined by the selected request type.</p>
+                            </div>
+                        </div>
+
                         <DynamicFormRenderer
-                            :fields="form.form_schema?.fields"
+                            v-if="effectiveSchema"
+                            :fields="effectiveSchema.fields"
                             v-model="dynamicForm.form_data"
-                            :items-columns="form.form_schema?.items_columns"
-                            :items-template-source="form.form_schema?.items_template_source"
-                            :items-templates="form.form_schema?.items_templates || {}"
-                            :item-label="form.form_schema?.item_label || 'Row'"
+                            :items-columns="effectiveSchema.items_columns"
+                            :items-template-source="effectiveSchema.items_template_source"
+                            :items-templates="effectiveSchema.items_templates || {}"
+                            :item-label="effectiveSchema.item_label || 'Row'"
                             v-model:items="dynamicForm.items"
-                            :has-items="form.form_schema?.has_items"
+                            :has-items="effectiveSchema.has_items"
                             :errors="dynamicForm.errors"
                             grid-columns="2"
                         />
@@ -357,7 +426,7 @@ function statusClass(s) {
                             </button>
                             <button type="submit" 
                                     class="flex-[2] px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200 transform hover:-translate-y-0.5 transition-all duration-300">
-                                {{ isEditing ? 'Update ' + form.name : 'Create ' + form.name }}
+                                {{ isEditing ? 'Update Submission' : 'Submit Request' }}
                             </button>
                         </div>
                     </form>

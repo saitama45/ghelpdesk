@@ -28,11 +28,15 @@ const approvalForm = useForm({
 
 const authUserId = computed(() => page.props.auth.user.id)
 
-const approverFields = computed(() => props.form.form_schema?.approver_fields ?? [])
-const schemaFields = computed(() => props.form.form_schema?.fields ?? [])
-const schemaItemsColumns = computed(() => props.form.form_schema?.items_columns ?? [])
-const itemsTemplateSource = computed(() => props.form.form_schema?.items_template_source || null)
-const itemsTemplates = computed(() => props.form.form_schema?.items_templates || {})
+// Use RequestType schema if available, fallback to FormDefinition
+const effectiveSchemaSource = computed(() => props.record.request_type || props.form)
+const effectiveFormSchema = computed(() => effectiveSchemaSource.value.form_schema || {})
+
+const approverFields = computed(() => effectiveFormSchema.value?.approver_fields ?? [])
+const schemaFields = computed(() => effectiveFormSchema.value?.fields ?? [])
+const schemaItemsColumns = computed(() => effectiveFormSchema.value?.items_columns ?? [])
+const itemsTemplateSource = computed(() => effectiveFormSchema.value?.items_template_source || null)
+const itemsTemplates = computed(() => effectiveFormSchema.value?.items_templates || {})
 const selectedItemsTemplateKey = computed(() =>
     itemsTemplateSource.value ? String(props.record.data?.[itemsTemplateSource.value] ?? '') : ''
 )
@@ -47,9 +51,9 @@ const activeSchemaItemsColumns = computed(() =>
         : schemaItemsColumns.value
 )
 const activeItemLabel = computed(() => activeItemsTemplate.value?.label || 'Line Items')
-const hasSchemaItems = computed(() => !!props.form.form_schema?.has_items && activeSchemaItemsColumns.value.length > 0)
+const hasSchemaItems = computed(() => !!effectiveFormSchema.value?.has_items && activeSchemaItemsColumns.value.length > 0)
 
-const approverMatrix = computed(() => props.form.approver_matrix ?? [])
+const approverMatrix = computed(() => effectiveSchemaSource.value.approver_matrix ?? [])
 
 const assignedApproversByLevel = computed(() => {
     const users = props.users ?? []
@@ -119,7 +123,7 @@ const canApprove = computed(() => {
         !alreadyApprovedCurrentLevel
 })
 
-const totalLevels = computed(() => Number(props.form.approval_levels ?? 0))
+const totalLevels = computed(() => Number(effectiveSchemaSource.value.approval_levels ?? 0))
 const stages = computed(() => Array.from({ length: totalLevels.value }, (_, i) => i + 1))
 
 function getApprovalForLevel(lvl) {
@@ -129,7 +133,7 @@ function getApprovalForLevel(lvl) {
 function statusClass(s) {
     if (!s) return 'bg-gray-500 text-white'
     if (s.startsWith('Approved Level')) return 'bg-indigo-500 text-white shadow-indigo-200'
-    const map = { 'Approved': 'bg-emerald-500 text-white shadow-emerald-200', 'Open': 'bg-blue-500 text-white shadow-blue-200', 'Cancelled': 'bg-rose-500 text-white shadow-rose-200' }
+    const map = { 'Approved': 'bg-emerald-500 text-white shadow-emerald-200', 'Open': 'bg-blue-500 text-white shadow-blue-200', 'Cancelled': 'bg-rose-500 text-white shadow-rose-200', 'Rejected': 'bg-red-500 text-white shadow-red-200' }
     return map[s] ?? 'bg-amber-500 text-white shadow-amber-200'
 }
 
@@ -218,10 +222,16 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                     {{ record.status }}
                                 </span>
                             </div>
-                            <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-8 flex items-center gap-3">
+                            <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-4 flex items-center gap-3">
                                 <span class="text-indigo-600">#{{ record.id }}</span>
                                 {{ form.name }}
                             </h1>
+                            <div v-if="record.request_type" class="mb-8">
+                                <span class="inline-flex items-center px-4 py-1.5 rounded-xl text-xs font-black bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tight">
+                                    <svg class="w-3.5 h-3.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                    {{ record.request_type.name }}
+                                </span>
+                            </div>
                             <div class="grid grid-cols-2 md:grid-cols-3 gap-8">
                                 <div>
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Created By</label>

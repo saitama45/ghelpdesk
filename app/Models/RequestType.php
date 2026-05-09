@@ -23,4 +23,9 @@ class RequestType extends Model
         'approver_matrix' => 'array',
         'form_schema' => 'array',
     ];
+
+    public function formDefinitions()
+    {
+        return $this->belongsToMany(FormDefinition::class, 'form_definition_request_type');
+    }
 }

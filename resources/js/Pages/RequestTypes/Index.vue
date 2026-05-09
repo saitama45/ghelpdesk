@@ -215,9 +215,9 @@ const countCheckboxApprovalOverrides = (type) => {
 </script>
 
 <template>
-    <AppLayout title="Request Types">
+    <AppLayout title="Request Types" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-12 bg-gray-50/50 min-h-screen">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="w-full mx-auto sm:px-6 lg:px-8">
                 <DataTable
                     title="Request Type Management"
                     subtitle="Manage classification of ticket requests for SAP and POS systems"

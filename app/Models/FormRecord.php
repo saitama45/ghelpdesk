@@ -8,6 +8,7 @@ class FormRecord extends Model
 {
     protected $fillable = [
         'form_definition_id',
+        'request_type_id',
         'data',
         'status',
         'current_approval_level',
@@ -17,6 +18,7 @@ class FormRecord extends Model
 
     protected $casts = [
         'form_definition_id' => 'integer',
+        'request_type_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',
         'data' => 'array',
@@ -25,6 +27,11 @@ class FormRecord extends Model
     public function definition()
     {
         return $this->belongsTo(FormDefinition::class, 'form_definition_id');
+    }
+
+    public function requestType()
+    {
+        return $this->belongsTo(RequestType::class, 'request_type_id');
     }
 
     public function creator()

@@ -5,31 +5,58 @@ namespace App\Http\Controllers;
 use App\Models\FormDefinition;
 use App\Models\FormRecord;
 use App\Models\FormRecordApproval;
+use App\Models\RequestType;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class DynamicFormController extends Controller
 {
+    public function list(Request $request)
+    {
+        $query = FormRecord::query();
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where('data', 'like', "%{$search}%");
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $records = $query->with(['creator', 'definition', 'requestType'])
+            ->latest()
+            ->paginate($request->get('per_page', 10))
+            ->withQueryString();
+
+        return Inertia::render('DynamicForm/List', [
+            'records' => $records,
+            'forms' => FormDefinition::where('is_active', true)->get(['id', 'name', 'slug', 'description', 'icon', 'approval_levels']),
+            'filters' => $request->only(['search', 'status']),
+        ]);
+    }
+
     public function index(Request $request, $slug)
     {
-        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $form = FormDefinition::where('slug', $slug)->with('requestTypes')->firstOrFail();
         
         $query = FormRecord::where('form_definition_id', $form->id);
-        
+
         // Basic search in the JSON data column
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where('data', 'like', "%{$search}%");
         }
-        
-        $records = $query->with(['creator', 'updator'])
+
+        $records = $query->with(['creator', 'updator', 'requestType'])
                         ->latest()
                         ->paginate($request->get('per_page', 10))
                         ->withQueryString();
-        
+
         return Inertia::render('DynamicForm/Index', [
             'form' => $form,
             'records' => $records,
@@ -39,7 +66,7 @@ class DynamicFormController extends Controller
     public function show($slug, $id)
     {
         $form = FormDefinition::where('slug', $slug)->firstOrFail();
-        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition'])
+        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition', 'requestType'])
             ->where('form_definition_id', $form->id)
             ->findOrFail($id);
 
@@ -52,21 +79,36 @@ class DynamicFormController extends Controller
 
     public function store(Request $request, $slug)
     {
-        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $formDefinition = FormDefinition::where('slug', $slug)->firstOrFail();
         
+        $request->validate([
+            'request_type_id' => 'nullable|exists:request_types,id',
+            'form_data' => 'required|array',
+            'items' => 'nullable|array',
+        ]);
+
+        $requestType = null;
+        if ($request->filled('request_type_id')) {
+            $requestType = RequestType::find($request->request_type_id);
+        }
+
         $data = $request->only(['form_data', 'items']);
-        $data = $this->storeFileUploads($form, $data);
+        $data = $this->storeFileUploads($formDefinition, $data);
         
         // Final structure to save in 'data' column
         $saveData = array_merge($data['form_data'] ?? [], [
             'items' => $data['items'] ?? []
         ]);
 
-        $status = $form->approval_levels > 0 ? 'Open' : 'Approved';
-        $currentLevel = $form->approval_levels > 0 ? 1 : 0;
+        // Use RequestType approval levels if available, otherwise fallback to FormDefinition
+        $approvalLevels = $requestType ? $requestType->approval_levels : $formDefinition->approval_levels;
+
+        $status = $approvalLevels > 0 ? 'Open' : 'Approved';
+        $currentLevel = $approvalLevels > 0 ? 1 : 0;
 
         FormRecord::create([
-            'form_definition_id' => $form->id,
+            'form_definition_id' => $formDefinition->id,
+            'request_type_id' => $request->request_type_id,
             'data' => $saveData,
             'status' => $status,
             'current_approval_level' => $currentLevel,
@@ -98,15 +140,15 @@ class DynamicFormController extends Controller
 
     public function approve(Request $request, $slug, $id)
     {
-        $form = FormDefinition::where('slug', $slug)->firstOrFail();
-        $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
+        $formDefinition = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::with('requestType')->where('form_definition_id', $formDefinition->id)->findOrFail($id);
 
         $request->validate([
             'remarks' => 'nullable|string',
             'approver_data' => 'nullable|array',
         ]);
 
-        DB::transaction(function () use ($form, $record, $request) {
+        DB::transaction(function () use ($formDefinition, $record, $request) {
             $currentLevel = $record->current_approval_level;
             
             // Log approval
@@ -118,115 +160,48 @@ class DynamicFormController extends Controller
                 'approver_data' => $request->approver_data,
             ]);
 
+            // Use RequestType approval levels if available
+            $approvalLevels = $record->requestType ? $record->requestType->approval_levels : $formDefinition->approval_levels;
+
             $nextLevel = $currentLevel + 1;
-            if ($nextLevel > $form->approval_levels) {
+            if ($nextLevel > $approvalLevels) {
                 $record->update([
                     'status' => 'Approved',
                     'current_approval_level' => 0,
                 ]);
             } else {
                 $record->update([
-                    'status' => "Approved Level {$currentLevel}",
                     'current_approval_level' => $nextLevel,
                 ]);
             }
         });
 
-        return redirect()->back()->with('success', 'Stage approved successfully');
+        return redirect()->back()->with('success', 'Record approved successfully');
     }
 
-    private function storeFileUploads(FormDefinition $form, array $data): array
+    public function reject(Request $request, $slug, $id)
     {
-        $schema = $form->form_schema;
-        if (!$schema) return $data;
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
 
-        // Process main fields
-        foreach ($schema['fields'] ?? [] as $field) {
-            if (($field['type'] ?? '') === 'file') {
-                $key = $field['key'];
-                $val = $data['form_data'][$key] ?? null;
-                if (!$val) continue;
+        $request->validate([
+            'remarks' => 'required|string',
+        ]);
 
-                if (is_array($val)) {
-                    $paths = [];
-                    foreach ($val as $f) {
-                        if ($f instanceof \Illuminate\Http\UploadedFile) {
-                            $paths[] = [
-                                'path' => $f->store('form-records/attachments', 'public'),
-                                'name' => $f->getClientOriginalName(),
-                            ];
-                        } else {
-                            $paths[] = $f;
-                        }
-                    }
-                    $data['form_data'][$key] = $paths;
-                } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
-                    $data['form_data'][$key] = [
-                        'path' => $val->store('form-records/attachments', 'public'),
-                        'name' => $val->getClientOriginalName(),
-                    ];
-                }
-            }
-        }
+        $record->update([
+            'status' => 'Rejected',
+            'current_approval_level' => 0,
+        ]);
 
-        // Process line items
-        if (isset($data['items']) && is_array($data['items'])) {
-            $formData = is_array($data['form_data'] ?? null) ? $data['form_data'] : [];
-            $itemColumns = $this->resolveItemColumns($schema, $formData);
+        FormRecordApproval::create([
+            'form_record_id' => $record->id,
+            'user_id' => Auth::id(),
+            'level' => $record->current_approval_level,
+            'remarks' => $request->remarks,
+            'status' => 'Rejected',
+        ]);
 
-            foreach ($data['items'] as $idx => $item) {
-                foreach ($itemColumns as $col) {
-                    if (($col['type'] ?? '') === 'file') {
-                        $key = $col['key'];
-                        $val = $item[$key] ?? null;
-                        if (!$val) continue;
-
-                        if (is_array($val)) {
-                            $paths = [];
-                            foreach ($val as $f) {
-                                if ($f instanceof \Illuminate\Http\UploadedFile) {
-                                    $paths[] = [
-                                        'path' => $f->store('form-records/attachments', 'public'),
-                                        'name' => $f->getClientOriginalName(),
-                                    ];
-                                } else {
-                                    $paths[] = $f;
-                                }
-                            }
-                            $data['items'][$idx][$key] = $paths;
-                        } elseif ($val instanceof \Illuminate\Http\UploadedFile) {
-                            $data['items'][$idx][$key] = [
-                                'path' => $val->store('form-records/attachments', 'public'),
-                                'name' => $val->getClientOriginalName(),
-                            ];
-                        }
-                    }
-                }
-            }
-        }
-
-        return $data;
-    }
-
-    private function resolveItemColumns(array $schema, array $formData): array
-    {
-        $source = $schema['items_template_source'] ?? null;
-
-        if ($source) {
-            $selected = $formData[$source] ?? null;
-            if (is_array($selected)) return [];
-
-            $selectedKey = is_scalar($selected) ? (string) $selected : '';
-            if ($selectedKey === '') return [];
-
-            $templates = is_array($schema['items_templates'] ?? null) ? $schema['items_templates'] : [];
-            $columns = $templates[$selectedKey]['columns'] ?? [];
-
-            return is_array($columns) ? $columns : [];
-        }
-
-        $columns = $schema['items_columns'] ?? [];
-        return is_array($columns) ? $columns : [];
+        return redirect()->back()->with('success', 'Record rejected successfully');
     }
 
     public function destroy($slug, $id)
@@ -237,5 +212,37 @@ class DynamicFormController extends Controller
         $record->delete();
 
         return redirect()->back()->with('success', 'Record deleted successfully');
+    }
+
+    private function storeFileUploads($form, $data)
+    {
+        $schema = $form->form_schema ?? [];
+        $fields = $schema['fields'] ?? [];
+        
+        foreach ($fields as $field) {
+            if ($field['type'] === 'file' && isset($data['form_data'][$field['key']])) {
+                $files = $data['form_data'][$field['key']];
+                if (!is_array($files)) $files = [$files];
+                
+                $storedFiles = [];
+                foreach ($files as $file) {
+                    if ($file instanceof \Illuminate\Http\UploadedFile) {
+                        $path = $file->store('dynamic-forms/' . $form->slug, 'public');
+                        $storedFiles[] = [
+                            'name' => $file->getClientOriginalName(),
+                            'path' => $path,
+                            'url' => Storage::url($path),
+                            'mime' => $file->getMimeType(),
+                            'size' => $file->getSize(),
+                        ];
+                    } else {
+                        $storedFiles[] = $file; // Keep existing file data
+                    }
+                }
+                $data['form_data'][$field['key']] = $storedFiles;
+            }
+        }
+        
+        return $data;
     }
 }

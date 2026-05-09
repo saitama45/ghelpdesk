@@ -24,6 +24,11 @@ class FormDefinition extends Model
         'is_active' => 'boolean',
     ];
 
+    public function requestTypes()
+    {
+        return $this->belongsToMany(RequestType::class, 'form_definition_request_type');
+    }
+
     public function records()
     {
         return $this->hasMany(FormRecord::class);

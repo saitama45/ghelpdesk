@@ -276,6 +276,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
                                 <Link :href="route('sap-requests.index')" :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))">{{ getChildLabel('services', 'sap-requests') }}</Link>
                             </div>
+                            <div style="order: 998">
+                                <Link :href="route('dynamic-form.list')" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.list'))">All Dynamic Forms</Link>
+                            </div>
                             <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" style="order: 999">
                                 <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ form.name }}</Link>
                             </div>
@@ -294,6 +297,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
                             <Link :href="route('sap-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'sap-requests') }}</span></Link>
+                        </div>
+                        <div style="order: 998">
+                            <Link :href="route('dynamic-form.list')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.list') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>All Dynamic Forms</span></Link>
                         </div>
                         <div v-for="form in visibleDynamicForms" :key="form.slug" style="order: 999">
                             <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ form.name }}</span></Link>

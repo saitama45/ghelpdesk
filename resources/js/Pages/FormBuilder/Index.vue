@@ -17,6 +17,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    requestTypes: {
+        type: Array,
+        default: () => [],
+    },
 })
 
 const { showSuccess, showError } = useToast()
@@ -44,6 +48,7 @@ const isEditing = ref(false)
 const currentForm = ref(null)
 
 const form = reactive({
+    request_type_ids: [],
     name: '',
     description: '',
     icon: 'DocumentTextIcon',
@@ -57,6 +62,13 @@ const userOptions = computed(() => {
     return (props.users ?? []).map(user => ({
         id: user.id,
         name: user.email ? `${user.name} (${user.email})` : user.name,
+    }))
+})
+
+const requestTypeOptions = computed(() => {
+    return (props.requestTypes ?? []).map(rt => ({
+        id: rt.id,
+        name: rt.name,
     }))
 })
 
@@ -90,6 +102,7 @@ watch(() => form.approval_levels, (newValue) => {
 const openCreateModal = () => {
     isEditing.value = false
     currentForm.value = null
+    form.request_type_ids = []
     form.name = ''
     form.description = ''
     form.icon = 'DocumentTextIcon'
@@ -103,6 +116,7 @@ const openCreateModal = () => {
 const editForm = (formData) => {
     isEditing.value = true
     currentForm.value = formData
+    form.request_type_ids = Array.isArray(formData.request_types) ? formData.request_types.map(rt => rt.id) : []
     form.name = formData.name
     form.description = formData.description || ''
     form.icon = formData.icon || 'DocumentTextIcon'
@@ -171,9 +185,9 @@ const openFieldBuilder = (formData) => {
 <template>
     <Head title="Form Builder" />
 
-    <AppLayout title="Form Builder">
+    <AppLayout title="Form Builder" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-12 bg-gray-50/50 min-h-screen">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <div class="w-full mx-auto sm:px-6 lg:px-8">
                 <DataTable
                     title="Form Builder Management"
                     subtitle="Build and configure custom forms with dynamic fields and approvals"
@@ -226,6 +240,11 @@ const openFieldBuilder = (formData) => {
                                     </div>
                                     <div class="ml-4">
                                         <div class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors duration-300">{{ formData.name }}</div>
+                                        <div v-if="formData.request_types?.length" class="mt-1 flex flex-wrap gap-1">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-tighter">
+                                                {{ formData.request_types.length }} Request Types
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </td>
@@ -335,6 +354,19 @@ const openFieldBuilder = (formData) => {
                     </div>
 
                     <form @submit.prevent="submitForm" class="space-y-6">
+                        <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                            <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3 ml-1">Connect Request Types (Optional)</label>
+                            <MultiAutocomplete
+                                v-model="form.request_type_ids"
+                                :options="requestTypeOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Search and select request types..."
+                                :limit="10"
+                            />
+                            <p class="text-[10px] text-indigo-500 mt-2 ml-1 italic font-medium">When Request Types are connected, users will see tiles to choose from when starting a submission. The selected type's schema and approvals will be used.</p>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Form Name</label>
@@ -342,7 +374,7 @@ const openFieldBuilder = (formData) => {
                                        class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-bold transition-all duration-300">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Approval Levels</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Default Approval Levels</label>
                                 <div class="flex items-center space-x-4 bg-gray-50 rounded-2xl p-1 border border-transparent focus-within:border-indigo-500 focus-within:bg-white transition-all duration-300">
                                     <button type="button" @click="form.approval_levels > 0 && form.approval_levels--" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -379,8 +411,8 @@ const openFieldBuilder = (formData) => {
                         <div v-if="form.approval_levels > 0" class="space-y-4">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">Approval Matrix</label>
-                                    <p class="text-xs text-gray-500 ml-1">Assign one or more approvers for each approval level.</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">Default Approval Matrix</label>
+                                    <p class="text-xs text-gray-500 ml-1">Assign one or more approvers for each approval level. Used if no Request Type is selected.</p>
                                 </div>
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100">
                                     {{ form.approval_levels }} Level{{ form.approval_levels > 1 ? 's' : '' }}
