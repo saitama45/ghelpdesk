@@ -48,15 +48,34 @@ const tabs = [
 ];
 
 // Sidebar layout drag state
-const { state: sidebarState, save: saveSidebarOrder, reset: resetSidebarOrder } = useSidebarOrder();
+const { state: sidebarState, init: initSidebar, serialize: serializeSidebar, reset: resetSidebarOrder, updateSectionLabel, updateChildLabel, getSectionLabel, getChildLabel } = useSidebarOrder();
+
+// Initialize sidebar state from props
+const rawLayout = props.settings.sidebar_layout;
+if (rawLayout) {
+    try {
+        const parsed = typeof rawLayout === 'string' ? JSON.parse(rawLayout) : rawLayout;
+        initSidebar(parsed);
+    } catch (e) {
+        console.error('Failed to parse sidebar layout', e);
+        initSidebar(null);
+    }
+} else {
+    initSidebar(null);
+}
 
 const sectionItems = ref(
-    sidebarState.sections.map(id => ({ id, label: SECTION_LABELS[id] || id }))
+    sidebarState.sections.map(id => ({ id, label: getSectionLabel(id) }))
 );
 const expandedSidebarSection = ref(null);
 const expandedChildItems = ref([]);
 
 const toggleSidebarSection = (sectionId) => {
+    // Sync current children back to state before switching or closing
+    if (expandedSidebarSection.value) {
+        expandedChildItems.value.forEach(item => updateChildLabel(expandedSidebarSection.value, item.id, item.label));
+    }
+
     if (expandedSidebarSection.value === sectionId) {
         expandedSidebarSection.value = null;
         expandedChildItems.value = [];
@@ -65,30 +84,46 @@ const toggleSidebarSection = (sectionId) => {
     expandedSidebarSection.value = sectionId;
     expandedChildItems.value = (sidebarState.children[sectionId] || []).map(id => ({
         id,
-        label: CHILD_LABELS[sectionId]?.[id] || id,
+        label: getChildLabel(sectionId, id),
     }));
 };
 
 const onSectionUpdate = () => {
     sidebarState.sections.splice(0, sidebarState.sections.length, ...sectionItems.value.map(s => s.id));
+    // Sync labels
+    sectionItems.value.forEach(item => updateSectionLabel(item.id, item.label));
 };
 
 const onChildUpdate = () => {
     if (expandedSidebarSection.value) {
         sidebarState.children[expandedSidebarSection.value] = expandedChildItems.value.map(c => c.id);
+        // Sync labels
+        expandedChildItems.value.forEach(item => updateChildLabel(expandedSidebarSection.value, item.id, item.label));
     }
 };
 
 const sidebarSaved = ref(false);
 const saveSidebarLayout = () => {
-    saveSidebarOrder();
-    sidebarSaved.value = true;
-    setTimeout(() => { sidebarSaved.value = false; }, 2500);
+    // Sync labels back to state before serializing
+    sectionItems.value.forEach(item => updateSectionLabel(item.id, item.label));
+    if (expandedSidebarSection.value) {
+        expandedChildItems.value.forEach(item => updateChildLabel(expandedSidebarSection.value, item.id, item.label));
+    }
+
+    form.sidebar_layout = serializeSidebar();
+    
+    form.put(route('settings.update'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            sidebarSaved.value = true;
+            setTimeout(() => { sidebarSaved.value = false; }, 2500);
+        }
+    });
 };
 
 const resetSidebarLayout = () => {
     resetSidebarOrder();
-    sectionItems.value = sidebarState.sections.map(id => ({ id, label: SECTION_LABELS[id] || id }));
+    sectionItems.value = sidebarState.sections.map(id => ({ id, label: getSectionLabel(id) }));
     expandedSidebarSection.value = null;
     expandedChildItems.value = [];
 };
@@ -165,6 +200,7 @@ const getInitialFormData = () => {
         waiting_aging_alarm_days: props.settings.waiting_aging_alarm_days || 3,
         ticket_retention_value: props.settings.ticket_retention_value || 6,
         ticket_retention_unit: props.settings.ticket_retention_unit || 'months',
+        sidebar_layout: props.settings.sidebar_layout || null,
     };
 
     // Add sub-unit specific settings
@@ -866,7 +902,7 @@ const syncEmails = () => {
                                     <Bars3BottomLeftIcon class="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
                                     <div>
                                         <p class="text-sm font-black text-indigo-900">Sidebar Menu Layout</p>
-                                        <p class="text-xs text-indigo-600 mt-0.5">Drag parent sections or sub-items to reorder. Changes apply instantly to the sidebar and are saved per browser.</p>
+                                        <p class="text-xs text-indigo-600 mt-0.5">Drag parent sections or sub-items to reorder and type directly to rename. Changes are saved to the database and applied globally.</p>
                                     </div>
                                 </div>
 
@@ -883,7 +919,12 @@ const syncEmails = () => {
                                                 <span class="section-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to reorder">
                                                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
                                                 </span>
-                                                <span class="flex-1 text-sm font-semibold text-gray-800">{{ section.label }}</span>
+                                                <input 
+                                                    type="text" 
+                                                    v-model="section.label" 
+                                                    class="flex-1 bg-transparent border-transparent focus:border-indigo-300 focus:ring-0 text-sm font-semibold text-gray-800 rounded px-2 py-1 transition-all"
+                                                    placeholder="Section Name"
+                                                >
                                                 <button
                                                     v-if="(sidebarState.children[section.id] || []).length > 0"
                                                     type="button"
@@ -910,7 +951,12 @@ const syncEmails = () => {
                                                             <span class="child-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to reorder">
                                                                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
                                                             </span>
-                                                            <span class="text-sm text-gray-700">{{ child.label }}</span>
+                                                            <input 
+                                                                type="text" 
+                                                                v-model="child.label" 
+                                                                class="flex-1 bg-transparent border-transparent focus:border-indigo-300 focus:ring-0 text-sm text-gray-700 rounded px-2 py-1 transition-all"
+                                                                placeholder="Item Name"
+                                                            >
                                                         </div>
                                                     </template>
                                                 </draggable>

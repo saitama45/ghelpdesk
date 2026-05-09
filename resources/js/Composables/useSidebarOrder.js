@@ -1,7 +1,5 @@
 import { reactive } from 'vue'
 
-const STORAGE_KEY = 'sidebar_order'
-
 export const SECTION_LABELS = {
     dashboard: 'Dashboard',
     projectTracker: 'Project Tracker',
@@ -80,38 +78,59 @@ export const CHILD_LABELS = {
 }
 
 function cloneChildren(src) {
-    return Object.fromEntries(Object.entries(src).map(([k, v]) => [k, [...v]]))
+    if (!src || typeof src !== 'object') return {}
+    return Object.fromEntries(
+        Object.entries(src).map(([k, v]) => [k, Array.isArray(v) ? [...v] : { ...v }])
+    )
 }
 
-function loadFromStorage() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (raw) return JSON.parse(raw)
-    } catch {}
-    return null
-}
-
-function mergedSections(stored) {
-    if (!stored) return [...DEFAULT_SECTION_ORDER]
-    const result = [...stored]
-    DEFAULT_SECTION_ORDER.forEach((id, defaultIdx) => {
-        if (!result.includes(id)) {
-            result.splice(Math.min(defaultIdx, result.length), 0, id)
-        }
-    })
-    return result
-}
-
-const _stored = loadFromStorage()
-
+// Global shared state for Sidebar.vue and Settings UI
 const _state = reactive({
-    sections: mergedSections(_stored?.sections),
-    children: _stored?.children
-        ? { ...cloneChildren(DEFAULT_CHILD_ORDER), ...cloneChildren(_stored.children) }
-        : cloneChildren(DEFAULT_CHILD_ORDER),
+    sections: [...DEFAULT_SECTION_ORDER],
+    children: cloneChildren(DEFAULT_CHILD_ORDER),
+    customSectionLabels: {},
+    customChildLabels: {},
 })
 
 export function useSidebarOrder() {
+    
+    const init = (config) => {
+        if (!config) {
+            _state.sections = [...DEFAULT_SECTION_ORDER]
+            _state.children = cloneChildren(DEFAULT_CHILD_ORDER)
+            _state.customSectionLabels = {}
+            _state.customChildLabels = {}
+            return
+        }
+
+        // Merge orders
+        if (config.sections) {
+            _state.sections = [...config.sections]
+            // Ensure any new default sections are included
+            DEFAULT_SECTION_ORDER.forEach((id, idx) => {
+                if (!_state.sections.includes(id)) {
+                    _state.sections.splice(idx, 0, id)
+                }
+            })
+        } else {
+            _state.sections = [...DEFAULT_SECTION_ORDER]
+        }
+
+        if (config.children) {
+            _state.children = { ...cloneChildren(DEFAULT_CHILD_ORDER), ...cloneChildren(config.children) }
+        } else {
+            _state.children = cloneChildren(DEFAULT_CHILD_ORDER)
+        }
+
+        // Merge labels
+        _state.customSectionLabels = config.customSectionLabels || {}
+        // Ensure customChildLabels is an object even if DB returns empty JSON array []
+        const rawChildLabels = config.customChildLabels
+        _state.customChildLabels = (rawChildLabels && !Array.isArray(rawChildLabels)) 
+            ? rawChildLabels 
+            : {}
+    }
+
     const getSectionOrder = (sectionId) => {
         const idx = _state.sections.indexOf(sectionId)
         return idx === -1 ? 999 : idx + 1
@@ -123,18 +142,48 @@ export function useSidebarOrder() {
         return idx === -1 ? 999 : idx + 1
     }
 
-    const save = () => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    const getSectionLabel = (sectionId) => {
+        return _state.customSectionLabels[sectionId] || SECTION_LABELS[sectionId] || sectionId
+    }
+
+    const getChildLabel = (sectionId, childId) => {
+        return _state.customChildLabels[sectionId]?.[childId] || CHILD_LABELS[sectionId]?.[childId] || childId
+    }
+
+    const updateSectionLabel = (sectionId, label) => {
+        _state.customSectionLabels[sectionId] = label
+    }
+
+    const updateChildLabel = (sectionId, childId, label) => {
+        if (!_state.customChildLabels[sectionId]) {
+            _state.customChildLabels[sectionId] = {}
+        }
+        _state.customChildLabels[sectionId][childId] = label
+    }
+
+    const serialize = () => {
+        return {
             sections: [..._state.sections],
             children: cloneChildren(_state.children),
-        }))
+            customSectionLabels: { ..._state.customSectionLabels },
+            customChildLabels: cloneChildren(_state.customChildLabels),
+        }
     }
 
     const reset = () => {
-        _state.sections = [...DEFAULT_SECTION_ORDER]
-        _state.children = cloneChildren(DEFAULT_CHILD_ORDER)
-        localStorage.removeItem(STORAGE_KEY)
+        init(null)
     }
 
-    return { state: _state, getSectionOrder, getChildOrder, save, reset }
+    return { 
+        state: _state, 
+        init, 
+        getSectionOrder, 
+        getChildOrder, 
+        getSectionLabel, 
+        getChildLabel,
+        updateSectionLabel,
+        updateChildLabel,
+        serialize,
+        reset 
+    }
 }

@@ -60,6 +60,10 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'permissions' => array_values($permissions),
             ],
+            'sidebarLayout' => Cache::remember('sidebar_layout_config', 3600, function () {
+                $val = \App\Models\Setting::where('key', 'sidebar_layout')->value('value');
+                return $val ? json_decode($val, true) : null;
+            }),
             'dynamicForms' => $this->activeFormDefinitions(),
             'flash' => [
                 'success' => $request->session()->get('success'),

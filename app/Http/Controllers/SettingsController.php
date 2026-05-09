@@ -64,6 +64,7 @@ class SettingsController extends Controller implements HasMiddleware
         }
 
         Cache::forget('app_mail_settings');
+        Cache::forget('sidebar_layout_config');
 
         return redirect()->back()->with('success', 'Settings updated successfully.');
     }

@@ -39,7 +39,7 @@ const visibleDynamicForms = computed(() => {
     return dynamicForms.value.filter(form => hasPermission(form.slug + '.view'));
 });
 const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
-const { getSectionOrder, getChildOrder } = useSidebarOrder();
+const { init: initSidebar, getSectionOrder, getChildOrder, getSectionLabel, getChildLabel } = useSidebarOrder();
 
 const route = window.route;
 
@@ -78,6 +78,7 @@ const co = (s, c) => ({ order: getChildOrder(s, c) });
 
 onMounted(() => {
     initPresence();
+    initSidebar(page.props.sidebarLayout);
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
@@ -211,9 +212,9 @@ const canSeeSettings = computed(() => {
                             isCollapsed ? 'mx-auto' : 'mr-3'
                         ]"
                     />
-                    <span v-if="!isCollapsed" class="truncate font-medium">Dashboard</span>
+                    <span v-if="!isCollapsed" class="truncate font-medium">{{ getSectionLabel('dashboard') }}</span>
                     <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                        Dashboard
+                        {{ getSectionLabel('dashboard') }}
                     </div>
                 </Link>
 
@@ -235,9 +236,9 @@ const canSeeSettings = computed(() => {
                             isCollapsed ? 'mx-auto' : 'mr-3'
                         ]"
                     />
-                    <span v-if="!isCollapsed" class="truncate font-medium">Project Tracker</span>
+                    <span v-if="!isCollapsed" class="truncate font-medium">{{ getSectionLabel('projectTracker') }}</span>
                     <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
-                        Project Tracker
+                        {{ getSectionLabel('projectTracker') }}
                     </div>
                 </Link>
 
@@ -253,27 +254,27 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <QueueListIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Services</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('services') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.services" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.services" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Services</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('services') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
-                                <Link :href="route('tickets.index')" :class="collapsedFlyoutLinkClass(route().current('tickets.*'))">Tickets</Link>
+                                <Link :href="route('tickets.index')" :class="collapsedFlyoutLinkClass(route().current('tickets.*'))">{{ getChildLabel('services', 'tickets') }}</Link>
                             </div>
                             <div v-if="hasPermission('task_boards.view')" :style="co('services', 'task-boards')">
-                                <Link :href="route('task-boards.index')" :class="collapsedFlyoutLinkClass(route().current('task-boards.*'))">Task Board</Link>
+                                <Link :href="route('task-boards.index')" :class="collapsedFlyoutLinkClass(route().current('task-boards.*'))">{{ getChildLabel('services', 'task-boards') }}</Link>
                             </div>
                             <div v-if="hasPermission('pos_requests.view')" :style="co('services', 'pos-requests')">
-                                <Link :href="route('pos-requests.index')" :class="collapsedFlyoutLinkClass(route().current('pos-requests.*'))">POS Requests</Link>
+                                <Link :href="route('pos-requests.index')" :class="collapsedFlyoutLinkClass(route().current('pos-requests.*'))">{{ getChildLabel('services', 'pos-requests') }}</Link>
                             </div>
                             <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
-                                <Link :href="route('sap-requests.index')" :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))">SAP Requests</Link>
+                                <Link :href="route('sap-requests.index')" :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))">{{ getChildLabel('services', 'sap-requests') }}</Link>
                             </div>
                             <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" style="order: 999">
                                 <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ form.name }}</Link>
@@ -283,16 +284,16 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="!isCollapsed && openMenus.services" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
                         <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
-                            <Link :href="route('tickets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('tickets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Tickets</span></Link>
+                            <Link :href="route('tickets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('tickets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'tickets') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('task_boards.view')" :style="co('services', 'task-boards')">
-                            <Link :href="route('task-boards.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('task-boards.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Task Board</span></Link>
+                            <Link :href="route('task-boards.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('task-boards.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'task-boards') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('pos_requests.view')" :style="co('services', 'pos-requests')">
-                            <Link :href="route('pos-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('pos-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>POS Requests</span></Link>
+                            <Link :href="route('pos-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('pos-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'pos-requests') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
-                            <Link :href="route('sap-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>SAP Requests</span></Link>
+                            <Link :href="route('sap-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'sap-requests') }}</span></Link>
                         </div>
                         <div v-for="form in visibleDynamicForms" :key="form.slug" style="order: 999">
                             <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ form.name }}</span></Link>
@@ -314,37 +315,37 @@ const canSeeSettings = computed(() => {
                         <svg :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Inventory</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('inventory') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.inventory" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.inventory" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Inventory</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('inventory') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('assets.view')" :style="co('inventory', 'assets')">
-                                <Link :href="route('assets.index')" :class="collapsedFlyoutLinkClass(route().current('assets.*'))">Assets</Link>
+                                <Link :href="route('assets.index')" :class="collapsedFlyoutLinkClass(route().current('assets.*'))">{{ getChildLabel('inventory', 'assets') }}</Link>
                             </div>
                             <div v-if="hasPermission('stock_ins.view')" :style="co('inventory', 'stock-ins')">
-                                <Link :href="route('stock-ins.index')" :class="collapsedFlyoutLinkClass(route().current('stock-ins.*'))">Stock Transaction</Link>
+                                <Link :href="route('stock-ins.index')" :class="collapsedFlyoutLinkClass(route().current('stock-ins.*'))">{{ getChildLabel('inventory', 'stock-ins') }}</Link>
                             </div>
                             <div v-if="hasPermission('reports.inventory')" :style="co('inventory', 'inventory-report')">
-                                <Link :href="route('reports.inventory')" :class="collapsedFlyoutLinkClass(route().current('reports.inventory'))">Inventory Report</Link>
+                                <Link :href="route('reports.inventory')" :class="collapsedFlyoutLinkClass(route().current('reports.inventory'))">{{ getChildLabel('inventory', 'inventory-report') }}</Link>
                             </div>
                         </div>
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.inventory" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
                         <div v-if="hasPermission('assets.view')" :style="co('inventory', 'assets')">
-                            <Link :href="route('assets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Assets</span></Link>
+                            <Link :href="route('assets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('assets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'assets') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('stock_ins.view')" :style="co('inventory', 'stock-ins')">
-                            <Link :href="route('stock-ins.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Stock Transaction</span></Link>
+                            <Link :href="route('stock-ins.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'stock-ins') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('reports.inventory')" :style="co('inventory', 'inventory-report')">
-                            <Link :href="route('reports.inventory')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.inventory') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Inventory Report</span></Link>
+                            <Link :href="route('reports.inventory')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.inventory') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'inventory-report') }}</span></Link>
                         </div>
                     </div>
                 </div>
@@ -361,49 +362,49 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <BriefcaseIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Administrative</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('adminTask') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.adminTask" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.adminTask" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Administrative</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('adminTask') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('attendance.view')" :style="co('adminTask', 'dtr')">
-                                <Link :href="route('attendance.index')" :class="collapsedFlyoutLinkClass(route().current('attendance.index'))">DTR</Link>
+                                <Link :href="route('attendance.index')" :class="collapsedFlyoutLinkClass(route().current('attendance.index'))">{{ getChildLabel('adminTask', 'dtr') }}</Link>
                             </div>
                             <div v-if="hasPermission('attendance.logs')" :style="co('adminTask', 'attendance-logs')">
-                                <Link :href="route('attendance.logs')" :class="collapsedFlyoutLinkClass(route().current('attendance.logs'))">Attendance Logs</Link>
+                                <Link :href="route('attendance.logs')" :class="collapsedFlyoutLinkClass(route().current('attendance.logs'))">{{ getChildLabel('adminTask', 'attendance-logs') }}</Link>
                             </div>
                             <div v-if="hasPermission('schedules.view')" :style="co('adminTask', 'scheduling')">
-                                <Link :href="route('schedules.index')" :class="collapsedFlyoutLinkClass(route().current('schedules.*'))">Scheduling</Link>
+                                <Link :href="route('schedules.index')" :class="collapsedFlyoutLinkClass(route().current('schedules.*'))">{{ getChildLabel('adminTask', 'scheduling') }}</Link>
                             </div>
                             <div v-if="hasPermission('presence.view')" :style="co('adminTask', 'presence')">
-                                <Link :href="route('presence.index')" :class="collapsedFlyoutLinkClass(route().current('presence.*'))">Presence</Link>
+                                <Link :href="route('presence.index')" :class="collapsedFlyoutLinkClass(route().current('presence.*'))">{{ getChildLabel('adminTask', 'presence') }}</Link>
                             </div>
                             <div v-if="hasPermission('kb_articles.view')" :style="co('adminTask', 'kb-articles')">
-                                <Link :href="route('kb-articles.index')" :class="collapsedFlyoutLinkClass(route().current('kb-articles.*'))">KB Articles</Link>
+                                <Link :href="route('kb-articles.index')" :class="collapsedFlyoutLinkClass(route().current('kb-articles.*'))">{{ getChildLabel('adminTask', 'kb-articles') }}</Link>
                             </div>
                         </div>
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.adminTask" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
                         <div v-if="hasPermission('attendance.view')" :style="co('adminTask', 'dtr')">
-                            <Link :href="route('attendance.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>DTR</span></Link>
+                            <Link :href="route('attendance.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'dtr') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('attendance.logs')" :style="co('adminTask', 'attendance-logs')">
-                            <Link :href="route('attendance.logs')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Attendance Logs</span></Link>
+                            <Link :href="route('attendance.logs')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'attendance-logs') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('schedules.view')" :style="co('adminTask', 'scheduling')">
-                            <Link :href="route('schedules.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Scheduling</span></Link>
+                            <Link :href="route('schedules.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'scheduling') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('presence.view')" :style="co('adminTask', 'presence')">
-                            <Link :href="route('presence.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Presence</span></Link>
+                            <Link :href="route('presence.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('presence.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'presence') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('kb_articles.view')" :style="co('adminTask', 'kb-articles')">
-                            <Link :href="route('kb-articles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>KB Articles</span></Link>
+                            <Link :href="route('kb-articles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'kb-articles') }}</span></Link>
                         </div>
                     </div>
                 </div>
@@ -420,85 +421,85 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <BuildingOfficeIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">References</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('references') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.references" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.references" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">References</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('references') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto custom-scrollbar">
                             <div v-if="hasPermission('companies.view')" :style="co('references', 'companies')">
-                                <Link :href="route('companies.index')" :class="collapsedFlyoutLinkClass(route().current('companies.*'))">Companies</Link>
+                                <Link :href="route('companies.index')" :class="collapsedFlyoutLinkClass(route().current('companies.*'))">{{ getChildLabel('references', 'companies') }}</Link>
                             </div>
                             <div v-if="hasPermission('departments.view')" :style="co('references', 'departments')">
-                                <Link :href="route('departments.index')" :class="collapsedFlyoutLinkClass(route().current('departments.*'))">Departments</Link>
+                                <Link :href="route('departments.index')" :class="collapsedFlyoutLinkClass(route().current('departments.*'))">{{ getChildLabel('references', 'departments') }}</Link>
                             </div>
                             <div v-if="hasPermission('clusters.view')" :style="co('references', 'clusters')">
-                                <Link :href="route('clusters.index')" :class="collapsedFlyoutLinkClass(route().current('clusters.*'))">Clusters</Link>
+                                <Link :href="route('clusters.index')" :class="collapsedFlyoutLinkClass(route().current('clusters.*'))">{{ getChildLabel('references', 'clusters') }}</Link>
                             </div>
                             <div v-if="hasPermission('stores.view')" :style="co('references', 'stores')">
-                                <Link :href="route('stores.index')" :class="collapsedFlyoutLinkClass(route().current('stores.*'))">Stores</Link>
+                                <Link :href="route('stores.index')" :class="collapsedFlyoutLinkClass(route().current('stores.*'))">{{ getChildLabel('references', 'stores') }}</Link>
                             </div>
                             <div v-if="hasPermission('vendors.view')" :style="co('references', 'vendors')">
-                                <Link :href="route('vendors.index')" :class="collapsedFlyoutLinkClass(route().current('vendors.*'))">Vendors</Link>
+                                <Link :href="route('vendors.index')" :class="collapsedFlyoutLinkClass(route().current('vendors.*'))">{{ getChildLabel('references', 'vendors') }}</Link>
                             </div>
                             <div v-if="hasPermission('activity_templates.view')" :style="co('references', 'activity-templates')">
-                                <Link :href="route('activity-templates.index')" :class="collapsedFlyoutLinkClass(route().current('activity-templates.*'))">Activity Templates</Link>
+                                <Link :href="route('activity-templates.index')" :class="collapsedFlyoutLinkClass(route().current('activity-templates.*'))">{{ getChildLabel('references', 'activity-templates') }}</Link>
                             </div>
                             <div v-if="hasPermission('categories.view')" :style="co('references', 'categories')">
-                                <Link :href="route('categories.index')" :class="collapsedFlyoutLinkClass(route().current('categories.*'))">Categories</Link>
+                                <Link :href="route('categories.index')" :class="collapsedFlyoutLinkClass(route().current('categories.*'))">{{ getChildLabel('references', 'categories') }}</Link>
                             </div>
                             <div v-if="hasPermission('subcategories.view')" :style="co('references', 'sub-categories')">
-                                <Link :href="route('sub-categories.index')" :class="collapsedFlyoutLinkClass(route().current('sub-categories.*'))">Sub-Categories</Link>
+                                <Link :href="route('sub-categories.index')" :class="collapsedFlyoutLinkClass(route().current('sub-categories.*'))">{{ getChildLabel('references', 'sub-categories') }}</Link>
                             </div>
                             <div v-if="hasPermission('items.view')" :style="co('references', 'items')">
-                                <Link :href="route('items.index')" :class="collapsedFlyoutLinkClass(route().current('items.*'))">Items</Link>
+                                <Link :href="route('items.index')" :class="collapsedFlyoutLinkClass(route().current('items.*'))">{{ getChildLabel('references', 'items') }}</Link>
                             </div>
                             <div v-if="hasPermission('request_types.view')" :style="co('references', 'request-types')">
-                                <Link :href="route('request-types.index')" :class="collapsedFlyoutLinkClass(route().current('request-types.*'))">Request Types</Link>
+                                <Link :href="route('request-types.index')" :class="collapsedFlyoutLinkClass(route().current('request-types.*'))">{{ getChildLabel('references', 'request-types') }}</Link>
                             </div>
                             <div v-if="hasPermission('form_builder.view')" :style="co('references', 'form-builder')">
-                                <Link :href="route('form-builder.index')" :class="collapsedFlyoutLinkClass(route().current('form-builder.*'))">Form Builder</Link>
+                                <Link :href="route('form-builder.index')" :class="collapsedFlyoutLinkClass(route().current('form-builder.*'))">{{ getChildLabel('references', 'form-builder') }}</Link>
                             </div>
                         </div>
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.references" class="pl-10 flex flex-col gap-0.5 mt-1">
                         <div v-if="hasPermission('companies.view')" :style="co('references', 'companies')">
-                            <Link :href="route('companies.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('companies.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Companies</span></Link>
+                            <Link :href="route('companies.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('companies.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'companies') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('departments.view')" :style="co('references', 'departments')">
-                            <Link :href="route('departments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Departments</span></Link>
+                            <Link :href="route('departments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'departments') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('clusters.view')" :style="co('references', 'clusters')">
-                            <Link :href="route('clusters.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('clusters.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Clusters</span></Link>
+                            <Link :href="route('clusters.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('clusters.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'clusters') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('stores.view')" :style="co('references', 'stores')">
-                            <Link :href="route('stores.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stores.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Stores</span></Link>
+                            <Link :href="route('stores.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stores.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'stores') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('vendors.view')" :style="co('references', 'vendors')">
-                            <Link :href="route('vendors.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('vendors.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Vendors</span></Link>
+                            <Link :href="route('vendors.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('vendors.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'vendors') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('activity_templates.view')" :style="co('references', 'activity-templates')">
-                            <Link :href="route('activity-templates.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('activity-templates.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Activity Templates</span></Link>
+                            <Link :href="route('activity-templates.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('activity-templates.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'activity-templates') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('categories.view')" :style="co('references', 'categories')">
-                            <Link :href="route('categories.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Categories</span></Link>
+                            <Link :href="route('categories.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'categories') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('subcategories.view')" :style="co('references', 'sub-categories')">
-                            <Link :href="route('sub-categories.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sub-categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Sub-Categories</span></Link>
+                            <Link :href="route('sub-categories.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sub-categories.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'sub-categories') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('items.view')" :style="co('references', 'items')">
-                            <Link :href="route('items.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('items.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Items</span></Link>
+                            <Link :href="route('items.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('items.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'items') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('request_types.view')" :style="co('references', 'request-types')">
-                            <Link :href="route('request-types.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('request-types.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Request Types</span></Link>
+                            <Link :href="route('request-types.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('request-types.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'request-types') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('form_builder.view')" :style="co('references', 'form-builder')">
-                            <Link :href="route('form-builder.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('form-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Form Builder</span></Link>
+                            <Link :href="route('form-builder.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('form-builder.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'form-builder') }}</span></Link>
                         </div>
                     </div>
                 </div>
@@ -515,37 +516,37 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <PresentationChartLineIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Reports</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('reports') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.reports" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.reports" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Reports</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('reports') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('reports.store_health')" :style="co('reports', 'store-health')">
-                                <Link :href="route('reports.store-health')" :class="collapsedFlyoutLinkClass(route().current('reports.store-health'))">Store Health Report</Link>
+                                <Link :href="route('reports.store-health')" :class="collapsedFlyoutLinkClass(route().current('reports.store-health'))">{{ getChildLabel('reports', 'store-health') }}</Link>
                             </div>
                             <div v-if="hasPermission('reports.sla_performance')" :style="co('reports', 'sla-performance')">
-                                <Link :href="route('reports.sla-performance')" :class="collapsedFlyoutLinkClass(route().current('reports.sla-performance'))">SLA Performance Report</Link>
+                                <Link :href="route('reports.sla-performance')" :class="collapsedFlyoutLinkClass(route().current('reports.sla-performance'))">{{ getChildLabel('reports', 'sla-performance') }}</Link>
                             </div>
                             <div v-if="hasPermission('reports.assignee_performance')" :style="co('reports', 'assignee-performance')">
-                                <Link :href="route('reports.assignee-performance')" :class="collapsedFlyoutLinkClass(route().current('reports.assignee-performance'))">Assignee Performance</Link>
+                                <Link :href="route('reports.assignee-performance')" :class="collapsedFlyoutLinkClass(route().current('reports.assignee-performance'))">{{ getChildLabel('reports', 'assignee-performance') }}</Link>
                             </div>
                         </div>
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.reports" class="pl-10 flex flex-col gap-0.5 mt-1">
                         <div v-if="hasPermission('reports.store_health')" :style="co('reports', 'store-health')">
-                            <Link :href="route('reports.store-health')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.store-health') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Store Health Report</span></Link>
+                            <Link :href="route('reports.store-health')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.store-health') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('reports', 'store-health') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('reports.sla_performance')" :style="co('reports', 'sla-performance')">
-                            <Link :href="route('reports.sla-performance')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.sla-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>SLA Performance Report</span></Link>
+                            <Link :href="route('reports.sla-performance')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.sla-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('reports', 'sla-performance') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('reports.assignee_performance')" :style="co('reports', 'assignee-performance')">
-                            <Link :href="route('reports.assignee-performance')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.assignee-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Assignee Performance</span></Link>
+                            <Link :href="route('reports.assignee-performance')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.assignee-performance') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('reports', 'assignee-performance') }}</span></Link>
                         </div>
                     </div>
                 </div>
@@ -562,31 +563,31 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <UserGroupIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">User Management</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('userManagement') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.userManagement" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.userManagement" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">User Management</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('userManagement') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('users.view')" :style="co('userManagement', 'users')">
-                                <Link :href="route('users.index')" :class="collapsedFlyoutLinkClass(route().current('users.*'))">Users</Link>
+                                <Link :href="route('users.index')" :class="collapsedFlyoutLinkClass(route().current('users.*'))">{{ getChildLabel('userManagement', 'users') }}</Link>
                             </div>
                             <div v-if="hasPermission('roles.view')" :style="co('userManagement', 'roles')">
-                                <Link :href="route('roles.index')" :class="collapsedFlyoutLinkClass(route().current('roles.*'))">Roles &amp; Permissions</Link>
+                                <Link :href="route('roles.index')" :class="collapsedFlyoutLinkClass(route().current('roles.*'))">{{ getChildLabel('userManagement', 'roles') }}</Link>
                             </div>
                         </div>
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.userManagement" class="pl-10 flex flex-col gap-0.5 mt-1">
                         <div v-if="hasPermission('users.view')" :style="co('userManagement', 'users')">
-                            <Link :href="route('users.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Users</span></Link>
+                            <Link :href="route('users.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('users.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('userManagement', 'users') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('roles.view')" :style="co('userManagement', 'roles')">
-                            <Link :href="route('roles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Roles &amp; Permissions</span></Link>
+                            <Link :href="route('roles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('roles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('userManagement', 'roles') }}</span></Link>
                         </div>
                     </div>
                 </div>
@@ -603,43 +604,43 @@ const canSeeSettings = computed(() => {
                         ]"
                     >
                         <Cog6ToothIcon :class="['w-5 h-5 flex-shrink-0', isCollapsed ? 'mx-auto' : 'mr-3']" />
-                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">Settings</span>
+                        <span v-if="!isCollapsed" class="flex-1 text-left truncate font-medium">{{ getSectionLabel('settings') }}</span>
                         <ChevronDownIcon v-if="!isCollapsed && openMenus.settings" class="w-4 h-4 ml-2" />
                         <ChevronRightIcon v-if="!isCollapsed && !openMenus.settings" class="w-4 h-4 ml-2" />
                     </button>
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Settings</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('settings') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('settings.view')" :style="co('settings', 'system-settings')">
-                                <Link :href="route('settings.index')" :class="collapsedFlyoutLinkClass(route().current('settings.index'))">System Settings</Link>
+                                <Link :href="route('settings.index')" :class="collapsedFlyoutLinkClass(route().current('settings.index'))">{{ getChildLabel('settings', 'system-settings') }}</Link>
                             </div>
                             <div v-if="hasPermission('settings.view')" :style="co('settings', 'ticket-archive')">
-                                <Link :href="route('ticket-archive.index')" :class="collapsedFlyoutLinkClass(route().current('ticket-archive.*'))">Ticket Archive</Link>
+                                <Link :href="route('ticket-archive.index')" :class="collapsedFlyoutLinkClass(route().current('ticket-archive.*'))">{{ getChildLabel('settings', 'ticket-archive') }}</Link>
                             </div>
                             <div v-if="hasPermission('canned_messages.view')" :style="co('settings', 'canned-messages')">
-                                <Link :href="route('canned-messages.index')" :class="collapsedFlyoutLinkClass(route().current('canned-messages.*'))">Canned Messages</Link>
+                                <Link :href="route('canned-messages.index')" :class="collapsedFlyoutLinkClass(route().current('canned-messages.*'))">{{ getChildLabel('settings', 'canned-messages') }}</Link>
                             </div>
                             <div :style="co('settings', 'profile')">
-                                <Link :href="route('profile.edit')" :class="collapsedFlyoutLinkClass(route().current('profile.edit'))">My Profile</Link>
+                                <Link :href="route('profile.edit')" :class="collapsedFlyoutLinkClass(route().current('profile.edit'))">{{ getChildLabel('settings', 'profile') }}</Link>
                             </div>
                         </div>
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.settings" class="pl-10 flex flex-col gap-0.5 mt-1">
                         <div v-if="hasPermission('settings.view')" :style="co('settings', 'system-settings')">
-                            <Link :href="route('settings.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('settings.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>System Settings</span></Link>
+                            <Link :href="route('settings.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('settings.index') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'system-settings') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('settings.view')" :style="co('settings', 'ticket-archive')">
-                            <Link :href="route('ticket-archive.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('ticket-archive.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Ticket Archive</span></Link>
+                            <Link :href="route('ticket-archive.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('ticket-archive.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'ticket-archive') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('canned_messages.view')" :style="co('settings', 'canned-messages')">
-                            <Link :href="route('canned-messages.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('canned-messages.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Canned Messages</span></Link>
+                            <Link :href="route('canned-messages.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('canned-messages.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'canned-messages') }}</span></Link>
                         </div>
                         <div :style="co('settings', 'profile')">
-                            <Link :href="route('profile.edit')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('profile.edit') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>My Profile</span></Link>
+                            <Link :href="route('profile.edit')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('profile.edit') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'profile') }}</span></Link>
                         </div>
                     </div>
                 </div>
