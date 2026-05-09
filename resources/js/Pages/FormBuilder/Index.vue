@@ -51,12 +51,15 @@ const form = reactive({
     request_type_ids: [],
     name: '',
     description: '',
+    workflow_type: 'approval',
     icon: 'DocumentTextIcon',
     approval_levels: 0,
     approver_matrix: [],
     cc_emails: '',
     is_active: true,
 })
+
+const isChecklist = computed(() => form.workflow_type === 'checklist')
 
 const userOptions = computed(() => {
     return (props.users ?? []).map(user => ({
@@ -82,6 +85,7 @@ const syncApproverMatrix = (levels) => {
 
         return {
             level,
+            name: existing?.name || '',
             user_ids: Array.isArray(existing?.user_ids) ? [...existing.user_ids] : [],
         }
     })
@@ -105,6 +109,7 @@ const openCreateModal = () => {
     form.request_type_ids = []
     form.name = ''
     form.description = ''
+    form.workflow_type = 'approval'
     form.icon = 'DocumentTextIcon'
     form.approval_levels = 0
     form.approver_matrix = []
@@ -119,11 +124,13 @@ const editForm = (formData) => {
     form.request_type_ids = Array.isArray(formData.request_types) ? formData.request_types.map(rt => rt.id) : []
     form.name = formData.name
     form.description = formData.description || ''
+    form.workflow_type = formData.workflow_type || 'approval'
     form.icon = formData.icon || 'DocumentTextIcon'
     form.approval_levels = formData.approval_levels ?? 0
     form.approver_matrix = Array.isArray(formData.approver_matrix)
         ? formData.approver_matrix.map(entry => ({
             level: Number(entry.level),
+            name: entry.name || '',
             user_ids: Array.isArray(entry.user_ids) ? [...entry.user_ids] : [],
         }))
         : []
@@ -374,48 +381,67 @@ const openFieldBuilder = (formData) => {
                                        class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-bold transition-all duration-300">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Default Approval Levels</label>
-                                <div class="flex items-center space-x-4 bg-gray-50 rounded-2xl p-1 border border-transparent focus-within:border-indigo-500 focus-within:bg-white transition-all duration-300">
-                                    <button type="button" @click="form.approval_levels > 0 && form.approval_levels--" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-                                        </svg>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Workflow Type</label>
+                                <div class="flex p-1 bg-gray-50 rounded-2xl border border-transparent focus-within:border-indigo-500 transition-all duration-300">
+                                    <button type="button" 
+                                            @click="form.workflow_type = 'approval'"
+                                            :class="form.workflow_type === 'approval' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'"
+                                            class="flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all">
+                                        Approvals
                                     </button>
-                                    <div class="flex-1 text-center">
-                                        <input v-model.number="form.approval_levels" type="number" required min="0"
-                                               class="w-full text-center bg-transparent border-none focus:ring-0 text-sm font-black text-gray-900">
-                                        <div class="text-[9px] font-black uppercase text-orange-500 mt-[-4px]" v-if="form.approval_levels === 0">No Approval</div>
-                                    </div>
-                                    <button type="button" @click="form.approval_levels++" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                        </svg>
+                                    <button type="button" 
+                                            @click="form.workflow_type = 'checklist'"
+                                            :class="form.workflow_type === 'checklist' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'"
+                                            class="flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all">
+                                        Checklist
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Description</label>
-                            <textarea v-model="form.description" rows="2" placeholder="Describe the purpose of this form..."
-                                      class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300"></textarea>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="md:col-span-2">
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Description</label>
+                                <textarea v-model="form.description" rows="2" placeholder="Describe the purpose of this form..."
+                                          class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300"></textarea>
+                            </div>
                         </div>
 
                         <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">CC Email Notifications (one per line)</label>
-                            <textarea v-model="form.cc_emails" rows="2" placeholder="email1@example.com&#10;email2@example.com"
-                                      class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300 custom-scrollbar"></textarea>
-                            <p class="text-[10px] text-gray-400 mt-2 ml-1 italic">These addresses will be notified via CC on record updates.</p>
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">
+                                {{ isChecklist ? 'Number of Tasks' : 'Default Approval Levels' }}
+                            </label>
+                            <div class="flex items-center space-x-4 bg-gray-50 rounded-2xl p-1 border border-transparent focus-within:border-indigo-500 focus-within:bg-white transition-all duration-300">
+                                <button type="button" @click="form.approval_levels > 0 && form.approval_levels--" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                                    </svg>
+                                </button>
+                                <div class="flex-1 text-center">
+                                    <input v-model.number="form.approval_levels" type="number" required min="0"
+                                           class="w-full text-center bg-transparent border-none focus:ring-0 text-sm font-black text-gray-900">
+                                    <div class="text-[9px] font-black uppercase text-orange-500 mt-[-4px]" v-if="form.approval_levels === 0">No workflow</div>
+                                </div>
+                                <button type="button" @click="form.approval_levels++" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
 
                         <div v-if="form.approval_levels > 0" class="space-y-4">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">Default Approval Matrix</label>
-                                    <p class="text-xs text-gray-500 ml-1">Assign one or more approvers for each approval level. Used if no Request Type is selected.</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">
+                                        {{ isChecklist ? 'Task Assignments' : 'Default Approval Matrix' }}
+                                    </label>
+                                    <p class="text-xs text-gray-500 ml-1">
+                                        {{ isChecklist ? 'Assign task owners for each step. Tasks can be completed in any order.' : 'Assign one or more approvers for each level. Steps are processed sequentially.' }}
+                                    </p>
                                 </div>
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100">
-                                    {{ form.approval_levels }} Level{{ form.approval_levels > 1 ? 's' : '' }}
+                                    {{ form.approval_levels }} {{ isChecklist ? 'Task' : 'Level' }}{{ form.approval_levels > 1 ? 's' : '' }}
                                 </span>
                             </div>
 
@@ -427,11 +453,19 @@ const openFieldBuilder = (formData) => {
                                 >
                                     <div class="flex items-center justify-between gap-3 mb-3">
                                         <div>
-                                            <p class="text-sm font-black text-gray-900">Level {{ level.level }}</p>
+                                            <p class="text-sm font-black text-gray-900">
+                                                {{ isChecklist ? 'Task' : 'Level' }} {{ level.level }}
+                                            </p>
                                             <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black">
-                                                {{ level.user_ids.length }} approver{{ level.user_ids.length !== 1 ? 's' : '' }} assigned
+                                                {{ level.user_ids.length }} {{ isChecklist ? 'assignee' : 'approver' }}{{ level.user_ids.length !== 1 ? 's' : '' }}
                                             </p>
                                         </div>
+                                    </div>
+
+                                    <div v-if="isChecklist" class="mb-4">
+                                        <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Task Name</label>
+                                        <input v-model="level.name" type="text" placeholder="e.g. Document Verification, Physical Inspection..."
+                                               class="block w-full px-3 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xs font-bold transition-all">
                                     </div>
 
                                     <MultiAutocomplete
@@ -439,7 +473,7 @@ const openFieldBuilder = (formData) => {
                                         :options="userOptions"
                                         label-key="name"
                                         value-key="id"
-                                        placeholder="Search and assign approvers..."
+                                        placeholder="Search and assign..."
                                         :limit="4"
                                     />
                                 </div>

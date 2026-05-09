@@ -53,7 +53,7 @@ class DynamicFormController extends Controller
             $query->where('data', 'like', "%{$search}%");
         }
 
-        $records = $query->with(['creator', 'updator', 'requestType'])
+        $records = $query->with(['creator', 'updator', 'requestType', 'approvals'])
                         ->latest()
                         ->paginate($request->get('per_page', 10))
                         ->withQueryString();
@@ -143,42 +143,57 @@ class DynamicFormController extends Controller
     public function approve(Request $request, $slug, $id)
     {
         $formDefinition = FormDefinition::where('slug', $slug)->firstOrFail();
-        $record = FormRecord::with('requestType')->where('form_definition_id', $formDefinition->id)->findOrFail($id);
+        $record = FormRecord::with(['requestType', 'approvals'])->where('form_definition_id', $formDefinition->id)->findOrFail($id);
 
         $request->validate([
             'remarks' => 'nullable|string',
             'approver_data' => 'nullable|array',
+            'force_level' => 'nullable|integer',
         ]);
 
         DB::transaction(function () use ($formDefinition, $record, $request) {
-            $currentLevel = $record->current_approval_level;
+            $isChecklist = $formDefinition->workflow_type === 'checklist';
+            $levelToApprove = $request->force_level ?? $record->current_approval_level;
             
+            // Use RequestType approval levels if available
+            $totalLevels = $record->requestType ? $record->requestType->approval_levels : $formDefinition->approval_levels;
+
             // Log approval
             FormRecordApproval::create([
                 'form_record_id' => $record->id,
                 'user_id' => Auth::id(),
-                'level' => $currentLevel,
+                'level' => $levelToApprove,
                 'remarks' => $request->remarks,
                 'approver_data' => $request->approver_data,
             ]);
 
-            // Use RequestType approval levels if available
-            $approvalLevels = $record->requestType ? $record->requestType->approval_levels : $formDefinition->approval_levels;
-
-            $nextLevel = $currentLevel + 1;
-            if ($nextLevel > $approvalLevels) {
-                $record->update([
-                    'status' => 'Approved',
-                    'current_approval_level' => 0,
-                ]);
+            if ($isChecklist) {
+                // For checklists, we check if ALL levels now have at least one approval
+                $approvedLevels = $record->approvals()->pluck('level')->push($levelToApprove)->unique();
+                
+                if ($approvedLevels->count() >= $totalLevels) {
+                    $record->update([
+                        'status' => 'Approved',
+                        'current_approval_level' => 0,
+                    ]);
+                }
             } else {
-                $record->update([
-                    'current_approval_level' => $nextLevel,
-                ]);
+                // Sequential logic
+                $nextLevel = $levelToApprove + 1;
+                if ($nextLevel > $totalLevels) {
+                    $record->update([
+                        'status' => 'Approved',
+                        'current_approval_level' => 0,
+                    ]);
+                } else {
+                    $record->update([
+                        'current_approval_level' => $nextLevel,
+                    ]);
+                }
             }
         });
 
-        return redirect()->back()->with('success', 'Record approved successfully');
+        return redirect()->back()->with('success', 'Record updated successfully');
     }
 
     public function reject(Request $request, $slug, $id)

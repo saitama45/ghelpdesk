@@ -444,10 +444,10 @@ const saveSchema = () => {
             items_templates: schema.items_template_source ? schema.items_templates : {},
         }
     }
-    router.put(route('form-builder.schema', props.form.id), payload, {
+    router.put(route('form-builder.schema', { form_builder: props.form.id }), payload, {
         preserveScroll: true,
+        preserveState: false,
         onSuccess: () => { 
-            showSuccess('Form schema saved successfully')
             emit('close') 
         },
         onError: () => showError('Failed to save schema'),

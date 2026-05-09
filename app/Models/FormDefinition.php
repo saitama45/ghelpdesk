@@ -10,6 +10,7 @@ class FormDefinition extends Model
         'name',
         'slug',
         'description',
+        'workflow_type',
         'icon',
         'approval_levels',
         'approver_matrix',

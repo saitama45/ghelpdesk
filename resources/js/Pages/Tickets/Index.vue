@@ -1059,7 +1059,7 @@ watch(activeDashboardFilter, () => {
         </template>
 
         <div class="space-y-6">
-            <section class="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-5 py-6 text-white shadow-xl sm:px-6">
+            <section class="hidden sm:block relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-5 py-6 text-white shadow-xl sm:px-6">
                 <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
                 <div class="relative flex flex-col gap-6">
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1115,51 +1115,51 @@ watch(activeDashboardFilter, () => {
                 </div>
             </section>
 
-            <div class="sticky top-4 z-20 space-y-4">
-                <div class="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
-                    <div class="flex flex-col gap-4 xl:flex-row xl:items-end">
-                        <div class="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div class="sticky top-4 z-20 space-y-2 sm:space-y-4">
+                <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
+                    <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
+                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
                             <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
                                 <MultiAutocomplete
                                     :model-value="filterStatus"
                                     :options="statusOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Filter by statuses..."
+                                    placeholder="Status..."
                                     :limit="1"
                                     @update:modelValue="handleStatusFilterChange"
                                 />
                             </div>
 
                             <div v-if="subUnitOptions.length > 0" class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Sub-Unit</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Sub-Unit</label>
                                 <MultiAutocomplete
                                     :model-value="filterSubUnit"
                                     :options="subUnitOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="All sub-units..."
+                                    placeholder="Sub-Unit..."
                                     :limit="1"
                                     @update:modelValue="handleSubUnitFilterChange"
                                 />
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Assignee</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Assignee</label>
                                 <MultiAutocomplete
                                     :model-value="filterAssignee"
                                     :options="assigneeOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="All assignees..."
+                                    placeholder="Assignee..."
                                     :limit="1"
                                     @update:modelValue="handleAssigneeFilterChange"
                                 />
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">From</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">From</label>
                                 <input
                                     v-model="filterStartDate"
                                     type="date"
@@ -1169,7 +1169,7 @@ watch(activeDashboardFilter, () => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">To</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">To</label>
                                 <input
                                     v-model="filterEndDate"
                                     type="date"
@@ -1182,7 +1182,7 @@ watch(activeDashboardFilter, () => {
                         <div class="flex flex-wrap items-center gap-2 xl:justify-end">
                             <button
                                 @click="clearFilters"
-                                class="inline-flex h-[38px] items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
+                                class="flex-1 sm:flex-none inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
                             >
                                 Reset
                             </button>
@@ -1190,33 +1190,33 @@ watch(activeDashboardFilter, () => {
                             <button
                                 v-if="hasPermission('tickets.create')"
                                 @click="showCreateModal = true"
-                                class="inline-flex h-[38px] items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-blue-700"
+                                class="flex-1 sm:flex-none inline-flex h-[38px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-blue-700"
                             >
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
-                                <span>Create Ticket</span>
+                                <span>New</span>
                             </button>
                         </div>
                     </div>
 
-                    <div class="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div class="flex flex-wrap gap-2">
+                    <div class="mt-2 sm:mt-4 flex flex-col gap-2 sm:gap-3 border-t border-slate-100 pt-2 sm:pt-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div class="flex flex-wrap gap-1.5 sm:gap-2">
                             <span
                                 v-if="!hasActiveFilters"
-                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-600"
+                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-slate-600"
                             >
-                                No active monitoring filters
+                                No filters
                             </span>
                             <span
                                 v-for="badge in activeFilterBadges"
                                 :key="badge"
-                                class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-700"
+                                class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-blue-700"
                             >
                                 {{ badge }}
                             </span>
                         </div>
-                        <div class="text-xs font-medium text-slate-500">
+                        <div class="hidden sm:block text-xs font-medium text-slate-500">
                             Filters apply without changing existing ticket logic or workflow behavior.
                         </div>
                     </div>
@@ -1232,7 +1232,7 @@ watch(activeDashboardFilter, () => {
                 >
                     <div
                         v-if="selectedIds.length > 0"
-                        class="rounded-2xl border border-blue-200 bg-blue-50/95 p-4 shadow-lg shadow-blue-100/60 backdrop-blur supports-[backdrop-filter]:bg-blue-50/90"
+                        class="rounded-2xl border border-blue-200 bg-blue-50/95 p-2 sm:p-4 shadow-lg shadow-blue-100/60 backdrop-blur supports-[backdrop-filter]:bg-blue-50/90"
                     >
                         <div class="grid grid-cols-1 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_auto] xl:items-end">
                             <div class="rounded-2xl border border-blue-200 bg-white/80 px-4 py-3 h-full">

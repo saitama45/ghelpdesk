@@ -238,6 +238,33 @@ function statusClass(s) {
     if (s.startsWith('Approved Level')) return 'bg-indigo-100 text-indigo-700'
     return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500'
 }
+
+const getStageDisplay = (record) => {
+    const totalLevels = Number(record.request_type ? record.request_type.approval_levels : props.form.approval_levels)
+    if (totalLevels === 0) return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase' }
+
+    const isChecklist = (record.request_type?.workflow_type || props.form.workflow_type) === 'checklist'
+    
+    if (isChecklist) {
+        const completed = new Set((record.approvals || []).map(a => Number(a.level))).size
+        return {
+            label: `${completed} / ${totalLevels}`,
+            class: 'text-xs font-black text-teal-600 bg-teal-50 px-3 py-0.5 rounded-full border border-teal-100',
+            isBadge: true,
+        }
+    } else {
+        if (record.status === 'Approved') return { label: `${totalLevels} / ${totalLevels}`, class: 'text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-100', isBadge: true }
+        if (record.status === 'Rejected') return { label: 'Rejected', class: 'text-[10px] font-black text-red-600 uppercase tracking-widest' }
+        if (record.status === 'Cancelled') return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest' }
+
+        const current = Number(record.current_approval_level || 1)
+        return {
+            label: `${current - 1} / ${totalLevels}`,
+            class: 'text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100',
+            isBadge: true,
+        }
+    }
+}
 </script>
 
 <template>
@@ -323,6 +350,7 @@ function statusClass(s) {
                             <th v-for="col in tableColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">
                                 {{ col.label }}
                             </th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Stage</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Status</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Created By</th>
                             <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
@@ -342,6 +370,16 @@ function statusClass(s) {
                             <td v-for="col in tableColumns" :key="col.key" class="px-6 py-5 whitespace-nowrap text-left">
                                 <div class="text-sm font-medium text-gray-900">
                                     {{ getDisplayValue(record, col) }}
+                                </div>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-center">
+                                <span v-if="!getStageDisplay(record).isBadge" :class="getStageDisplay(record).class">
+                                    {{ getStageDisplay(record).label }}
+                                </span>
+                                <div v-else class="inline-flex flex-col">
+                                    <span :class="getStageDisplay(record).class">
+                                        {{ getStageDisplay(record).label }}
+                                    </span>
                                 </div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">

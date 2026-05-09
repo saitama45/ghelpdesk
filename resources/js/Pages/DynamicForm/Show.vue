@@ -98,16 +98,30 @@ async function submitApproval() {
         approvalForm.post(route('dynamic-form.approve', { slug: props.form.slug, id: props.record.id }), {
             onSuccess: () => {
                 approvalForm.reset('remarks')
-                showSuccess('Approved successfully')
             },
             onError: () => showError('Approval failed')
         })
     }
 }
 
+const isChecklistWorkflow = computed(() => props.form?.workflow_type === 'checklist')
+
 const canApprove = computed(() => {
     const s = props.record.status ?? ''
     const currentLevel = Number(props.record.current_approval_level)
+    
+    // For Checklist workflow, anyone assigned to ANY unapproved level can approve it at any time
+    if (isChecklistWorkflow.value) {
+        if (s === 'Approved' || s === 'Cancelled' || s === 'Rejected') return false
+        
+        // Find all levels this user is assigned to that aren't yet approved
+        const unapprovedLevels = stages.value.filter(lvl => !getApprovalForLevel(lvl))
+        return unapprovedLevels.some(lvl => {
+            const assigned = assignedApproversByLevel.value[lvl] ?? []
+            return assigned.length === 0 || assigned.some(u => Number(u.id) === Number(authUserId.value))
+        })
+    }
+
     const alreadyApprovedCurrentLevel = (props.record.approvals ?? []).some(a =>
         Number(a.user_id) === Number(authUserId.value) &&
         Number(a.level) === currentLevel
@@ -123,8 +137,53 @@ const canApprove = computed(() => {
         !alreadyApprovedCurrentLevel
 })
 
+const selectedChecklistLevel = ref(null)
+
+const toggleChecklistTask = (lvl) => {
+    if (getApprovalForLevel(lvl)) return
+    
+    // Check assignment
+    const assigned = assignedApproversByLevel.value[lvl] ?? []
+    const isAssigned = assigned.length === 0 || assigned.some(u => Number(u.id) === Number(authUserId.value))
+    
+    if (!isAssigned) {
+        showError('You are not assigned to this task.')
+        return
+    }
+
+    selectedChecklistLevel.value = lvl
+}
+
 const totalLevels = computed(() => Number(effectiveSchemaSource.value.approval_levels ?? 0))
 const stages = computed(() => Array.from({ length: totalLevels.value }, (_, i) => i + 1))
+
+function getTaskName(lvl) {
+    const match = approverMatrix.value.find(m => Number(m.level) === Number(lvl))
+    return match?.name || 'Task ' + lvl
+}
+
+async function submitChecklistApproval(lvl) {
+    if (!validateApproverFields()) return;
+
+    const taskName = getTaskName(lvl);
+    const confirmed = await confirm({
+        title: 'Complete Task',
+        message: `Are you sure you want to mark "${taskName}" as completed?`,
+        confirmLabel: 'Mark Completed',
+        variant: 'success'
+    })
+
+    if (confirmed) {
+        approvalForm.post(route('dynamic-form.approve', { slug: props.form.slug, id: props.record.id, force_level: lvl }), {
+            onSuccess: () => {
+                approvalForm.reset('remarks')
+                selectedChecklistLevel.value = null
+                showSuccess('Task completed successfully')
+            },
+            onError: () => showError('Failed to update task')
+        })
+    }
+}
 
 function getApprovalForLevel(lvl) {
     return (props.record.approvals ?? []).find(a => Number(a.level) === Number(lvl))
@@ -321,16 +380,88 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                         </div>
                     </div>
 
-                    <!-- Right: Approval Sidebar -->
+                    <!-- Right: Workflow Sidebar -->
                     <div v-if="totalLevels > 0" class="space-y-8">
                         <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
+                            
+                            <!-- Header -->
                             <div class="flex items-center justify-between mb-8">
-                                <h3 class="text-lg font-black text-gray-900">Approval Pulse</h3>
+                                <h3 class="text-lg font-black text-gray-900">{{ isChecklistWorkflow ? 'Task Checklist' : 'Approval Pulse' }}</h3>
                                 <span v-if="record.status === 'Approved'" class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-widest">Finalized</span>
-                                <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest">No Approval Needed</span>
+                                <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest">No workflow</span>
                             </div>
 
-                            <div v-if="totalLevels > 0" class="relative px-2">
+                            <!-- Checklist Workflow UI -->
+                            <div v-if="isChecklistWorkflow" class="space-y-4">
+                                <div v-for="lvl in stages" :key="lvl" 
+                                    class="group p-5 rounded-3xl border-2 transition-all duration-300 relative overflow-hidden"
+                                    :class="getApprovalForLevel(lvl) 
+                                        ? 'bg-emerald-50/50 border-emerald-100 shadow-sm' 
+                                        : (selectedChecklistLevel === lvl ? 'bg-indigo-50/50 border-indigo-200 ring-2 ring-indigo-100' : 'bg-gray-50/50 border-gray-100 hover:border-indigo-100 hover:bg-white hover:shadow-lg')">
+                                    
+                                    <div class="flex items-start justify-between gap-4">
+                                        <div class="flex items-start gap-4">
+                                            <button 
+                                                @click="toggleChecklistTask(lvl)"
+                                                :disabled="getApprovalForLevel(lvl)"
+                                                class="mt-1 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all"
+                                                :class="getApprovalForLevel(lvl) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-200 bg-white group-hover:border-indigo-400 group-hover:shadow-md'">
+                                                <svg v-if="getApprovalForLevel(lvl)" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                            </button>
+                                            
+                                            <div>
+                                                <p class="text-sm font-black transition-colors" :class="getApprovalForLevel(lvl) ? 'text-emerald-900' : 'text-gray-900 group-hover:text-indigo-600'">{{ getTaskName(lvl) }}</p>
+                                                <div v-if="getApprovalForLevel(lvl)" class="mt-1 space-y-1">
+                                                    <p class="text-[10px] font-bold text-emerald-600">Completed by {{ getApprovalForLevel(lvl).user?.name }}</p>
+                                                    <p class="text-[9px] font-medium text-emerald-500/70">{{ fmt(getApprovalForLevel(lvl).created_at) }}</p>
+                                                    <p v-if="getApprovalForLevel(lvl).remarks" class="text-[10px] text-emerald-700 italic bg-white/50 rounded-lg p-2 mt-2 border border-emerald-100/50">"{{ getApprovalForLevel(lvl).remarks }}"</p>
+                                                </div>
+                                                <div v-else class="mt-1">
+                                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-indigo-400">Assigned To</p>
+                                                    <div class="flex flex-wrap gap-1.5 mt-2">
+                                                        <template v-if="(assignedApproversByLevel[lvl] ?? []).length > 0">
+                                                            <span v-for="user in assignedApproversByLevel[lvl]" :key="user.id" class="px-2 py-0.5 rounded-md bg-white border border-gray-100 text-[9px] font-black text-gray-600 shadow-sm">
+                                                                {{ user.name }}
+                                                            </span>
+                                                        </template>
+                                                        <span v-else class="text-[10px] text-gray-400 italic">Anyone can complete</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Selected Task Action Area -->
+                                    <div v-if="selectedChecklistLevel === lvl" class="mt-6 pt-6 border-t border-indigo-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div v-if="approverFields.length > 0" class="bg-white border border-indigo-50 rounded-2xl p-4 shadow-sm">
+                                            <h4 class="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-3">Task Details</h4>
+                                            <DynamicFormRenderer
+                                                :fields="approverFields"
+                                                v-model="approvalForm.approver_data"
+                                                :errors="approvalForm.errors"
+                                                grid-columns="1"
+                                                gap="3"
+                                                dense
+                                            />
+                                        </div>
+
+                                        <textarea v-model="approvalForm.remarks" rows="2" placeholder="Task remarks (optional)..."
+                                            class="w-full bg-white border-2 border-indigo-50 rounded-2xl p-3 text-xs font-medium focus:border-indigo-500 focus:ring-0 transition-all"></textarea>
+                                        
+                                        <div class="flex gap-2">
+                                            <button @click="selectedChecklistLevel = null" class="flex-1 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 transition-all">Cancel</button>
+                                            <button @click="submitChecklistApproval(lvl)" :disabled="approvalForm.processing"
+                                                class="flex-[2] py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                                                <span>Mark as Done</span>
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sequential Approval Workflow UI -->
+                            <div v-else class="relative px-2">
                                 <div class="absolute left-[27px] top-2 bottom-2 w-1 bg-gradient-to-b from-indigo-500 via-gray-100 to-gray-50 rounded-full"></div>
                                 <div class="space-y-10">
                                     <div v-for="lvl in stages" :key="lvl" class="relative pl-16">
@@ -381,7 +512,8 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                 </div>
                             </div>
 
-                            <div v-if="canApprove" class="mt-10 pt-8 border-t border-gray-100 relative">
+                            <!-- Action Box (Approval Workflow Only) -->
+                            <div v-if="canApprove && !isChecklistWorkflow" class="mt-10 pt-8 border-t border-gray-100 relative">
                                 <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">Your Decision</div>
                                 
                                 <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">

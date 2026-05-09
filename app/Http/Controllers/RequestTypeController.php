@@ -51,6 +51,7 @@ class RequestTypeController extends Controller implements HasMiddleware
             'approval_levels' => 'required|integer|min:0',
             'approver_matrix' => 'nullable|array',
             'approver_matrix.*.level' => 'required|integer|min:1',
+            'approver_matrix.*.name' => 'nullable|string|max:255',
             'approver_matrix.*.user_ids' => 'nullable|array',
             'approver_matrix.*.user_ids.*' => 'exists:users,id',
             'cc_emails' => 'nullable|string',
@@ -84,6 +85,7 @@ class RequestTypeController extends Controller implements HasMiddleware
             'approval_levels' => 'required|integer|min:0',
             'approver_matrix' => 'nullable|array',
             'approver_matrix.*.level' => 'required|integer|min:1',
+            'approver_matrix.*.name' => 'nullable|string|max:255',
             'approver_matrix.*.user_ids' => 'nullable|array',
             'approver_matrix.*.user_ids.*' => 'exists:users,id',
             'cc_emails' => 'nullable|string',
@@ -135,6 +137,7 @@ class RequestTypeController extends Controller implements HasMiddleware
 
                 return [
                     'level' => $level,
+                    'name' => $match['name'] ?? null,
                     'user_ids' => collect($match['user_ids'] ?? [])
                         ->map(fn ($id) => (int) $id)
                         ->filter()
