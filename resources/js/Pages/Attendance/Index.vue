@@ -283,7 +283,7 @@ const retakePhoto = () => {
 };
 
 // Location Functions
-const startLocationTracking = () => {
+const startLocationTracking = (highAccuracy = true) => {
     if (!navigator.geolocation) {
         locationError.value = "Geolocation not supported.";
         return;
@@ -301,7 +301,8 @@ const startLocationTracking = () => {
 
             updateMap();
 
-            if (locationAccuracy.value < 100) {
+            const requiredAccuracy = highAccuracy ? 100 : 500;
+            if (locationAccuracy.value < requiredAccuracy) {
                 startStabilityTimer();
             } else if (!isLocationStable.value) {
                 // Only reset if we haven't achieved a stable lock yet
@@ -310,13 +311,22 @@ const startLocationTracking = () => {
         },
         (err) => {
             if (!isMounted.value) return;
+
+            // Fallback mechanism: if high accuracy fails, switch to standard (Wi-Fi/Cellular)
+            if (highAccuracy && (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE)) {
+                if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+                locationError.value = "Switching to standard accuracy (Wi-Fi/Cellular)...";
+                setTimeout(() => startLocationTracking(false), 1000);
+                return;
+            }
+
             if (err.code === err.TIMEOUT) {
                 locationError.value = "GPS signal taking too long. Please move to a clearer area or near a window.";
             } else {
                 locationError.value = "GPS Error: " + err.message;
             }
         },
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+        { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 15000 : 30000, maximumAge: 0 }
     );
 };
 
