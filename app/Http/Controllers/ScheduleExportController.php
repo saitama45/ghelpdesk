@@ -66,7 +66,7 @@ class ScheduleExportController extends Controller
             $query = User::active();
 
             if ($request->filled('sub_unit')) {
-                $query->where('sub_unit', $request->sub_unit);
+                $query->where('org_path', 'like', '%'.$request->sub_unit.'%');
             }
 
             if ($request->filled('user_id')) {
@@ -77,10 +77,10 @@ class ScheduleExportController extends Controller
                 }
             }
 
-            $users = $query->orderByRaw("CASE WHEN sub_unit IS NULL OR sub_unit = '' THEN 1 ELSE 0 END")
-                ->orderBy('sub_unit')
+            $users = $query->orderByRaw("CASE WHEN org_path IS NULL OR org_path = '' THEN 1 ELSE 0 END")
+                ->orderBy('org_path')
                 ->orderBy('name')
-                ->get(['id', 'name', 'sub_unit', 'email']);
+                ->get(['id', 'name', 'org_path', 'email']);
             $userIds = $users->pluck('id');
 
             // Fetch all schedules for these users in range
@@ -271,7 +271,7 @@ class ScheduleExportController extends Controller
 
         // Sub-unit filter
         if ($request->filled('sub_unit')) {
-            $query->whereHas('user', fn($q) => $q->where('sub_unit', $request->sub_unit));
+            $query->whereHas('user', fn($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
         }
 
         // Store filter
@@ -400,11 +400,11 @@ class ScheduleExportController extends Controller
             ? collect((array) $selectedYearsInput)->map(fn ($y) => (int) $y)->unique()->sort()->values()->toArray()
             : [now()->year - 1, now()->year, now()->year + 1];
 
-        $pivotUsersQuery = User::whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name');
+        $pivotUsersQuery = User::whereNotNull('org_path')->orderBy('org_path')->orderBy('name');
         if ($request->filled('sub_unit')) {
-            $pivotUsersQuery->where('sub_unit', $request->sub_unit);
+            $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }
-        $pivotUsers = $pivotUsersQuery->get(['id', 'name', 'sub_unit']);
+        $pivotUsers = $pivotUsersQuery->get(['id', 'name', 'org_path']);
         $pivotUserIds = $pivotUsers->pluck('id')->toArray();
 
         if (empty($pivotUserIds) || empty($selectedYears)) {
@@ -449,7 +449,7 @@ class ScheduleExportController extends Controller
         $pivotData = [];
         foreach ($pivotUsers as $user) {
             $byYear = $grouped->get($user->id, collect())->groupBy('year');
-            $rowData = ['unit' => $user->sub_unit, 'name' => $user->name, 'years' => []];
+            $rowData = ['unit' => $user->org_path, 'name' => $user->name, 'years' => []];
 
             foreach ($selectedYears as $year) {
                 $yearRows = $byYear->get((string) $year, collect());

@@ -73,8 +73,8 @@ class TicketObserver
     public function created(Ticket $ticket): void
     {
         $now = Carbon::now();
-        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->sub_unit : null;
-        
+        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->org_path : null;
+
         $metric = TicketSlaMetric::create([
             'ticket_id' => $ticket->id,
             'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $subUnit),
@@ -92,7 +92,7 @@ class TicketObserver
     public function updated(Ticket $ticket): void
     {
         $metric = $ticket->slaMetric;
-        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->sub_unit : null;
+        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->org_path : null;
 
         if (!$metric) {
             // Try to create it if it doesn't exist

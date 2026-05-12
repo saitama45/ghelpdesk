@@ -22,7 +22,7 @@ class SettingsController extends Controller implements HasMiddleware
     public function index()
     {
         $settings = Setting::all()->pluck('value', 'key');
-        $subUnits = \App\Models\User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
+        $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
         
         return Inertia::render('Settings/Index', [
             'settings' => $settings,

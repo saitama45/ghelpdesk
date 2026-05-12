@@ -107,13 +107,13 @@ class SlaReportController extends Controller implements HasMiddleware
         }
 
         if ($subUnit !== 'all') {
-            $query->where('users.sub_unit', $subUnit);
+            $query->where('users.org_path', 'like', '%'.$subUnit.'%');
         }
 
         $metrics = $query->select(
             'users.id as user_id',
             'users.name as user_name',
-            'users.sub_unit',
+            'users.org_path as sub_unit',
             'ticket_sla_metrics.*'
         )->get();
 
@@ -168,9 +168,9 @@ class SlaReportController extends Controller implements HasMiddleware
 
         $users = User::active()->whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'sub_unit')->get();
+        })->select('id', 'name', 'org_path')->get();
 
-        $subUnits = User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
+        $subUnits = User::whereNotNull('org_path')->distinct()->pluck('org_path');
 
         return [
             'reportData' => $reportData,

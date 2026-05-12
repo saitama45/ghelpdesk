@@ -30,7 +30,7 @@ class PresenceController extends Controller
         }
 
         $users = User::with('lastPresenceLog')
-            ->select('id', 'name', 'status', 'last_activity_at', 'sub_unit')
+            ->select('id', 'name', 'status', 'last_activity_at', 'org_path')
             ->get()
             ->map(function($user) {
                 $status = $user->status;
@@ -48,7 +48,7 @@ class PresenceController extends Controller
                     'id' => $user->id,
                     'name' => $user->name,
                     'status' => $status,
-                    'sub_unit' => $user->sub_unit ?: 'Unassigned',
+                    'sub_unit' => $user->org_path ?: 'Unassigned',
                     'last_activity_at' => $user->last_activity_at,
                     'duration_current_status' => $duration,
                 ];

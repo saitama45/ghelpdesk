@@ -47,7 +47,7 @@ class StoreReportController extends Controller implements HasMiddleware
         })->select('id', 'name')->get();
 
         $allStores = Store::where('is_active', true)->orderBy('name')->get();
-        $subUnits = User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
+        $subUnits = User::whereNotNull('org_path')->distinct()->pluck('org_path');
 
         return Inertia::render('Reports/StoreHealth', [
             'reportData' => $data['reportData'],

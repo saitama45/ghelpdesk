@@ -121,7 +121,11 @@ class TicketController extends Controller
         $subUnitFilters = $normalizeFilterValues($request->input('sub_unit'));
         if ($subUnitFilters->isNotEmpty()) {
             $query->whereHas('assignee', function ($q) use ($subUnitFilters) {
-                $q->whereIn('sub_unit', $subUnitFilters->all());
+                $q->where(function ($orQ) use ($subUnitFilters) {
+                    foreach ($subUnitFilters->all() as $val) {
+                        $orQ->orWhere('org_path', 'like', '%'.$val.'%');
+                    }
+                });
             });
         }
 
@@ -161,12 +165,12 @@ class TicketController extends Controller
         $tickets = $query->paginate($request->get('per_page', 10))->withQueryString();
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'sub_unit')->get();
+        })->select('id', 'name', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
-        $subUnits = User::whereNotNull('sub_unit')->distinct()->orderBy('sub_unit')->pluck('sub_unit');
+        $subUnits = User::whereNotNull('org_path')->distinct()->orderBy('org_path')->pluck('org_path');
 
         $vendors = collect([['id' => null, 'name' => 'None']])
             ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
@@ -336,7 +340,7 @@ class TicketController extends Controller
 
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'sub_unit')->get();
+        })->select('id', 'name', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
@@ -344,7 +348,7 @@ class TicketController extends Controller
         $vendors = collect([['id' => null, 'name' => 'None']])
             ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
 
-        $subUnit = $ticket->assignee?->sub_unit;
+        $subUnit = $ticket->assignee?->org_path;
         $businessHours = [
             'start' => \App\Models\Setting::get($subUnit ? "business_start_time_" . \Illuminate\Support\Str::slug($subUnit, '_') : "business_start_time", \App\Models\Setting::get("business_start_time", "08:00")),
             'end' => \App\Models\Setting::get($subUnit ? "business_end_time_" . \Illuminate\Support\Str::slug($subUnit, '_') : "business_end_time", \App\Models\Setting::get("business_end_time", "17:00")),

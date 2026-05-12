@@ -40,10 +40,10 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             ->paginate($request->get('per_page', 15))
             ->withQueryString();
 
-        $subUnits = User::whereNotNull('sub_unit')
-            ->where('sub_unit', '!=', '')
+        $subUnits = User::whereNotNull('org_path')
+            ->where('org_path', '!=', '')
             ->distinct()
-            ->pluck('sub_unit')
+            ->pluck('org_path')
             ->sort()
             ->values();
 
@@ -269,17 +269,17 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         return User::active()
             ->whereNotNull('department')
             ->where('department', '!=', '')
-            ->whereNotNull('sub_unit')
-            ->where('sub_unit', '!=', '')
+            ->whereNotNull('org_path')
+            ->where('org_path', '!=', '')
             ->orderBy('department')
-            ->orderBy('sub_unit')
-            ->get(['department', 'sub_unit'])
+            ->orderBy('org_path')
+            ->get(['department', 'org_path'])
             ->groupBy(fn (User $user) => trim((string) $user->department))
             ->map(fn ($users, string $department) => [
                 'name' => $department,
                 'sub_units' => $users
-                    ->pluck('sub_unit')
-                    ->map(fn ($subUnit) => trim((string) $subUnit))
+                    ->pluck('org_path')
+                    ->map(fn ($orgPath) => trim((string) $orgPath))
                     ->filter()
                     ->unique()
                     ->sort()

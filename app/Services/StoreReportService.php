@@ -32,7 +32,7 @@ class StoreReportService
 
         if ($subUnit && $subUnit !== 'all') {
             $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
-                $q->where('sub_unit', $subUnit);
+                $q->where('org_path', 'like', '%'.$subUnit.'%');
             });
         }
 
@@ -62,7 +62,7 @@ class StoreReportService
             return [
                 'id' => $assigneeId,
                 'name' => $assignee?->name ?? 'Unknown',
-                'sub_unit' => $assignee?->sub_unit,
+                'sub_unit' => $assignee?->org_path,
                 'stores' => $stores,
             ];
         })->filter(function($u) {

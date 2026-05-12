@@ -104,7 +104,7 @@ class AttendanceController extends Controller implements HasMiddleware
         // Filter by Sub-Unit
         if ($request->filled('sub_unit')) {
             $query->whereHas('user', function($q) use ($request) {
-                $q->where('sub_unit', $request->sub_unit);
+                $q->where('org_path', 'like', '%'.$request->sub_unit.'%');
             });
         }
 
@@ -129,7 +129,7 @@ class AttendanceController extends Controller implements HasMiddleware
         }
 
         $logs = $query->paginate($request->get('perPage', 10))->withQueryString();
-        $users = User::active()->orderBy('name')->get(['id', 'name', 'sub_unit']);
+        $users = User::active()->orderBy('name')->get(['id', 'name', 'org_path']);
         $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
         return Inertia::render('Attendance/Logs', [

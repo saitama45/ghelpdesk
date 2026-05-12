@@ -70,13 +70,13 @@ class AssigneePerformanceReportController extends Controller implements HasMiddl
         }
 
         if ($subUnit !== 'all') {
-            $query->where('users.sub_unit', $subUnit);
+            $query->where('users.org_path', 'like', '%'.$subUnit.'%');
         }
 
         $rows = $query->select(
             'tickets.assignee_id as user_id',
             'users.name as user_name',
-            'users.sub_unit',
+            'users.org_path as sub_unit',
             'tickets.status',
             'ticket_sla_metrics.first_response_at',
             'ticket_sla_metrics.is_response_breached',
@@ -150,11 +150,11 @@ class AssigneePerformanceReportController extends Controller implements HasMiddl
 
         $users = User::active()
             ->whereHas('roles', fn($q) => $q->where('is_assignable', true))
-            ->select('id', 'name', 'sub_unit')
+            ->select('id', 'name', 'org_path')
             ->orderBy('name')
             ->get();
 
-        $subUnits = User::whereNotNull('sub_unit')->distinct()->orderBy('sub_unit')->pluck('sub_unit');
+        $subUnits = User::whereNotNull('org_path')->distinct()->orderBy('org_path')->pluck('org_path');
 
         return [
             'reportData' => $reportData,

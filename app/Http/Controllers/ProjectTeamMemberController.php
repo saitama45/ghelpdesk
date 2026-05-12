@@ -32,7 +32,7 @@ class ProjectTeamMemberController extends Controller
         if (!empty($validated['user_id'])) {
             $user = User::find($validated['user_id']);
             $validated['department'] = $validated['department'] ?: $user?->department;
-            $validated['sub_unit'] = $validated['sub_unit'] ?: $user?->sub_unit;
+            $validated['sub_unit'] = $validated['sub_unit'] ?: $user?->org_path;
         }
 
         ProjectTeamMember::create($validated);

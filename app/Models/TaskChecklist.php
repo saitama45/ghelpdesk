@@ -31,7 +31,7 @@ class TaskChecklist extends Model
     {
         return $this->hasMany(TaskChecklistItem::class)
             ->whereNull('parent_item_id')
-            ->with(['assignee:id,name,profile_photo,sub_unit', 'children.assignee:id,name,profile_photo,sub_unit'])
+            ->with(['assignee:id,name,profile_photo,org_path', 'children.assignee:id,name,profile_photo,org_path'])
             ->orderBy('sort_order')
             ->orderBy('id');
     }

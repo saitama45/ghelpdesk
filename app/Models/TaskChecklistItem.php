@@ -45,7 +45,7 @@ class TaskChecklistItem extends Model
     public function children(): HasMany
     {
         return $this->hasMany(TaskChecklistItem::class, 'parent_item_id')
-            ->with('assignee:id,name,profile_photo,sub_unit')
+            ->with('assignee:id,name,profile_photo,org_path')
             ->orderBy('sort_order')
             ->orderBy('id');
     }

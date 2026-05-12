@@ -43,10 +43,10 @@ class DashboardController extends Controller
         // Dropdown Data for Filters
         $allUsers = \App\Models\User::active()->whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'sub_unit')->orderBy('name')->get();
+        })->select('id', 'name', 'org_path')->orderBy('name')->get();
 
         $allStores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
-        $subUnits = \App\Models\User::whereNotNull('sub_unit')->distinct()->pluck('sub_unit');
+        $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
         
         // Define base query based on role
         $query = Ticket::query();
@@ -163,7 +163,7 @@ class DashboardController extends Controller
         $kanbanQuery = (clone $filteredQuery)->whereIn('status', $kanbanStatuses);
 
         if ($subUnitFilter && $subUnitFilter !== 'all') {
-            $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('sub_unit', $subUnitFilter));
+            $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('org_path', 'like', '%'.$subUnitFilter.'%'));
         }
 
         if ($userIdFilter && $userIdFilter !== 'all') {
@@ -176,7 +176,7 @@ class DashboardController extends Controller
 
         $kanbanTickets = $kanbanQuery
             ->with([
-                'assignee:id,name,sub_unit',
+                'assignee:id,name,org_path',
                 'company:id,name',
                 'store:id,code,name',
                 'item:id,priority',
@@ -197,7 +197,7 @@ class DashboardController extends Controller
                     'priority' => strtolower((string) $priority),
                     'assignee_id' => $ticket->assignee_id,
                     'assignee' => $ticket->assignee?->name ?? 'Unassigned',
-                    'sub_unit' => $ticket->assignee?->sub_unit ?: 'No Sub-Unit',
+                    'sub_unit' => $ticket->assignee?->org_path ?: 'No Org Path',
                     'company_name' => $ticket->company?->name ?? 'N/A',
                     'store' => $ticket->store ? [
                         'id' => $ticket->store->id,
@@ -221,7 +221,7 @@ class DashboardController extends Controller
                         return $ticket['assignee_id'] ? (string) $ticket['assignee_id'] : 'unassigned';
                     }
 
-                    return $ticket['sub_unit'] ?: 'No Sub-Unit';
+                    return $ticket['sub_unit'] ?: 'No Org Path';
                 })
                 ->map(function ($groupTickets, $groupKey) use ($mode, $emptyColumnSet) {
                     $firstTicket = $groupTickets->first();
@@ -237,7 +237,7 @@ class DashboardController extends Controller
                     return [
                         'key' => (string) $groupKey,
                         'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) $groupKey,
-                        'subtitle' => $mode === 'user' ? $firstTicket['sub_unit'] : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)',
+                        'subtitle' => $mode === 'user' ? $firstTicket['sub_unit'] : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)', // sub_unit key now holds org_path value
                         'total' => $groupTickets->count(),
                         'columns' => $columns,
                     ];

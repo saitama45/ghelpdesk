@@ -86,7 +86,7 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         if ($request->filled('sub_unit')) {
-            $query->whereHas('user', fn($q) => $q->where('sub_unit', $request->sub_unit));
+            $query->whereHas('user', fn($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
         }
 
         if ($request->filled('store_id')) {
@@ -585,7 +585,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
                 $query->where('s.user_id', $request->user_id);
             })
-            ->when($request->filled('sub_unit'), fn ($query) => $query->where('u.sub_unit', $request->sub_unit))
+            ->when($request->filled('sub_unit'), fn ($query) => $query->where('u.org_path', 'like', '%'.$request->sub_unit.'%'))
             ->when($request->filled('store_id'), fn ($query) => $query->where('ss.store_id', $request->store_id))
             ->select([
                 'ss.id as schedule_store_id',
@@ -607,7 +607,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 's.remarks as schedule_remarks',
                 's.created_at',
                 'u.name as user_name',
-                'u.sub_unit',
+                'u.org_path as sub_unit',
                 'st.name as store_name',
                 't.ticket_key',
             ])
@@ -1076,11 +1076,11 @@ class ScheduleController extends Controller implements HasMiddleware
             ? collect((array)$selectedYearsInput)->map(fn($y) => (int)$y)->unique()->sort()->values()->toArray()
             : [2024, 2025, 2026];
 
-        $pivotUsersQuery = User::whereNotNull('sub_unit')->orderBy('sub_unit')->orderBy('name');
+        $pivotUsersQuery = User::whereNotNull('org_path')->orderBy('org_path')->orderBy('name');
         if ($request->filled('sub_unit')) {
-            $pivotUsersQuery->where('sub_unit', $request->sub_unit);
+            $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }
-        $pivotUsers   = $pivotUsersQuery->get(['id', 'name', 'sub_unit']);
+        $pivotUsers   = $pivotUsersQuery->get(['id', 'name', 'org_path']);
         $pivotUserIds = $pivotUsers->pluck('id')->toArray();
 
         if (empty($pivotUserIds)) {
@@ -1138,7 +1138,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $pivotData = [];
         foreach ($pivotUsers as $u) {
             $byYear = $grouped->get($u->id, collect())->groupBy('year');
-            $rowData = ['unit' => $u->sub_unit, 'name' => $u->name, 'years' => []];
+            $rowData = ['unit' => $u->org_path, 'name' => $u->name, 'years' => []];
 
             foreach ($selectedYears as $y) {
                 $yearRows   = $byYear->get((string)$y, collect());
@@ -1645,7 +1645,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $query = User::active();
 
         if ($request->filled('sub_unit')) {
-            $query->where('sub_unit', $request->sub_unit);
+            $query->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }
 
         if ($request->filled('user_id')) {
@@ -1656,10 +1656,10 @@ class ScheduleController extends Controller implements HasMiddleware
             }
         }
 
-        $users = $query->orderByRaw("CASE WHEN sub_unit IS NULL OR sub_unit = '' THEN 1 ELSE 0 END")
-            ->orderBy('sub_unit')
+        $users = $query->orderByRaw("CASE WHEN org_path IS NULL OR org_path = '' THEN 1 ELSE 0 END")
+            ->orderBy('org_path')
             ->orderBy('name')
-            ->get(['id', 'name', 'sub_unit', 'email']);
+            ->get(['id', 'name', 'org_path', 'email']);
         $userIds = $users->pluck('id');
 
         $scheduleQuery = Schedule::with(['scheduleStores:id,schedule_id,store_id,start_time,end_time'])
@@ -1747,7 +1747,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $query = User::active();
 
         if ($request->filled('sub_unit')) {
-            $query->where('sub_unit', $request->sub_unit);
+            $query->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }
 
         if ($request->filled('user_id')) {
@@ -1758,10 +1758,10 @@ class ScheduleController extends Controller implements HasMiddleware
             }
         }
 
-        $users = $query->orderByRaw("CASE WHEN sub_unit IS NULL OR sub_unit = '' THEN 1 ELSE 0 END")
-            ->orderBy('sub_unit')
+        $users = $query->orderByRaw("CASE WHEN org_path IS NULL OR org_path = '' THEN 1 ELSE 0 END")
+            ->orderBy('org_path')
             ->orderBy('name')
-            ->get(['id', 'name', 'sub_unit', 'email']);
+            ->get(['id', 'name', 'org_path', 'email']);
         $userIds = $users->pluck('id');
 
         // Fetch all schedules for these users in range

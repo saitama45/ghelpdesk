@@ -601,13 +601,13 @@ class TaskCardController extends Controller implements HasMiddleware
     {
         $card = $card->fresh([
             'creator:id,name,profile_photo',
-            'assignees:id,name,email,profile_photo,sub_unit',
+            'assignees:id,name,email,profile_photo,org_path',
             'labels',
             'watchers:id,name',
             'project:id,name,status,store_id,board_month,board_year',
             'project.store:id,name',
-            'checklists.items.assignee:id,name,profile_photo,sub_unit',
-            'checklists.items.children.assignee:id,name,profile_photo,sub_unit',
+            'checklists.items.assignee:id,name,profile_photo,org_path',
+            'checklists.items.children.assignee:id,name,profile_photo,org_path',
             'comments.user:id,name,profile_photo',
             'attachments.user:id,name,profile_photo',
             'activities.actor:id,name,profile_photo',

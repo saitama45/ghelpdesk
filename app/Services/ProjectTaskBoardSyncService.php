@@ -314,18 +314,18 @@ class ProjectTaskBoardSyncService
     {
         return [
             'creator:id,name,profile_photo',
-            'assignees:id,name,email,profile_photo,sub_unit',
+            'assignees:id,name,email,profile_photo,org_path',
             'labels',
             'watchers:id,name',
             'project:id,name,status,store_id,board_month,board_year',
             'project.store:id,name',
-            'checklists.items.assignee:id,name,profile_photo,sub_unit',
-            'checklists.items.children.assignee:id,name,profile_photo,sub_unit',
+            'checklists.items.assignee:id,name,profile_photo,org_path',
+            'checklists.items.children.assignee:id,name,profile_photo,org_path',
             'comments.user:id,name,profile_photo',
             'attachments.user:id,name,profile_photo',
             'activities.actor:id,name,profile_photo',
-            'projectTask.assignedUser:id,name,email,profile_photo,sub_unit',
-            'projectTask.supportUser:id,name,email,profile_photo,sub_unit',
+            'projectTask.assignedUser:id,name,email,profile_photo,org_path',
+            'projectTask.supportUser:id,name,email,profile_photo,org_path',
             'projectTask.parentTask:id,name,category',
         ];
     }
@@ -335,7 +335,7 @@ class ProjectTaskBoardSyncService
         return $project->teamMembers
             ->map(function ($member) {
                 $department = $this->cleanOrgValue($member->department ?: $member->user?->department);
-                $subUnit = $this->cleanOrgValue($member->sub_unit ?: $member->user?->sub_unit);
+                $subUnit = $this->cleanOrgValue($member->sub_unit ?: $member->user?->org_path);
 
                 if ($department === '' || $subUnit === '') {
                     return null;
@@ -412,11 +412,11 @@ class ProjectTaskBoardSyncService
         User::active()
             ->whereNotNull('department')
             ->where('department', '!=', '')
-            ->whereNotNull('sub_unit')
-            ->where('sub_unit', '!=', '')
-            ->get(['id', 'department', 'sub_unit'])
+            ->whereNotNull('org_path')
+            ->where('org_path', '!=', '')
+            ->get(['id', 'department', 'org_path'])
             ->filter(fn (User $user) => $this->normalizeOrgKey($user->department) === $this->normalizeOrgKey($target['department'])
-                && $this->normalizeOrgKey($user->sub_unit) === $this->normalizeOrgKey($target['sub_unit']))
+                && $this->normalizeOrgKey($user->org_path) === $this->normalizeOrgKey($target['sub_unit']))
             ->each(fn (User $user) => $this->ensureBoardMember($board, $user->id, 'member'));
 
         $this->projectUserIds($project)

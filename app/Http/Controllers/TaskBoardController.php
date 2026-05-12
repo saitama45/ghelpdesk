@@ -43,7 +43,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         $boards = TaskBoard::query()
             ->with([
                 'creator:id,name',
-                'members:id,name,profile_photo,sub_unit',
+                'members:id,name,profile_photo,org_path',
                 'project.store:id,name',
                 'cards.projectTask:id,project_id,parent_task_id,name,category,status,progress',
             ])
@@ -133,7 +133,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         }
 
         $usersBySubUnit = $this->activeUsersForDepartment($department)
-            ->groupBy(fn (User $user) => $this->cleanOrgValue($user->sub_unit))
+            ->groupBy(fn (User $user) => $this->cleanOrgValue($user->org_path))
             ->filter(fn ($users, $subUnit) => (string) $subUnit !== '')
             ->sortKeys();
 
@@ -248,7 +248,7 @@ class TaskBoardController extends Controller implements HasMiddleware
 
         $taskBoard->load([
             'creator:id,name',
-            'members:id,name,email,profile_photo,sub_unit',
+            'members:id,name,email,profile_photo,org_path',
             'watchers:id,name',
             'project.store:id,name',
             'labels',
@@ -260,13 +260,13 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->reorder()
             ->with([
                 'creator:id,name,profile_photo',
-                'assignees:id,name,email,profile_photo,sub_unit',
+                'assignees:id,name,email,profile_photo,org_path',
                 'labels',
                 'watchers:id,name',
                 'project:id,name,status,store_id,board_month,board_year',
                 'project.store:id,name',
-                'checklists.items.assignee:id,name,profile_photo,sub_unit',
-                'checklists.items.children.assignee:id,name,profile_photo,sub_unit',
+                'checklists.items.assignee:id,name,profile_photo,org_path',
+                'checklists.items.children.assignee:id,name,profile_photo,org_path',
                 'comments.user:id,name,profile_photo',
                 'attachments.user:id,name,profile_photo',
                 'activities.actor:id,name,profile_photo',
@@ -653,7 +653,7 @@ class TaskBoardController extends Controller implements HasMiddleware
             'name' => $member->name,
             'email' => $member->email,
             'profile_photo' => $member->profile_photo,
-            'sub_unit' => $member->sub_unit,
+            'sub_unit' => $member->org_path,
             'role' => $member->pivot->role,
             'starred' => (bool) $member->pivot->starred,
         ])->values()->all();
@@ -664,15 +664,15 @@ class TaskBoardController extends Controller implements HasMiddleware
         $rows = User::active()
             ->whereNotNull('department')
             ->where('department', '!=', '')
-            ->whereNotNull('sub_unit')
-            ->where('sub_unit', '!=', '')
+            ->whereNotNull('org_path')
+            ->where('org_path', '!=', '')
             ->orderBy('department')
-            ->orderBy('sub_unit')
+            ->orderBy('org_path')
             ->orderBy('name')
-            ->get(['id', 'department', 'sub_unit'])
+            ->get(['id', 'department', 'org_path'])
             ->map(function (User $user) {
                 $department = $this->cleanOrgValue($user->department);
-                $subUnit = $this->cleanOrgValue($user->sub_unit);
+                $subUnit = $this->cleanOrgValue($user->org_path);
 
                 return [
                     'department' => $department,
@@ -711,11 +711,11 @@ class TaskBoardController extends Controller implements HasMiddleware
         return User::active()
             ->whereNotNull('department')
             ->where('department', '!=', '')
-            ->whereNotNull('sub_unit')
-            ->where('sub_unit', '!=', '')
-            ->orderBy('sub_unit')
+            ->whereNotNull('org_path')
+            ->where('org_path', '!=', '')
+            ->orderBy('org_path')
             ->orderBy('name')
-            ->get(['id', 'name', 'department', 'sub_unit'])
+            ->get(['id', 'name', 'department', 'org_path'])
             ->filter(fn (User $user) => $this->normalizeOrgKey($user->department) === $departmentKey)
             ->values();
     }
@@ -747,7 +747,7 @@ class TaskBoardController extends Controller implements HasMiddleware
     {
         return User::active()
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'sub_unit']);
+            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'org_path']);
     }
 
     private function defaultLabels(): array

@@ -63,11 +63,11 @@ class ProjectController extends Controller
     {
         $project->load([
             'store',
-            'teamMembers.user:id,name,profile_photo,department,sub_unit',
+            'teamMembers.user:id,name,profile_photo,department,org_path',
             'taskBoard:id,project_id,title,closed_at',
             'tasks',
-            'tasks.assignedUser:id,name,profile_photo,sub_unit',
-            'tasks.supportUser:id,name,profile_photo,sub_unit',
+            'tasks.assignedUser:id,name,profile_photo,org_path',
+            'tasks.supportUser:id,name,profile_photo,org_path',
             'assets'
         ]);
 
@@ -75,7 +75,7 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Show', [
             'project' => $project,
-            'users' => User::active()->orderBy('name')->get(['id', 'name', 'department', 'sub_unit']),
+            'users' => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores' => Store::all(['id', 'name']),
             'departmentOptions' => $this->departmentOptions(),
             'boardYears' => $this->boardYears(),
@@ -126,17 +126,17 @@ class ProjectController extends Controller
         return User::active()
             ->whereNotNull('department')
             ->where('department', '!=', '')
-            ->whereNotNull('sub_unit')
-            ->where('sub_unit', '!=', '')
+            ->whereNotNull('org_path')
+            ->where('org_path', '!=', '')
             ->orderBy('department')
-            ->orderBy('sub_unit')
-            ->get(['department', 'sub_unit'])
+            ->orderBy('org_path')
+            ->get(['department', 'org_path'])
             ->groupBy(fn (User $user) => trim((string) $user->department))
             ->map(fn ($users, string $department) => [
                 'name' => $department,
                 'sub_units' => $users
-                    ->pluck('sub_unit')
-                    ->map(fn ($subUnit) => trim((string) $subUnit))
+                    ->pluck('org_path')
+                    ->map(fn ($orgPath) => trim((string) $orgPath))
                     ->filter()
                     ->unique()
                     ->sort()
