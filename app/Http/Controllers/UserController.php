@@ -32,9 +32,7 @@ class UserController extends Controller
             'creator:id,name,email',
             'updater:id,name,email',
             'departmentReference:id,name',
-            'departmentSection:id,name',
-            'departmentUnit:id,name',
-            'departmentSubUnit:id,name',
+            'departmentNode:id,name,org_path',
         ]);
         
         if ($request->filled('search')) {
@@ -42,9 +40,7 @@ class UserController extends Controller
                 $q->where('name', 'like', "%{$request->search}%")
                   ->orWhere('email', 'like', "%{$request->search}%")
                   ->orWhere('department', 'like', "%{$request->search}%")
-                  ->orWhere('section', 'like', "%{$request->search}%")
-                  ->orWhere('unit', 'like', "%{$request->search}%")
-                  ->orWhere('sub_unit', 'like', "%{$request->search}%")
+                  ->orWhere('org_path', 'like', "%{$request->search}%")
                   ->orWhere('position', 'like', "%{$request->search}%");
             });
         }
@@ -87,9 +83,7 @@ class UserController extends Controller
             'password' => 'required|string|min:8',
             'role' => 'required|string|exists:roles,name',
             'department_id' => 'nullable|integer|exists:departments,id',
-            'department_section_id' => 'nullable|integer|exists:department_sections,id',
-            'department_unit_id' => 'nullable|integer|exists:department_units,id',
-            'department_sub_unit_id' => 'nullable|integer|exists:department_sub_units,id',
+            'department_node_id' => 'nullable|integer|exists:department_nodes,id',
             'position' => 'nullable|string|max:255',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
@@ -134,9 +128,7 @@ class UserController extends Controller
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
             'role' => 'required|string|exists:roles,name',
             'department_id' => 'nullable|integer|exists:departments,id',
-            'department_section_id' => 'nullable|integer|exists:department_sections,id',
-            'department_unit_id' => 'nullable|integer|exists:department_units,id',
-            'department_sub_unit_id' => 'nullable|integer|exists:department_sub_units,id',
+            'department_node_id' => 'nullable|integer|exists:department_nodes,id',
             'position' => 'nullable|string|max:255',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
@@ -290,37 +282,29 @@ class UserController extends Controller
 
     private function organizationPayloadFromRequest(Request $request): array
     {
-        $orgIds = collect([
-            $request->input('department_id'),
-            $request->input('department_section_id'),
-            $request->input('department_unit_id'),
-            $request->input('department_sub_unit_id'),
-        ])->filter(fn ($value) => filled($value));
+        $nodeId = $request->input('department_node_id');
+        $deptId = $request->input('department_id');
 
-        if ($orgIds->isEmpty()) {
+        if (!$nodeId && !$deptId) {
             return $this->organizationReferences->clearPayload();
         }
 
-        $payload = $this->organizationReferences->payloadFromIds(
-            $request->input('department_id') ? (int) $request->input('department_id') : null,
-            $request->input('department_section_id') ? (int) $request->input('department_section_id') : null,
-            $request->input('department_unit_id') ? (int) $request->input('department_unit_id') : null,
-            $request->input('department_sub_unit_id') ? (int) $request->input('department_sub_unit_id') : null
+        $payload = $this->organizationReferences->payloadFromNodeId(
+            $nodeId ? (int) $nodeId : null
         );
+
+        if (!$nodeId && $deptId) {
+            $dept = \App\Models\Department::find($deptId);
+            if ($dept && $dept->is_active) {
+                $payload['department'] = $dept->name;
+                $payload['department_id'] = $dept->id;
+            }
+        }
 
         if ($request->filled('department_id') && is_null($payload['department_id'])) {
             throw ValidationException::withMessages([
                 'department_id' => 'Selected department is invalid or inactive.',
             ]);
-        }
-
-        // Check that any other provided IDs were successfully resolved
-        foreach (['department_section_id', 'department_unit_id', 'department_sub_unit_id'] as $key) {
-            if ($request->filled($key) && is_null($payload[$key])) {
-                throw ValidationException::withMessages([
-                    $key => 'Selected organization entity is invalid or inactive.',
-                ]);
-            }
         }
 
         return $payload;

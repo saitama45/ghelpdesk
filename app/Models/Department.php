@@ -18,9 +18,14 @@ class Department extends Model
         'is_active' => 'boolean',
     ];
 
-    public function sections(): HasMany
+    public function nodes(): HasMany
     {
-        return $this->hasMany(DepartmentSection::class)->orderBy('name');
+        return $this->hasMany(DepartmentNode::class)->whereNull('parent_id')->orderBy('sort_order')->orderBy('name');
+    }
+
+    public function allNodes(): HasMany
+    {
+        return $this->hasMany(DepartmentNode::class);
     }
 
     public function users(): HasMany

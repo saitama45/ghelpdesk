@@ -20,13 +20,9 @@ class User extends Authenticatable
         'password',
         'google_id',
         'department',
-        'section',
-        'unit',
-        'sub_unit',
         'department_id',
-        'department_section_id',
-        'department_unit_id',
-        'department_sub_unit_id',
+        'department_node_id',
+        'org_path',
         'position',
         'is_active',
         'is_manager',
@@ -36,8 +32,6 @@ class User extends Authenticatable
         'last_activity_at',
         'profile_photo',
         'org_sort_order',
-        'company_id',
-
         'company_id',
         'created_by',
         'updated_by',
@@ -131,9 +125,7 @@ class User extends Authenticatable
             'is_vacant' => 'boolean',
             'company_id' => 'integer',
             'department_id' => 'integer',
-            'department_section_id' => 'integer',
-            'department_unit_id' => 'integer',
-            'department_sub_unit_id' => 'integer',
+            'department_node_id' => 'integer',
             'created_by' => 'integer',
             'updated_by' => 'integer',
         ];
@@ -160,19 +152,9 @@ class User extends Authenticatable
         return $this->belongsTo(Department::class, 'department_id');
     }
 
-    public function departmentSection()
+    public function departmentNode()
     {
-        return $this->belongsTo(DepartmentSection::class, 'department_section_id');
-    }
-
-    public function departmentUnit()
-    {
-        return $this->belongsTo(DepartmentUnit::class, 'department_unit_id');
-    }
-
-    public function departmentSubUnit()
-    {
-        return $this->belongsTo(DepartmentSubUnit::class, 'department_sub_unit_id');
+        return $this->belongsTo(DepartmentNode::class, 'department_node_id');
     }
 
     public function stores()

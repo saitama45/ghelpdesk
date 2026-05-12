@@ -3,9 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Department;
-use App\Models\DepartmentSection;
-use App\Models\DepartmentSubUnit;
-use App\Models\DepartmentUnit;
+use App\Models\DepartmentNode;
 use App\Models\User;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
@@ -22,10 +20,9 @@ class DepartmentController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:departments.view', only: ['index']),
-            new Middleware('can:departments.create', only: ['store', 'storeSection', 'storeUnit', 'storeSubUnit']),
-            new Middleware('can:departments.edit', only: ['update', 'updateSection', 'updateUnit', 'updateSubUnit', 'updateUserPlacement', 'updateVacant', 'reorderStructure']),
-            new Middleware('can:departments.delete', only: ['destroy', 'destroySection', 'destroyUnit', 'destroySubUnit', 'destroyVacant']),
-            new Middleware('can:departments.create', only: ['storeVacant']),
+            new Middleware('can:departments.create', only: ['store', 'storeNode', 'storeVacant']),
+            new Middleware('can:departments.edit', only: ['update', 'updateNode', 'updateUserPlacement', 'updateVacant', 'reorderStructure', 'reorderUsers']),
+            new Middleware('can:departments.delete', only: ['destroy', 'destroyNode', 'destroyVacant']),
         ];
     }
 
@@ -44,13 +41,9 @@ class DepartmentController extends Controller implements HasMiddleware
                 'email',
                 'position',
                 'department',
-                'section',
-                'unit',
-                'sub_unit',
                 'department_id',
-                'department_section_id',
-                'department_unit_id',
-                'department_sub_unit_id',
+                'department_node_id',
+                'org_path',
                 'is_active',
                 'is_manager',
                 'is_vacant',
@@ -106,9 +99,9 @@ class DepartmentController extends Controller implements HasMiddleware
 
     public function destroy(Department $department)
     {
-        if ($department->sections()->exists() || User::where('department_id', $department->id)->exists()) {
+        if ($department->nodes()->exists() || User::where('department_id', $department->id)->exists()) {
             throw ValidationException::withMessages([
-                'department' => 'Remove child sections and assigned users before deleting this department.',
+                'department' => 'Remove child nodes and assigned users before deleting this department.',
             ]);
         }
 
@@ -117,205 +110,77 @@ class DepartmentController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Department deleted successfully.');
     }
 
-    public function storeSection(Request $request, Department $department)
+    public function storeNode(Request $request, Department $department)
     {
         $validated = $request->validate([
+            'parent_id' => ['nullable', 'integer', 'exists:department_nodes,id'],
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('department_sections', 'name')
-                    ->where(fn ($query) => $query->where('department_id', $department->id)),
+                Rule::unique('department_nodes', 'name')
+                    ->where(fn ($query) => $query->where('department_id', $department->id)->where('parent_id', $request->parent_id)),
             ],
             'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
-        $department->sections()->create([
+        $department->allNodes()->create([
+            'parent_id' => $validated['parent_id'] ?? null,
             'name' => trim($validated['name']),
             'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active', true),
         ]);
 
-        return redirect()->back()->with('success', 'Section created successfully.');
+        return redirect()->back()->with('success', 'Hierarchy node created successfully.');
     }
 
-    public function updateSection(Request $request, DepartmentSection $departmentSection)
+    public function updateNode(Request $request, DepartmentNode $node)
     {
         $validated = $request->validate([
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('department_sections', 'name')
-                    ->where(fn ($query) => $query->where('department_id', $departmentSection->department_id))
-                    ->ignore($departmentSection->id),
+                Rule::unique('department_nodes', 'name')
+                    ->where(fn ($query) => $query->where('department_id', $node->department_id)->where('parent_id', $node->parent_id))
+                    ->ignore($node->id),
             ],
             'code' => ['nullable', 'string', 'max:50'],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
         ]);
 
-        $departmentSection->update([
+        $node->update([
             'name' => trim($validated['name']),
             'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
             'description' => $validated['description'] ?? null,
             'is_active' => $request->boolean('is_active'),
         ]);
 
-        return redirect()->back()->with('success', 'Section updated successfully.');
+        return redirect()->back()->with('success', 'Hierarchy node updated successfully.');
     }
 
-    public function destroySection(DepartmentSection $departmentSection)
+    public function destroyNode(DepartmentNode $node)
     {
-        if ($departmentSection->units()->exists() || User::where('department_section_id', $departmentSection->id)->exists()) {
+        if ($node->children()->exists() || $node->users()->exists()) {
             throw ValidationException::withMessages([
-                'section' => 'Remove child units and assigned users before deleting this section.',
+                'node' => 'Remove child nodes and assigned users before deleting this node.',
             ]);
         }
 
-        $departmentSection->delete();
+        $node->delete();
 
-        return redirect()->back()->with('success', 'Section deleted successfully.');
-    }
-
-    public function storeUnit(Request $request, DepartmentSection $departmentSection)
-    {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('department_units', 'name')
-                    ->where(fn ($query) => $query->where('department_section_id', $departmentSection->id)),
-            ],
-            'code' => ['nullable', 'string', 'max:50'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
-        ]);
-
-        $departmentSection->units()->create([
-            'name' => trim($validated['name']),
-            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
-            'description' => $validated['description'] ?? null,
-            'is_active' => $request->boolean('is_active', true),
-        ]);
-
-        return redirect()->back()->with('success', 'Unit created successfully.');
-    }
-
-    public function updateUnit(Request $request, DepartmentUnit $departmentUnit)
-    {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('department_units', 'name')
-                    ->where(fn ($query) => $query->where('department_section_id', $departmentUnit->department_section_id))
-                    ->ignore($departmentUnit->id),
-            ],
-            'code' => ['nullable', 'string', 'max:50'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
-        ]);
-
-        $departmentUnit->update([
-            'name' => trim($validated['name']),
-            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
-            'description' => $validated['description'] ?? null,
-            'is_active' => $request->boolean('is_active'),
-        ]);
-
-        return redirect()->back()->with('success', 'Unit updated successfully.');
-    }
-
-    public function destroyUnit(DepartmentUnit $departmentUnit)
-    {
-        if ($departmentUnit->subUnits()->exists() || User::where('department_unit_id', $departmentUnit->id)->exists()) {
-            throw ValidationException::withMessages([
-                'unit' => 'Remove child sub-units and assigned users before deleting this unit.',
-            ]);
-        }
-
-        $departmentUnit->delete();
-
-        return redirect()->back()->with('success', 'Unit deleted successfully.');
-    }
-
-    public function storeSubUnit(Request $request, DepartmentUnit $departmentUnit)
-    {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('department_sub_units', 'name')
-                    ->where(fn ($query) => $query->where('department_unit_id', $departmentUnit->id)),
-            ],
-            'code' => ['nullable', 'string', 'max:50'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
-        ]);
-
-        $departmentUnit->subUnits()->create([
-            'name' => trim($validated['name']),
-            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
-            'description' => $validated['description'] ?? null,
-            'is_active' => $request->boolean('is_active', true),
-        ]);
-
-        return redirect()->back()->with('success', 'Sub-Unit created successfully.');
-    }
-
-    public function updateSubUnit(Request $request, DepartmentSubUnit $departmentSubUnit)
-    {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('department_sub_units', 'name')
-                    ->where(fn ($query) => $query->where('department_unit_id', $departmentSubUnit->department_unit_id))
-                    ->ignore($departmentSubUnit->id),
-            ],
-            'code' => ['nullable', 'string', 'max:50'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
-        ]);
-
-        $departmentSubUnit->update([
-            'name' => trim($validated['name']),
-            'code' => filled($validated['code'] ?? null) ? trim($validated['code']) : null,
-            'description' => $validated['description'] ?? null,
-            'is_active' => $request->boolean('is_active'),
-        ]);
-
-        return redirect()->back()->with('success', 'Sub-Unit updated successfully.');
-    }
-
-    public function destroySubUnit(DepartmentSubUnit $departmentSubUnit)
-    {
-        if ($departmentSubUnit->users()->exists()) {
-            throw ValidationException::withMessages([
-                'sub_unit' => 'Remove assigned users before deleting this sub-unit.',
-            ]);
-        }
-
-        $departmentSubUnit->delete();
-
-        return redirect()->back()->with('success', 'Sub-Unit deleted successfully.');
+        return redirect()->back()->with('success', 'Hierarchy node deleted successfully.');
     }
 
     public function updateUserPlacement(Request $request, User $user)
     {
         $validated = $request->validate([
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'department_section_id' => ['nullable', 'integer', 'exists:department_sections,id'],
-            'department_unit_id' => ['nullable', 'integer', 'exists:department_units,id'],
-            'department_sub_unit_id' => ['nullable', 'integer', 'exists:department_sub_units,id'],
+            'department_node_id' => ['nullable', 'integer', 'exists:department_nodes,id'],
             'manager_ids' => ['nullable', 'array'],
             'manager_ids.*' => ['integer', 'exists:users,id'],
             'profile_photo' => ['nullable', 'image', 'max:2048'],
@@ -333,27 +198,7 @@ class DepartmentController extends Controller implements HasMiddleware
             ]);
         }
 
-        if ($managerIds->isNotEmpty()) {
-            $validManagerCount = User::active()
-                ->where('is_manager', true)
-                ->whereIn('id', $managerIds->all())
-                ->count();
-
-            if ($validManagerCount !== $managerIds->count()) {
-                throw ValidationException::withMessages([
-                    'manager_ids' => 'Reports To users must be active users marked as managers.',
-                ]);
-            }
-        }
-
-        $orgIds = collect([
-            $validated['department_id'] ?? null,
-            $validated['department_section_id'] ?? null,
-            $validated['department_unit_id'] ?? null,
-            $validated['department_sub_unit_id'] ?? null,
-        ])->filter(fn ($value) => filled($value));
-
-        DB::transaction(function () use ($user, $validated, $managerIds, $orgIds, $request) {
+        DB::transaction(function () use ($user, $validated, $managerIds, $request) {
             if ($request->hasFile('profile_photo')) {
                 if ($user->profile_photo) {
                     \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_photo);
@@ -363,24 +208,22 @@ class DepartmentController extends Controller implements HasMiddleware
                 $user->save();
             }
 
-            if ($orgIds->isEmpty()) {
+            if (!$validated['department_id'] && !$validated['department_node_id']) {
                 $user->forceFill([
                     ...$this->organizationReferences->clearPayload(),
                     'org_sort_order' => (int) ($validated['org_sort_order'] ?? 0),
                     'updated_by' => auth()->id(),
                 ])->save();
             } else {
-                $payload = $this->organizationReferences->payloadFromIds(
-                    $validated['department_id'] ? (int) $validated['department_id'] : null,
-                    $validated['department_section_id'] ? (int) $validated['department_section_id'] : null,
-                    $validated['department_unit_id'] ? (int) $validated['department_unit_id'] : null,
-                    $validated['department_sub_unit_id'] ? (int) $validated['department_sub_unit_id'] : null
+                $payload = $this->organizationReferences->payloadFromNodeId(
+                    $validated['department_node_id'] ? (int) $validated['department_node_id'] : null
                 );
 
-                if ($validated['department_id'] && !filled($payload['department_id'])) {
-                    throw ValidationException::withMessages([
-                        'department_id' => 'Selected department is invalid or inactive.',
-                    ]);
+                // Fallback to department level if no node is selected but department is
+                if (!$validated['department_node_id'] && $validated['department_id']) {
+                    $dept = Department::find($validated['department_id']);
+                    $payload['department'] = $dept->name;
+                    $payload['department_id'] = $dept->id;
                 }
 
                 $user->forceFill([
@@ -399,26 +242,24 @@ class DepartmentController extends Controller implements HasMiddleware
     public function storeVacant(Request $request)
     {
         $validated = $request->validate([
-            'title'                  => ['nullable', 'string', 'max:255'],
-            'department_id'          => ['nullable', 'integer', 'exists:departments,id'],
-            'department_section_id'  => ['nullable', 'integer', 'exists:department_sections,id'],
-            'department_unit_id'     => ['nullable', 'integer', 'exists:department_units,id'],
-            'department_sub_unit_id' => ['nullable', 'integer', 'exists:department_sub_units,id'],
-            'manager_ids'            => ['nullable', 'array'],
-            'manager_ids.*'          => ['integer', 'exists:users,id'],
-            'org_sort_order'         => ['nullable', 'integer'],
+            'title'              => ['nullable', 'string', 'max:255'],
+            'department_id'      => ['nullable', 'integer', 'exists:departments,id'],
+            'department_node_id' => ['nullable', 'integer', 'exists:department_nodes,id'],
+            'manager_ids'        => ['nullable', 'array'],
+            'manager_ids.*'      => ['integer', 'exists:users,id'],
+            'org_sort_order'     => ['nullable', 'integer'],
         ]);
 
         $managerIds = collect($validated['manager_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values();
 
-        $payload = [];
-        if ($validated['department_id'] ?? null) {
-            $payload = $this->organizationReferences->payloadFromIds(
-                (int) $validated['department_id'],
-                $validated['department_section_id'] ? (int) $validated['department_section_id'] : null,
-                $validated['department_unit_id']    ? (int) $validated['department_unit_id']    : null,
-                $validated['department_sub_unit_id'] ? (int) $validated['department_sub_unit_id'] : null,
-            );
+        $payload = $this->organizationReferences->payloadFromNodeId(
+            $validated['department_node_id'] ? (int) $validated['department_node_id'] : null
+        );
+
+        if (!$validated['department_node_id'] && $validated['department_id']) {
+            $dept = Department::find($validated['department_id']);
+            $payload['department'] = $dept->name;
+            $payload['department_id'] = $dept->id;
         }
 
         DB::transaction(function () use ($validated, $payload, $managerIds) {
@@ -446,33 +287,25 @@ class DepartmentController extends Controller implements HasMiddleware
         abort_if(! $user->is_vacant, 403);
 
         $validated = $request->validate([
-            'title'                  => ['nullable', 'string', 'max:255'],
-            'department_id'          => ['nullable', 'integer', 'exists:departments,id'],
-            'department_section_id'  => ['nullable', 'integer', 'exists:department_sections,id'],
-            'department_unit_id'     => ['nullable', 'integer', 'exists:department_units,id'],
-            'department_sub_unit_id' => ['nullable', 'integer', 'exists:department_sub_units,id'],
-            'manager_ids'            => ['nullable', 'array'],
-            'manager_ids.*'          => ['integer', 'exists:users,id'],
-            'org_sort_order'         => ['nullable', 'integer'],
+            'title'              => ['nullable', 'string', 'max:255'],
+            'department_id'      => ['nullable', 'integer', 'exists:departments,id'],
+            'department_node_id' => ['nullable', 'integer', 'exists:department_nodes,id'],
+            'manager_ids'        => ['nullable', 'array'],
+            'manager_ids.*'      => ['integer', 'exists:users,id'],
+            'org_sort_order'     => ['nullable', 'integer'],
         ]);
 
         $managerIds = collect($validated['manager_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values();
 
-        $orgIds = collect([
-            $validated['department_id'] ?? null,
-            $validated['department_section_id'] ?? null,
-            $validated['department_unit_id'] ?? null,
-            $validated['department_sub_unit_id'] ?? null,
-        ])->filter(fn ($v) => filled($v));
+        $payload = $this->organizationReferences->payloadFromNodeId(
+            $validated['department_node_id'] ? (int) $validated['department_node_id'] : null
+        );
 
-        $payload = $orgIds->isEmpty()
-            ? $this->organizationReferences->clearPayload()
-            : $this->organizationReferences->payloadFromIds(
-                $validated['department_id'] ? (int) $validated['department_id'] : null,
-                $validated['department_section_id'] ? (int) $validated['department_section_id'] : null,
-                $validated['department_unit_id']    ? (int) $validated['department_unit_id']    : null,
-                $validated['department_sub_unit_id'] ? (int) $validated['department_sub_unit_id'] : null,
-            );
+        if (!$validated['department_node_id'] && $validated['department_id']) {
+            $dept = Department::find($validated['department_id']);
+            $payload['department'] = $dept->name;
+            $payload['department_id'] = $dept->id;
+        }
 
         DB::transaction(function () use ($user, $validated, $payload, $managerIds) {
             $title = filled($validated['title'] ?? null) ? $validated['title'] : 'Vacant Position';
@@ -517,22 +350,14 @@ class DepartmentController extends Controller implements HasMiddleware
     public function reorderStructure(Request $request)
     {
         $validated = $request->validate([
-            'type'              => ['required', 'in:section,unit,sub_unit'],
             'items'             => ['required', 'array'],
-            'items.*.id'        => ['required', 'integer'],
+            'items.*.id'        => ['required', 'integer', 'exists:department_nodes,id'],
             'items.*.sort_order' => ['required', 'integer'],
         ]);
 
-        $table = match ($validated['type']) {
-            'section'  => 'department_sections',
-            'unit'     => 'department_units',
-            'sub_unit' => 'department_sub_units',
-        };
-
-        DB::transaction(function () use ($validated, $table) {
+        DB::transaction(function () use ($validated) {
             foreach ($validated['items'] as $item) {
-                DB::table($table)
-                    ->where('id', (int) $item['id'])
+                DepartmentNode::where('id', (int) $item['id'])
                     ->update(['sort_order' => (int) $item['sort_order']]);
             }
         });

@@ -36,38 +36,21 @@ const { hasPermission } = usePermission();
 const allStoreIds = computed(() => props.stores.map(s => s.id));
 const departmentOptions = computed(() => props.departmentTree || []);
 
-const sectionsFor = (form) => {
-    const department = departmentOptions.value.find(item => Number(item.id) === Number(form.department_id));
-    return department?.sections || [];
-};
-
-const unitsFor = (form) => {
-    const section = sectionsFor(form).find(item => Number(item.id) === Number(form.department_section_id));
-    return section?.units || [];
-};
-
-const subUnitsFor = (form) => {
-    const unit = unitsFor(form).find(item => Number(item.id) === Number(form.department_unit_id));
-    return unit?.sub_units || [];
+const flattenNodes = (nodes, level = 0) => {
+    let flat = [];
+    nodes.forEach(n => {
+        flat.push({ ...n, level });
+        if (n.children?.length) flat = flat.concat(flattenNodes(n.children, level + 1));
+    });
+    return flat;
 };
 
 const handleDepartmentChange = (form) => {
-    form.department_section_id = '';
-    form.department_unit_id = '';
-    form.department_sub_unit_id = '';
-};
-
-const handleSectionChange = (form) => {
-    form.department_unit_id = '';
-    form.department_sub_unit_id = '';
-};
-
-const handleUnitChange = (form) => {
-    form.department_sub_unit_id = '';
+    form.department_node_id = '';
 };
 
 const formatOrganisation = (user) => {
-    const parts = [user.department, user.section, user.unit, user.sub_unit]
+    const parts = [user.department, user.org_path]
         .filter(part => part && String(part).trim() !== '');
 
     return parts.length ? parts.join(' / ') : '-';
@@ -144,9 +127,7 @@ const createForm = useForm({
     password: '',
     role: '',
     department_id: '',
-    department_section_id: '',
-    department_unit_id: '',
-    department_sub_unit_id: '',
+    department_node_id: '',
     position: '',
     is_active: true,
     is_manager: false,
@@ -159,9 +140,7 @@ const editForm = useForm({
     email: '',
     role: '',
     department_id: '',
-    department_section_id: '',
-    department_unit_id: '',
-    department_sub_unit_id: '',
+    department_node_id: '',
     position: '',
     is_active: true,
     is_manager: false,
@@ -193,9 +172,7 @@ const editUser = (user) => {
     editForm.email = user.email;
     editForm.role = user.roles[0]?.name || '';
     editForm.department_id = user.department_id || '';
-    editForm.department_section_id = user.department_section_id || '';
-    editForm.department_unit_id = user.department_unit_id || '';
-    editForm.department_sub_unit_id = user.department_sub_unit_id || '';
+    editForm.department_node_id = user.department_node_id || '';
     editForm.position = user.position || '';
     editForm.is_active = user.google_id && !user.is_active && !(user.roles?.length) ? true : !!user.is_active;
     editForm.is_manager = !!user.is_manager;
@@ -457,31 +434,17 @@ const updatePassword = () => {
                                 <option v-for="department in departmentOptions" :key="department.id" :value="department.id">{{ department.name }}</option>
                             </select>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Section</label>
-                                <select v-model="createForm.department_section_id" :disabled="!createForm.department_id" @change="handleSectionChange(createForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                    <option value="">Select Section</option>
-                                    <option v-for="section in sectionsFor(createForm)" :key="section.id" :value="section.id">{{ section.name }}</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
-                                <select v-model="createForm.department_unit_id" :disabled="!createForm.department_section_id" @change="handleUnitChange(createForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                    <option value="">Select Unit</option>
-                                    <option v-for="unit in unitsFor(createForm)" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                            <select v-model="createForm.department_sub_unit_id" :disabled="!createForm.department_unit_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                <option value="">Select Sub-Unit</option>
-                                <option v-for="subUnit in subUnitsFor(createForm)" :key="subUnit.id" :value="subUnit.id">{{ subUnit.name }}</option>
+                        <div v-if="createForm.department_id">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement (Optional)</label>
+                            <select v-model="createForm.department_node_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                <option value="">Top Level (Department Only)</option>
+                                <template v-for="node in flattenNodes(departmentOptions.find(d => Number(d.id) === Number(createForm.department_id))?.nodes || [])" :key="node.id">
+                                    <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
+                                </template>
                             </select>
                         </div>
-                        <div v-if="createForm.department_id && !createForm.department_section_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                            You have selected a Department. Section, Unit, and Sub-Unit are optional.
+                        <div v-if="createForm.department_id && !createForm.department_node_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                            You have selected a Department. Team placement is optional.
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Position</label>
@@ -579,31 +542,17 @@ const updatePassword = () => {
                                 <option v-for="department in departmentOptions" :key="department.id" :value="department.id">{{ department.name }}</option>
                             </select>
                         </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Section</label>
-                                <select v-model="editForm.department_section_id" :disabled="!editForm.department_id" @change="handleSectionChange(editForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                    <option value="">Select Section</option>
-                                    <option v-for="section in sectionsFor(editForm)" :key="section.id" :value="section.id">{{ section.name }}</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Unit</label>
-                                <select v-model="editForm.department_unit_id" :disabled="!editForm.department_section_id" @change="handleUnitChange(editForm)" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                    <option value="">Select Unit</option>
-                                    <option v-for="unit in unitsFor(editForm)" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                            <select v-model="editForm.department_sub_unit_id" :disabled="!editForm.department_unit_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                <option value="">Select Sub-Unit</option>
-                                <option v-for="subUnit in subUnitsFor(editForm)" :key="subUnit.id" :value="subUnit.id">{{ subUnit.name }}</option>
+                        <div v-if="editForm.department_id">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement (Optional)</label>
+                            <select v-model="editForm.department_node_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
+                                <option value="">Top Level (Department Only)</option>
+                                <template v-for="node in flattenNodes(departmentOptions.find(d => Number(d.id) === Number(editForm.department_id))?.nodes || [])" :key="node.id">
+                                    <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
+                                </template>
                             </select>
                         </div>
-                        <div v-if="editForm.department_id && !editForm.department_section_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                            You have selected a Department. Section, Unit, and Sub-Unit are optional.
+                        <div v-if="editForm.department_id && !editForm.department_node_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                            You have selected a Department. Team placement is optional.
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Position</label>
