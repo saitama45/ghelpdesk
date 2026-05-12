@@ -329,7 +329,7 @@ const StructureNode = defineComponent({
                     openCreateNode: props.openCreateNode,
                     openEditNode: props.openEditNode,
                     deleteNode: props.deleteNode,
-                    openAssignUserModal: props.openAssignUserModal,
+                    openTeamAssignUserModal: props.openTeamAssignUserModal,
                 }))
             ) : null
         ])
@@ -338,6 +338,7 @@ const StructureNode = defineComponent({
 
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import TreeSelector from '@/Components/TreeSelector.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -467,6 +468,18 @@ const flattenNodes = (nodes, level = 0, path = []) => {
         }
     })
     return flat
+}
+
+const findNodeInTree = (nodes, id) => {
+    if (!nodes || !id) return null;
+    for (const node of nodes) {
+        if (Number(node.id) === Number(id)) return node;
+        if (node.children?.length) {
+            const found = findNodeInTree(node.children, id);
+            if (found) return found;
+        }
+    }
+    return null;
 }
 
 const userHierarchy = computed(() => {
@@ -867,7 +880,16 @@ const deleteNode = async (type, node) => {
     })
     if (!confirmed) return
 
-    const options = { preserveScroll: true, onError: handleErrors }
+    const options = { 
+        preserveScroll: true, 
+        onSuccess: () => {
+            if (type === 'node') {
+                if (Number(placementForm.department_node_id) === Number(node.id)) placementForm.department_node_id = '';
+                if (Number(vacantForm.department_node_id) === Number(node.id)) vacantForm.department_node_id = '';
+            }
+        },
+        onError: handleErrors 
+    }
     if (type === 'department') return destroy(route('departments.destroy', node.id), options)
     return destroy(route('departments.nodes.destroy', node.id), options)
 }
@@ -1396,25 +1418,50 @@ const downloadChart = async () => {
                             </div>
                             <div>
                                 <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
-                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Team / Placement (Optional)</label>
-                                    <button
-                                        v-if="hasPermission('departments.create') && placementForm.department_id"
-                                        type="button"
-                                        @click="openCreateNode('node', activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id)))"
-                                        class="text-[10px] font-black uppercase tracking-wider text-blue-600 hover:underline"
-                                    >
-                                        + New Team
-                                    </button>
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Team / Placement</label>
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="hasPermission('departments.create') && placementForm.department_id"
+                                            type="button"
+                                            @click="openCreateNode('node', activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id)))"
+                                            class="text-[10px] font-black uppercase tracking-wider text-blue-600 hover:underline"
+                                            title="Add root-level team"
+                                        >
+                                            + New
+                                        </button>
+                                        <template v-if="placementForm.department_node_id">
+                                            <button
+                                                v-if="hasPermission('departments.create')"
+                                                type="button"
+                                                @click="openCreateNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes, placementForm.department_node_id))"
+                                                class="text-[10px] font-black uppercase tracking-wider text-blue-600 hover:underline"
+                                                title="Add child team to selected"
+                                            >
+                                                + Child
+                                            </button>
+                                            <button
+                                                v-if="hasPermission('departments.edit')"
+                                                type="button"
+                                                @click="openEditNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes, placementForm.department_node_id))"
+                                                class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                v-if="hasPermission('departments.delete')"
+                                                type="button"
+                                                @click="deleteNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes, placementForm.department_node_id))"
+                                                class="text-[10px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-700"
+                                            >
+                                                Del
+                                            </button>
+                                        </template>
+                                    </div>
                                 </div>
-                                <Autocomplete
+                                <TreeSelector
                                     v-model="placementForm.department_node_id"
-                                    :options="[
-                                        { id: '', fullPathName: 'Top Level (Department Only)' },
-                                        ...flattenNodes(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes || [])
-                                    ]"
-                                    label-key="fullPathName"
-                                    value-key="id"
-                                    placeholder="Search placement level..."
+                                    :nodes="activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes || []"
+                                    label="Select Team Level"
                                     :disabled="!placementForm.department_id"
                                 />
                             </div>
@@ -1506,23 +1553,50 @@ const downloadChart = async () => {
                             </div>
                             <div>
                                 <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
-                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Team / Placement (Optional)</label>
-                                    <button
-                                        v-if="hasPermission('departments.create') && vacantForm.department_id"
-                                        type="button"
-                                        @click="openCreateNode('node', activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id)))"
-                                        class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline"
-                                    >+ New Team</button>
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Team / Placement</label>
+                                    <div class="flex items-center gap-2">
+                                        <button
+                                            v-if="hasPermission('departments.create') && vacantForm.department_id"
+                                            type="button"
+                                            @click="openCreateNode('node', activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id)))"
+                                            class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline"
+                                            title="Add root-level team"
+                                        >
+                                            + New
+                                        </button>
+                                        <template v-if="vacantForm.department_node_id">
+                                            <button
+                                                v-if="hasPermission('departments.create')"
+                                                type="button"
+                                                @click="openCreateNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes, vacantForm.department_node_id))"
+                                                class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline"
+                                                title="Add child team to selected"
+                                            >
+                                                + Child
+                                            </button>
+                                            <button
+                                                v-if="hasPermission('departments.edit')"
+                                                type="button"
+                                                @click="openEditNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes, vacantForm.department_node_id))"
+                                                class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                v-if="hasPermission('departments.delete')"
+                                                type="button"
+                                                @click="deleteNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes, vacantForm.department_node_id))"
+                                                class="text-[10px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-700"
+                                            >
+                                                Del
+                                            </button>
+                                        </template>
+                                    </div>
                                 </div>
-                                <Autocomplete
+                                <TreeSelector
                                     v-model="vacantForm.department_node_id"
-                                    :options="[
-                                        { id: '', fullPathName: 'Top Level (Department Only)' },
-                                        ...flattenNodes(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes || [])
-                                    ]"
-                                    label-key="fullPathName"
-                                    value-key="id"
-                                    placeholder="Search placement level..."
+                                    :nodes="activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes || []"
+                                    label="Select Team Level"
                                     :disabled="!vacantForm.department_id"
                                 />
                             </div>

@@ -4,6 +4,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import TreeSelector from '@/Components/TreeSelector.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
@@ -435,16 +436,11 @@ const updatePassword = () => {
                             </select>
                         </div>
                         <div v-if="createForm.department_id">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement (Optional)</label>
-                            <Autocomplete
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement</label>
+                            <TreeSelector
                                 v-model="createForm.department_node_id"
-                                :options="[
-                                    { id: '', fullPathName: 'Top Level (Department Only)' },
-                                    ...flattenNodes(departmentOptions.find(d => Number(d.id) === Number(createForm.department_id))?.nodes || [])
-                                ]"
-                                label-key="fullPathName"
-                                value-key="id"
-                                placeholder="Search placement level..."
+                                :nodes="departmentOptions.find(d => Number(d.id) === Number(createForm.department_id))?.nodes || []"
+                                label="Select Team Level"
                             />
                         </div>
                         <div v-if="createForm.department_id && !createForm.department_node_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
@@ -547,16 +543,11 @@ const updatePassword = () => {
                             </select>
                         </div>
                         <div v-if="editForm.department_id">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement (Optional)</label>
-                            <Autocomplete
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement</label>
+                            <TreeSelector
                                 v-model="editForm.department_node_id"
-                                :options="[
-                                    { id: '', fullPathName: 'Top Level (Department Only)' },
-                                    ...flattenNodes(departmentOptions.find(d => Number(d.id) === Number(editForm.department_id))?.nodes || [])
-                                ]"
-                                label-key="fullPathName"
-                                value-key="id"
-                                placeholder="Search placement level..."
+                                :nodes="departmentOptions.find(d => Number(d.id) === Number(editForm.department_id))?.nodes || []"
+                                label="Select Team Level"
                             />
                         </div>
                         <div v-if="editForm.department_id && !editForm.department_node_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
