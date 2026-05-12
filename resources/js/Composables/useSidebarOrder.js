@@ -20,7 +20,7 @@ export const DEFAULT_CHILD_ORDER = {
     dashboard: [],
     projectTracker: [],
     services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests'],
-    inventory: ['assets', 'stock-ins', 'inventory-report'],
+    inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
     adminTask: ['dtr', 'attendance-logs', 'scheduling', 'presence', 'kb-articles'],
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
@@ -37,7 +37,9 @@ export const CHILD_LABELS = {
     },
     inventory: {
         'assets': 'Assets',
-        'stock-ins': 'Stock Transaction',
+        'stock-ins': 'Stock In',
+        'stock-transfers': 'Stock Transfer',
+        'stock-receivings': 'Receiving Stock',
         'inventory-report': 'Inventory Report',
     },
     adminTask: {
@@ -117,7 +119,30 @@ export function useSidebarOrder() {
         }
 
         if (config.children) {
-            _state.children = { ...cloneChildren(DEFAULT_CHILD_ORDER), ...cloneChildren(config.children) }
+            // Merge per-section: keep saved order, but append any default children
+            // that aren't yet in the saved list (so new modules appear automatically).
+            const merged = cloneChildren(DEFAULT_CHILD_ORDER)
+            const savedChildren = cloneChildren(config.children)
+            for (const sectionId of Object.keys(merged)) {
+                const savedList = Array.isArray(savedChildren[sectionId]) ? savedChildren[sectionId] : null
+                if (!savedList) continue
+                const defaults = merged[sectionId]
+                // Start with saved order, then append any default child not already present
+                const finalList = [...savedList]
+                for (const childId of defaults) {
+                    if (!finalList.includes(childId)) {
+                        finalList.push(childId)
+                    }
+                }
+                merged[sectionId] = finalList
+            }
+            // Carry over any sections in saved config not in defaults
+            for (const sectionId of Object.keys(savedChildren)) {
+                if (!(sectionId in merged)) {
+                    merged[sectionId] = savedChildren[sectionId]
+                }
+            }
+            _state.children = merged
         } else {
             _state.children = cloneChildren(DEFAULT_CHILD_ORDER)
         }

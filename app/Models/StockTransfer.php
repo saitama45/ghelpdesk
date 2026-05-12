@@ -6,24 +6,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 
-class StockIn extends Model
+class StockTransfer extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'receive_date',
-        'source_stock_in_id',
-        'dr_no',
-        'dr_date',
-        'vendor',
+        'transfer_date',
+        'transfer_no',
         'origin_location',
         'destination_location',
-        'received_by',
+        'requested_by',
         'memo_remarks',
         'posted_by',
         'posted_date',
+        'received_by',
+        'received_at',
         'status',
         'asset_id',
+        'source_stock_in_id',
         'asset_type',
         'is_allocation',
         'quantity',
@@ -42,19 +42,20 @@ class StockIn extends Model
 
     protected $casts = [
         'asset_id' => 'integer',
-        'is_allocation' => 'boolean',
         'source_stock_in_id' => 'integer',
-        'created_by' => 'integer',
-        'updated_by' => 'integer',
-        'receive_date' => 'date',
-        'dr_date' => 'date',
+        'is_allocation' => 'boolean',
+        'quantity' => 'integer',
+        'transfer_date' => 'date:Y-m-d',
         'posted_date' => 'datetime',
+        'received_at' => 'datetime',
         'warranty_date' => 'date',
         'eol_date' => 'date',
         'warranty_months' => 'integer',
         'eol_months' => 'integer',
         'cost' => 'decimal:2',
         'price' => 'decimal:2',
+        'created_by' => 'integer',
+        'updated_by' => 'integer',
     ];
 
     public function asset()
@@ -77,28 +78,23 @@ class StockIn extends Model
         return $this->belongsTo(StockIn::class, 'source_stock_in_id');
     }
 
-    public function transferChildren()
+    public function receivings()
     {
-        return $this->hasMany(StockIn::class, 'source_stock_in_id');
-    }
-
-    public function sourceStockTransfers()
-    {
-        return $this->hasMany(StockTransfer::class, 'source_stock_in_id');
+        return $this->hasMany(StockReceiving::class, 'stock_transfer_id');
     }
 
     protected static function booted()
     {
-        static::saving(function ($stockIn) {
-            if ($stockIn->receive_date) {
-                $receiveDate = Carbon::parse($stockIn->receive_date);
+        static::saving(function ($transfer) {
+            if ($transfer->transfer_date) {
+                $baseDate = Carbon::parse($transfer->transfer_date);
                 
-                if ($stockIn->warranty_months) {
-                    $stockIn->warranty_date = $receiveDate->copy()->addMonths($stockIn->warranty_months);
+                if ($transfer->warranty_months) {
+                    $transfer->warranty_date = $baseDate->copy()->addMonths($transfer->warranty_months);
                 }
                 
-                if ($stockIn->eol_months) {
-                    $stockIn->eol_date = $receiveDate->copy()->addMonths($stockIn->eol_months);
+                if ($transfer->eol_months) {
+                    $transfer->eol_date = $baseDate->copy()->addMonths($transfer->eol_months);
                 }
             }
         });

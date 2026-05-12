@@ -261,7 +261,7 @@ class EmailTicketService
             $ticket = Ticket::create([
                 'ticket_key' => $ticketKey,
                 'title' => mb_substr($subject, 0, 255),
-                'description' => mb_substr($cleanBody, 0, 65535),
+                'description' => $cleanBody,
                 'type' => 'task',
                 'status' => 'open',
                 'priority' => 'medium',
@@ -321,7 +321,7 @@ class EmailTicketService
             // Create the comment
             $comment = TicketComment::create([
                 'ticket_id' => $ticket->id,
-                'comment_text' => substr($cleanBody, 0, 65535),
+                'comment_text' => $cleanBody,
                 'user_id' => $user ? $user->id : null,
                 'sender_email' => mb_substr($senderEmail, 0, 255),
                 'sender_name' => mb_substr($senderName, 0, 255),
@@ -393,10 +393,10 @@ class EmailTicketService
         // 3. Fallback: normalized subject match for the same sender.
         $cleanSubject = $this->normalizeEmailSubject($subject);
         if ($cleanSubject !== '') {
-            $existingTicket = Ticket::where('title', $cleanSubject)
-                ->where('sender_email', $senderEmail)
+            $existingTicket = Ticket::where('sender_email', $senderEmail)
                 ->orderBy('created_at', 'desc')
-                ->first();
+                ->get()
+                ->first(fn (Ticket $ticket) => $this->normalizeEmailSubject($ticket->title ?? '') === $cleanSubject);
 
             if ($existingTicket) {
                 return $existingTicket;
@@ -626,7 +626,18 @@ class EmailTicketService
             $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }
 
-        return $this->stripQuotedText((string) $body);
+        return $this->normalizeFetchedEmailBody((string) $body);
+    }
+
+    protected function normalizeFetchedEmailBody(string $body): string
+    {
+        $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $body = str_replace(["\r\n", "\r"], "\n", $body);
+        $body = str_replace(["\xe2\x80\xaf", "\xc2\xa0", "\t"], ' ', $body);
+        $body = preg_replace("/[ \f\v]+/u", ' ', $body) ?? $body;
+        $body = preg_replace("/\n{3,}/", "\n\n", $body) ?? $body;
+
+        return trim($body);
     }
 
     protected function emailBodyHash(?string $body): ?string
@@ -658,96 +669,6 @@ class EmailTicketService
         preg_match_all('/[\pL\pN]+/u', $normalizedBody, $matches);
 
         return count($matches[0] ?? []) >= 3;
-    }
-
-    /**
-     * Strip quoted text and reply headers from an email body.
-     */
-    protected function stripQuotedText($body)
-    {
-        // 1. Decode HTML entities first
-        $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        
-        // 2. Normalize line endings and whitespace
-        $body = str_replace(["\r\n", "\r"], "\n", $body);
-        
-        // Replace various whitespace characters with regular spaces
-        $body = str_replace(["\xe2\x80\xaf", "\xc2\xa0", "\t"], " ", $body);
-        
-        // 3. Custom separator (Hard cut)
-        $separator = "### Please type your reply above this line ###";
-        if (str_contains($body, $separator)) {
-            $parts = explode($separator, $body);
-            $body = $parts[0]; // Truncate but CONTINUE to clean with regex
-        }
-
-        // 4. Regex markers for reply headers
-        $markers = [
-            // Standard "On [date], [name] <[email]> wrote:"
-            // Aggressive multi-line check to catch 'On' followed by 'wrote' or 'sent'
-            '/\n\s*On\s+.{1,150}?(?:\d{4}|\d{1,2}:\d{2}).{1,100}?(?:wrote|sent):?/is',
-            '/\bOn\s+.{1,150}?(?:\d{4}|\d{1,2}:\d{2}).{1,100}?(?:wrote|sent):?/is',
-            
-            // "From: [name] [mailto:email] Sent: [date] To: [name]"
-            '/\n\s*From:\s+.{1,150}?\n?(?:Sent|To|Subject):/is',
-            '/\bFrom:\s+.{1,150}?\n?(?:Sent|To|Subject):/is',
-            
-            // Delimiter lines
-            '/-+\s*Original Message\s*-+/i',
-            '/________________________________/i',
-            '/-+\s*Forwarded message\s*-+/i',
-        ];
-
-        $earliest = strlen($body);
-
-        foreach ($markers as $marker) {
-            if (preg_match($marker, $body, $matches, PREG_OFFSET_CAPTURE)) {
-                $pos = $matches[0][1];
-                if ($pos < $earliest) {
-                    $earliest = $pos;
-                }
-            }
-        }
-
-        // Truncate at the earliest marker found
-        if ($earliest < strlen($body)) {
-            $body = substr($body, 0, $earliest);
-        }
-
-        // 5. Line-by-line cleanup for standard signatures and loose quotes
-        $lines = explode("\n", $body);
-        $cleanLines = [];
-
-        foreach ($lines as $line) {
-            $trimmed = trim($line);
-            
-            // Signature marker (standard --)
-            if ($trimmed === '--' || $trimmed === '-- ') {
-                break;
-            }
-
-            // Mobile app signature markers
-            if (preg_match('/^Sent from my (?:iPhone|Android|Samsung|iPad|device)/i', $trimmed)) {
-                break;
-            }
-
-            // If we hit a line that starts with a quote character '>', 
-            // it's a clear sign we've entered the quoted history
-            if (str_starts_with($trimmed, '>')) {
-                break;
-            }
-
-            $cleanLines[] = $line;
-        }
-
-        $result = trim(implode("\n", $cleanLines));
-
-        // 6. Fallback: If we stripped everything, return original body trimmed
-        if (empty($result)) {
-             return trim($body);
-        }
-
-        return $result;
     }
 
     /**

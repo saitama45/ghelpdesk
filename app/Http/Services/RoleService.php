@@ -54,6 +54,8 @@ class RoleService
             'pos_requests',
             'sap_requests',
             'stock in',
+            'stock transfer',
+            'receiving stock',
             'attendance',
             'schedules',
             'presence',
@@ -92,6 +94,10 @@ class RoleService
                 $categoryDisplay = 'Task Board';
             } elseif ($category === 'stock_ins') {
                 $categoryDisplay = 'Stock In';
+            } elseif ($category === 'stock_transfers') {
+                $categoryDisplay = 'Stock Transfer';
+            } elseif ($category === 'stock_receivings') {
+                $categoryDisplay = 'Receiving Stock';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 

@@ -33,5 +33,10 @@ if (Schema::hasColumn('users', 'created_by')) {
 }
 ```
 
-## 4. Maintenance & Repair
-If a remote environment is out of sync (e.g., `migrate` says "Nothing to migrate" but columns are missing), use a high-numbered "repair" migration to force-apply the missing schema changes using `Schema::hasColumn` checks.
+## 5. Module Creation Workflow
+When creating a new module, ensure the following checklist is followed:
+1. **Permissions:** Add the module permissions in `database/seeders/RolesAndPermissionSeeder.php` and update `app/Http/Services/RoleService.php` to include the new permissions in the appropriate group and order.
+2. **Roles UI:** Update `resources/js/Pages/Roles/Index.vue` to include the new module in the `landingPageOptions` and ensure it appears in the permission management tabs.
+3. **Settings UI:** Ensure the module is discoverable in the Sidebar Layout management under `resources/js/Pages/Settings/Index.vue`.
+4. **Implementation:** Create the Migration, Model, Controller, and Vue Index page following the established patterns (e.g., grouping by location, audit fields).
+5. **Consistency:** Always ask for clarification on specific business requirements (e.g., stock handling, SOH logic) before implementation.

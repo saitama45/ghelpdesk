@@ -1649,7 +1649,7 @@ watch(activeDashboardFilter, () => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Description</label>
-                            <textarea v-model="createForm.description" maxlength="65535" rows="4" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                            <textarea v-model="createForm.description" rows="4" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
                         </div>
                         <div v-if="createForm.item_id" class="p-3 bg-gray-50 rounded-lg border border-gray-100">
                             <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
@@ -1795,7 +1795,6 @@ watch(activeDashboardFilter, () => {
                             <textarea
                                 v-model="bulkResponseForm.comment_text"
                                 rows="8"
-                                maxlength="65535"
                                 class="block w-full resize-y rounded-xl border-gray-300 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                 placeholder="Write your response..."
                                 @paste="handleBulkResponsePaste"

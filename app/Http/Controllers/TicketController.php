@@ -725,11 +725,11 @@ class TicketController extends Controller
         $requiresRcaOnResolve = (bool) $ticket->item?->requires_rca_on_resolve;
 
         $request->validate([
-            'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange), 'nullable', 'string', 'max:65535'],
+            'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange), 'nullable', 'string'],
             'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
-            'action_taken' => [Rule::requiredIf($isTerminalStatusChange), 'nullable', 'string', 'max:65535'],
-            'root_cause_analysis' => [Rule::requiredIf($isTerminalStatusChange && $requiresRcaOnResolve), 'nullable', 'string', 'max:65535'],
+            'action_taken' => [Rule::requiredIf($isTerminalStatusChange), 'nullable', 'string'],
+            'root_cause_analysis' => [Rule::requiredIf($isTerminalStatusChange && $requiresRcaOnResolve), 'nullable', 'string'],
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
         ]);
@@ -908,7 +908,7 @@ class TicketController extends Controller
         $validated = $request->validate([
             'ticket_ids' => 'required|array|min:1',
             'ticket_ids.*' => 'exists:tickets,id',
-            'comment_text' => 'nullable|string|max:65535',
+            'comment_text' => 'nullable|string',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
         ]);

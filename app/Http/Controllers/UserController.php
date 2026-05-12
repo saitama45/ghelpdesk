@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Mail\GoogleRegistrationApproved;
+use App\Models\Company;
 use App\Models\User;
 use App\Http\Services\RoleService;
 use App\Services\OrganizationReferenceService;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 use Throwable;
 
 class UserController extends Controller
@@ -32,7 +33,7 @@ class UserController extends Controller
             'creator:id,name,email',
             'updater:id,name,email',
             'departmentReference:id,name',
-            'departmentNode:id,name,org_path',
+            'departmentNode:id,name',
         ]);
         
         if ($request->filled('search')) {
@@ -58,15 +59,20 @@ class UserController extends Controller
         }
         
         $users = $query->paginate($request->get('per_page', 10))->withQueryString();
-        $roles = Role::select('id', 'name')->get();
+        $roles = Role::with('permissions:id,name', 'companies:id,name')->get();
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         $managers = User::where('is_manager', true)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
-        
+        $permissions = RoleService::getPermissionsByCategory();
+        $companies = Company::where('is_active', true)->select('id', 'name')->get();
+
         return Inertia::render('Users/Index', [
             'users' => $users,
             'roles' => $roles,
             'stores' => $stores,
             'managers' => $managers,
+            'permissions' => $permissions,
+            'companies' => $companies,
+            'dynamicForms' => \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug']),
             'departmentTree' => $this->organizationReferences->tree(activeOnly: true),
             'filters' => [
                 'search' => $request->input('search', ''),

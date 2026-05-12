@@ -170,6 +170,80 @@ class EmailTicketThreadingTest extends TestCase
                 ->exists()
         );
     }
+
+    public function test_reply_history_is_preserved_when_email_becomes_comment(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<root-reply-history@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Kitchen printer issue',
+            body: 'The kitchen printer does not print new orders from the POS terminal.',
+        ));
+
+        $replyBody = "Please also check the network cable.\n\n"
+            . "On Tue, May 12, 2026 at 10:15 AM Support <support@example.test> wrote:\n"
+            . "> We received your original kitchen printer concern.\n"
+            . "> Please send the branch details.";
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<reply-history@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'RE: Kitchen printer issue',
+            body: $replyBody,
+        ));
+
+        $comment = TicketComment::latest('created_at')->firstOrFail();
+
+        $this->assertStringContainsString('Please also check the network cable.', $comment->comment_text);
+        $this->assertStringContainsString('On Tue, May 12, 2026 at 10:15 AM Support', $comment->comment_text);
+        $this->assertStringContainsString('We received your original kitchen printer concern.', $comment->comment_text);
+        $this->assertStringContainsString('Please send the branch details.', $comment->comment_text);
+    }
+
+    public function test_forwarded_history_is_preserved_when_email_creates_ticket(): void
+    {
+        $forwardedBody = "Kindly create a ticket for the concern below.\n\n"
+            . "---------- Forwarded message ---------\n"
+            . "From: Store Manager <manager@example.test>\n"
+            . "Subject: POS concern\n\n"
+            . "Original message details should remain visible in the ticket description.";
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<forwarded@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'FW: POS concern',
+            body: $forwardedBody,
+        ));
+
+        $ticket = Ticket::firstOrFail();
+
+        $this->assertStringContainsString('Kindly create a ticket for the concern below.', $ticket->description);
+        $this->assertStringContainsString('Forwarded message', $ticket->description);
+        $this->assertStringContainsString('Original message details should remain visible', $ticket->description);
+    }
+
+    public function test_nested_re_and_fw_subject_matches_existing_ticket_for_same_sender(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<subject-root@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Store router issue',
+            body: 'The store router disconnects every hour and affects POS transactions.',
+        ));
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<subject-reply@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'FW: RE: Store router issue',
+            body: 'Forwarding the same concern again with additional details from the branch.',
+        ));
+
+        $this->assertSame(1, Ticket::count());
+        $this->assertSame(1, TicketComment::count());
+        $this->assertDatabaseHas('ticket_comments', [
+            'message_id' => 'subject-reply@example.test',
+        ]);
+    }
 }
 
 class TestableEmailTicketService extends EmailTicketService

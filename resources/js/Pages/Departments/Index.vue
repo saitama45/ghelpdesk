@@ -338,7 +338,7 @@ const StructureNode = defineComponent({
 
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
-import TreeSelector from '@/Components/TreeSelector.vue'
+import HierarchySelector from '@/Components/HierarchySelector.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -433,6 +433,11 @@ watch(selectedDepartmentId, () => {
     filterNodeId.value = ''
 })
 
+const nodesFlat = computed(() => {
+    if (!selectedDepartment.value?.nodes) return []
+    return flattenNodes(selectedDepartment.value.nodes)
+})
+
 const selectedDepartmentUsers = computed(() => {
     if (!selectedDepartment.value) return []
     return (props.users || []).filter(user => Number(user.department_id) === Number(selectedDepartment.value.id))
@@ -440,7 +445,23 @@ const selectedDepartmentUsers = computed(() => {
 
 const filteredChartUsers = computed(() => {
     let users = selectedDepartmentUsers.value
-    if (filterNodeId.value) users = users.filter(u => Number(u.department_node_id) === Number(filterNodeId.value))
+    if (filterNodeId.value) {
+        const targetId = Number(filterNodeId.value)
+        const descendantIds = [targetId]
+        
+        // Recursively find all sub-team IDs
+        const findDescendants = (nodes) => {
+            nodes.forEach(n => {
+                descendantIds.push(n.id)
+                if (n.children?.length) findDescendants(n.children)
+            })
+        }
+        
+        const targetNode = findNodeInTree(selectedDepartment.value.nodes, targetId)
+        if (targetNode?.children?.length) findDescendants(targetNode.children)
+        
+        users = users.filter(u => descendantIds.includes(Number(u.department_node_id)))
+    }
     return users
 })
 
@@ -518,6 +539,19 @@ const userHierarchy = computed(() => {
         }
     })
 
+    const findDirectChildNode = (leafNodeId, parentNodeId) => {
+        let current = nodesFlat.value.find(n => Number(n.id) === Number(leafNodeId))
+        if (!current) return null
+        
+        while (current) {
+            if (Number(current.parent_id) === Number(parentNodeId)) return current
+            const pId = current.parent_id
+            if (!pId) break
+            current = nodesFlat.value.find(n => Number(n.id) === Number(pId))
+        }
+        return null
+    }
+
     const injectStructure = (subordinates, parentNodeId = null) => {
         if (!subordinates || subordinates.length === 0) return []
         
@@ -525,20 +559,12 @@ const userHierarchy = computed(() => {
         const groups = new Map()
         
         subordinates.forEach(sub => {
-            if (Number(sub.data.department_node_id) === Number(parentNodeId)) {
-                sub.children = injectStructure(sub.children, sub.data.department_node_id)
+            const userNodeId = sub.data.department_node_id
+            
+            if (Number(userNodeId) === Number(parentNodeId)) {
+                sub.children = injectStructure(sub.children, userNodeId)
                 result.push(sub)
             } else {
-                // Find which direct child node of parentNodeId this user belongs to
-                // We need to traverse up the user's node path
-                const userNodeId = sub.data.department_node_id
-                if (!userNodeId) {
-                    sub.children = injectStructure(sub.children, null)
-                    result.push(sub)
-                    return
-                }
-
-                // Find the ancestor of userNodeId that is a direct child of parentNodeId
                 const targetNode = findDirectChildNode(userNodeId, parentNodeId)
                 if (targetNode) {
                     const key = `node-${targetNode.id}`
@@ -569,23 +595,12 @@ const userHierarchy = computed(() => {
         return [...userNodes, ...structureNodes]
     }
 
-    const findDirectChildNode = (leafNodeId, parentNodeId) => {
-        const allNodes = selectedDepartment.value.nodes_flat || flattenNodes(selectedDepartment.value.nodes)
-        let current = allNodes.find(n => Number(n.id) === Number(leafNodeId))
-        
-        while (current) {
-            if (Number(current.parent_id) === Number(parentNodeId)) return current
-            current = allNodes.find(n => Number(n.id) === Number(current.parent_id))
-        }
-        return null
-    }
-
     const rootNodes = Array.from(userMap.values()).filter(node => {
         const managers = (node.data.managers || []).filter(m => userMap.has(Number(m.id)) && Number(m.id) !== Number(node.data.id))
         return managers.length === 0
     })
 
-    return injectStructure(rootNodes, null)
+    return injectStructure(rootNodes, isFiltering ? Number(filterNodeId.value) : null)
 })
 
 const getOrgPath = (user) => {
@@ -1208,30 +1223,22 @@ const downloadChart = async () => {
                         </div>
 
                         <!-- Org Chart View Filters -->
-                        <div v-if="selectedDepartment" class="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-200 mt-2">
-                            <div class="flex items-center gap-2 text-gray-400 mr-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                                </svg>
-                                <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">View Filters</span>
+                        <div v-if="selectedDepartment" class="pt-4 border-t border-gray-200 mt-2">
+                            <div class="flex flex-col gap-2">
+                                <div class="flex items-center gap-2 text-gray-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                    </svg>
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">View Filters</span>
+                                </div>
+                                <div class="w-full sm:w-80">
+                                    <HierarchySelector
+                                        v-model="filterNodeId"
+                                        :nodes="selectedDepartment.nodes || []"
+                                        placeholder="Focus on a specific Team..."
+                                    />
+                                </div>
                             </div>
-
-                            <div class="w-full sm:w-80">
-                                <Autocomplete
-                                    v-model="filterNodeId"
-                                    :options="[
-                                        { id: '', fullPathName: 'Entire Department' },
-                                        ...flattenNodes(selectedDepartment.nodes || [])
-                                    ]"
-                                    label-key="fullPathName"
-                                    value-key="id"
-                                    placeholder="Search team or level..."
-                                />
-                            </div>
-                            
-                            <button v-if="filterNodeId" @click="filterNodeId = ''" class="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-wider">
-                                Clear Focus
-                            </button>
                         </div>
                     </div>
 
@@ -1458,11 +1465,12 @@ const downloadChart = async () => {
                                         </template>
                                     </div>
                                 </div>
-                                <TreeSelector
+                                <HierarchySelector
                                     v-model="placementForm.department_node_id"
                                     :nodes="activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes || []"
                                     label="Select Team Level"
                                     :disabled="!placementForm.department_id"
+                                    inline
                                 />
                             </div>
                         </div>
@@ -1593,11 +1601,12 @@ const downloadChart = async () => {
                                         </template>
                                     </div>
                                 </div>
-                                <TreeSelector
+                                <HierarchySelector
                                     v-model="vacantForm.department_node_id"
                                     :nodes="activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes || []"
                                     label="Select Team Level"
                                     :disabled="!vacantForm.department_id"
+                                    inline
                                 />
                             </div>
                         </div>

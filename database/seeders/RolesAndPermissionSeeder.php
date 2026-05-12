@@ -129,6 +129,19 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_ins.post' => 'Post Stock In',
             'stock_ins.delete' => 'Delete Stock In',
 
+            // Stock Transfer
+            'stock_transfers.view' => 'View Stock Transfer',
+            'stock_transfers.create' => 'Create Stock Transfer',
+            'stock_transfers.edit' => 'Edit Stock Transfer',
+            'stock_transfers.post' => 'Post Stock Transfer',
+            'stock_transfers.delete' => 'Delete Stock Transfer',
+
+            // Receiving Stock
+            'stock_receivings.view' => 'View Receiving Stock',
+            'stock_receivings.edit' => 'Edit Receiving Stock',
+            'stock_receivings.post' => 'Post Receiving Stock',
+            'stock_receivings.delete' => 'Delete Receiving Stock',
+
             // Administrative - Attendance
             'attendance.view' => 'View DTR',
             'attendance.logs' => 'View attendance logs',
@@ -230,6 +243,15 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_ins.edit',
             'stock_ins.post',
             'stock_ins.delete',
+            'stock_transfers.view',
+            'stock_transfers.create',
+            'stock_transfers.edit',
+            'stock_transfers.post',
+            'stock_transfers.delete',
+            'stock_receivings.view',
+            'stock_receivings.edit',
+            'stock_receivings.post',
+            'stock_receivings.delete',
             'stores.view',
             'schedules.view',
             'canned_messages.view',

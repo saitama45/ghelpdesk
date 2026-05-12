@@ -100,6 +100,15 @@ Route::middleware('auth')->group(function () {
     Route::get('stock-ins/{stock_in}/print-barcodes', [\App\Http\Controllers\StockInController::class, 'printBarcodes'])->name('stock-ins.print-barcodes');
     Route::get('stock-ins/{stock_in}/print-qrcodes', [\App\Http\Controllers\StockInController::class, 'printQrcodes'])->name('stock-ins.print-qrcodes');
     Route::resource('stock-ins', \App\Http\Controllers\StockInController::class);
+
+    Route::get('stock-transfers/available-stock', [\App\Http\Controllers\StockTransferController::class, 'availableStock'])->name('stock-transfers.available-stock');
+    Route::get('stock-transfers/assets-with-stock', [\App\Http\Controllers\StockTransferController::class, 'assetsWithStock'])->name('stock-transfers.assets-with-stock');
+    Route::post('stock-transfers/{stock_transfer}/post', [\App\Http\Controllers\StockTransferController::class, 'post'])->name('stock-transfers.post');
+    Route::resource('stock-transfers', \App\Http\Controllers\StockTransferController::class);
+
+    Route::post('stock-receivings/{stock_receiving}/post', [\App\Http\Controllers\StockReceivingController::class, 'post'])->name('stock-receivings.post');
+    Route::resource('stock-receivings', \App\Http\Controllers\StockReceivingController::class)->except(['create', 'edit', 'store']);
+
     Route::post('task-boards/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-boards.restore');
     Route::post('task-boards/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-boards.star');
     Route::post('task-boards/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-boards.watch');

@@ -405,6 +405,8 @@ const landingPageOptions = [
         options: [
             { label: 'Assets', value: 'assets.index' },
             { label: 'Stock In', value: 'stock-ins.index' },
+            { label: 'Stock Transfer', value: 'stock-transfers.index' },
+            { label: 'Receiving Stock', value: 'stock-receivings.index' },
             { label: 'Inventory Report', value: 'reports.inventory' },
         ]
     },
@@ -604,7 +606,7 @@ const permissionGroups = computed(() => {
         { name: 'Dashboard', categories: ['Dashboard'] },
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Services', categories: servicesCategories },
-        { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Reports'] },
+        { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Stock_transfer', 'Receiving_stock', 'Reports'] },
         { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
         { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },

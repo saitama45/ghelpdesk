@@ -85,7 +85,7 @@ onMounted(() => {
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
-    if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*')) {
+    if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*') || route().current('stock-transfers.*') || route().current('stock-receivings.*')) {
         openMenus.value.inventory = true;
     }
     if (route().current('companies.*') || route().current('departments.*') || route().current('clusters.*') || route().current('stores.*') || route().current('vendors.*') || route().current('categories.*') || route().current('sub-categories.*') || route().current('items.*') || route().current('activity-templates.*') || route().current('request-types.*') || route().current('form-builder.*')) {
@@ -123,7 +123,7 @@ const canSeeServices = computed(() => {
 });
 
 const canSeeInventory = computed(() => {
-    return hasPermission('stock_ins.view') || hasPermission('reports.inventory') || hasPermission('assets.view');
+    return hasPermission('stock_ins.view') || hasPermission('reports.inventory') || hasPermission('assets.view') || hasPermission('stock_transfers.view') || hasPermission('stock_receivings.view');
 });
 
 const canSeeForms = computed(() => {
@@ -313,7 +313,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('inventory')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*')) && (isCollapsed || !openMenus.inventory)
+                            (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*') || route().current('stock-transfers.*') || route().current('stock-receivings.*')) && (isCollapsed || !openMenus.inventory)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -337,6 +337,12 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('stock_ins.view')" :style="co('inventory', 'stock-ins')">
                                 <Link :href="route('stock-ins.index')" :class="collapsedFlyoutLinkClass(route().current('stock-ins.*'))">{{ getChildLabel('inventory', 'stock-ins') }}</Link>
                             </div>
+                            <div v-if="hasPermission('stock_transfers.view')" :style="co('inventory', 'stock-transfers')">
+                                <Link :href="route('stock-transfers.index')" :class="collapsedFlyoutLinkClass(route().current('stock-transfers.*'))">{{ getChildLabel('inventory', 'stock-transfers') }}</Link>
+                            </div>
+                            <div v-if="hasPermission('stock_receivings.view')" :style="co('inventory', 'stock-receivings')">
+                                <Link :href="route('stock-receivings.index')" :class="collapsedFlyoutLinkClass(route().current('stock-receivings.*'))">{{ getChildLabel('inventory', 'stock-receivings') }}</Link>
+                            </div>
                             <div v-if="hasPermission('reports.inventory')" :style="co('inventory', 'inventory-report')">
                                 <Link :href="route('reports.inventory')" :class="collapsedFlyoutLinkClass(route().current('reports.inventory'))">{{ getChildLabel('inventory', 'inventory-report') }}</Link>
                             </div>
@@ -349,6 +355,12 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('stock_ins.view')" :style="co('inventory', 'stock-ins')">
                             <Link :href="route('stock-ins.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stock-ins.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'stock-ins') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('stock_transfers.view')" :style="co('inventory', 'stock-transfers')">
+                            <Link :href="route('stock-transfers.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stock-transfers.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'stock-transfers') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('stock_receivings.view')" :style="co('inventory', 'stock-receivings')">
+                            <Link :href="route('stock-receivings.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stock-receivings.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'stock-receivings') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('reports.inventory')" :style="co('inventory', 'inventory-report')">
                             <Link :href="route('reports.inventory')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('reports.inventory') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('inventory', 'inventory-report') }}</span></Link>

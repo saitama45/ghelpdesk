@@ -1973,7 +1973,6 @@ const linkify = (text) => {
                                             ref="descriptionInput"
                                             v-model="editForm.description" 
                                             rows="6" 
-                                            maxlength="65535"
                                             class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-2 text-sm sm:text-base"
                                             @keydown.esc="cancelDescriptionEdit"
                                         ></textarea>
@@ -2173,7 +2172,6 @@ const linkify = (text) => {
                                         <textarea 
                                             v-model="commentForm.comment_text" 
                                             rows="2" 
-                                            maxlength="65535"
                                             class="block w-full border-0 focus:ring-0 resize-y bg-transparent p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400 transition-all duration-300 ease-in-out focus:min-h-[50vh]" 
                                             placeholder="Write your response..."
                                             @paste="handlePaste"
