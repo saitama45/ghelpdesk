@@ -395,9 +395,40 @@ const usersById = computed(() => {
     return map
 })
 
+const filterSectionId = ref('')
+const filterUnitId = ref('')
+const filterSubUnitId = ref('')
+
+watch(selectedDepartmentId, () => {
+    filterSectionId.value = ''
+    filterUnitId.value = ''
+    filterSubUnitId.value = ''
+})
+
+watch(filterSectionId, () => {
+    filterUnitId.value = ''
+    filterSubUnitId.value = ''
+})
+
+watch(filterUnitId, () => {
+    filterSubUnitId.value = ''
+})
+
+const chartFilterSections = computed(() => selectedDepartment.value?.sections || [])
+const chartFilterUnits = computed(() => chartFilterSections.value.find(s => Number(s.id) === Number(filterSectionId.value))?.units || [])
+const chartFilterSubUnits = computed(() => chartFilterUnits.value.find(u => Number(u.id) === Number(filterUnitId.value))?.sub_units || [])
+
 const selectedDepartmentUsers = computed(() => {
     if (!selectedDepartment.value) return []
     return (props.users || []).filter(user => Number(user.department_id) === Number(selectedDepartment.value.id))
+})
+
+const filteredChartUsers = computed(() => {
+    let users = selectedDepartmentUsers.value
+    if (filterSectionId.value) users = users.filter(u => Number(u.department_section_id) === Number(filterSectionId.value))
+    if (filterUnitId.value) users = users.filter(u => Number(u.department_unit_id) === Number(filterUnitId.value))
+    if (filterSubUnitId.value) users = users.filter(u => Number(u.department_sub_unit_id) === Number(filterSubUnitId.value))
+    return users
 })
 
 const photoPreview = ref(null)
@@ -415,12 +446,16 @@ const userHierarchy = computed(() => {
     
     const userMap = new Map()
     const relevantUserIds = new Set()
-    const inDeptUsers = selectedDepartmentUsers.value
+    const inDeptUsers = filteredChartUsers.value
     inDeptUsers.forEach(u => relevantUserIds.add(Number(u.id)))
     
-    inDeptUsers.forEach(u => {
-        (u.managers || []).forEach(m => relevantUserIds.add(Number(m.id)))
-    })
+    const isFiltering = filterSectionId.value || filterUnitId.value || filterSubUnitId.value
+
+    if (!isFiltering) {
+        inDeptUsers.forEach(u => {
+            (u.managers || []).forEach(m => relevantUserIds.add(Number(m.id)))
+        })
+    }
 
     props.users.forEach(u => {
         if (relevantUserIds.has(Number(u.id))) {
@@ -621,6 +656,10 @@ const centerChart = async () => {
 watch(selectedDepartmentUsers, () => refreshChartLinks(), { deep: true })
 watch(selectedDepartmentId, async () => { await refreshChartLinks(); await centerChart() })
 watch(zoomScale, () => refreshChartLinks())
+watch([filterSectionId, filterUnitId, filterSubUnitId], async () => {
+    await refreshChartLinks()
+    await centerChart()
+})
 
 onMounted(async () => {
     window.addEventListener('resize', refreshChartLinks)
@@ -863,6 +902,21 @@ const openAssignUserModal = (department, section, unit, subUnit) => {
     placementForm.department_section_id = section.id
     placementForm.department_unit_id = unit.id
     placementForm.department_sub_unit_id = subUnit.id
+    placementForm.manager_ids = []
+    placementForm.profile_photo = null
+    placementForm.org_sort_order = 0
+    photoPreview.value = null
+    showPlacementModal.value = true
+}
+
+const openAddUserModal = () => {
+    placementMode.value = 'assign'
+    placementForm.reset()
+    placementForm.user_id = ''
+    placementForm.department_id = selectedDepartment.value ? Number(selectedDepartment.value.id) : ''
+    placementForm.department_section_id = ''
+    placementForm.department_unit_id = ''
+    placementForm.department_sub_unit_id = ''
     placementForm.manager_ids = []
     placementForm.profile_photo = null
     placementForm.org_sort_order = 0
@@ -1124,54 +1178,109 @@ const downloadChart = async () => {
                 </div>
 
                 <div class="rounded-xl border border-gray-200 bg-white shadow-sm">
-                    <div class="flex flex-col gap-4 border-b border-gray-200 bg-gray-50 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div class="w-full lg:max-w-md">
-                            <Autocomplete
-                                v-model="selectedDepartmentId"
-                                :options="departmentSelectOptions"
-                                label-key="name"
-                                value-key="id"
-                                placeholder="Select department..."
-                            />
+                    <div class="flex flex-col gap-4 border-b border-gray-200 bg-gray-50 px-6 py-5">
+                        <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                            <!-- Left: Department Selector & Status -->
+                            <div class="flex flex-1 items-center gap-2">
+                                <div class="w-full lg:max-w-md">
+                                    <Autocomplete
+                                        v-model="selectedDepartmentId"
+                                        :options="departmentSelectOptions"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select department..."
+                                    />
+                                </div>
+                                <button
+                                    v-if="selectedDepartment && hasPermission('departments.edit')"
+                                    type="button"
+                                    @click="openEditNode('department', selectedDepartment)"
+                                    class="rounded-lg bg-white border border-gray-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-gray-600 transition-colors hover:bg-gray-100 shadow-sm whitespace-nowrap"
+                                    title="Edit department name, code, etc."
+                                >
+                                    Edit Dept
+                                </button>
+                            </div>
+
+                            <!-- Right: Action Control Panel -->
+                            <div v-if="selectedDepartment" class="flex flex-wrap items-center gap-4">
+                                <!-- Group 1: Configuration (Blue) -->
+                                <div class="flex items-center gap-1.5 rounded-xl bg-blue-50/50 p-1.5 border border-blue-100">
+                                    <button
+                                        v-if="hasPermission('departments.edit')"
+                                        type="button"
+                                        @click="showStructureModal = true"
+                                        class="rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white transition-colors hover:bg-blue-700 shadow-md shadow-blue-100"
+                                        title="Setup Sections, Units, and Sub-Units"
+                                    >
+                                        Setup Hierarchy
+                                    </button>
+                                </div>
+
+                                <!-- Group 2: Personnel (Emerald/Amber) -->
+                                <div class="flex items-center gap-1.5 rounded-xl bg-emerald-50/30 p-1.5 border border-emerald-100">
+                                    <button
+                                        v-if="hasPermission('departments.edit')"
+                                        type="button"
+                                        @click="openAddUserModal"
+                                        class="rounded-lg bg-white border border-emerald-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-50 shadow-sm"
+                                    >
+                                        + Add User
+                                    </button>
+                                    <button
+                                        v-if="hasPermission('departments.edit')"
+                                        type="button"
+                                        @click="openAddVacantModal"
+                                        class="rounded-lg bg-white border border-amber-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-50 shadow-sm"
+                                    >
+                                        + Vacant Position
+                                    </button>
+                                </div>
+
+                                <!-- Group 3: Danger (Rose) -->
+                                <button
+                                    v-if="hasPermission('departments.delete')"
+                                    type="button"
+                                    @click="deleteNode('department', selectedDepartment)"
+                                    class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-700 transition-colors hover:bg-rose-100"
+                                >
+                                    Delete
+                                </button>
+                            </div>
                         </div>
-                        <div v-if="selectedDepartment" class="flex flex-wrap items-center gap-2">
-                            <span
-                                :class="selectedDepartment.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'"
-                                class="rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider"
-                            >
-                                {{ selectedDepartment.is_active ? 'Active' : 'Inactive' }}
-                            </span>
-                            <button
-                                v-if="hasPermission('departments.edit')"
-                                type="button"
-                                @click="showStructureModal = true"
-                                class="rounded-lg border border-blue-600 bg-blue-600 px-3 py-2 text-xs font-black uppercase tracking-wider text-white transition-colors hover:bg-blue-700"
-                            >
-                                Manage Structure
-                            </button>
-                            <button
-                                v-if="hasPermission('departments.edit')"
-                                type="button"
-                                @click="openEditNode('department', selectedDepartment)"
-                                class="rounded-lg border border-gray-200 px-3 py-2 text-xs font-black uppercase tracking-wider text-gray-600 transition-colors hover:bg-gray-100"
-                            >
-                                Edit Dept
-                            </button>
-                            <button
-                                v-if="hasPermission('departments.edit')"
-                                type="button"
-                                @click="openAddVacantModal"
-                                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-100"
-                            >
-                                + Vacant Position
-                            </button>
-                            <button
-                                v-if="hasPermission('departments.delete')"
-                                type="button"
-                                @click="deleteNode('department', selectedDepartment)"
-                                class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-black uppercase tracking-wider text-rose-700 transition-colors hover:bg-rose-100"
-                            >
-                                Delete
+
+                        <!-- Org Chart View Filters -->
+                        <div v-if="selectedDepartment" class="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-200 mt-2">
+                            <div class="flex items-center gap-2 text-gray-400 mr-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">View Filters</span>
+                            </div>
+
+                            <select v-model="filterSectionId" class="block rounded-lg border-gray-300 py-1.5 pl-3 pr-8 text-xs font-bold text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">All Sections</option>
+                                <option v-for="section in chartFilterSections" :key="section.id" :value="section.id">{{ section.name }}</option>
+                            </select>
+                            
+                            <template v-if="filterSectionId">
+                                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                <select v-model="filterUnitId" class="block rounded-lg border-gray-300 py-1.5 pl-3 pr-8 text-xs font-bold text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <option value="">All Units</option>
+                                    <option v-for="unit in chartFilterUnits" :key="unit.id" :value="unit.id">{{ unit.name }}</option>
+                                </select>
+                            </template>
+
+                            <template v-if="filterUnitId">
+                                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                <select v-model="filterSubUnitId" class="block rounded-lg border-gray-300 py-1.5 pl-3 pr-8 text-xs font-bold text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <option value="">All Sub-Units</option>
+                                    <option v-for="subUnit in chartFilterSubUnits" :key="subUnit.id" :value="subUnit.id">{{ subUnit.name }}</option>
+                                </select>
+                            </template>
+                            
+                            <button v-if="filterSectionId" @click="filterSectionId = ''; filterUnitId = ''; filterSubUnitId = '';" class="ml-auto text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-wider">
+                                Clear Filters
                             </button>
                         </div>
                     </div>
@@ -1280,7 +1389,7 @@ const downloadChart = async () => {
                 <!-- Unplaced Users section hidden as requested -->
             </div>
 
-        <div v-if="showNodeModal" class="fixed inset-0 z-[60] overflow-y-auto">
+        <div v-if="showNodeModal" class="fixed inset-0 z-[70] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeNodeModal"></div>
                 <div class="relative w-full max-w-lg rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
@@ -1323,7 +1432,7 @@ const downloadChart = async () => {
             </div>
         </div>
 
-        <div v-if="showPlacementModal" class="fixed inset-0 z-50 overflow-y-auto">
+        <div v-if="showPlacementModal" class="fixed inset-0 z-[60] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closePlacementModal"></div>
                 <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
@@ -1487,7 +1596,7 @@ const downloadChart = async () => {
             </div>
         </div>
         <!-- Vacant Position Modal -->
-        <div v-if="showVacantModal" class="fixed inset-0 z-50 overflow-y-auto">
+        <div v-if="showVacantModal" class="fixed inset-0 z-[60] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeVacantModal"></div>
                 <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
