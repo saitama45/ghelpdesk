@@ -290,7 +290,7 @@ const UserNode = defineComponent({
 
 const StructureNode = defineComponent({
     name: 'StructureNode',
-    props: ['node', 'hasPermission', 'openCreateNode', 'openEditNode', 'deleteNode', 'openAssignUserModal'],
+    props: ['node', 'hasPermission', 'openCreateNode', 'openEditNode', 'deleteNode', 'openTeamAssignUserModal'],
     setup(props) {
         return () => h('div', { class: 'ml-6 mt-4 space-y-4' }, [
             h('div', { class: 'flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm' }, [
@@ -301,7 +301,7 @@ const StructureNode = defineComponent({
                 h('div', { class: 'flex items-center gap-2' }, [
                     h('button', {
                         type: 'button',
-                        onClick: () => props.openAssignUserModal(props.node.department_id, props.node),
+                        onClick: () => props.openTeamAssignUserModal(props.node.department_id, props.node),
                         class: 'text-[10px] font-black uppercase tracking-wider text-emerald-600 hover:underline'
                     }, 'Assign'),
                     props.hasPermission('departments.create') ? h('button', {
@@ -453,11 +453,18 @@ const handlePhotoSelect = (e) => {
     }
 }
 
-const flattenNodes = (nodes, level = 0) => {
+const flattenNodes = (nodes, level = 0, path = []) => {
     let flat = []
     nodes.forEach(n => {
-        flat.push({ ...n, level })
-        if (n.children?.length) flat = flat.concat(flattenNodes(n.children, level + 1))
+        const fullPath = [...path, n.name]
+        flat.push({ 
+            ...n, 
+            level, 
+            fullPathName: fullPath.join(' > ') 
+        })
+        if (n.children?.length) {
+            flat = flat.concat(flattenNodes(n.children, level + 1, fullPath))
+        }
     })
     return flat
 }
@@ -877,7 +884,7 @@ const placementForm = useForm({
 const showPlacementModal = ref(false)
 const placementMode = ref('assign')
 
-const openAssignUserModal = (department, node) => {
+const openTeamAssignUserModal = (department, node) => {
     placementMode.value = 'assign'
     placementForm.reset()
     placementForm.user_id = ''
@@ -890,7 +897,7 @@ const openAssignUserModal = (department, node) => {
     showPlacementModal.value = true
 }
 
-const openAddUserModal = () => {
+const openAssignUserModal = () => {
     placementMode.value = 'assign'
     placementForm.reset()
     placementForm.user_id = ''
@@ -1151,10 +1158,10 @@ const downloadChart = async () => {
                                     <button
                                         v-if="hasPermission('departments.edit')"
                                         type="button"
-                                        @click="openAddUserModal"
+                                        @click="openAssignUserModal"
                                         class="rounded-lg bg-white border border-emerald-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-50 shadow-sm"
                                     >
-                                        + Add User
+                                        + Assign User
                                     </button>
                                     <button
                                         v-if="hasPermission('departments.edit')"
@@ -1187,14 +1194,20 @@ const downloadChart = async () => {
                                 <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">View Filters</span>
                             </div>
 
-                            <select v-model="filterNodeId" class="block rounded-lg border-gray-300 py-1.5 pl-3 pr-8 text-xs font-bold text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="">Entire Department</option>
-                                <template v-for="node in flattenNodes(selectedDepartment.nodes || [])" :key="node.id">
-                                    <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
-                                </template>
-                            </select>
+                            <div class="w-full sm:w-80">
+                                <Autocomplete
+                                    v-model="filterNodeId"
+                                    :options="[
+                                        { id: '', fullPathName: 'Entire Department' },
+                                        ...flattenNodes(selectedDepartment.nodes || [])
+                                    ]"
+                                    label-key="fullPathName"
+                                    value-key="id"
+                                    placeholder="Search team or level..."
+                                />
+                            </div>
                             
-                            <button v-if="filterNodeId" @click="filterNodeId = ''" class="ml-auto text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-wider">
+                            <button v-if="filterNodeId" @click="filterNodeId = ''" class="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-wider">
                                 Clear Focus
                             </button>
                         </div>
@@ -1393,14 +1406,17 @@ const downloadChart = async () => {
                                         + New Team
                                     </button>
                                 </div>
-                                <select v-model="placementForm.department_node_id" :disabled="!placementForm.department_id" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100">
-                                    <option value="">Top Level (Department Only)</option>
-                                    <template v-if="placementForm.department_id">
-                                        <template v-for="node in flattenNodes(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes || [])" :key="node.id">
-                                            <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
-                                        </template>
-                                    </template>
-                                </select>
+                                <Autocomplete
+                                    v-model="placementForm.department_node_id"
+                                    :options="[
+                                        { id: '', fullPathName: 'Top Level (Department Only)' },
+                                        ...flattenNodes(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes || [])
+                                    ]"
+                                    label-key="fullPathName"
+                                    value-key="id"
+                                    placeholder="Search placement level..."
+                                    :disabled="!placementForm.department_id"
+                                />
                             </div>
                         </div>
 
@@ -1498,18 +1514,17 @@ const downloadChart = async () => {
                                         class="text-[10px] font-black uppercase tracking-wider text-amber-600 hover:underline"
                                     >+ New Team</button>
                                 </div>
-                                <select
+                                <Autocomplete
                                     v-model="vacantForm.department_node_id"
+                                    :options="[
+                                        { id: '', fullPathName: 'Top Level (Department Only)' },
+                                        ...flattenNodes(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes || [])
+                                    ]"
+                                    label-key="fullPathName"
+                                    value-key="id"
+                                    placeholder="Search placement level..."
                                     :disabled="!vacantForm.department_id"
-                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 disabled:bg-gray-100"
-                                >
-                                    <option value="">Top Level (Department Only)</option>
-                                    <template v-if="vacantForm.department_id">
-                                        <template v-for="node in flattenNodes(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes || [])" :key="node.id">
-                                            <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
-                                        </template>
-                                    </template>
-                                </select>
+                                />
                             </div>
                         </div>
 
@@ -1619,7 +1634,7 @@ const downloadChart = async () => {
                                         :openCreateNode="openCreateNode"
                                         :openEditNode="openEditNode"
                                         :deleteNode="deleteNode"
-                                        :openAssignUserModal="openAssignUserModal"
+                                        :openTeamAssignUserModal="openTeamAssignUserModal"
                                     />
                                 </div>
                             </template>

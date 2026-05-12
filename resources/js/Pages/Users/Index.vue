@@ -436,12 +436,16 @@ const updatePassword = () => {
                         </div>
                         <div v-if="createForm.department_id">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement (Optional)</label>
-                            <select v-model="createForm.department_node_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                <option value="">Top Level (Department Only)</option>
-                                <template v-for="node in flattenNodes(departmentOptions.find(d => Number(d.id) === Number(createForm.department_id))?.nodes || [])" :key="node.id">
-                                    <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
-                                </template>
-                            </select>
+                            <Autocomplete
+                                v-model="createForm.department_node_id"
+                                :options="[
+                                    { id: '', fullPathName: 'Top Level (Department Only)' },
+                                    ...flattenNodes(departmentOptions.find(d => Number(d.id) === Number(createForm.department_id))?.nodes || [])
+                                ]"
+                                label-key="fullPathName"
+                                value-key="id"
+                                placeholder="Search placement level..."
+                            />
                         </div>
                         <div v-if="createForm.department_id && !createForm.department_node_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
                             You have selected a Department. Team placement is optional.
@@ -544,12 +548,16 @@ const updatePassword = () => {
                         </div>
                         <div v-if="editForm.department_id">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team / Placement (Optional)</label>
-                            <select v-model="editForm.department_node_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100">
-                                <option value="">Top Level (Department Only)</option>
-                                <template v-for="node in flattenNodes(departmentOptions.find(d => Number(d.id) === Number(editForm.department_id))?.nodes || [])" :key="node.id">
-                                    <option :value="node.id">{{ ' '.repeat(node.level * 2) }}{{ node.name }}</option>
-                                </template>
-                            </select>
+                            <Autocomplete
+                                v-model="editForm.department_node_id"
+                                :options="[
+                                    { id: '', fullPathName: 'Top Level (Department Only)' },
+                                    ...flattenNodes(departmentOptions.find(d => Number(d.id) === Number(editForm.department_id))?.nodes || [])
+                                ]"
+                                label-key="fullPathName"
+                                value-key="id"
+                                placeholder="Search placement level..."
+                            />
                         </div>
                         <div v-if="editForm.department_id && !editForm.department_node_id" class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
                             You have selected a Department. Team placement is optional.
