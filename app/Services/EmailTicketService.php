@@ -71,8 +71,8 @@ class EmailTicketService
             $count = 0;
             $errors = [];
             foreach ($messages as $message) {
-                Log::debug("EmailTicketService: Checking message: " . $message->getSubject());
                 try {
+                    Log::debug("EmailTicketService: Checking message: " . $message->getSubject());
                     if ($this->processMessage($message)) {
                         $count++;
                     }
@@ -677,9 +677,23 @@ class EmailTicketService
     protected function decodeMimeHeader($string)
     {
         if (!$string) return '';
-        
-        // iconv_mime_decode is robust for handling various charsets and malformed strings.
-        return iconv_mime_decode($string, 0, 'UTF-8') ?: $string;
+
+        // If no MIME-encoded words are present the string is already plain text —
+        // just ensure it is valid UTF-8 and return it directly.
+        if (strpos($string, '=?') === false) {
+            return mb_convert_encoding($string, 'UTF-8', 'UTF-8');
+        }
+
+        // ICONV_MIME_DECODE_CONTINUE_ON_ERROR substitutes illegal chars with '?'
+        // instead of aborting, so malformed/mixed-charset subjects do not crash the loop.
+        $decoded = iconv_mime_decode($string, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8');
+
+        if ($decoded !== false && $decoded !== '') {
+            return $decoded;
+        }
+
+        // Final fallback — mb extension handles a wider variety of charsets.
+        return mb_decode_mimeheader($string) ?: $string;
     }
 
     protected function ticketAttachmentStoragePath(string $originalName): string
