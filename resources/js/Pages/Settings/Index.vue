@@ -1,13 +1,13 @@
 <script setup>
-import { ref, computed } from 'vue';
-import { Head, useForm, router } from '@inertiajs/vue3';
+import { ref, computed, onMounted } from 'vue';
+import { Head, useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
 import draggable from 'vuedraggable';
-import { useSidebarOrder, SECTION_LABELS, CHILD_LABELS, DEFAULT_SECTION_ORDER, DEFAULT_CHILD_ORDER } from '@/Composables/useSidebarOrder.js';
+import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import {
     Cog6ToothIcon,
     EnvelopeIcon,
@@ -48,7 +48,9 @@ const tabs = [
 ];
 
 // Sidebar layout drag state
-const { state: sidebarState, init: initSidebar, serialize: serializeSidebar, reset: resetSidebarOrder, updateSectionLabel, updateChildLabel, getSectionLabel, getChildLabel } = useSidebarOrder();
+const { state: sidebarState, init: initSidebar, serialize: serializeSidebar, reset: resetSidebarOrder, updateSectionLabel, updateChildLabel, getSectionLabel, getChildLabel, ensureDynamicFormChildren } = useSidebarOrder();
+const settingsPage = usePage();
+const dynamicForms = computed(() => settingsPage.props.dynamicForms || []);
 
 // Initialize sidebar state from props
 const rawLayout = props.settings.sidebar_layout;
@@ -63,6 +65,9 @@ if (rawLayout) {
 } else {
     initSidebar(null);
 }
+
+// Make active Form Builder menus available in the Services sub-item editor.
+ensureDynamicFormChildren(dynamicForms.value);
 
 const sectionItems = ref(
     sidebarState.sections.map(id => ({ id, label: getSectionLabel(id) }))
@@ -123,10 +128,15 @@ const saveSidebarLayout = () => {
 
 const resetSidebarLayout = () => {
     resetSidebarOrder();
+    ensureDynamicFormChildren(dynamicForms.value);
     sectionItems.value = sidebarState.sections.map(id => ({ id, label: getSectionLabel(id) }));
     expandedSidebarSection.value = null;
     expandedChildItems.value = [];
 };
+
+onMounted(() => {
+    ensureDynamicFormChildren(dynamicForms.value);
+});
 
 const currentTab = computed(() => tabs.find(t => t.id === activeTab.value) || tabs[0]);
 

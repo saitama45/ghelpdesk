@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     HomeIcon,
@@ -39,7 +39,7 @@ const visibleDynamicForms = computed(() => {
     return dynamicForms.value.filter(form => hasPermission(form.slug + '.view'));
 });
 const { currentStatus, init: initPresence, destroy: destroyPresence } = usePresence();
-const { init: initSidebar, getSectionOrder, getChildOrder, getSectionLabel, getChildLabel } = useSidebarOrder();
+const { init: initSidebar, getSectionOrder, getChildOrder, getSectionLabel, getChildLabel, ensureDynamicFormChildren } = useSidebarOrder();
 
 const route = window.route;
 
@@ -75,10 +75,18 @@ const collapsedFlyoutLinkClass = (isActive) => [
 
 const so = (s) => ({ order: getSectionOrder(s) });
 const co = (s, c) => ({ order: getChildOrder(s, c) });
+const dynamicFormChildId = (form) => 'form-' + form.slug;
+const dynamicFormLabel = (form) => {
+    const childId = dynamicFormChildId(form);
+    const label = getChildLabel('services', childId);
+
+    return label === childId ? form.name : label;
+};
 
 onMounted(() => {
     initPresence();
     initSidebar(page.props.sidebarLayout);
+    ensureDynamicFormChildren(dynamicForms.value);
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
@@ -104,6 +112,10 @@ onMounted(() => {
 
 onUnmounted(() => {
     destroyPresence();
+});
+
+watch(dynamicForms, (forms) => {
+    ensureDynamicFormChildren(forms);
 });
 
 const canSeeAdminTask = computed(() => {
@@ -279,8 +291,8 @@ const canSeeSettings = computed(() => {
                             <div style="order: 998">
                                 <Link :href="route('dynamic-form.list')" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.list'))">All Dynamic Forms</Link>
                             </div>
-                            <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" style="order: 999">
-                                <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ form.name }}</Link>
+                            <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" :style="co('services', dynamicFormChildId(form))">
+                                <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ dynamicFormLabel(form) }}</Link>
                             </div>
                         </div>
                     </div>
@@ -301,8 +313,8 @@ const canSeeSettings = computed(() => {
                         <div style="order: 998">
                             <Link :href="route('dynamic-form.list')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.list') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>All Dynamic Forms</span></Link>
                         </div>
-                        <div v-for="form in visibleDynamicForms" :key="form.slug" style="order: 999">
-                            <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ form.name }}</span></Link>
+                        <div v-for="form in visibleDynamicForms" :key="form.slug" :style="co('services', dynamicFormChildId(form))">
+                            <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ dynamicFormLabel(form) }}</span></Link>
                         </div>
                     </div>
                 </div>

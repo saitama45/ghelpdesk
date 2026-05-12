@@ -186,6 +186,34 @@ export function useSidebarOrder() {
         _state.customChildLabels[sectionId][childId] = label
     }
 
+    const ensureChild = (sectionId, childId, label = null) => {
+        if (!_state.children[sectionId]) {
+            _state.children[sectionId] = []
+        }
+
+        if (!_state.children[sectionId].includes(childId)) {
+            _state.children[sectionId].push(childId)
+        }
+
+        if (label) {
+            if (!_state.customChildLabels[sectionId]) {
+                _state.customChildLabels[sectionId] = {}
+            }
+
+            if (!Object.prototype.hasOwnProperty.call(_state.customChildLabels[sectionId], childId)) {
+                _state.customChildLabels[sectionId][childId] = label
+            }
+        }
+    }
+
+    const ensureDynamicFormChildren = (forms = []) => {
+        forms.forEach((form) => {
+            if (!form?.slug) return
+
+            ensureChild('services', 'form-' + form.slug, form.name)
+        })
+    }
+
     const serialize = () => {
         return {
             sections: [..._state.sections],
@@ -208,6 +236,7 @@ export function useSidebarOrder() {
         getChildLabel,
         updateSectionLabel,
         updateChildLabel,
+        ensureDynamicFormChildren,
         serialize,
         reset 
     }
