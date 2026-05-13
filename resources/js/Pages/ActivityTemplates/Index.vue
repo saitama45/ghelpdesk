@@ -136,7 +136,7 @@
         </div>
 
         <!-- Create/Edit Modal -->
-        <Modal :show="showModal" @close="closeModal" maxWidth="6xl">
+        <Modal :show="showModal" @close="closeModal" maxWidth="6xl" :closeable="false">
             <div class="p-6">
                 <div class="flex justify-between items-center mb-6 border-b pb-4">
                     <div>
@@ -285,11 +285,12 @@
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                        <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider">Σ {{ subTaskLeadTimeSum(act) }} days</span>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex justify-center gap-1">
-                                                            <button 
-                                                                type="button" 
+                                                            <button
+                                                                type="button"
                                                                 @click="addSubActivity(act)"
                                                                 class="text-blue-400 hover:text-blue-700 transition-colors p-1"
                                                                 title="Add Sub-task"
@@ -327,10 +328,20 @@
                                                         </div>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <span class="block rounded bg-white px-2 py-1 text-xs font-bold text-gray-500 ring-1 ring-gray-100">{{ act.department || '-' }}</span>
+                                                        <select v-model="subTask.department"
+                                                                class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500"
+                                                                @change="handleSubTaskDepartmentChange(subTask)">
+                                                            <option value="">None</option>
+                                                            <option v-for="department in departmentOptions" :key="department.name" :value="department.name">{{ department.name }}</option>
+                                                        </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <span class="block rounded bg-white px-2 py-1 text-xs font-bold text-gray-500 ring-1 ring-gray-100">{{ act.sub_unit || '-' }}</span>
+                                                        <select v-model="subTask.sub_unit"
+                                                                class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500"
+                                                                :disabled="!subTask.department">
+                                                            <option value="">None</option>
+                                                            <option v-for="subUnit in subUnitsForDepartment(subTask.department)" :key="subUnit" :value="subUnit">{{ subUnit }}</option>
+                                                        </select>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="subTask.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
@@ -361,10 +372,7 @@
                         <div v-if="form.errors.activities" class="text-sm text-red-600">{{ form.errors.activities }}</div>
                     </div>
 
-                    <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-                        <SecondaryButton @click="closeModal">
-                            Cancel
-                        </SecondaryButton>
+                    <div class="flex justify-end pt-6 border-t mt-6">
                         <PrimaryButton type="submit" :disabled="form.processing" class="bg-blue-600 hover:bg-blue-700">
                             {{ isEditing ? 'Update Template' : 'Create Template' }}
                         </PrimaryButton>
@@ -385,7 +393,6 @@ import TextInput from '@/Components/TextInput.vue'
 import InputLabel from '@/Components/InputLabel.vue'
 import InputError from '@/Components/InputError.vue'
 import PrimaryButton from '@/Components/PrimaryButton.vue'
-import SecondaryButton from '@/Components/SecondaryButton.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
@@ -434,6 +441,7 @@ const currentTemplate = ref(null)
 const activityInputs = ref([])
 let clientKeySequence = 1
 
+
 const makeClientKey = () => `activity-${Date.now()}-${clientKeySequence++}`
 
 const createActivityRow = (overrides = {}) => ({
@@ -476,6 +484,7 @@ const openCreateModal = () => {
     form.reset()
     form.store_class = selectedClass.value
     form.activities = [createActivityRow()]
+
     showModal.value = true
 }
 
@@ -666,6 +675,34 @@ const removeActivity = (activity) => {
         form.activities = [createActivityRow()]
     }
 }
+
+const subTaskLeadTimeSum = (activity) => {
+    return form.activities
+        .filter(a => a.parent_client_key === activity.client_key)
+        .reduce((sum, a) => sum + (Number(a.default_duration_days) || 0), 0)
+}
+
+watch(
+    () => form.activities.map(a => ({ key: a.parent_client_key, days: a.default_duration_days })),
+    () => {
+        form.activities.forEach(activity => {
+            if (!activity.parent_client_key) {
+                const subs = form.activities.filter(a => a.parent_client_key === activity.client_key)
+                if (subs.length) {
+                    activity.default_duration_days = subs.reduce((sum, a) => sum + (Number(a.default_duration_days) || 0), 0)
+                }
+            }
+        })
+    },
+    { deep: true }
+)
+
+const handleSubTaskDepartmentChange = (subTask) => {
+    if (!subUnitsForDepartment(subTask.department).includes(subTask.sub_unit)) {
+        subTask.sub_unit = ''
+    }
+}
+
 
 const submitForm = () => {
     const transformPayload = (data) => ({

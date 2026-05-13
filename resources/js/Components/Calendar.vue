@@ -508,6 +508,9 @@ const closeDayModal = () => {
 const formatDateLong = (date) => {
     return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
 };
+
+const hideTimeStatuses = new Set(['SL', 'VL', 'Restday', 'N/A']);
+const shouldShowTime = (status) => !hideTimeStatuses.has(status);
 </script>
 
 <template>
@@ -712,10 +715,10 @@ const formatDateLong = (date) => {
                                 </div>
                                 <div v-if="getEventStatus(event, day.date).isStart" class="opacity-90 font-medium truncate flex justify-between">
                                     <span>{{ event.status }}</span>
-                                    <span class="text-[9px]">{{ formatTime(event.start_time) }}</span>
+                                    <span v-if="shouldShowTime(event.status)" class="text-[9px]">{{ formatTime(event.start_time) }}</span>
                                 </div>
                                 <div
-                                    v-if="getActualTimesForDate(event, day.date).actual_time_in || getActualTimesForDate(event, day.date).actual_time_out"
+                                    v-if="shouldShowTime(event.status) && (getActualTimesForDate(event, day.date).actual_time_in || getActualTimesForDate(event, day.date).actual_time_out)"
                                     class="flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-bold opacity-95 leading-tight"
                                 >
                                     <span v-if="getActualTimesForDate(event, day.date).actual_time_in">
@@ -800,10 +803,10 @@ const formatDateLong = (date) => {
                                 <span class="text-[11px] font-bold truncate">{{ item.event.user?.name }}</span>
                             </div>
                             <span class="text-[10px] opacity-90 truncate">{{ item.event.status }}</span>
-                            <span class="text-[9px] opacity-75">{{ formatTime(item.event.start_time) }} – {{ formatTime(item.event.end_time) }}</span>
+                            <span v-if="shouldShowTime(item.event.status)" class="text-[9px] opacity-75">{{ formatTime(item.event.start_time) }} – {{ formatTime(item.event.end_time) }}</span>
                             <p v-if="item.event.store" class="text-[9px] opacity-75 italic truncate">@ {{ item.event.store.name }}</p>
                             <div
-                                v-if="getActualTimesForDate(item.event, currentDayDate).actual_time_in || getActualTimesForDate(item.event, currentDayDate).actual_time_out"
+                                v-if="shouldShowTime(item.event.status) && (getActualTimesForDate(item.event, currentDayDate).actual_time_in || getActualTimesForDate(item.event, currentDayDate).actual_time_out)"
                                 class="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] font-bold opacity-95 leading-tight"
                             >
                                 <span v-if="getActualTimesForDate(item.event, currentDayDate).actual_time_in">
@@ -870,13 +873,13 @@ const formatDateLong = (date) => {
                                                 :class="getChipColor(event).split(' ')[0]"
                                             >{{ String(event.ticket.priority).toUpperCase() }}</span>
                                         </div>
-                                        <span class="text-[10px] font-medium text-gray-400 shrink-0 ml-2">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
+                                        <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 shrink-0 ml-2">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
                                     </div>
                                     <p class="text-xs text-gray-500 font-medium">
                                         {{ event.status }}<span v-if="event.ticket" class="ml-1 text-gray-400">[{{ event.ticket.ticket_key }}]</span>
                                     </p>
                                     <p v-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
-                                    <div v-if="getActualTimesForDate(event, selectedDayDate).actual_time_in || getActualTimesForDate(event, selectedDayDate).actual_time_out"
+                                    <div v-if="shouldShowTime(event.status) && (getActualTimesForDate(event, selectedDayDate).actual_time_in || getActualTimesForDate(event, selectedDayDate).actual_time_out)"
                                          class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold">
                                         <span v-if="getActualTimesForDate(event, selectedDayDate).actual_time_in" class="text-emerald-600">
                                             Actual In: {{ formatTime(getActualTimesForDate(event, selectedDayDate).actual_time_in) }}
