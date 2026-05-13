@@ -266,28 +266,27 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
     private function departmentOptions(): array
     {
-        return User::active()
-            ->whereNotNull('department')
-            ->where('department', '!=', '')
-            ->whereNotNull('org_path')
-            ->where('org_path', '!=', '')
-            ->orderBy('department')
-            ->orderBy('org_path')
-            ->get(['department', 'org_path'])
-            ->groupBy(fn (User $user) => trim((string) $user->department))
-            ->map(fn ($users, string $department) => [
-                'name' => $department,
-                'sub_units' => $users
-                    ->pluck('org_path')
-                    ->map(fn ($orgPath) => trim((string) $orgPath))
-                    ->filter()
-                    ->unique()
-                    ->sort()
-                    ->values()
-                    ->all(),
-            ])
-            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values()
-            ->all();
+        $departments = \App\Models\Department::where('is_active', true)->orderBy('name')->get();
+        $allNodes = \App\Models\DepartmentNode::where('is_active', true)->get();
+
+        return $departments->map(function ($dept) use ($allNodes) {
+            $deptNodes = $allNodes->where('department_id', $dept->id);
+            
+            $subUnits = $deptNodes->map(function ($node) use ($allNodes) {
+                $pathParts = [];
+                $current = $node;
+                while ($current) {
+                    array_unshift($pathParts, $current->name);
+                    $parentId = $current->parent_id;
+                    $current = $parentId ? $allNodes->firstWhere('id', $parentId) : null;
+                }
+                return implode(' > ', $pathParts);
+            })->filter()->unique()->sort()->values()->all();
+
+            return [
+                'name' => $dept->name,
+                'sub_units' => $subUnits,
+            ];
+        })->values()->all();
     }
 }
