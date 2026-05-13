@@ -149,6 +149,12 @@ const userOptions = computed(() =>
     }))
 )
 
+const isChecklistForm = computed(() => props.form.workflow_type === 'checklist')
+
+const checklistSourceFieldKey = computed(() =>
+    schema.fields.find(f => f.checklist_source && f.key !== editingField.value?.key)?.key ?? null
+)
+
 const blankField = () => ({
     key: '',
     label: '',
@@ -167,6 +173,8 @@ const blankField = () => ({
     _dependentOptions: false,
     _dependsOnField: '',
     has_option_approvers: false,
+    checklist_source: false,
+    checklist_assignees: [],
 })
 
 const blankOption = () => ({
@@ -263,6 +271,19 @@ const saveField = () => {
     }
     delete f._dependentOptions
     delete f._dependsOnField
+
+    if (!['radio', 'checkbox_group'].includes(f.type)) {
+        f.checklist_source = false
+        f.checklist_assignees = []
+    }
+    if (f.checklist_source) {
+        schema.fields.forEach(field => {
+            if (field.key !== f.key) {
+                field.checklist_source = false
+                field.checklist_assignees = []
+            }
+        })
+    }
 
     if (editingIndex.value === null) {
         f.sort_order = activeFields.value.length + 1
@@ -663,6 +684,38 @@ watch(() => schema.fields.map(f => `${f.key}:${(f.options || []).map(o => o.valu
                                                 Selected checkbox options can replace the normal request-type approvers level by level. Unconfigured levels still fall back to the default approval matrix.
                                             </p>
                                         </div>
+                                        <!-- Connect to Checklist (only for radio/checkbox_group in checklist-type forms) -->
+                                        <template v-if="isChecklistForm && ['radio', 'checkbox_group'].includes(editingField.type)">
+                                            <div class="p-3 rounded-2xl border border-teal-100 bg-teal-50/50">
+                                                <label class="flex items-center gap-2 cursor-pointer select-none mb-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        v-model="editingField.checklist_source"
+                                                        :disabled="!!checklistSourceFieldKey"
+                                                        class="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                                    />
+                                                    <span class="text-xs font-bold text-gray-700">
+                                                        Use as Checklist Source
+                                                        <span class="text-gray-400 font-normal">(each selected option becomes a task)</span>
+                                                    </span>
+                                                </label>
+                                                <p v-if="checklistSourceFieldKey" class="text-[11px] text-amber-600 font-medium mb-2">
+                                                    Another field (<span class="font-mono">{{ checklistSourceFieldKey }}</span>) is already the checklist source.
+                                                </p>
+                                                <template v-if="editingField.checklist_source">
+                                                    <label class="block text-[10px] font-black text-teal-700 uppercase tracking-wider mb-1">Default Task Assignees</label>
+                                                    <MultiAutocomplete
+                                                        v-model="editingField.checklist_assignees"
+                                                        :options="userOptions"
+                                                        label-key="name"
+                                                        value-key="id"
+                                                        placeholder="Search and assign task owners..."
+                                                        :limit="4"
+                                                    />
+                                                    <p class="text-[11px] text-teal-600 mt-2">These users are assigned to all dynamically generated tasks. This replaces the form's static task matrix.</p>
+                                                </template>
+                                            </div>
+                                        </template>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-wider">Options</label>
                                         <div class="space-y-3">
                                             <div

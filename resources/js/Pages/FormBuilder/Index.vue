@@ -61,6 +61,12 @@ const form = reactive({
 
 const isChecklist = computed(() => form.workflow_type === 'checklist')
 
+const checklistSourceField = computed(() => {
+    if (form.workflow_type !== 'checklist') return null
+    const fields = currentForm.value?.form_schema?.fields ?? []
+    return fields.find(f => f.checklist_source) ?? null
+})
+
 const userOptions = computed(() => {
     return (props.users ?? []).map(user => ({
         id: user.id,
@@ -431,53 +437,70 @@ const openFieldBuilder = (formData) => {
                         </div>
 
                         <div v-if="form.approval_levels > 0" class="space-y-4">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">
-                                        {{ isChecklist ? 'Task Assignments' : 'Default Approval Matrix' }}
-                                    </label>
-                                    <p class="text-xs text-gray-500 ml-1">
-                                        {{ isChecklist ? 'Assign task owners for each step. Tasks can be completed in any order.' : 'Assign one or more approvers for each level. Steps are processed sequentially.' }}
-                                    </p>
+                            <!-- Dynamic checklist notice (replaces static editor when a field is connected) -->
+                            <div v-if="isChecklist && checklistSourceField" class="p-4 rounded-2xl border border-teal-200 bg-teal-50 space-y-2">
+                                <div class="flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                    </svg>
+                                    <span class="text-sm font-black text-teal-800">Dynamic Tasks from Field: <span class="font-mono text-teal-700">{{ checklistSourceField.label }}</span></span>
                                 </div>
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100">
-                                    {{ form.approval_levels }} {{ isChecklist ? 'Task' : 'Level' }}{{ form.approval_levels > 1 ? 's' : '' }}
-                                </span>
+                                <p class="text-xs text-teal-700">Task names are generated at submission time based on what the user selects in the "<strong>{{ checklistSourceField.label }}</strong>" field. The static task matrix is not used.</p>
+                                <div v-if="checklistSourceField.checklist_assignees?.length" class="text-xs text-teal-600">
+                                    {{ checklistSourceField.checklist_assignees.length }} default assignee(s) configured.
+                                </div>
                             </div>
 
-                            <div class="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                <div
-                                    v-for="level in form.approver_matrix"
-                                    :key="level.level"
-                                    class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4"
-                                >
-                                    <div class="flex items-center justify-between gap-3 mb-3">
-                                        <div>
-                                            <p class="text-sm font-black text-gray-900">
-                                                {{ isChecklist ? 'Task' : 'Level' }} {{ level.level }}
-                                            </p>
-                                            <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black">
-                                                {{ level.user_ids.length }} {{ isChecklist ? 'assignee' : 'approver' }}{{ level.user_ids.length !== 1 ? 's' : '' }}
-                                            </p>
+                            <!-- Static task editor (when no dynamic source) -->
+                            <template v-else>
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">
+                                            {{ isChecklist ? 'Task Assignments' : 'Default Approval Matrix' }}
+                                        </label>
+                                        <p class="text-xs text-gray-500 ml-1">
+                                            {{ isChecklist ? 'Assign task owners for each step. Tasks can be completed in any order.' : 'Assign one or more approvers for each level. Steps are processed sequentially.' }}
+                                        </p>
+                                    </div>
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100">
+                                        {{ form.approval_levels }} {{ isChecklist ? 'Task' : 'Level' }}{{ form.approval_levels > 1 ? 's' : '' }}
+                                    </span>
+                                </div>
+
+                                <div class="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                    <div
+                                        v-for="level in form.approver_matrix"
+                                        :key="level.level"
+                                        class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4"
+                                    >
+                                        <div class="flex items-center justify-between gap-3 mb-3">
+                                            <div>
+                                                <p class="text-sm font-black text-gray-900">
+                                                    {{ isChecklist ? 'Task' : 'Level' }} {{ level.level }}
+                                                </p>
+                                                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black">
+                                                    {{ level.user_ids.length }} {{ isChecklist ? 'assignee' : 'approver' }}{{ level.user_ids.length !== 1 ? 's' : '' }}
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <div v-if="isChecklist" class="mb-4">
-                                        <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Task Name</label>
-                                        <input v-model="level.name" type="text" placeholder="e.g. Document Verification, Physical Inspection..."
-                                               class="block w-full px-3 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xs font-bold transition-all">
-                                    </div>
+                                        <div v-if="isChecklist" class="mb-4">
+                                            <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Task Name</label>
+                                            <input v-model="level.name" type="text" placeholder="e.g. Document Verification, Physical Inspection..."
+                                                   class="block w-full px-3 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xs font-bold transition-all">
+                                        </div>
 
-                                    <MultiAutocomplete
-                                        v-model="level.user_ids"
-                                        :options="userOptions"
-                                        label-key="name"
-                                        value-key="id"
-                                        placeholder="Search and assign..."
-                                        :limit="4"
-                                    />
+                                        <MultiAutocomplete
+                                            v-model="level.user_ids"
+                                            :options="userOptions"
+                                            label-key="name"
+                                            value-key="id"
+                                            placeholder="Search and assign..."
+                                            :limit="4"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                            </template>
                         </div>
 
                         <div class="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">

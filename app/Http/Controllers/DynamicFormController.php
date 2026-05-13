@@ -105,6 +105,16 @@ class DynamicFormController extends Controller
         // Use RequestType approval levels if available, otherwise fallback to FormDefinition
         $approvalLevels = $requestType ? $requestType->approval_levels : $formDefinition->approval_levels;
 
+        // For checklist forms: check if a field is connected as checklist source
+        if ($formDefinition->workflow_type === 'checklist') {
+            $formSchema = $formDefinition->form_schema ?? [];
+            $dynamicTasks = $this->resolveDynamicChecklistTasks($formSchema, $data['form_data'] ?? []);
+            if ($dynamicTasks !== null) {
+                $approvalLevels = count($dynamicTasks);
+                $saveData['_checklist_tasks'] = $dynamicTasks;
+            }
+        }
+
         $status = $approvalLevels > 0 ? 'Open' : 'Approved';
         $currentLevel = $approvalLevels > 0 ? 1 : 0;
 
@@ -229,6 +239,42 @@ class DynamicFormController extends Controller
         $record->delete();
 
         return redirect()->back()->with('success', 'Record deleted successfully');
+    }
+
+    private function resolveDynamicChecklistTasks(array $formSchema, array $formData): ?array
+    {
+        $fields = $formSchema['fields'] ?? [];
+        $sourceField = null;
+        foreach ($fields as $field) {
+            if (!empty($field['checklist_source'])) {
+                $sourceField = $field;
+                break;
+            }
+        }
+        if (!$sourceField) return null;
+
+        $fieldKey = $sourceField['key'];
+        $assignees = $sourceField['checklist_assignees'] ?? [];
+        $selectedValues = $formData[$fieldKey] ?? [];
+        if (!is_array($selectedValues)) {
+            $selectedValues = ($selectedValues !== null && $selectedValues !== '') ? [$selectedValues] : [];
+        }
+
+        $optionMap = [];
+        foreach ($sourceField['options'] ?? [] as $opt) {
+            $optionMap[$opt['value']] = $opt['label'];
+        }
+
+        $tasks = [];
+        $level = 1;
+        foreach ($selectedValues as $val) {
+            $tasks[] = [
+                'level'     => $level++,
+                'name'      => $optionMap[$val] ?? $val,
+                'assignees' => $assignees,
+            ];
+        }
+        return $tasks ?: null;
     }
 
     private function storeFileUploads($form, $data)

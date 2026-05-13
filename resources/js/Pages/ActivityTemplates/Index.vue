@@ -45,6 +45,12 @@
                                 >
                                     Office
                                 </button>
+                                <button
+                                    @click="filterByClass('Department Store (DS)')"
+                                    :class="[selectedClass === 'Department Store (DS)' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
+                                >
+                                    DS
+                                </button>
                                 </nav>
                             <button 
                                 v-if="hasPermission('activity_templates.create')"
@@ -89,6 +95,10 @@
                                 <span v-else-if="template.store_class === 'Office'" class="px-2.5 py-1 bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
                                     <BuildingOfficeIcon class="w-3 h-3 mr-1" />
                                     Office
+                                </span>
+                                <span v-else-if="template.store_class === 'Department Store (DS)'" class="px-2.5 py-1 bg-rose-50 text-rose-700 border-rose-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                    <BuildingOfficeIcon class="w-3 h-3 mr-1" />
+                                    DS
                                 </span>
                                 <span v-else class="px-2.5 py-1 bg-slate-50 text-slate-600 border-slate-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
                                     <DocumentTextIcon class="w-3 h-3 mr-1" />
@@ -183,6 +193,7 @@
                                 <option value="Kitchen">Kitchen Only</option>
                                 <option value="Both">Both (Regular & Kitchen)</option>
                                 <option value="Office">Office Store</option>
+                                <option value="Department Store (DS)">Department Store (DS)</option>
                             </select>
                             <InputError :message="form.errors.store_class" class="mt-1" />
                         </div>
