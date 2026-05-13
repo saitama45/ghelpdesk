@@ -146,9 +146,17 @@ class StockTransferController extends Controller
         $originLocation = $this->normalizeStoreCode($validated['origin_location']);
         $locationVariants = $this->locationVariants($originLocation);
 
-        $soh = (int) InventoryTransaction::where('asset_id', $asset->id)
-            ->whereIn('location', $locationVariants)
-            ->sum('quantity');
+        $soh = (int) InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
+            ->whereIn('inventory_transactions.location', $locationVariants)
+            ->leftJoin('stock_ins as si_soh', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
+                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where(function ($q) {
+                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                  ->orWhere('si_soh.status', 'Posted');
+            })
+            ->sum('inventory_transactions.quantity');
 
         $excludeTransferIds = array_filter(
             (array) $request->input('exclude_transfer_ids', []),

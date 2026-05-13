@@ -967,9 +967,17 @@ class StockInController extends Controller
 
     protected function inventorySoh(int $assetId, string $location): int
     {
-        return (int) InventoryTransaction::where('asset_id', $assetId)
-            ->where('location', $this->normalizeStoreCode($location))
-            ->sum('quantity');
+        return (int) InventoryTransaction::where('inventory_transactions.asset_id', $assetId)
+            ->where('inventory_transactions.location', $this->normalizeStoreCode($location))
+            ->leftJoin('stock_ins as si_soh', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
+                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where(function ($q) {
+                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                  ->orWhere('si_soh.status', 'Posted');
+            })
+            ->sum('inventory_transactions.quantity');
     }
 
     protected function isInternalTransferLocation(?string $location): bool

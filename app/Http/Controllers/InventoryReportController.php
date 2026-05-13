@@ -98,6 +98,10 @@ class InventoryReportController extends Controller implements HasMiddleware
                 $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
                      ->where('inventory_transactions.reference_type', '=', StockIn::class);
             })
+            ->where(function ($q) {
+                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                  ->orWhere('stock_ins.status', 'Posted');
+            })
             ->leftJoin('users', 'inventory_transactions.created_by', '=', 'users.id')
             ->select(
                 'inventory_transactions.transaction_type',

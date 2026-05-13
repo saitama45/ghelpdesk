@@ -6,6 +6,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -22,7 +23,7 @@ const props = defineProps({
     cannedMessages: Array,
     filters: Object,
     departments: Array,
-    sub_units: Array,
+    hierarchicalDepartments: Array,
 });
 
 const page = usePage();
@@ -124,7 +125,11 @@ const normalizeAssigneeFilterValue = (value) => {
 };
 
 const filterStatus = ref(normalizeFilterValues(props.filters?.status, defaultStatusFilters(), normalizeStringFilterValue));
-const filterSubUnit = ref(normalizeFilterValues(props.filters?.sub_unit, [], normalizeStringFilterValue));
+const filterNodeId = ref(
+    props.filters?.department_node_id
+        ? props.filters.department_node_id
+        : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
+)
 const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [], normalizeAssigneeFilterValue));
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
@@ -146,9 +151,22 @@ const statusOptions = computed(() => {
     return filterOptions.map(opt => ({ id: opt.value, name: opt.label }));
 });
 
-const subUnitOptions = computed(() => {
-    return (props.sub_units || []).map(u => ({ id: u, name: u }));
-});
+const hierarchicalOptions = computed(() =>
+    (props.hierarchicalDepartments || []).map(dept => ({
+        ...dept,
+        id: `dept-${dept.id}`,
+        children: dept.nodes || []
+    }))
+)
+
+const deptFilterParams = computed(() => {
+    const nodeId = filterNodeId.value
+    if (!nodeId) return {}
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        return { department_id: nodeId.replace('dept-', '') }
+    }
+    return { department_node_id: nodeId }
+})
 
 const assigneeOptions = computed(() => {
     return (props.staff || []).map(s => ({ id: s.id, name: s.name }));
@@ -156,17 +174,13 @@ const assigneeOptions = computed(() => {
 
 const ticketFilterParams = () => ({
     status: filterStatus.value,
-    sub_unit: filterSubUnit.value,
+    ...deptFilterParams.value,
     assignee_id: filterAssignee.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
-
-const subUnits = computed(() => {
-    return props.sub_units || [];
-});
 
 const applyFilter = () => {
     router.get(route('tickets.index'), {
@@ -198,11 +212,6 @@ const handleStatusFilterChange = (value) => {
     applyFilter();
 };
 
-const handleSubUnitFilterChange = (value) => {
-    filterSubUnit.value = normalizeFilterValues(value, [], normalizeStringFilterValue);
-    applyFilter();
-};
-
 const handleAssigneeFilterChange = (value) => {
     filterAssignee.value = normalizeFilterValues(value, [], normalizeAssigneeFilterValue);
     applyFilter();
@@ -210,7 +219,7 @@ const handleAssigneeFilterChange = (value) => {
 
 const clearFilters = () => {
     filterStatus.value = defaultStatusFilters();
-    filterSubUnit.value = [];
+    filterNodeId.value = '';
     filterAssignee.value = [];
     filterStartDate.value = '';
     filterEndDate.value = '';
@@ -936,8 +945,17 @@ const activeFilterBadges = computed(() => {
     if (selectedStatuses.length) {
         badges.push(`Status: ${formatFilterBadgeValues(selectedStatuses, getStatusLabel)}`);
     }
-    if (filterSubUnit.value.length) {
-        badges.push(`Sub-Unit: ${formatFilterBadgeValues(filterSubUnit.value)}`);
+    if (filterNodeId.value) {
+        const nodeLabel = filterNodeId.value.toString().startsWith('dept-')
+            ? (props.hierarchicalDepartments || []).find(d => String(d.id) === filterNodeId.value.replace('dept-', ''))?.name ?? filterNodeId.value
+            : (function findName(nodes) {
+                for (const n of nodes) {
+                    if (String(n.id) === String(filterNodeId.value)) return n.name
+                    if (n.nodes?.length) { const f = findName(n.nodes); if (f) return f }
+                }
+                return filterNodeId.value
+              })(props.hierarchicalDepartments || [])
+        badges.push(`Sub-Unit: ${nodeLabel}`)
     }
     if (filterAssignee.value.length) {
         badges.push(`Assignee: ${formatFilterBadgeValues(filterAssignee.value, getAssigneeFilterLabel)}`);
@@ -1132,16 +1150,13 @@ watch(activeDashboardFilter, () => {
                                 />
                             </div>
 
-                            <div v-if="subUnitOptions.length > 0" class="flex flex-col gap-1.5">
+                            <div v-if="hierarchicalOptions.length > 0" class="flex flex-col gap-1.5">
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Sub-Unit</label>
-                                <MultiAutocomplete
-                                    :model-value="filterSubUnit"
-                                    :options="subUnitOptions"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Sub-Unit..."
-                                    :limit="1"
-                                    @update:modelValue="handleSubUnitFilterChange"
+                                <HierarchySelector
+                                    v-model="filterNodeId"
+                                    :nodes="hierarchicalOptions"
+                                    placeholder="All Departments / Teams..."
+                                    @update:modelValue="applyFilter"
                                 />
                             </div>
 

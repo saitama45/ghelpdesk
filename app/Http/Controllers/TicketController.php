@@ -26,6 +26,10 @@ use Inertia\Inertia;
 
 class TicketController extends Controller
 {
+    public function __construct(
+        private \App\Services\OrganizationReferenceService $organizationReferences
+    ) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -117,16 +121,20 @@ class TicketController extends Controller
             });
         }
 
-        // Apply Sub-Unit filter
-        $subUnitFilters = $normalizeFilterValues($request->input('sub_unit'));
-        if ($subUnitFilters->isNotEmpty()) {
-            $query->whereHas('assignee', function ($q) use ($subUnitFilters) {
-                $q->where(function ($orQ) use ($subUnitFilters) {
-                    foreach ($subUnitFilters->all() as $val) {
-                        $orQ->orWhere('org_path', 'like', '%'.$val.'%');
-                    }
-                });
-            });
+        // Apply Department / Team filter
+        $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
+        $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
+
+        if (!$filterDeptId && !$filterNodeId) {
+            $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
+        }
+
+        if ($filterNodeId) {
+            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
+            $nodeIds = array_merge([$filterNodeId], $descendantIds);
+            $query->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
+        } elseif ($filterDeptId) {
+            $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
         }
 
         // Apply Assignee filter
@@ -170,7 +178,6 @@ class TicketController extends Controller
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
-        $subUnits = User::whereNotNull('org_path')->distinct()->orderBy('org_path')->pluck('org_path');
 
         $vendors = collect([['id' => null, 'name' => 'None']])
             ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
@@ -183,11 +190,12 @@ class TicketController extends Controller
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
             'departments' => $departments,
-            'sub_units' => $subUnits,
+            'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'filters' => [
                 'status' => $statusFilters->all(),
                 'search' => $request->search,
-                'sub_unit' => $subUnitFilters->all(),
+                'department_id' => $filterDeptId,
+                'department_node_id' => $filterNodeId,
                 'assignee_id' => $assigneeFilters->all(),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
