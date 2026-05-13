@@ -41,6 +41,21 @@ class ScheduleExportController extends Controller
         })->values();
     }
 
+    private function applyDeptFilter($query, Request $request, bool $onUser = false): void
+    {
+        if ($request->filled('department_node_id')) {
+            $nodeId = (int) $request->department_node_id;
+            $ids = array_merge([$nodeId], \App\Models\DepartmentNode::getAllDescendantIds($nodeId));
+            $onUser
+                ? $query->whereIn('department_node_id', $ids)
+                : $query->whereHas('user', fn($q) => $q->whereIn('department_node_id', $ids));
+        } elseif ($request->filled('department_id')) {
+            $onUser
+                ? $query->where('department_id', $request->department_id)
+                : $query->whereHas('user', fn($q) => $q->where('department_id', $request->department_id));
+        }
+    }
+
     public function pdf(Request $request)
     {
         if ($request->input('view') === 'report') {
@@ -64,6 +79,7 @@ class ScheduleExportController extends Controller
             }
 
             $query = User::active();
+            $this->applyDeptFilter($query, $request, onUser: true);
 
             if ($request->filled('sub_unit')) {
                 $query->where('org_path', 'like', '%'.$request->sub_unit.'%');
@@ -252,6 +268,8 @@ class ScheduleExportController extends Controller
         $query = Schedule::with(['user', 'scheduleStores.store'])
             ->orderBy('start_time', 'asc');
 
+        $this->applyDeptFilter($query, $request, onUser: false);
+
         // Date range
         if ($request->filled('start') && $request->filled('end')) {
             $start = Carbon::parse($request->start)->startOfDay();
@@ -401,6 +419,7 @@ class ScheduleExportController extends Controller
             : [now()->year - 1, now()->year, now()->year + 1];
 
         $pivotUsersQuery = User::whereNotNull('org_path')->orderBy('org_path')->orderBy('name');
+        $this->applyDeptFilter($pivotUsersQuery, $request, onUser: true);
         if ($request->filled('sub_unit')) {
             $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }

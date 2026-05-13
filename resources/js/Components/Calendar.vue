@@ -129,13 +129,9 @@ const toggleAllPriorities = () => {
 const allEventsByDate = computed(() => {
     const grouped = new Map()
     for (const event of props.events) {
-        let cursor = parseDateKey(toDateKey(event.start_time))
-        const end = parseDateKey(toDateKey(event.end_time))
-        while (cursor <= end) {
-            const key = toDateKey(cursor)
+        for (const key of getEventDateKeys(event)) {
             if (!grouped.has(key)) grouped.set(key, new Set())
             grouped.get(key).add(event.user_id)
-            cursor.setDate(cursor.getDate() + 1)
         }
     }
     return grouped
@@ -253,6 +249,23 @@ const parseDateKey = (key) => {
     return new Date(year, month - 1, day);
 };
 
+const getEventDateKeys = (event) => {
+    if (event.calendar_date_key) {
+        return [event.calendar_date_key];
+    }
+
+    const keys = [];
+    let cursor = parseDateKey(toDateKey(event.start_time));
+    const end = parseDateKey(toDateKey(event.end_time));
+
+    while (cursor <= end) {
+        keys.push(toDateKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return keys;
+};
+
 const sortEvents = (events) => {
     return [...events].sort((a, b) => {
         const priorityRank = { urgent: 1, high: 2, medium: 3, low: 4 };
@@ -323,14 +336,9 @@ const eventsByDate = computed(() => {
     const grouped = new Map();
 
     for (const event of filteredEvents.value) {
-        let cursor = parseDateKey(toDateKey(event.start_time));
-        const end = parseDateKey(toDateKey(event.end_time));
-
-        while (cursor <= end) {
-            const key = toDateKey(cursor);
+        for (const key of getEventDateKeys(event)) {
             if (!grouped.has(key)) grouped.set(key, []);
             grouped.get(key).push(event);
-            cursor.setDate(cursor.getDate() + 1);
         }
     }
 

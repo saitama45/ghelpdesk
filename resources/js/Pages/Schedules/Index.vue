@@ -106,6 +106,16 @@
                             <span class="text-xs font-bold uppercase tracking-widest">Filters</span>
                         </div>
 
+                        <!-- Department / Team filter -->
+                        <div class="w-full sm:w-80">
+                            <HierarchySelector
+                                v-model="filterNodeId"
+                                :nodes="hierarchicalOptions"
+                                placeholder="All Departments / Teams"
+                                @update:modelValue="applyFilter"
+                            />
+                        </div>
+
                         <!-- Sub-Unit filter -->
                         <div class="w-full sm:w-56" v-if="subUnitOptions.length > 1">
                             <Autocomplete
@@ -965,6 +975,7 @@ import { router, usePage, useRemember, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import HierarchySelector from '@/Components/HierarchySelector.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -974,6 +985,10 @@ const props = defineProps({
     schedules: Array,
     users: Array,
     stores: Array,
+    departmentNodes: Array,
+    departments: Array,
+    activeDepartments: Array,
+    hierarchicalDepartments: Array,
     pivotYears: Array,
     availableYears: Array,
     pivotStatuses: Array,
@@ -1087,8 +1102,34 @@ const initialRange = props.filters?.start && props.filters?.end
     : getMonthRange()
 
 const filterUser = useRemember(props.filters?.user_id || '', 'schedules.filterUser')
+const filterDepartment = useRemember(props.filters?.department_id || '', 'schedules.filterDepartment')
+const filterNodeId = useRemember(
+    props.filters?.department_node_id
+        ? props.filters.department_node_id
+        : (props.filters?.department_id ? `dept-${props.filters.department_id}` : ''),
+    'schedules.filterNodeId'
+)
 const filterSubUnit = useRemember(props.filters?.sub_unit || '', 'schedules.filterSubUnit')
 const filterStore = useRemember(props.filters?.store_id || '', 'schedules.filterStore')
+
+watch(filterDepartment, () => {
+    filterUser.value = ''
+    filterSubUnit.value = ''
+    filterNodeId.value = ''
+})
+
+watch(filterNodeId, () => {
+    filterUser.value = ''
+    filterSubUnit.value = ''
+})
+
+const hierarchicalOptions = computed(() => {
+    return (props.hierarchicalDepartments || []).map(dept => ({
+        ...dept,
+        id: `dept-${dept.id}`,
+        children: dept.nodes || []
+    }));
+});
 
 // These filters are synced with the Calendar component
 const filterStatus = useRemember(
@@ -1115,6 +1156,20 @@ const reportTitle = computed(() => {
 })
 const currentView = useRemember('calendar', 'schedules.currentView')
 const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
+
+const getDescendantNodeIds = (nodeId, nodes) => {
+    if (!nodeId || !nodes) return [];
+    const children = nodes.filter(n => Number(n.parent_id) === Number(nodeId));
+    let ids = children.map(c => Number(c.id));
+    children.forEach(c => {
+        ids = ids.concat(getDescendantNodeIds(c.id, nodes));
+    });
+    return ids;
+}
+
+const authUserDescendantNodeIds = computed(() => {
+    return getDescendantNodeIds(authUser.value?.department_node_id, props.departmentNodes);
+});
 
 const calendarUsers = computed(() => {
     const authDeptId = page.props.auth?.user?.department_id
@@ -1184,6 +1239,16 @@ const calendarSchedules = computed(() => {
 const pivotData = ref([])
 const isPivotLoading = ref(false)
 
+// Resolves filterNodeId into the right department_id / department_node_id params
+const deptFilterParams = computed(() => {
+    const nodeId = filterNodeId.value
+    if (!nodeId) return {}
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        return { department_id: nodeId.replace('dept-', '') }
+    }
+    return { department_node_id: nodeId }
+})
+
 const fetchPivotData = async () => {
     if (isPivotLoading.value) return
     isPivotLoading.value = true
@@ -1192,6 +1257,8 @@ const fetchPivotData = async () => {
         selectedReportYears.value.forEach(y => params.append('report_years[]', y))
         if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
         if (filterStore.value)   params.set('store_id', filterStore.value)
+        if (deptFilterParams.value.department_id)      params.set('department_id', deptFilterParams.value.department_id)
+        if (deptFilterParams.value.department_node_id) params.set('department_node_id', deptFilterParams.value.department_node_id)
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
         const res = await fetch(`/schedules/report-data?${params}`, {
@@ -1225,6 +1292,8 @@ const fetchMissingSchedulesData = async (page = 1) => {
         params.set('page', page)
         if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
         if (filterUser.value)    params.set('user_id', filterUser.value)
+        if (deptFilterParams.value.department_id)      params.set('department_id', deptFilterParams.value.department_id)
+        if (deptFilterParams.value.department_node_id) params.set('department_node_id', deptFilterParams.value.department_node_id)
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
         const res = await fetch(`/schedules/missing-schedules?${params}`, {
@@ -1268,6 +1337,8 @@ const fetchCompleteSchedulesData = async (page = 1) => {
         if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
         if (filterUser.value)    params.set('user_id', filterUser.value)
         if (filterStore.value)   params.set('store_id', filterStore.value)
+        if (deptFilterParams.value.department_id)      params.set('department_id', deptFilterParams.value.department_id)
+        if (deptFilterParams.value.department_node_id) params.set('department_node_id', deptFilterParams.value.department_node_id)
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
         const res = await fetch(`/schedules/complete-schedules?${params}`, {
@@ -1307,10 +1378,20 @@ const authUser = computed(() => page.props.auth.user)
 const isManager = computed(() => !!authUser.value?.is_manager)
 
 // Users available to a manager in the schedule form:
-// the manager themselves + their direct subordinates
+// the manager themselves + their direct subordinates (explicit or hierarchical)
 const subordinateUsers = computed(() => {
     const all = props.users ?? []
-    const subs = all.filter(u => u.managers?.some(m => Number(m.id) === Number(authUser.value?.id)))
+    const descendantNodeIds = authUserDescendantNodeIds.value;
+
+    const subs = all.filter(u => {
+        // 1. Explicitly reports to
+        const isDirectReport = u.managers?.some(m => Number(m.id) === Number(authUser.value?.id));
+        // 2. Or is in a descendant node
+        const isHierarchyReport = u.department_node_id && descendantNodeIds.includes(Number(u.department_node_id));
+
+        return isDirectReport || isHierarchyReport;
+    })
+
     const self = all.find(u => Number(u.id) === Number(authUser.value?.id))
     // Prepend self if not already in the subordinates list
     if (self && !subs.some(u => Number(u.id) === Number(authUser.value?.id))) {
@@ -1335,13 +1416,27 @@ const storeSelectOptions = computed(() => {
 })
 
 const subUnitOptions = computed(() => {
-    const units = props.users
+    let users = props.users || [];
+    if (filterDepartment.value) {
+        users = users.filter(u => Number(u.department_id) === Number(filterDepartment.value));
+    }
+    const units = users
         .map(u => u.sub_unit)
         .filter(u => u && u.trim() !== '')
     const unique = [...new Set(units)].sort()
     return [
         { id: '', name: 'All Sub-Units' },
         ...unique.map(u => ({ id: u, name: u }))
+    ]
+})
+
+const departmentFilterOptions = computed(() => {
+    return [
+        { id: '', name: 'All Departments' },
+        ...(props.departments || []).map(d => ({
+            id: d.id,
+            name: d.is_active ? d.name : `${d.name} (Inactive)`
+        }))
     ]
 })
 
@@ -1352,7 +1447,12 @@ const userFilterOptions = computed(() => {
         { id: 'my', name: 'My Schedules' }
     ]
     
-    props.users.forEach(user => {
+    let users = props.users || [];
+    if (filterDepartment.value) {
+        users = users.filter(u => Number(u.department_id) === Number(filterDepartment.value));
+    }
+
+    users.forEach(user => {
         if (Number(user.id) !== Number(currentUserId)) {
             options.push({ id: user.id, name: user.name })
         }
@@ -1362,10 +1462,16 @@ const userFilterOptions = computed(() => {
 })
 
 const applyFilter = () => {
+    const nodeId = filterNodeId.value;
+    const isDept = typeof nodeId === 'string' && nodeId.startsWith('dept-');
+    const actualId = isDept ? nodeId.replace('dept-', '') : nodeId;
+
     router.get(route('schedules.index'), {
         start: visibleRange.value.start,
         end: visibleRange.value.end,
         user_id: filterUser.value,
+        department_id: isDept ? actualId : '',
+        department_node_id: (!isDept && nodeId) ? actualId : '',
         sub_unit: filterSubUnit.value,
         store_id: filterStore.value,
         report_years: selectedReportYears.value
@@ -1393,10 +1499,16 @@ const handleVisibleRangeChange = (range) => {
 
     visibleRange.value = range
 
+    const nodeId = filterNodeId.value;
+    const isDept = typeof nodeId === 'string' && nodeId.startsWith('dept-');
+    const actualId = isDept ? nodeId.replace('dept-', '') : nodeId;
+
     router.get(route('schedules.index'), {
         start: range.start,
         end: range.end,
         user_id: filterUser.value,
+        department_id: isDept ? actualId : '',
+        department_node_id: (!isDept && nodeId) ? actualId : '',
         sub_unit: filterSubUnit.value,
         store_id: filterStore.value,
         report_years: selectedReportYears.value
@@ -1467,6 +1579,8 @@ const exportPdf = () => {
     if (currentView.value !== 'report' && filterUser.value) {
         params.user_id = filterUser.value;
     }
+    if (deptFilterParams.value.department_id)      params.department_id      = deptFilterParams.value.department_id;
+    if (deptFilterParams.value.department_node_id) params.department_node_id = deptFilterParams.value.department_node_id;
     if (filterSubUnit.value) params.sub_unit = filterSubUnit.value;
     if (filterStore.value && currentView.value === 'calendar') params.store_id = filterStore.value;
 
@@ -1914,8 +2028,9 @@ const handleEventClick = (payload) => {
     // Check if the current user is a manager of the user who owns this schedule
     const scheduleUser = props.users.find(u => Number(u.id) === Number(event.user_id));
     const isDirectManager = scheduleUser?.managers?.some(m => Number(m.id) === Number(user.id));
+    const isHierarchySubordinate = scheduleUser?.department_node_id && authUserDescendantNodeIds.value.includes(Number(scheduleUser.department_node_id));
     
-    const canEdit = isOwner || isAdmin || isDirectManager;
+    const canEdit = isOwner || isAdmin || isDirectManager || isHierarchySubordinate;
 
     isEditing.value = true; // Signifies we are interacting with an existing record
     isViewingOnly.value = true; // Always start in View mode

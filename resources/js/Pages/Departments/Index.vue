@@ -801,7 +801,7 @@ const openCreateNode = (type, parent = null) => {
     nodeParent.value = parent
     editingNode.value = null
     nodeForm.reset()
-    nodeForm.parent_id = type === 'node' && parent && (parent.department_id || parent.id) ? (parent.id || '') : ''
+    nodeForm.parent_id = type === 'node' && parent && parent.department_id ? (parent.id || '') : ''
     nodeForm.name = ''
     nodeForm.description = ''
     nodeForm.is_active = true

@@ -50,9 +50,9 @@ const clearSelection = (event) => {
 
 // Find node by ID in the tree
 const findNode = (nodes, id) => {
-    if (!id) return null;
+    if (id === null || id === undefined || id === '') return null;
     for (const node of nodes) {
-        if (Number(node.id) === Number(id)) return node;
+        if (String(node.id) === String(id)) return node;
         if (node.children?.length) {
             const found = findNode(node.children, id);
             if (found) return found;
@@ -68,7 +68,7 @@ const expandToSelected = () => {
 
     const findAndExpandAncestors = (nodes) => {
         for (const node of nodes) {
-            if (Number(node.id) === Number(props.modelValue)) return true;
+            if (String(node.id) === String(props.modelValue)) return true;
             if (node.children?.length) {
                 if (findAndExpandAncestors(node.children)) {
                     expandedStates.value[node.id] = true;

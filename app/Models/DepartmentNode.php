@@ -64,4 +64,15 @@ class DepartmentNode extends Model
     {
         return $this->hasMany(User::class, 'department_node_id');
     }
+
+    public static function getAllDescendantIds(int $parentId): array
+    {
+        $ids = [];
+        $children = static::where('parent_id', $parentId)->pluck('id')->all();
+        foreach ($children as $childId) {
+            $ids[] = $childId;
+            $ids = array_merge($ids, static::getAllDescendantIds($childId));
+        }
+        return $ids;
+    }
 }

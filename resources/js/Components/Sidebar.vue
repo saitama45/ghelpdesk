@@ -465,7 +465,7 @@ const canSeeSettings = computed(() => {
                                 <Link :href="route('companies.index')" :class="collapsedFlyoutLinkClass(route().current('companies.*'))">{{ getChildLabel('references', 'companies') }}</Link>
                             </div>
                             <div v-if="hasPermission('departments.view')" :style="co('references', 'departments')">
-                                <Link :href="route('departments.index')" :class="collapsedFlyoutLinkClass(route().current('departments.*'))">{{ getChildLabel('references', 'departments') }}</Link>
+                                <Link :href="route('departments.index')" :class="collapsedFlyoutLinkClass(route().current('departments.*'))">Departments</Link>
                             </div>
                             <div v-if="hasPermission('clusters.view')" :style="co('references', 'clusters')">
                                 <Link :href="route('clusters.index')" :class="collapsedFlyoutLinkClass(route().current('clusters.*'))">{{ getChildLabel('references', 'clusters') }}</Link>
@@ -502,7 +502,7 @@ const canSeeSettings = computed(() => {
                             <Link :href="route('companies.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('companies.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'companies') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('departments.view')" :style="co('references', 'departments')">
-                            <Link :href="route('departments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'departments') }}</span></Link>
+                            <Link :href="route('departments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('departments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>Departments</span></Link>
                         </div>
                         <div v-if="hasPermission('clusters.view')" :style="co('references', 'clusters')">
                             <Link :href="route('clusters.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('clusters.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('references', 'clusters') }}</span></Link>

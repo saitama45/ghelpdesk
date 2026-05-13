@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
 use App\Models\Schedule;
 use App\Models\ScheduleStore;
 use App\Models\AttendanceLog;
@@ -24,6 +25,10 @@ use Illuminate\Validation\ValidationException;
 
 class ScheduleController extends Controller implements HasMiddleware
 {
+    public function __construct(
+        private \App\Services\OrganizationReferenceService $organizationReferences
+    ) {}
+
     private function buildActualTimesByDate($logs): array
     {
         return collect($logs)
@@ -76,6 +81,22 @@ class ScheduleController extends Controller implements HasMiddleware
 
         $query->where('start_time', '<=', $rangeEnd)
             ->where('end_time', '>=', $rangeStart);
+
+        $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
+        $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
+
+        // Default to the authenticated user's department on first load
+        if (!$filterDeptId && !$filterNodeId) {
+            $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
+        }
+
+        if ($filterNodeId) {
+            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
+            $nodeIds = array_merge([$filterNodeId], $descendantIds);
+            $query->whereHas('user', fn($q) => $q->whereIn('department_node_id', $nodeIds));
+        } elseif ($filterDeptId) {
+            $query->whereHas('user', fn($q) => $q->where('department_id', $filterDeptId));
+        }
 
         if ($request->filled('user_id')) {
             if ($request->user_id === 'my') {
@@ -192,6 +213,9 @@ class ScheduleController extends Controller implements HasMiddleware
         
         $users = User::active()->with(['managers:id', 'departmentReference:id,code,name'])->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $departmentNodes = \App\Models\DepartmentNode::select('id', 'parent_id', 'department_id', 'name')->get();
+        $departments = Department::orderBy('name')->get(['id', 'name', 'is_active']);
+        $activeDepartments = $departments->where('is_active', true)->values();
 
         // Pivot report metadata (cheap — just year lists, no schedule data)
         $currentYear = (int)date('Y');
@@ -220,14 +244,20 @@ class ScheduleController extends Controller implements HasMiddleware
             'schedules'      => $schedules,
             'users'          => $users,
             'stores'         => $stores,
+            'departmentNodes'=> $departmentNodes,
+            'departments'    => $departments,
+            'activeDepartments' => $activeDepartments,
+            'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'pivotYears'     => $selectedYears,
             'availableYears' => $availableYears,
             'pivotStatuses'  => $pivotStatuses,
             'filters'        => array_merge(
                 $request->only(['user_id', 'report_years', 'sub_unit', 'store_id', 'status', 'priority']),
                 [
+                    'department_id'      => $filterDeptId  ?? '',
+                    'department_node_id' => $filterNodeId  ?? '',
                     'start' => $rangeStart->toDateString(),
-                    'end' => $rangeEnd->toDateString(),
+                    'end'   => $rangeEnd->toDateString(),
                 ]
             ),
         ]);
@@ -1067,6 +1097,21 @@ class ScheduleController extends Controller implements HasMiddleware
         return $expanded;
     }
 
+    private function applyDeptFilter($query, Request $request, bool $onUser = false): void
+    {
+        if ($request->filled('department_node_id')) {
+            $nodeId = (int) $request->department_node_id;
+            $ids = array_merge([$nodeId], \App\Models\DepartmentNode::getAllDescendantIds($nodeId));
+            $onUser
+                ? $query->whereIn('department_node_id', $ids)
+                : $query->whereHas('user', fn($q) => $q->whereIn('department_node_id', $ids));
+        } elseif ($request->filled('department_id')) {
+            $onUser
+                ? $query->where('department_id', $request->department_id)
+                : $query->whereHas('user', fn($q) => $q->where('department_id', $request->department_id));
+        }
+    }
+
     public function reportData(Request $request)
     {
         $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
@@ -1077,6 +1122,7 @@ class ScheduleController extends Controller implements HasMiddleware
             : [2024, 2025, 2026];
 
         $pivotUsersQuery = User::whereNotNull('org_path')->orderBy('org_path')->orderBy('name');
+        $this->applyDeptFilter($pivotUsersQuery, $request, onUser: true);
         if ($request->filled('sub_unit')) {
             $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }
@@ -1643,6 +1689,7 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         $query = User::active();
+        $this->applyDeptFilter($query, $request, onUser: true);
 
         if ($request->filled('sub_unit')) {
             $query->where('org_path', 'like', '%'.$request->sub_unit.'%');
@@ -1745,6 +1792,7 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         $query = User::active();
+        $this->applyDeptFilter($query, $request, onUser: true);
 
         if ($request->filled('sub_unit')) {
             $query->where('org_path', 'like', '%'.$request->sub_unit.'%');
