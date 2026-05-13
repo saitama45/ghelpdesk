@@ -236,6 +236,38 @@
                         </div>
                     </div>
 
+                    <!-- Barcode scan strip (edit mode only) -->
+                    <div v-if="!readOnly" class="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                        <svg class="w-5 h-5 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m0 14v1M4.22 4.22l.707.707M18.364 18.364l.707.707M1 12h1m20 0h1M4.22 19.778l.707-.707M18.364 5.636l.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z" />
+                        </svg>
+                        <svg class="w-5 h-5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h2M3 10h2M3 15h2M3 20h2M8 5h1M8 10h1M8 15h1M8 20h1M14 5h2M14 20h2M20 5h1M20 10h1M20 15h1M20 20h1" />
+                        </svg>
+                        <input
+                            ref="scanInputRef"
+                            v-model="scanInput"
+                            @keydown.enter.prevent="handleScan()"
+                            @paste="handlePaste"
+                            placeholder="Scan barcode or serial number and press Enter..."
+                            class="flex-1 rounded-lg border-gray-200 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                        <transition name="fade">
+                            <span v-if="scanFeedback"
+                                :class="scanFeedback.type === 'success' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'"
+                                class="px-2 py-1 rounded-lg text-xs font-black whitespace-nowrap">
+                                {{ scanFeedback.message }}
+                            </span>
+                        </transition>
+                    </div>
+
+                    <!-- Scan progress -->
+                    <p v-if="!readOnly" class="text-xs font-bold text-gray-500">
+                        Verified: {{ verifiedIds.size }} / {{ itemRows.length }} items
+                    </p>
+
                     <!-- Items grouped by asset -->
                     <template v-for="group in groupedItems" :key="group.asset.id">
                         <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
@@ -252,7 +284,7 @@
                                         <tr>
                                             <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Serial / Barcode</th>
                                             <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500">Transferred</th>
-                                            <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500">Received</th>
+                                            <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500">Verified</th>
                                             <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Condition</th>
                                             <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Damage / Notes</th>
                                         </tr>
@@ -265,13 +297,18 @@
                                             </td>
                                             <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ row.transferred_quantity }}</td>
                                             <td class="px-4 py-2 text-right">
-                                                <input v-if="!readOnly"
-                                                    type="number"
-                                                    v-model.number="row.received_quantity"
-                                                    :min="0"
-                                                    :max="row.transferred_quantity"
-                                                    class="w-20 text-right rounded-md border-gray-300 shadow-sm text-sm font-bold focus:ring-blue-500 focus:border-blue-500"
-                                                >
+                                                <template v-if="!readOnly">
+                                                    <span v-if="verifiedIds.has(row.id)"
+                                                        class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-black text-green-700">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        1
+                                                    </span>
+                                                    <span v-else class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-black text-gray-400">
+                                                        Pending
+                                                    </span>
+                                                </template>
                                                 <span v-else class="text-sm font-bold text-gray-900">{{ row.received_quantity }}</span>
                                             </td>
                                             <td class="px-4 py-2">
@@ -316,7 +353,11 @@
                         <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
                             {{ readOnly ? 'Close' : 'Cancel' }}
                         </button>
-                        <button v-if="!readOnly" type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700" :disabled="processing">
+                        <button v-if="!readOnly" type="submit"
+                            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            :disabled="processing || verifiedIds.size === 0"
+                            :title="verifiedIds.size === 0 ? 'Scan at least one item to save.' : ''"
+                        >
                             Save Changes
                         </button>
                     </div>
@@ -327,7 +368,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -396,7 +437,47 @@ const headerInfo = reactive({
 const form = reactive({
     remarks: '',
 })
-const itemRows = ref([]) // flat list of receiving rows with editable received_quantity / condition / damage_notes
+const itemRows = ref([]) // flat list of receiving rows
+
+// Barcode scanner state
+const verifiedIds   = ref(new Set())
+const scanInput     = ref('')
+const scanFeedback  = ref(null)
+const scanInputRef  = ref(null)
+
+const scanLookup = computed(() => {
+    const map = new Map()
+    itemRows.value.forEach(row => {
+        if (row.barcode)   map.set(row.barcode.trim().toLowerCase(),   row.id)
+        if (row.serial_no) map.set(row.serial_no.trim().toLowerCase(), row.id)
+    })
+    return map
+})
+
+const handleScan = (overrideValue) => {
+    const value = (overrideValue ?? scanInput.value).trim()
+    if (!value) return
+
+    const rowId = scanLookup.value.get(value.toLowerCase())
+    if (rowId) {
+        verifiedIds.value = new Set([...verifiedIds.value, rowId])
+        scanFeedback.value = { type: 'success', message: '✓ Verified' }
+    } else {
+        scanFeedback.value = { type: 'error', message: 'Barcode not found in this receiving.' }
+    }
+
+    scanInput.value = ''
+    nextTick(() => scanInputRef.value?.focus())
+    setTimeout(() => { scanFeedback.value = null }, 2500)
+}
+
+const handlePaste = (e) => {
+    e.preventDefault()
+    const pasted = (e.clipboardData || window.clipboardData).getData('text')
+    if (!pasted.trim()) return
+    scanInput.value = pasted
+    setTimeout(() => handleScan(), 400)
+}
 
 const groupedItems = computed(() => {
     const map = new Map()
@@ -451,7 +532,17 @@ const closeModal = () => {
     showModal.value = false
     readOnly.value = false
     itemRows.value = []
+    verifiedIds.value = new Set()
+    scanInput.value = ''
+    scanFeedback.value = null
 }
+
+watch(showModal, async (open) => {
+    if (open && !readOnly.value) {
+        await nextTick()
+        scanInputRef.value?.focus()
+    }
+})
 
 const submitForm = () => {
     // Group by asset_id for payload
@@ -460,7 +551,7 @@ const submitForm = () => {
         if (!byAsset.has(row.asset_id)) byAsset.set(row.asset_id, [])
         byAsset.get(row.asset_id).push({
             id: row.id,
-            received_quantity: Math.max(0, Math.min(row.received_quantity ?? 0, row.transferred_quantity)),
+            received_quantity: verifiedIds.value.has(row.id) ? row.transferred_quantity : 0,
             condition: row.condition,
             damage_notes: row.condition === 'Good' ? null : (row.damage_notes || null),
         })

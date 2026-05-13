@@ -203,7 +203,7 @@ const exportToExcel = (type) => {
 <template>
     <Head title="Dashboard - Help Desk" />
 
-    <AppLayout>
+    <AppLayout content-class="w-full px-4 sm:px-6 lg:px-8">
         <template #header>
             <h2 class="text-xl font-bold text-gray-900">Dashboard</h2>
         </template>
