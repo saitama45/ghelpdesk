@@ -616,7 +616,7 @@ const unplacedUsers = computed(() => {
 const managerOptions = computed(() => {
     return (props.users || [])
         .filter(user => user.is_active && user.is_manager && Number(user.id) !== Number(placementForm.user_id || 0))
-        .map(user => ({ id: user.id, name: user.name }))
+        .map(user => ({ id: Number(user.id), name: user.name }))
 })
 
 const activeDepartmentOptions = computed(() => props.activeDepartments || [])

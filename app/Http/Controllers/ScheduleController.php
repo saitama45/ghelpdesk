@@ -326,12 +326,10 @@ class ScheduleController extends Controller implements HasMiddleware
         // Authorization Logic
         $isOwner = (int) $schedule->user_id === (int) $user->id;
         $isAdmin = $user->hasRole('Admin');
-        
-        // Check if the current user is a manager of the user who owns the schedule
-        $isDirectManager = $schedule->user->managers()->where('manager_id', $user->id)->exists();
-        
-        if (!$isOwner && !$isAdmin && !$isDirectManager) {
-            abort(403, 'You are not authorized to edit this schedule. Only the owner or their assigned manager can edit.');
+        $isOrgChartSubordinate = in_array($schedule->user_id, $this->getTransitiveSubordinateIds($user->id));
+
+        if (!$isOwner && !$isAdmin && !$isOrgChartSubordinate) {
+            abort(403, 'You are not authorized to edit this schedule.');
         }
 
         $request->validate([
@@ -1981,5 +1979,28 @@ class ScheduleController extends Controller implements HasMiddleware
         );
 
         return response()->json($paginatedResults);
+    }
+
+    private function getTransitiveSubordinateIds(int $userId): array
+    {
+        $pairs = \DB::table('manager_user')->get(['manager_id', 'user_id']);
+
+        $subMap = [];
+        foreach ($pairs as $pair) {
+            $subMap[$pair->manager_id][] = $pair->user_id;
+        }
+
+        $visited = [];
+        $queue = [$userId];
+        while (!empty($queue)) {
+            $current = array_shift($queue);
+            foreach ($subMap[$current] ?? [] as $subId) {
+                if (!in_array($subId, $visited)) {
+                    $visited[] = $subId;
+                    $queue[] = $subId;
+                }
+            }
+        }
+        return $visited;
     }
 }

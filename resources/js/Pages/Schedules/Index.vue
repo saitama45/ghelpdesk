@@ -1171,6 +1171,30 @@ const authUserDescendantNodeIds = computed(() => {
     return getDescendantNodeIds(authUser.value?.department_node_id, props.departmentNodes);
 });
 
+const orgChartSubordinateIds = computed(() => {
+    const users = props.users ?? []
+    const subMap = new Map()
+    users.forEach(u => {
+        ;(u.managers || []).forEach(m => {
+            const mId = Number(m.id)
+            if (!subMap.has(mId)) subMap.set(mId, [])
+            subMap.get(mId).push(Number(u.id))
+        })
+    })
+    const visited = new Set()
+    const queue = [Number(authUser.value?.id)]
+    while (queue.length) {
+        const current = queue.shift()
+        for (const subId of (subMap.get(current) ?? [])) {
+            if (!visited.has(subId)) {
+                visited.add(subId)
+                queue.push(subId)
+            }
+        }
+    }
+    return visited
+})
+
 const calendarUsers = computed(() => {
     const authDeptId = page.props.auth?.user?.department_id
     if (!authDeptId) return (props.users ?? []).filter(u => !u.is_vacant)
@@ -1383,14 +1407,7 @@ const subordinateUsers = computed(() => {
     const all = props.users ?? []
     const descendantNodeIds = authUserDescendantNodeIds.value;
 
-    const subs = all.filter(u => {
-        // 1. Explicitly reports to
-        const isDirectReport = u.managers?.some(m => Number(m.id) === Number(authUser.value?.id));
-        // 2. Or is in a descendant node
-        const isHierarchyReport = u.department_node_id && descendantNodeIds.includes(Number(u.department_node_id));
-
-        return isDirectReport || isHierarchyReport;
-    })
+    const subs = all.filter(u => orgChartSubordinateIds.value.has(Number(u.id)))
 
     const self = all.find(u => Number(u.id) === Number(authUser.value?.id))
     // Prepend self if not already in the subordinates list
@@ -2025,12 +2042,8 @@ const handleEventClick = (payload) => {
     const isAdmin = user.roles?.some(r => r.name === 'Admin');
     const isOwner = Number(event.user_id) === Number(user.id);
     
-    // Check if the current user is a manager of the user who owns this schedule
-    const scheduleUser = props.users.find(u => Number(u.id) === Number(event.user_id));
-    const isDirectManager = scheduleUser?.managers?.some(m => Number(m.id) === Number(user.id));
-    const isHierarchySubordinate = scheduleUser?.department_node_id && authUserDescendantNodeIds.value.includes(Number(scheduleUser.department_node_id));
-    
-    const canEdit = isOwner || isAdmin || isDirectManager || isHierarchySubordinate;
+    const isOrgChartSubordinate = orgChartSubordinateIds.value.has(Number(event.user_id));
+    const canEdit = isOwner || isAdmin || isOrgChartSubordinate;
 
     isEditing.value = true; // Signifies we are interacting with an existing record
     isViewingOnly.value = true; // Always start in View mode
