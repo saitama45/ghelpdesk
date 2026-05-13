@@ -249,7 +249,7 @@
                             v-model="scanInput"
                             @keydown.enter.prevent="handleScan()"
                             @paste="handlePaste"
-                            placeholder="Scan barcode or serial number and press Enter..."
+                            placeholder="Scan barcode and press Enter"
                             class="flex-1 rounded-lg border-gray-200 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
                             autocomplete="off"
                             spellcheck="false"

@@ -13,12 +13,46 @@ const props = defineProps({
     logs: Object,
     users: Array,
     stores: Array,
+    workHoursSummary: Array,
     filters: Object,
 });
 
 const { formatDate } = useDateFormatter();
 const search = ref(props.filters?.search || '');
 const isLoading = ref(false);
+const activeTab = ref('logs');
+
+const formatMinutes = (mins) => {
+    const total = Math.abs(mins)
+    const h = Math.floor(total / 60)
+    const m = total % 60
+    return `${h}h ${m}m`
+}
+
+const formatDecimalHours = (mins) => {
+    return (Math.abs(mins) / 60).toFixed(2) + ' hrs'
+}
+
+// Detail modal state
+const detailModal = ref(false)
+const detailUser  = ref('')
+const detailMode  = ref('all')   // 'all' | 'present' | 'absent'
+const detailRows  = ref([])
+
+const filteredDetailRows = computed(() => {
+    if (detailMode.value === 'present') return detailRows.value.filter(r => r.is_present)
+    if (detailMode.value === 'absent')  return detailRows.value.filter(r => !r.is_present && r.scheduled_start)
+    return detailRows.value
+})
+
+const openDetail = (row, mode) => {
+    detailUser.value = row.name
+    detailMode.value = mode
+    detailRows.value = row.detail_dates || []
+    detailModal.value = true
+}
+
+const formatTime = (t) => t || '—'
 
 // Filters
 const filterSubUnit = ref(props.filters?.sub_unit || '');
@@ -253,7 +287,38 @@ const stopDrag = () => {
                 </div>
             </div>
 
+            <!-- Tab Bar (Ultra-Emphasis Segmented Control) -->
+            <div class="inline-flex p-2 bg-slate-100 rounded-[2rem] shadow-inner mb-4">
+                <button
+                    @click="activeTab = 'logs'"
+                    :class="[
+                        'inline-flex items-center gap-3 px-12 py-4 text-sm font-black transition-all duration-300 rounded-[1.75rem]',
+                        activeTab === 'logs' 
+                            ? 'bg-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05]' 
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-white'
+                    ]"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Logs</span>
+                </button>
+                <button
+                    @click="activeTab = 'work_hours'"
+                    :class="[
+                        'inline-flex items-center gap-3 px-12 py-4 text-sm font-black transition-all duration-300 rounded-[1.75rem]',
+                        activeTab === 'work_hours' 
+                            ? 'bg-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05]' 
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-white'
+                    ]"
+                >
+                    <ClockIcon class="w-5 h-5" />
+                    <span>Work Hours</span>
+                </button>
+            </div>
+
             <DataTable
+                v-if="activeTab === 'logs'"
                 title="Logs"
                 subtitle="View your time-in and time-out history"
                 v-model:search="search"
@@ -344,7 +409,134 @@ const stopDrag = () => {
                     </tr>
                 </template>
             </DataTable>
+
+            <!-- Work Hours Tab -->
+            <div v-if="activeTab === 'work_hours'" class="bg-white rounded-b-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100">
+                    <h2 class="text-base font-black text-gray-900">Work Hours Summary</h2>
+                    <p class="text-xs text-gray-500 mt-0.5">Based on scheduled shifts and actual time-in / time-out logs for the selected date range.</p>
+                </div>
+
+                <div v-if="!workHoursSummary || workHoursSummary.length === 0" class="px-6 py-12 text-center text-sm text-gray-400">
+                    No scheduled or logged data found for the selected date range.
+                </div>
+
+                <div v-else class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-100">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">User</th>
+                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. Days</th>
+                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Present</th>
+                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Absent</th>
+                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Scheduled Hrs</th>
+                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Hrs</th>
+                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Variance</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-50">
+                            <tr v-for="row in workHoursSummary" :key="row.user_id" class="hover:bg-gray-50 transition-colors">
+                                <td class="px-6 py-3 text-sm font-bold text-gray-900">{{ row.name }}</td>
+                                <td class="px-6 py-3 text-center">
+                                    <button @click="openDetail(row, 'all')" class="text-sm font-bold text-blue-600 hover:underline cursor-pointer">
+                                        {{ row.scheduled_days }}
+                                    </button>
+                                </td>
+                                <td class="px-6 py-3 text-center">
+                                    <button @click="openDetail(row, 'present')" class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-700 hover:bg-emerald-200 cursor-pointer">
+                                        {{ row.days_present }}
+                                    </button>
+                                </td>
+                                <td class="px-6 py-3 text-center">
+                                    <button
+                                        @click="openDetail(row, 'absent')"
+                                        :class="(row.scheduled_days - row.days_present) > 0 ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'"
+                                        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-black cursor-pointer"
+                                    >
+                                        {{ row.scheduled_days - row.days_present }}
+                                    </button>
+                                </td>
+                                <td class="px-6 py-3 text-right text-sm font-bold text-gray-700">
+                                    {{ formatMinutes(row.scheduled_minutes) }}
+                                </td>
+                                <td class="px-6 py-3 text-right text-sm font-bold text-gray-900">
+                                    {{ formatDecimalHours(row.actual_minutes) }}
+                                </td>
+                                <td class="px-6 py-3 text-right">
+                                    <span
+                                        :class="(row.actual_minutes - row.scheduled_minutes) >= 0 ? 'text-emerald-600' : 'text-red-600'"
+                                        class="text-sm font-black"
+                                    >
+                                        {{ (row.actual_minutes - row.scheduled_minutes) >= 0 ? '+' : '−' }}{{ formatDecimalHours(row.actual_minutes - row.scheduled_minutes) }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
+
+        <!-- Work Hours Detail Modal -->
+        <Modal :show="detailModal" @close="detailModal = false" max-width="2xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-base font-black text-gray-900">{{ detailUser }}</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            <span v-if="detailMode === 'all'">All scheduled dates</span>
+                            <span v-else-if="detailMode === 'present'">Days present</span>
+                            <span v-else>Days absent</span>
+                        </p>
+                    </div>
+                    <!-- Mode toggle -->
+                    <div class="flex gap-1 rounded-lg border border-gray-200 p-1 text-xs font-bold">
+                        <button @click="detailMode = 'all'"     :class="detailMode === 'all'     ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1 rounded-md transition-colors">All</button>
+                        <button @click="detailMode = 'present'" :class="detailMode === 'present' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1 rounded-md transition-colors">Present</button>
+                        <button @click="detailMode = 'absent'"  :class="detailMode === 'absent'  ? 'bg-red-600 text-white' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1 rounded-md transition-colors">Absent</button>
+                    </div>
+                </div>
+
+                <div class="overflow-hidden rounded-xl border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-100 text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. Start</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. End</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Time In</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Time Out</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-50 bg-white">
+                            <tr v-if="filteredDetailRows.length === 0">
+                                <td colspan="6" class="px-4 py-8 text-center text-gray-400 text-xs">No records.</td>
+                            </tr>
+                            <tr v-for="d in filteredDetailRows" :key="d.date" class="hover:bg-gray-50">
+                                <td class="px-4 py-2 font-bold text-gray-900">{{ d.date }}</td>
+                                <td class="px-4 py-2 text-center text-gray-600">{{ formatTime(d.scheduled_start) }}</td>
+                                <td class="px-4 py-2 text-center text-gray-600">{{ formatTime(d.scheduled_end) }}</td>
+                                <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_in ? 'text-emerald-700' : 'text-gray-300'">
+                                    {{ formatTime(d.actual_time_in) }}
+                                </td>
+                                <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_out ? 'text-blue-700' : 'text-gray-300'">
+                                    {{ formatTime(d.actual_time_out) }}
+                                </td>
+                                <td class="px-4 py-2 text-center">
+                                    <span v-if="d.is_present" class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">Present</span>
+                                    <span v-else class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700">Absent</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-4 flex justify-end">
+                    <SecondaryButton @click="detailModal = false">Close</SecondaryButton>
+                </div>
+            </div>
+        </Modal>
 
         <!-- Selfie Preview Modal -->
         <Modal :show="isPreviewOpen" @close="closePreview" maxWidth="2xl">

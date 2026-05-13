@@ -132,10 +132,13 @@ class AttendanceController extends Controller implements HasMiddleware
         $users = User::active()->orderBy('name')->get(['id', 'name', 'org_path']);
         $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
+        $workHoursSummary = $this->buildWorkHoursSummary($request, $dateFrom, $dateTo);
+
         return Inertia::render('Attendance/Logs', [
             'logs' => $logs,
             'users' => $users,
             'stores' => $stores,
+            'workHoursSummary' => $workHoursSummary,
             'filters' => [
                 'sub_unit' => $request->sub_unit,
                 'store_id' => $request->store_id,
@@ -251,6 +254,188 @@ class AttendanceController extends Controller implements HasMiddleware
         RateLimiter::clear($throttleKey);
 
         return redirect()->route('attendance.logs')->with('success', 'Successfully ' . ($type === 'time_in' ? 'Timed In' : 'Timed Out'));
+    }
+
+    private function buildWorkHoursSummary(Request $request, string $dateFrom, string $dateTo): array
+    {
+        $authUser = auth()->user();
+        $isPrivileged = $authUser->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) || $authUser->is_manager;
+
+        // --- Scheduled hours ---
+        $scheduleQuery = Schedule::whereIn('status', ['On-site', 'Off-site', 'WFH'])
+            ->where('start_time', '<=', $dateTo . ' 23:59:59')
+            ->where('end_time',   '>=', $dateFrom . ' 00:00:00')
+            ->with('user:id,name');
+
+        if (!$isPrivileged) {
+            $scheduleQuery->where('user_id', $authUser->id);
+        }
+
+        if ($request->filled('sub_unit')) {
+            $scheduleQuery->whereHas('user', fn($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
+        }
+
+        $schedules = $scheduleQuery->get();
+
+        $scheduledByUser = [];
+        foreach ($schedules as $s) {
+            if (!$s->user) continue;
+            $uid = $s->user_id;
+
+            if (!isset($scheduledByUser[$uid])) {
+                $scheduledByUser[$uid] = [
+                    'user_id'           => $uid,
+                    'name'              => $s->user->name,
+                    'scheduled_minutes' => 0,
+                    'scheduled_days'    => [],
+                ];
+            }
+
+            // Daily shift hours (same every day within the block)
+            $dailyStart = $s->start_time->format('H:i');
+            $dailyEnd   = $s->end_time->format('H:i');
+            [$sh, $sm]  = explode(':', $dailyStart);
+            [$eh, $em]  = explode(':', $dailyEnd);
+            $dailyMinutes = max(0, ((int)$eh * 60 + (int)$em) - ((int)$sh * 60 + (int)$sm) - 60);
+
+            // Intersect the schedule block with the filter date range
+            $blockStart = max($s->start_time->toDateString(), $dateFrom);
+            $blockEnd   = min($s->end_time->toDateString(),   $dateTo);
+
+            $cursor = \Carbon\Carbon::parse($blockStart);
+            $limit  = \Carbon\Carbon::parse($blockEnd);
+
+            while ($cursor->lte($limit)) {
+                $date = $cursor->toDateString();
+                if (!isset($scheduledByUser[$uid]['scheduled_days'][$date])) {
+                    $scheduledByUser[$uid]['scheduled_days'][$date] = [
+                        'scheduled_start' => $dailyStart,
+                        'scheduled_end'   => $dailyEnd,
+                    ];
+                    $scheduledByUser[$uid]['scheduled_minutes'] += $dailyMinutes;
+                }
+                $cursor->addDay();
+            }
+        }
+
+        // --- Actual hours ---
+        $logQuery = AttendanceLog::whereBetween('log_time', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
+            ->orderBy('log_time')
+            ->select('user_id', 'schedule_id', 'schedule_store_id', 'type', 'log_time');
+
+        if (!$isPrivileged) {
+            $logQuery->where('user_id', $authUser->id);
+        }
+
+        if ($request->filled('sub_unit')) {
+            $logQuery->whereHas('user', fn($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
+        }
+
+        if ($request->filled('store_id')) {
+            $logQuery->whereHas('scheduleStore', fn($q) => $q->where('store_id', $request->store_id));
+        }
+
+        $actualByUser = [];
+        foreach ($logQuery->get() as $log) {
+            $uid    = $log->user_id;
+            $date   = $log->log_time->toDateString();
+            $segKey = $log->schedule_store_id ? 'ss_'.$log->schedule_store_id : 's_'.$log->schedule_id;
+
+            if (!isset($actualByUser[$uid])) {
+                $actualByUser[$uid] = ['segments' => [], 'days_present' => []];
+            }
+
+            if (!isset($actualByUser[$uid]['segments'][$segKey])) {
+                $actualByUser[$uid]['segments'][$segKey] = ['date' => $date, 'time_in' => null, 'time_out' => null];
+            }
+
+            $seg = &$actualByUser[$uid]['segments'][$segKey];
+            if ($log->type === 'time_in' && $seg['time_in'] === null) {
+                $seg['time_in'] = $log->log_time->format('H:i');
+            } elseif ($log->type === 'time_out') {
+                $seg['time_out'] = $log->log_time->format('H:i');
+            }
+
+            if ($log->type === 'time_in') {
+                $actualByUser[$uid]['days_present'][$date] = true;
+            }
+        }
+
+        // --- Merge ---
+        $allUserIds = array_unique(array_merge(array_keys($scheduledByUser), array_keys($actualByUser)));
+
+        $summary = [];
+        foreach ($allUserIds as $uid) {
+            $sched  = $scheduledByUser[$uid] ?? null;
+            $actual = $actualByUser[$uid]    ?? null;
+
+            // Build per-date log pairs keyed by date
+            $logsByDate = [];
+            if ($actual) {
+                foreach ($actual['segments'] as $seg) {
+                    $d = $seg['date'];
+                    if (!isset($logsByDate[$d])) {
+                        $logsByDate[$d] = ['time_in' => null, 'time_out' => null];
+                    }
+                    if ($seg['time_in'] && !$logsByDate[$d]['time_in']) {
+                        $logsByDate[$d]['time_in'] = $seg['time_in'];
+                    }
+                    if ($seg['time_out']) {
+                        $logsByDate[$d]['time_out'] = $seg['time_out'];
+                    }
+                }
+            }
+
+            // Compute actual minutes from H:i strings, subtract 60 min per day for lunch break
+            $actualMinutes = 0;
+            foreach ($logsByDate as $pair) {
+                if ($pair['time_in'] && $pair['time_out']) {
+                    [$inH, $inM]   = explode(':', $pair['time_in']);
+                    [$outH, $outM] = explode(':', $pair['time_out']);
+                    $actualMinutes += max(0, ((int)$outH * 60 + (int)$outM) - ((int)$inH * 60 + (int)$inM) - 60);
+                }
+            }
+
+            $scheduledDates = $sched['scheduled_days'] ?? [];
+            $scheduledDays  = count($scheduledDates);
+            $daysPresent    = $actual ? count($actual['days_present']) : 0;
+
+            // Build detail rows: one entry per date that appears in schedules or logs
+            $allDates = array_unique(array_merge(array_keys($scheduledDates), array_keys($logsByDate)));
+            sort($allDates);
+            $detailDates = [];
+            foreach ($allDates as $date) {
+                $isPresent  = isset($logsByDate[$date]) && $logsByDate[$date]['time_in'] !== null;
+                $detailDates[] = [
+                    'date'             => $date,
+                    'scheduled_start'  => $scheduledDates[$date]['scheduled_start'] ?? null,
+                    'scheduled_end'    => $scheduledDates[$date]['scheduled_end']   ?? null,
+                    'actual_time_in'   => $logsByDate[$date]['time_in']  ?? null,
+                    'actual_time_out'  => $logsByDate[$date]['time_out'] ?? null,
+                    'is_present'       => $isPresent,
+                ];
+            }
+
+            $name = $sched['name'] ?? null;
+            if (!$name && $actual) {
+                $userModel = \App\Models\User::find($uid);
+                $name = $userModel?->name ?? 'Unknown';
+            }
+
+            $summary[] = [
+                'user_id'           => $uid,
+                'name'              => $name,
+                'scheduled_minutes' => $sched['scheduled_minutes'] ?? 0,
+                'actual_minutes'    => $actualMinutes,
+                'scheduled_days'    => $scheduledDays,
+                'days_present'      => $daysPresent,
+                'detail_dates'      => $detailDates,
+            ];
+        }
+
+        usort($summary, fn($a, $b) => strcmp($a['name'] ?? '', $b['name'] ?? ''));
+
+        return $summary;
     }
 
     /**
