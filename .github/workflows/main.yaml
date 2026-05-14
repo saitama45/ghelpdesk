@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p build_output
           # Use rsync to copy everything except the build folder itself and unnecessary heavy folders
-          rsync -ar . build_output/ --exclude build_output --exclude node_modules --exclude .git --exclude tests
+          rsync -ar . build_output/ --exclude build_output --exclude node_modules --exclude .git --exclude tests --exclude android
           
           # Ensure storage framework directories exist and contain a dummy file so FTP uploads them
           mkdir -p build_output/storage/framework/cache/data
