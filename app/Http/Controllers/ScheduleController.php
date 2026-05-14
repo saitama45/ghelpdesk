@@ -1716,12 +1716,36 @@ class ScheduleController extends Controller implements HasMiddleware
             $scheduleQuery->whereHas('scheduleStores', fn ($sq) => $sq->where('store_id', $request->store_id));
         }
 
-        $schedules = $scheduleQuery->get(['id', 'user_id', 'start_time', 'end_time']);
+        $schedules = $scheduleQuery->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
 
+        $scheduleIds = $schedules->pluck('id')->filter()->values();
+        $attendanceLogs = collect();
+
+        foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
+            $attendanceLogs = $attendanceLogs->concat(
+                AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                    ->orderBy('log_time')
+                    ->get(['schedule_id', 'type', 'log_time'])
+            );
+        }
+
+        $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
         $userScheduledDates = [];
+        $userScheduledStatuses = [];
+        $userCompleteLocationEntries = [];
+        $userCompleteActualTimeInEntries = [];
+        $userCompleteActualTimeOutEntries = [];
+        $actualTimeOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
+        $locationOptionalStatuses = ['Restday', 'Holiday', 'N/A'];
+        $storeId = (string) $request->input('store_id', '');
+
         foreach ($schedules as $schedule) {
+            $scheduleLogsByDate = $logsBySchedule
+                ->get($schedule->id, collect())
+                ->groupBy(fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString());
+
             $coverageEntries = $request->filled('store_id')
-                ? $schedule->scheduleStores->filter(fn ($scheduleStore) => (string) $scheduleStore->store_id === (string) $request->store_id)
+                ? $schedule->scheduleStores->filter(fn ($scheduleStore) => (string) $scheduleStore->store_id === $storeId)
                 : collect([$schedule]);
 
             foreach ($coverageEntries as $entry) {
@@ -1733,27 +1757,137 @@ class ScheduleController extends Controller implements HasMiddleware
                     $dateStr = $curr->toDateString();
                     if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
                         $userScheduledDates[$schedule->user_id][$dateStr] = true;
+                        $userScheduledStatuses[$schedule->user_id][$dateStr][$schedule->status] = true;
+                    }
+                    $curr->addDay();
+                }
+            }
+
+            $dailyLogsByDate = $scheduleLogsByDate;
+            $curr = $schedule->start_time->copy()->timezone('Asia/Manila');
+            $scheduleEnd = $schedule->end_time->copy()->timezone('Asia/Manila');
+
+            while ($curr->toDateString() <= $scheduleEnd->toDateString()) {
+                $dateStr = $curr->toDateString();
+
+                if ($dateStr < $rangeStart->toDateString() || $dateStr > $rangeEnd->toDateString()) {
+                    $curr->addDay();
+                    continue;
+                }
+
+                if (!isset($userScheduledDates[$schedule->user_id][$dateStr])) {
+                    $curr->addDay();
+                    continue;
+                }
+
+                if (!in_array($schedule->status, $actualTimeOptionalStatuses, true)) {
+                    $dailyLogs = $dailyLogsByDate->get($dateStr, collect());
+
+                    if ($dailyLogs->contains(fn ($log) => $log->type === 'time_in')) {
+                        $userCompleteActualTimeInEntries[$schedule->user_id][$dateStr][$schedule->status] = true;
+                    }
+
+                    if ($dailyLogs->contains(fn ($log) => $log->type === 'time_out')) {
+                        $userCompleteActualTimeOutEntries[$schedule->user_id][$dateStr][$schedule->status] = true;
+                    }
+                }
+
+                $curr->addDay();
+            }
+
+            if (in_array($schedule->status, $locationOptionalStatuses, true)) {
+                continue;
+            }
+
+            if ($schedule->scheduleStores->isEmpty()) {
+                continue;
+            }
+
+            foreach ($schedule->scheduleStores as $scheduleStore) {
+                if ($request->filled('store_id') && (string) $scheduleStore->store_id !== $storeId) {
+                    continue;
+                }
+
+                if (! $scheduleStore->store_id && ! in_array($schedule->status, ['SL', 'VL'], true)) {
+                    continue;
+                }
+
+                if (! $scheduleStore->store_id && in_array($schedule->status, ['SL', 'VL'], true)) {
+                    continue;
+                }
+
+                $segmentStart = ($scheduleStore->start_time ?? $schedule->start_time)->copy()->timezone('Asia/Manila');
+                $segmentEnd = ($scheduleStore->end_time ?? $schedule->end_time)->copy()->timezone('Asia/Manila');
+
+                $curr = $segmentStart->copy();
+                while ($curr->toDateString() <= $segmentEnd->toDateString()) {
+                    $dateStr = $curr->toDateString();
+                    if ($dateStr >= $rangeStart->toDateString() && $dateStr <= $rangeEnd->toDateString()) {
+                        $userCompleteLocationEntries[$schedule->user_id][$dateStr][$schedule->status] = true;
                     }
                     $curr->addDay();
                 }
             }
         }
 
-        $results = $users->map(function ($user) use ($allDates, $userScheduledDates, $rangeStart, $rangeEnd) {
-            $coveredDays = [];
+        $results = $users->map(function ($user) use (
+            $allDates,
+            $userScheduledDates,
+            $userScheduledStatuses,
+            $userCompleteLocationEntries,
+            $userCompleteActualTimeInEntries,
+            $userCompleteActualTimeOutEntries
+        ) {
+            $completeDays = [];
+            $completeLocations = [];
+            $completeActualTimeIns = [];
+            $completeActualTimeOuts = [];
+            $optionalLocationStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
+            $optionalActualTimeStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
 
             foreach ($allDates as $date) {
                 if (!isset($userScheduledDates[$user->id][$date])) {
                     return null;
                 }
 
-                $coveredDays[] = Carbon::parse($date)->format('M j');
+                $completeDays[] = Carbon::parse($date)->format('M j');
+
+                $scheduledStatuses = array_keys($userScheduledStatuses[$user->id][$date] ?? []);
+                sort($scheduledStatuses);
+
+                foreach ($scheduledStatuses as $status) {
+                    $chip = sprintf('%s (%s)', Carbon::parse($date)->format('M j'), $status);
+
+                    if (!in_array($status, $optionalLocationStatuses, true)) {
+                        if (isset($userCompleteLocationEntries[$user->id][$date][$status])) {
+                            $completeLocations[] = $chip;
+                        }
+                    }
+
+                    if (!in_array($status, $optionalActualTimeStatuses, true)) {
+                        if (isset($userCompleteActualTimeInEntries[$user->id][$date][$status])) {
+                            $completeActualTimeIns[] = $chip;
+                        }
+                        if (isset($userCompleteActualTimeOutEntries[$user->id][$date][$status])) {
+                            $completeActualTimeOuts[] = $chip;
+                        }
+                    }
+                }
             }
 
-            $user->covered_days = $coveredDays;
-            $user->covered_days_count = count($coveredDays);
-            $user->range_start = $rangeStart->toDateString();
-            $user->range_end = $rangeEnd->toDateString();
+            $user->complete_days = $completeDays;
+            $user->complete_days_count = count($completeDays);
+            $user->complete_locations = $completeLocations;
+            $user->complete_location_count = count($completeLocations);
+            $user->complete_actual_time_ins = $completeActualTimeIns;
+            $user->complete_actual_time_in_count = count($completeActualTimeIns);
+            $user->complete_actual_time_outs = $completeActualTimeOuts;
+            $user->complete_actual_time_out_count = count($completeActualTimeOuts);
+            $user->complete_total_count = count($completeDays)
+                + count($completeLocations)
+                + count($completeActualTimeIns)
+                + count($completeActualTimeOuts);
+
             return $user;
         })->filter()->values();
 

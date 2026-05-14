@@ -309,7 +309,7 @@
                                 </tr>
                                 <template v-else>
                                     <tr v-for="user in missingSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
-                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ user.sub_unit || '-' }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ formatSubUnitDisplay(user.sub_unit || user.org_path) }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
                                         <td class="px-6 py-4 text-sm text-red-600 font-medium max-w-md">
                                             <div class="flex flex-wrap gap-1">
@@ -343,7 +343,7 @@
                                                 <span v-if="!user.missing_actual_time_outs?.length" class="text-gray-300 text-xs">-</span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_total_count ?? user.missing_days_count }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_days_count ?? 0 }}</td>
                                     </tr>
                                     <tr v-if="missingSchedulesData.length === 0">
                                         <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic">
@@ -401,40 +401,74 @@
                 <!-- Complete Schedules View -->
                 <div v-else-if="currentView === 'complete-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900">Complete Schedules</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Full Coverage</span>
+                        <h3 class="text-lg font-bold text-gray-900">Complete Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Full Days / Location / Actual Times</span>
                     </div>
-                    <div class="overflow-x-auto custom-scrollbar">
+                    <div class="max-h-[60vh] min-h-[140px] overflow-auto custom-scrollbar">
                         <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-100">
+                            <thead class="sticky top-0 z-20 bg-gray-100 shadow-sm">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Covered Days</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Date Range</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Days</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Location</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Actual Time In</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Actual Time Out</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <tr v-if="isCompleteSchedulesLoading">
-                                    <td colspan="4" class="px-6 py-12 text-center">
+                                    <td colspan="7" class="px-6 py-12 text-center">
                                         <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
                                             </svg>
-                                            Loading completed schedules...
+                                            Loading complete schedule records...
                                         </div>
                                     </td>
                                 </tr>
                                 <template v-else>
                                     <tr v-for="user in completeSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
-                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ user.sub_unit || '-' }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ formatSubUnitDisplay(user.sub_unit || user.org_path) }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-emerald-700">{{ user.covered_days_count }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">{{ user.range_start }} to {{ user.range_end }}</td>
+                                        <td class="px-6 py-4 text-sm text-emerald-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.complete_days" :key="i" class="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.complete_days?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-blue-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.complete_locations" :key="i" class="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.complete_locations?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-cyan-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.complete_actual_time_ins" :key="i" class="bg-cyan-50 px-1.5 py-0.5 rounded border border-cyan-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.complete_actual_time_ins?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 text-sm text-violet-700 font-medium max-w-md">
+                                            <div class="flex flex-wrap gap-1">
+                                                <span v-for="(day, i) in user.complete_actual_time_outs" :key="i" class="bg-violet-50 px-1.5 py-0.5 rounded border border-violet-100 text-[10px] whitespace-nowrap">
+                                                    {{ day }}
+                                                </span>
+                                                <span v-if="!user.complete_actual_time_outs?.length" class="text-gray-300 text-xs">-</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.complete_days_count ?? 0 }}</td>
                                     </tr>
                                     <tr v-if="completeSchedulesData.length === 0">
-                                        <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic">
                                             No users have complete schedule coverage for this period.
                                         </td>
                                     </tr>
@@ -1968,6 +2002,18 @@ const formatTime = (isoString) => {
 const formatDateTime = (isoString) => {
     if (!isoString) return '-'
     return new Date(isoString).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+}
+
+const formatSubUnitDisplay = (value) => {
+    const normalized = String(value || '').trim()
+    if (!normalized) return '-'
+
+    const segments = normalized
+        .split('>')
+        .map(segment => segment.trim())
+        .filter(Boolean)
+
+    return segments.at(-1) || normalized
 }
 
 const formatDateForInput = (date) => {
