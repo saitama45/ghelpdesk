@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\DepartmentNode;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Setting;
@@ -16,6 +17,8 @@ class StoreReportService
         $userId = $filters['user_id'] ?? 'all';
         $storeId = $filters['store_id'] ?? 'all';
         $subUnit = $filters['sub_unit'] ?? 'all';
+        $departmentId = $filters['department_id'] ?? null;
+        $departmentNodeId = $filters['department_node_id'] ?? null;
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
 
         // Query active tickets that have an assignee
@@ -30,7 +33,16 @@ class StoreReportService
             $ticketsQuery->where('store_id', $storeId);
         }
 
-        if ($subUnit && $subUnit !== 'all') {
+        if ($departmentId) {
+            $ticketsQuery->whereHas('assignee', function($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+        } elseif ($departmentNodeId) {
+            $nodeIds = array_merge([(int) $departmentNodeId], DepartmentNode::getAllDescendantIds((int) $departmentNodeId));
+            $ticketsQuery->whereHas('assignee', function($q) use ($nodeIds) {
+                $q->whereIn('department_node_id', $nodeIds);
+            });
+        } elseif ($subUnit && $subUnit !== 'all') {
             $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
                 $q->where('org_path', 'like', '%'.$subUnit.'%');
             });

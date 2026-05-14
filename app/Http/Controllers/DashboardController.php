@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DepartmentNode;
 use App\Services\StoreReportService;
+use App\Services\OrganizationReferenceService;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHistory;
@@ -17,10 +19,12 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 class DashboardController extends Controller
 {
     protected $reportService;
+    protected $organizationReferenceService;
 
-    public function __construct(StoreReportService $reportService)
+    public function __construct(StoreReportService $reportService, OrganizationReferenceService $organizationReferenceService)
     {
         $this->reportService = $reportService;
+        $this->organizationReferenceService = $organizationReferenceService;
     }
 
     public function index(Request $request)
@@ -28,14 +32,23 @@ class DashboardController extends Controller
         $user = Auth::user();
         $year = $request->input('year');
         $month = $request->input('month');
-        $subUnitFilter = $request->input('sub_unit', 'all');
+        $departmentIdFilter = $request->input('department_id');
+        $departmentNodeIdFilter = $request->input('department_node_id');
         $userIdFilter = $request->input('user_id', 'all');
         $storeIdFilter = $request->input('store_id', 'all');
+        $hierarchicalDepartments = $this->organizationReferenceService->tree(true);
+        $selectedSubUnitLabel = 'all';
+
+        if ($departmentNodeIdFilter) {
+            $selectedSubUnitLabel = $this->organizationReferenceService->payloadFromNodeId((int) $departmentNodeIdFilter)['org_path'] ?? 'all';
+        }
 
         // Store Health Data
         $storeHealth = $this->reportService->getStoreHealthData([
             'as_of_date' => Carbon::now()->format('Y-m-d'),
-            'sub_unit' => $subUnitFilter,
+            'sub_unit' => $selectedSubUnitLabel,
+            'department_id' => $departmentIdFilter,
+            'department_node_id' => $departmentNodeIdFilter,
             'user_id' => $userIdFilter,
             'store_id' => $storeIdFilter,
         ]);
@@ -43,7 +56,7 @@ class DashboardController extends Controller
         // Dropdown Data for Filters
         $allUsers = \App\Models\User::active()->whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'org_path')->orderBy('name')->get();
+        })->select('id', 'name', 'org_path', 'department_id', 'department_node_id')->orderBy('name')->get();
 
         $allStores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
         $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
@@ -164,8 +177,14 @@ class DashboardController extends Controller
 
         $kanbanQuery = (clone $filteredQuery)->whereIn('status', $kanbanStatuses);
 
-        if ($subUnitFilter && $subUnitFilter !== 'all') {
-            $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('org_path', 'like', '%'.$subUnitFilter.'%'));
+        if ($departmentIdFilter) {
+            $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
+        }
+
+        if ($departmentNodeIdFilter) {
+            $descendantIds = DepartmentNode::getAllDescendantIds((int) $departmentNodeIdFilter);
+            $nodeIds = array_merge([(int) $departmentNodeIdFilter], $descendantIds);
+            $kanbanQuery->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
         }
 
         if ($userIdFilter && $userIdFilter !== 'all') {
@@ -200,6 +219,7 @@ class DashboardController extends Controller
                     'assignee_id' => $ticket->assignee_id,
                     'assignee' => $ticket->assignee?->name ?? 'Unassigned',
                     'sub_unit' => $ticket->assignee?->org_path ?: 'No Org Path',
+                    'sub_unit_short' => $this->extractLastOrgPathSegment($ticket->assignee?->org_path),
                     'company_name' => $ticket->company?->name ?? 'N/A',
                     'store' => $ticket->store ? [
                         'id' => $ticket->store->id,
@@ -238,7 +258,7 @@ class DashboardController extends Controller
 
                     return [
                         'key' => (string) $groupKey,
-                        'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) $groupKey,
+                        'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) ($firstTicket['sub_unit_short'] ?: $groupKey),
                         'subtitle' => $mode === 'user' ? $firstTicket['sub_unit'] : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)', // sub_unit key now holds org_path value
                         'total' => $groupTickets->count(),
                         'columns' => $columns,
@@ -432,16 +452,30 @@ class DashboardController extends Controller
             'users' => $allUsers,
             'stores' => $allStores,
             'subUnits' => $subUnits,
+            'hierarchicalDepartments' => $hierarchicalDepartments,
             'filters' => [
                 'year' => (int)$year ?: null,
                 'month' => (int)$month ?: null,
-                'sub_unit' => $subUnitFilter,
+                'department_id' => $departmentIdFilter ? (int) $departmentIdFilter : null,
+                'department_node_id' => $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
                 'user_id' => $userIdFilter,
                 'store_id' => $storeIdFilter,
             ],
             'years' => $years,
             'months' => $months,
         ]);
+    }
+
+    private function extractLastOrgPathSegment(?string $orgPath): string
+    {
+        if (!$orgPath) {
+            return 'No Org Path';
+        }
+
+        $segments = preg_split('/\s*>\s*/', $orgPath);
+        $segments = array_values(array_filter($segments, fn ($segment) => filled($segment)));
+
+        return $segments ? end($segments) : $orgPath;
     }
 
     public function export(Request $request)

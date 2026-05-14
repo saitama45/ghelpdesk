@@ -4,6 +4,7 @@ import { ref, computed, reactive, watch, onMounted } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
 import axios from 'axios';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -26,6 +27,7 @@ const props = defineProps({
     users: Array,
     stores: Array,
     subUnits: Array,
+    hierarchicalDepartments: Array,
 });
 
 const { hasPermission } = usePermission();
@@ -40,22 +42,74 @@ onMounted(() => {
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const kanbanView = ref('sub_unit');
+const filterNodeId = ref(
+    props.filters?.department_node_id
+        ? props.filters.department_node_id
+        : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
+);
 
 const filterForm = reactive({
     year: props.filters.year || '',
     month: props.filters.month || '',
-    sub_unit: props.filters.sub_unit || 'all',
     user_id: props.filters.user_id || 'all',
     store_id: props.filters.store_id || 'all',
+});
+
+const hierarchicalOptions = computed(() =>
+    (props.hierarchicalDepartments || []).map(dept => ({
+        ...dept,
+        id: `dept-${dept.id}`,
+        children: dept.nodes || [],
+    }))
+);
+
+const getDescendantNodeIds = (nodeId, nodes = []) => {
+    for (const node of nodes || []) {
+        if (Number(node.id) === Number(nodeId)) {
+            return collectDescendantNodeIds(node.children || []);
+        }
+
+        const descendants = getDescendantNodeIds(nodeId, node.children || []);
+        if (descendants.length > 0) {
+            return descendants;
+        }
+    }
+
+    return [];
+};
+
+const collectDescendantNodeIds = (nodes = []) => {
+    const ids = [];
+
+    for (const node of nodes) {
+        ids.push(Number(node.id));
+        ids.push(...collectDescendantNodeIds(node.children || []));
+    }
+
+    return ids;
+};
+
+const deptFilterParams = computed(() => {
+    const nodeId = filterNodeId.value;
+
+    if (!nodeId) {
+        return {};
+    }
+
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        return { department_id: nodeId.replace('dept-', '') };
+    }
+
+    return { department_node_id: nodeId };
 });
 
 const applyFilters = () => {
     router.get(route('dashboard'), {
         year: filterForm.year,
         month: filterForm.month,
-        sub_unit: filterForm.sub_unit,
         user_id: filterForm.user_id,
         store_id: filterForm.store_id,
+        ...deptFilterParams.value,
     }, {
         preserveState: true,
         preserveScroll: true,
@@ -66,13 +120,13 @@ const applyFilters = () => {
 const clearFilters = () => {
     filterForm.year = '';
     filterForm.month = '';
-    filterForm.sub_unit = 'all';
     filterForm.user_id = 'all';
     filterForm.store_id = 'all';
+    filterNodeId.value = '';
     applyFilters();
 };
 
-watch(() => [filterForm.year, filterForm.month, filterForm.sub_unit, filterForm.user_id, filterForm.store_id], () => {
+watch(() => [filterForm.year, filterForm.month, filterNodeId.value, filterForm.user_id, filterForm.store_id], () => {
     applyFilters();
 });
 
@@ -80,7 +134,7 @@ const hasActiveFilters = computed(() => {
     return Boolean(
         filterForm.year ||
         filterForm.month ||
-        filterForm.sub_unit !== 'all' ||
+        filterNodeId.value ||
         filterForm.user_id !== 'all' ||
         filterForm.store_id !== 'all'
     );
@@ -88,12 +142,22 @@ const hasActiveFilters = computed(() => {
 
 const filteredUsers = computed(() => {
     const users = props.users || [];
+    let matchingUsers = users;
 
-    if (!filterForm.sub_unit || filterForm.sub_unit === 'all') {
-        return users;
+    if (deptFilterParams.value.department_id) {
+        matchingUsers = matchingUsers.filter(u => Number(u.department_id) === Number(deptFilterParams.value.department_id));
     }
 
-    const matchingUsers = users.filter(u => u.sub_unit === filterForm.sub_unit);
+    if (deptFilterParams.value.department_node_id) {
+        const selectedNodeId = Number(deptFilterParams.value.department_node_id);
+        const allowedNodeIds = new Set([
+            selectedNodeId,
+            ...getDescendantNodeIds(selectedNodeId, props.hierarchicalDepartments || []),
+        ]);
+
+        matchingUsers = matchingUsers.filter(u => allowedNodeIds.has(Number(u.department_node_id)));
+    }
+
     const selectedUser = users.find(u => String(u.id) === String(filterForm.user_id));
 
     if (selectedUser && !matchingUsers.some(u => String(u.id) === String(selectedUser.id))) {
@@ -125,6 +189,30 @@ const activeTicketFilterParams = computed(() => {
 const kanbanColumns = computed(() => props.kanbanReport?.columns || []);
 const kanbanGroups = computed(() => props.kanbanReport?.groups?.[kanbanView.value] || []);
 const kanbanTotals = computed(() => props.kanbanReport?.totals || {});
+const kanbanPrioritySummary = computed(() => {
+    const summary = Object.fromEntries(
+        kanbanColumns.value.map(column => [
+            column.key,
+            { urgent: 0, high: 0, medium: 0, low: 0 },
+        ])
+    );
+
+    for (const group of kanbanGroups.value) {
+        for (const column of kanbanColumns.value) {
+            const tickets = group?.columns?.[column.key]?.tickets || [];
+
+            for (const ticket of tickets) {
+                const priorityKey = ['urgent', 'high', 'medium', 'low'].includes(String(ticket.priority || '').toLowerCase())
+                    ? String(ticket.priority).toLowerCase()
+                    : 'low';
+
+                summary[column.key][priorityKey] += 1;
+            }
+        }
+    }
+
+    return summary;
+});
 
 const getKanbanCell = (group, columnKey) => {
     return group?.columns?.[columnKey] || { count: 0, tickets: [] };
@@ -176,6 +264,13 @@ const getPriorityLevel = (priority) => {
         default: return 'P4';
     }
 };
+
+const priorityBreakdownItems = [
+    { key: 'urgent', label: 'P1' },
+    { key: 'high', label: 'P2' },
+    { key: 'medium', label: 'P3' },
+    { key: 'low', label: 'P4' },
+];
 
 const getKanbanColumnTheme = (key) => {
     switch (key) {
@@ -281,10 +376,11 @@ const exportToExcel = (type) => {
             <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
-                    <select v-model="filterForm.sub_unit" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                        <option value="all">All Sub-Units</option>
-                        <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                    </select>
+                    <HierarchySelector
+                        v-model="filterNodeId"
+                        :nodes="hierarchicalOptions"
+                        placeholder="All Departments / Sub-Units"
+                    />
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">User</label>
@@ -364,6 +460,20 @@ const exportToExcel = (type) => {
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="getKanbanColumnTheme(column.key).count">
                                 {{ kanbanTotals[column.key] || 0 }}
                             </span>
+                        </div>
+                        <div class="mt-3 grid grid-cols-4 gap-1.5">
+                            <div
+                                v-for="priority in priorityBreakdownItems"
+                                :key="`${column.key}-${priority.key}`"
+                                class="rounded-md border border-white/60 bg-white/70 px-1 py-1 text-center"
+                            >
+                                <div class="text-[11px] font-black leading-none text-gray-900">
+                                    {{ kanbanPrioritySummary[column.key]?.[priority.key] || 0 }}
+                                </div>
+                                <div class="mt-1 text-[9px] font-black uppercase tracking-wider text-gray-500">
+                                    {{ priority.label }}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
