@@ -6,12 +6,13 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import CustomSelect from '@/Components/CustomSelect.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon, AdjustmentsHorizontalIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -833,6 +834,13 @@ const handleKeydown = (e) => {
     if (e.key === 'Escape') closeImageViewer();
 };
 
+const showAuditTrails = ref(false);
+
+const filteredActivities = computed(() => {
+    if (showAuditTrails.value) return activities.value;
+    return activities.value.filter(a => a.activity_type !== 'history');
+});
+
 const activities = computed(() => {
     const comments = (props.ticket.comments || [])
         .filter(c => !c.is_internal)
@@ -903,6 +911,10 @@ const debounce = (fn, delay) => {
 
 const departments = computed(() =>
     [...new Set(props.users.map(u => u.department).filter(Boolean))].sort()
+);
+
+const departmentNodes = computed(() =>
+    departments.value.map(dept => ({ id: dept, name: dept }))
 );
 
 const isClassificationComplete = computed(() => {
@@ -1592,41 +1604,26 @@ const linkify = (text) => {
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
                                         <input v-model="requesterDraft.sender_name" type="text" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                               @blur="updateRequesterDetails"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
                                         <input v-model="requesterDraft.sender_email" type="email" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                               @blur="updateRequesterDetails"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                     </div>
                                 </div>
 
                                 <div class="pt-2 border-t border-gray-200">
                                     <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Department</label>
-                                    <input
+                                    <HierarchySelector
                                         v-model="requesterDraft.department"
-                                        type="text"
-                                        list="edit-ticket-departments-list"
-                                        maxlength="255"
-                                        :readonly="editForm.is_self_requester || !hasPermission('tickets.edit')"
-                                        :disabled="!hasPermission('tickets.edit')"
-                                        :class="(editForm.is_self_requester || !hasPermission('tickets.edit')) ? 'bg-gray-100 cursor-not-allowed' : ''"
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
-                                        placeholder="Department"
-                                    >
-                                    <datalist id="edit-ticket-departments-list">
-                                        <option v-for="dept in departments" :key="dept" :value="dept" />
-                                    </datalist>
-                                    <button
-                                        v-if="canEditRequesterDetails"
-                                        type="button"
-                                        @click="updateRequesterDetails"
-                                        :disabled="!requesterDetailsDirty || requesterDetailsProcessing"
-                                        class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        <CheckIcon class="h-4 w-4" />
-                                        <span>{{ requesterDetailsProcessing ? 'Updating...' : 'Update Requester Details' }}</span>
-                                    </button>
+                                        :nodes="departmentNodes"
+                                        placeholder="Select Department"
+                                        :disabled="editForm.is_self_requester || !hasPermission('tickets.edit')"
+                                        @update:modelValue="updateRequesterDetails"
+                                    />
                                 </div>
 
                             </div>
@@ -1842,12 +1839,25 @@ const linkify = (text) => {
 
                     <!-- Activity / Timeline -->
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 pb-0 relative">
-                        <h3 class="text-lg font-black text-gray-900 mb-6 uppercase tracking-widest">Activity Timeline</h3>
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-black text-gray-900 uppercase tracking-widest">Activity Timeline</h3>
+                            <button 
+                                type="button"
+                                @click="showAuditTrails = !showAuditTrails"
+                                :class="[
+                                    'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all',
+                                    showAuditTrails ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ]"
+                            >
+                                <AdjustmentsHorizontalIcon class="w-4 h-4" />
+                                {{ showAuditTrails ? 'Hide Audit Trails' : 'Show Audit Trails' }}
+                            </button>
+                        </div>
 
                         <!-- Timeline List -->
                         <div class="relative pl-4 border-l-2 border-gray-200 space-y-8 mb-8 pb-6">
                             <!-- Loop Activities (Comments + History + Description) -->
-                            <div v-for="activity in activities" :key="activity.activity_type + '-' + activity.id" class="relative">
+                            <div v-for="activity in filteredActivities" :key="activity.activity_type + '-' + activity.id" class="relative">
                                 
                                 <!-- Description Item (Inline Editable) -->
                                 <template v-if="activity.activity_type === 'description'">
