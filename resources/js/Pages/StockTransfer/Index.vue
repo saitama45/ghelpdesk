@@ -172,6 +172,13 @@
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
                                     <button
+                                        @click="viewTransfer(item)"
+                                        class="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-full transition-colors"
+                                        title="View Details"
+                                    >
+                                        <EyeIcon class="w-4 h-4" />
+                                    </button>
+                                    <button
                                         v-if="hasPermission('stock_transfers.post') && canPostTransfer(item.status)"
                                         @click="postTransfer(item)"
                                         class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
@@ -481,7 +488,7 @@ import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
-import { PlusIcon } from '@heroicons/vue/24/outline'
+import { PlusIcon, EyeIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -537,6 +544,11 @@ const readOnlyMode = ref(false)
 const currentId = ref(null)
 
 const canPostTransfer = (status) => String(status || '').trim().toLowerCase() === 'for posting'
+
+const viewTransfer = async (item) => {
+    await editTransfer(item)
+    readOnlyMode.value = true
+}
 
 const formatDateForInput = (date) => {
     const year = date.getFullYear()

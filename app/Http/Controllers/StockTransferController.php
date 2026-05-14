@@ -422,6 +422,7 @@ class StockTransferController extends Controller
                     'price'                => $item->price,
                     'transferred_quantity' => $item->quantity,
                     'received_quantity'    => $item->quantity,
+                    'remarks'              => $item->memo_remarks,
                     'condition'            => 'Good',
                     'status'               => 'For Receiving',
                     'created_by'           => $request->user()->id,
