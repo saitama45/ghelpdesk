@@ -31,11 +31,20 @@ const cameraError = ref(null);
 const latitude = ref(null);
 const longitude = ref(null);
 const locationAccuracy = ref(null);
-const isLocationStable = ref(false);
+const locationMode = ref('acquiring');
 const locationError = ref(null);
-const stabilityProgress = ref(0);
-let stabilityInterval = null;
+const locationHint = ref(null);
+const locationAttemptProgress = ref(0);
+const locationSamples = ref([]);
 let watchId = null;
+let locationAttemptInterval = null;
+let preciseAttemptTimeout = null;
+let currentWatchHighAccuracy = true;
+
+const PRECISE_LOCATION_ACCURACY_METERS = 100;
+const PRECISE_LOCATION_TIMEOUT_MS = 15000;
+const LOCATION_SAMPLE_WINDOW_MS = 30000;
+const MAX_LOCATION_SAMPLES = 5;
 
 // Map State
 const mapElement = ref(null);
@@ -239,7 +248,6 @@ onUnmounted(() => {
     stopCamera();
     stopLocationTracking();
     clearInterval(clockInterval);
-    if (stabilityInterval) clearInterval(stabilityInterval);
 });
 
 // Camera Functions
@@ -283,76 +291,202 @@ const retakePhoto = () => {
 };
 
 // Location Functions
+const hasUsableLocation = computed(() => {
+    return latitude.value !== null &&
+           longitude.value !== null &&
+           ['precise', 'approximate'].includes(locationMode.value);
+});
+
+const locationReadinessLabel = computed(() => {
+    if (locationMode.value === 'precise') return 'Precise Location Ready';
+    if (locationMode.value === 'approximate') return 'Approximate Location Ready';
+    if (locationMode.value === 'error') return 'Location Error';
+    return 'Securing precise location...';
+});
+
+const locationReadinessTone = computed(() => {
+    if (locationMode.value === 'precise') return 'text-green-600 font-bold';
+    if (locationMode.value === 'approximate') return 'text-amber-600 font-bold';
+    if (locationMode.value === 'error') return 'text-red-600 font-medium';
+    return 'text-orange-600 font-medium';
+});
+
+const clearLocationAttemptTimers = () => {
+    if (locationAttemptInterval) {
+        clearInterval(locationAttemptInterval);
+        locationAttemptInterval = null;
+    }
+
+    if (preciseAttemptTimeout) {
+        clearTimeout(preciseAttemptTimeout);
+        preciseAttemptTimeout = null;
+    }
+};
+
+const startLocationAttemptProgress = () => {
+    clearLocationAttemptTimers();
+    locationAttemptProgress.value = 0;
+
+    const startedAt = Date.now();
+    locationAttemptInterval = setInterval(() => {
+        const elapsed = Date.now() - startedAt;
+        locationAttemptProgress.value = Math.min(100, Math.round((elapsed / PRECISE_LOCATION_TIMEOUT_MS) * 100));
+    }, 250);
+
+    preciseAttemptTimeout = setTimeout(() => {
+        locationAttemptProgress.value = 100;
+
+        if (latitude.value !== null && longitude.value !== null) {
+            locationMode.value = 'approximate';
+            locationHint.value = 'Using approximate location from Wi-Fi/Cellular while GPS continues improving.';
+        } else if (!locationError.value) {
+            locationHint.value = 'Still trying to obtain a location fix. Switch on location services or move to an area with better signal.';
+        }
+
+        clearLocationAttemptTimers();
+
+        if (currentWatchHighAccuracy) {
+            startLocationTracking(false);
+        }
+    }, PRECISE_LOCATION_TIMEOUT_MS);
+};
+
+const getRecentLocationSamples = () => {
+    const cutoff = Date.now() - LOCATION_SAMPLE_WINDOW_MS;
+
+    return locationSamples.value.filter(sample => sample.timestamp >= cutoff);
+};
+
+const applySelectedLocationSample = (sample) => {
+    if (!sample) return;
+
+    latitude.value = sample.latitude;
+    longitude.value = sample.longitude;
+    locationAccuracy.value = sample.accuracy;
+    form.latitude = sample.latitude;
+    form.longitude = sample.longitude;
+};
+
+const updateSelectedLocationSample = () => {
+    const recentSamples = getRecentLocationSamples();
+    if (!recentSamples.length) return;
+
+    locationSamples.value = recentSamples;
+
+    const bestSample = [...recentSamples].sort((left, right) => {
+        if (left.accuracy !== right.accuracy) {
+            return left.accuracy - right.accuracy;
+        }
+
+        return right.timestamp - left.timestamp;
+    })[0];
+
+    applySelectedLocationSample(bestSample);
+
+    if (bestSample.accuracy <= PRECISE_LOCATION_ACCURACY_METERS) {
+        locationMode.value = 'precise';
+        locationHint.value = null;
+        locationAttemptProgress.value = 100;
+        clearLocationAttemptTimers();
+    } else if (locationMode.value !== 'approximate') {
+        locationMode.value = 'acquiring';
+    }
+};
+
+const recordLocationSample = (position) => {
+    const sample = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: Date.now(),
+    };
+
+    locationSamples.value = [...getRecentLocationSamples(), sample]
+        .sort((left, right) => right.timestamp - left.timestamp)
+        .slice(0, MAX_LOCATION_SAMPLES);
+
+    updateSelectedLocationSample();
+};
+
+const stopLocationTracking = () => {
+    if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    clearLocationAttemptTimers();
+};
+
 const startLocationTracking = (highAccuracy = true) => {
     if (!navigator.geolocation) {
+        locationMode.value = 'error';
         locationError.value = "Geolocation not supported.";
         return;
+    }
+
+    if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    clearLocationAttemptTimers();
+    currentWatchHighAccuracy = highAccuracy;
+
+    if (highAccuracy) {
+        locationMode.value = 'acquiring';
+        locationError.value = null;
+        locationHint.value = null;
+        startLocationAttemptProgress();
+    } else if (locationMode.value !== 'precise' && latitude.value !== null && longitude.value !== null) {
+        locationMode.value = 'approximate';
     }
 
     watchId = navigator.geolocation.watchPosition(
         (position) => {
             if (!isMounted.value) return;
-            latitude.value = position.coords.latitude;
-            longitude.value = position.coords.longitude;
-            locationAccuracy.value = position.coords.accuracy;
-            form.latitude = latitude.value;
-            form.longitude = longitude.value;
-            locationError.value = null; // Clear any previous errors on success
 
+            locationError.value = null;
+            recordLocationSample(position);
             updateMap();
-
-            const requiredAccuracy = highAccuracy ? 100 : 500;
-            if (locationAccuracy.value < requiredAccuracy) {
-                startStabilityTimer();
-            } else if (!isLocationStable.value) {
-                // Only reset if we haven't achieved a stable lock yet
-                resetStabilityTimer();
-            }
         },
         (err) => {
             if (!isMounted.value) return;
 
-            // Fallback mechanism: if high accuracy fails, switch to standard (Wi-Fi/Cellular)
-            if (highAccuracy && (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE)) {
-                if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-                locationError.value = "Switching to standard accuracy (Wi-Fi/Cellular)...";
-                setTimeout(() => startLocationTracking(false), 1000);
+            if (err.code === err.PERMISSION_DENIED) {
+                clearLocationAttemptTimers();
+                locationMode.value = 'error';
+                locationError.value = "Location access denied. Please allow location permission and try again.";
                 return;
             }
 
-            if (err.code === err.TIMEOUT) {
-                locationError.value = "GPS signal taking too long. Please move to a clearer area or near a window.";
-            } else {
-                locationError.value = "GPS Error: " + err.message;
+            if (highAccuracy && (err.code === err.TIMEOUT || err.code === err.POSITION_UNAVAILABLE)) {
+                locationHint.value = "Precise GPS is unavailable. Falling back to standard location (Wi-Fi/Cellular).";
+
+                if (latitude.value !== null && longitude.value !== null) {
+                    locationMode.value = 'approximate';
+                }
+
+                startLocationTracking(false);
+                return;
             }
+
+            if (latitude.value !== null && longitude.value !== null) {
+                if (locationMode.value !== 'precise') {
+                    locationMode.value = 'approximate';
+                }
+
+                locationHint.value = "Location signal is unstable. Using the best available fix while continuing to refresh.";
+                return;
+            }
+
+            locationMode.value = 'error';
+            clearLocationAttemptTimers();
+            locationError.value = err.code === err.TIMEOUT
+                ? "Location is taking too long to respond. Please move to a clearer area or near a window."
+                : "GPS Error: " + err.message;
         },
-        { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 15000 : 30000, maximumAge: 0 }
+        { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 15000 : 30000, maximumAge: highAccuracy ? 0 : 15000 }
     );
-};
-
-const startStabilityTimer = () => {
-    if (isLocationStable.value || stabilityInterval) return;
-    stabilityInterval = setInterval(() => {
-        stabilityProgress.value += 10;
-        if (stabilityProgress.value >= 100) {
-            isLocationStable.value = true;
-            clearInterval(stabilityInterval);
-            stabilityInterval = null;
-        }
-    }, 200);
-};
-
-const resetStabilityTimer = () => {
-    isLocationStable.value = false;
-    stabilityProgress.value = 0;
-    if (stabilityInterval) {
-        clearInterval(stabilityInterval);
-        stabilityInterval = null;
-    }
-};
-
-const stopLocationTracking = () => {
-    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 };
 
 // Geofencing logic
@@ -544,7 +678,7 @@ const canSave = computed(() => {
            !props.isSegmentComplete &&
            !isRecentlyLogged.value &&
            !!capturedImage.value &&
-           isLocationStable.value === true &&
+           hasUsableLocation.value === true &&
            isWithinStoreVicinity.value === true &&
            !form.processing;
 });
@@ -562,7 +696,11 @@ const statusMessage = computed(() => {
     }
     if (!capturedImage.value) return 'Please take a selfie first.';
     if (latitude.value === null || longitude.value === null) return 'Acquiring GPS...';
-    if (!isLocationStable.value) return 'Waiting for location to stabilize...';
+    if (!hasUsableLocation.value) {
+        return locationMode.value === 'error'
+            ? (locationError.value || 'Unable to secure your location.')
+            : 'Securing your location. We will automatically use the best available fix if precise GPS takes too long.';
+    }
     if (requiresGeofencing.value && !isWithinStoreVicinity.value) {
         return `You are outside the active schedule store vicinity for ${activeScheduleStore.value?.name ?? 'the scheduled store'}.`;
     }
@@ -670,8 +808,9 @@ const statusMessage = computed(() => {
                             2. Confirm Location
                         </h3>
                         <div class="flex gap-2">
-                            <span v-if="isLocationStable" class="text-[10px] font-bold text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded">
-                                <CheckCircleIcon class="w-3 h-3" /> STABLE
+                            <span v-if="hasUsableLocation" class="text-[10px] font-bold flex items-center gap-1 px-2 py-1 rounded"
+                                  :class="locationMode === 'precise' ? 'text-green-600 bg-green-50' : 'text-amber-700 bg-amber-50'">
+                                <CheckCircleIcon class="w-3 h-3" /> {{ locationMode === 'precise' ? 'PRECISE READY' : 'APPROX READY' }}
                             </span>
                             <span v-if="todaySchedule?.status === 'WFH'" class="text-[10px] font-bold text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                 <GlobeAsiaAustraliaIcon class="w-3 h-3" /> WFH MODE
@@ -697,13 +836,16 @@ const statusMessage = computed(() => {
                     <div class="space-y-2">
                         <div class="flex justify-between text-sm">
                             <span class="text-gray-600 font-medium">GPS Accuracy</span>
-                            <span :class="isLocationStable ? 'text-green-600 font-bold' : 'text-orange-600 font-medium'">
-                                {{ isLocationStable ? 'Location Secured' : 'Stabilizing Signal...' }}
+                            <span :class="locationReadinessTone">
+                                {{ locationReadinessLabel }}
                             </span>
                         </div>
                         <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: stabilityProgress + '%' }"></div>
+                            <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: locationAttemptProgress + '%' }"></div>
                         </div>
+                        <p v-if="locationHint" class="text-[11px] text-amber-700 text-center font-medium">
+                            {{ locationHint }}
+                        </p>
                         <p v-if="latitude" class="text-[10px] text-gray-400 font-mono text-center">
                             {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }} (±{{ locationAccuracy?.toFixed(1) }}m)
                         </p>
@@ -754,9 +896,9 @@ const statusMessage = computed(() => {
                                     <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                     Selfie
                                 </div>
-                                <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="isLocationStable ? 'text-green-600' : 'text-gray-400'">
+                                <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="hasUsableLocation ? 'text-green-600' : 'text-gray-400'">
                                     <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                    Stable
+                                    Location Ready
                                 </div>
                                 <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="isWithinStoreVicinity ? 'text-green-600' : 'text-gray-400'">
                                     <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
