@@ -49,7 +49,9 @@ class DashboardController extends Controller
         $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
         
         // Define base query based on role
-        $query = Ticket::query();
+        $query = Ticket::query()
+            ->where('is_deleted', false)
+            ->whereNull('parent_id');
         
         if ($user->hasRole('User')) {
             $query->where('reporter_id', $user->id);

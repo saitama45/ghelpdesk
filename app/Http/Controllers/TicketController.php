@@ -124,8 +124,9 @@ class TicketController extends Controller
         // Apply Department / Team filter
         $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
         $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
+        $skipDefaultDepartmentScope = $request->boolean('skip_default_department');
 
-        if (!$filterDeptId && !$filterNodeId) {
+        if (!$skipDefaultDepartmentScope && !$filterDeptId && !$filterNodeId) {
             $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
         }
 
@@ -148,6 +149,14 @@ class TicketController extends Controller
             $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
             $end = \Carbon\Carbon::parse($request->end_date)->endOfDay();
             $query->whereBetween('created_at', [$start, $end]);
+        } else {
+            if ($request->filled('year')) {
+                $query->whereYear('created_at', (int) $request->year);
+            }
+
+            if ($request->filled('month')) {
+                $query->whereMonth('created_at', (int) $request->month);
+            }
         }
 
         if ($request->filled('search')) {
@@ -199,9 +208,184 @@ class TicketController extends Controller
                 'assignee_id' => $assigneeFilters->all(),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
+                'year' => $request->year,
+                'month' => $request->month,
             ],
         ]);
     }
+
+    public function export(Request $request)
+    {
+        $user = $request->user();
+
+        $query = Ticket::where('is_deleted', false)->whereNull('parent_id');
+
+        if ($user->hasRole('User')) {
+            $query->where('reporter_id', $user->id);
+        } else {
+            $user->load('roles.companies');
+            $allowedCompanyIds = collect();
+            foreach ($user->roles as $role) {
+                if ($role->companies) {
+                    $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
+                }
+            }
+            if ($user->company_id) $allowedCompanyIds->push($user->company_id);
+            $allowedCompanyIds = $allowedCompanyIds->unique();
+            if ($allowedCompanyIds->isEmpty()) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $query->whereIn('company_id', $allowedCompanyIds);
+            }
+        }
+
+        $normalizeFilterValues = fn ($value) => collect(is_array($value) ? $value : [$value])
+            ->filter(fn ($item) => $item !== null && $item !== '')
+            ->map(fn ($item) => is_string($item) ? trim($item) : $item)
+            ->unique(fn ($item) => (string) $item)
+            ->values();
+
+        $defaultStatus = $user->hasRole('User') ? 'all' : 'open';
+        $statusFilters = $normalizeFilterValues($request->input('status', [$defaultStatus]));
+        if ($statusFilters->isEmpty()) $statusFilters = collect([$defaultStatus]);
+
+        if (!$statusFilters->contains('all')) {
+            $normalStatusFilters = $statusFilters->reject(fn ($s) => in_array($s, ['my_tickets', 'unassigned']))->values();
+            $query->where(function ($q) use ($statusFilters, $normalStatusFilters, $user) {
+                if ($normalStatusFilters->isNotEmpty()) $q->whereIn('status', $normalStatusFilters->all());
+                if ($statusFilters->contains('my_tickets')) {
+                    $q->orWhere(fn($sq) => $sq->where('reporter_id', $user->id)->orWhere('assignee_id', $user->id));
+                }
+                if ($statusFilters->contains('unassigned')) $q->orWhereNull('assignee_id');
+            });
+        }
+
+        $filterDeptId = $request->filled('department_id')      ? (int) $request->department_id      : null;
+        $filterNodeId = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
+        if (!$filterDeptId && !$filterNodeId) {
+            $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
+        }
+        if ($filterNodeId) {
+            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
+            $query->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', array_merge([$filterNodeId], $descendantIds)));
+        } elseif ($filterDeptId) {
+            $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+        }
+
+        $assigneeFilters = $normalizeFilterValues($request->input('assignee_id'));
+        if ($assigneeFilters->isNotEmpty()) $query->whereIn('assignee_id', $assigneeFilters->all());
+
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('created_at', [
+                \Carbon\Carbon::parse($request->start_date)->startOfDay(),
+                \Carbon\Carbon::parse($request->end_date)->endOfDay(),
+            ]);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhere('ticket_key', 'like', "%{$search}%")
+                  ->orWhereHas('assignee', fn($aq) => $aq->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        $tickets = $query
+            ->with([
+                'reporter:id,name',
+                'assignee:id,name',
+                'company:id,name',
+                'store:id,name',
+                'item:id,name,priority',
+                'category:id,name',
+                'subCategory:id,name',
+                'vendor:id,name',
+                'parent:id,ticket_key',
+                'slaMetric',
+                'histories' => fn($q) => $q->where('column_changed', 'status')
+                    ->with('user:id,name')
+                    ->orderBy('changed_at', 'desc'),
+            ])
+            ->orderBy('created_at', 'desc')
+            ->take(2000)
+            ->get();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Tickets');
+
+        $headers = [
+            'Ticket ID', 'Title', 'Type', 'Status', 'Priority', 'Severity',
+            'Category', 'Sub-Category', 'Item / Concern',
+            'Company', 'Store', 'Vendor', 'Parent Ticket',
+            'Reporter (Created By)', 'Assignee', 'Last Updated By',
+            'Created At', 'Updated At',
+            'First Response At', 'Resolved At', 'Closed At',
+            'SLA Response Breached', 'SLA Resolution Breached',
+        ];
+
+        foreach ($headers as $i => $h) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $sheet->setCellValue($col . '1', $h);
+        }
+
+        $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastCol}1")->getFill()
+            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+
+        $tz = new \DateTimeZone('Asia/Manila');
+        $fmt = fn ($dt) => $dt ? $dt->setTimezone($tz)->format('Y-m-d H:i:s') : '';
+
+        $row = 2;
+        foreach ($tickets as $ticket) {
+            $closedAt    = $ticket->histories->firstWhere('new_value', 'closed')?->changed_at;
+            $lastUpdater = $ticket->histories->first()?->user?->name;
+
+            $sheet->setCellValue('A' . $row, $ticket->ticket_key);
+            $sheet->setCellValue('B' . $row, $ticket->title);
+            $sheet->setCellValue('C' . $row, $ticket->type);
+            $sheet->setCellValue('D' . $row, str_replace('_', ' ', $ticket->status));
+            $sheet->setCellValue('E' . $row, $ticket->priority);
+            $sheet->setCellValue('F' . $row, $ticket->severity);
+            $sheet->setCellValue('G' . $row, $ticket->category?->name);
+            $sheet->setCellValue('H' . $row, $ticket->subCategory?->name);
+            $sheet->setCellValue('I' . $row, $ticket->item?->name);
+            $sheet->setCellValue('J' . $row, $ticket->company?->name);
+            $sheet->setCellValue('K' . $row, $ticket->store?->name);
+            $sheet->setCellValue('L' . $row, $ticket->vendor?->name);
+            $sheet->setCellValue('M' . $row, $ticket->parent?->ticket_key);
+            $sheet->setCellValue('N' . $row, $ticket->reporter?->name);
+            $sheet->setCellValue('O' . $row, $ticket->assignee?->name ?? 'Unassigned');
+            $sheet->setCellValue('P' . $row, $lastUpdater);
+            $sheet->setCellValue('Q' . $row, $fmt($ticket->created_at));
+            $sheet->setCellValue('R' . $row, $fmt($ticket->updated_at));
+            $sheet->setCellValue('S' . $row, $fmt($ticket->slaMetric?->first_response_at));
+            $sheet->setCellValue('T' . $row, $fmt($ticket->slaMetric?->resolved_at));
+            $sheet->setCellValue('U' . $row, $fmt($closedAt));
+            $sheet->setCellValue('V' . $row, $ticket->slaMetric?->is_response_breached  ? 'Yes' : 'No');
+            $sheet->setCellValue('W' . $row, $ticket->slaMetric?->is_resolution_breached ? 'Yes' : 'No');
+            $row++;
+        }
+
+        foreach (range(1, count($headers)) as $i) {
+            $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
+        }
+
+        $writer   = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = 'tickets-export-' . now()->format('Y-m-d-His') . '.xlsx';
+        $httpHeaders = [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'max-age=0',
+        ];
+
+        return response()->stream(fn() => $writer->save('php://output'), 200, $httpHeaders);
+    }
+
 
     /**
      * Store a newly created resource in storage.

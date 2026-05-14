@@ -1405,7 +1405,7 @@ const getStatusLabel = (status) => {
     switch (status) {
         case 'for_schedule': return 'For Schedule';
         case 'waiting_service_provider': return 'Waiting for service provider';
-        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        case 'waiting_client_feedback': return 'Waiting for Client\'s Feedback';
         default: return status.replace('_', ' ');
     }
 };

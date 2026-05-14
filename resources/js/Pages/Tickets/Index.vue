@@ -142,7 +142,7 @@ const filterOptions = [
     { value: 'in_progress', label: 'In Progress' },
     { value: 'resolved', label: 'Resolved' },
     { value: 'waiting_service_provider', label: 'Waiting for service provider' },
-    { value: 'waiting_client_feedback', label: 'Waiting for clients feedback?' },
+    { value: 'waiting_client_feedback', label: 'Waiting for Client\'s Feedback' },
     { value: 'closed', label: 'Closed' },
     { value: 'unassigned', label: 'Unassigned' },
 ];
@@ -216,6 +216,17 @@ const handleAssigneeFilterChange = (value) => {
     filterAssignee.value = normalizeFilterValues(value, [], normalizeAssigneeFilterValue);
     applyFilter();
 };
+
+const exportToExcel = () => {
+    const params = new URLSearchParams()
+    const fp = ticketFilterParams()
+    Object.entries(fp).forEach(([k, v]) => {
+        if (Array.isArray(v)) v.forEach(i => params.append(`${k}[]`, i))
+        else if (v !== null && v !== undefined && v !== '') params.set(k, v)
+    })
+    if (pagination.search.value) params.set('search', pagination.search.value)
+    window.location.href = route('tickets.export') + '?' + params.toString()
+}
 
 const clearFilters = () => {
     filterStatus.value = defaultStatusFilters();
@@ -781,7 +792,7 @@ const getStatusLabel = (status) => {
     switch (status) {
         case 'for_schedule': return 'For Schedule';
         case 'waiting_service_provider': return 'Waiting for service provider';
-        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
+        case 'waiting_client_feedback': return 'Waiting for Client\'s Feedback';
         default: return String(status || '').replace(/_/g, ' ');
     }
 };
@@ -1387,6 +1398,19 @@ watch(activeDashboardFilter, () => {
                 @go-to-page="pagination.goToPage"
                 @change-per-page="pagination.changePerPage"
             >
+                <template #actions>
+                    <button
+                        @click="exportToExcel"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                        title="Export current view to Excel"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>Export Excel</span>
+                    </button>
+                </template>
+
                 <template #header>
                     <tr>
                         <th class="px-4 py-3 w-10">

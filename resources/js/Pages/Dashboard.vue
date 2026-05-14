@@ -103,6 +103,25 @@ const filteredUsers = computed(() => {
     return matchingUsers;
 });
 
+const activeTicketCount = computed(() => (Number(props.stats?.open || 0) + Number(props.stats?.in_progress || 0)));
+
+const activeTicketFilterParams = computed(() => {
+    const params = {
+        status: ['open', 'in_progress'],
+        skip_default_department: 1,
+    };
+
+    if (filterForm.year) {
+        params.year = filterForm.year;
+    }
+
+    if (filterForm.month) {
+        params.month = filterForm.month;
+    }
+
+    return params;
+});
+
 const kanbanColumns = computed(() => props.kanbanReport?.columns || []);
 const kanbanGroups = computed(() => props.kanbanReport?.groups?.[kanbanView.value] || []);
 const kanbanTotals = computed(() => props.kanbanReport?.totals || {});
@@ -145,6 +164,16 @@ const getPriorityColor = (priority) => {
         case 'medium': return 'text-yellow-800 bg-yellow-50';
         case 'low': return 'text-green-800 bg-green-50';
         default: return 'text-gray-600 bg-gray-50';
+    }
+};
+
+const getPriorityLevel = (priority) => {
+    switch (String(priority || '').toLowerCase()) {
+        case 'urgent': return 'P1';
+        case 'high': return 'P2';
+        case 'medium': return 'P3';
+        case 'low': return 'P4';
+        default: return 'P4';
     }
 };
 
@@ -219,7 +248,16 @@ const exportToExcel = (type) => {
                 </div>
                 <div>
                     <h2 class="text-xl sm:text-2xl font-black">Welcome back, {{ user.name }}!</h2>
-                    <p class="text-blue-100 mt-1 text-sm sm:text-base">You have <span class="font-bold text-white underline decoration-blue-400">{{ stats.open + stats.in_progress }}</span> active tickets needing attention.</p>
+                    <p class="text-blue-100 mt-1 text-sm sm:text-base">
+                        You have
+                        <Link
+                            :href="route('tickets.index', activeTicketFilterParams)"
+                            class="font-bold text-white underline decoration-blue-400 underline-offset-2 hover:text-blue-100"
+                        >
+                            {{ activeTicketCount }}
+                        </Link>
+                        active tickets needing attention.
+                    </p>
                 </div>
             </div>
         </div>
@@ -356,7 +394,7 @@ const exportToExcel = (type) => {
                                         <div class="flex items-start justify-between gap-2">
                                             <span class="text-xs font-black text-blue-600">{{ ticket.key }}</span>
                                             <span :class="['px-1.5 py-0.5 text-[9px] font-black uppercase rounded-md', getPriorityColor(ticket.priority)]">
-                                                {{ ticket.priority || 'low' }}
+                                                {{ ticket.priority || 'low' }} {{ getPriorityLevel(ticket.priority) }}
                                             </span>
                                         </div>
                                         <p class="mt-1 text-xs font-bold text-gray-900 leading-4 line-clamp-2">{{ ticket.title }}</p>

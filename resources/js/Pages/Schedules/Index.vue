@@ -1197,8 +1197,38 @@ const orgChartSubordinateIds = computed(() => {
 
 const calendarUsers = computed(() => {
     const authDeptId = page.props.auth?.user?.department_id
-    if (!authDeptId) return (props.users ?? []).filter(u => !u.is_vacant)
-    return (props.users ?? []).filter(u => u.department_id === authDeptId && !u.is_vacant)
+    const allUsers = (props.users ?? []).filter(u => !u.is_vacant)
+
+    let users = authDeptId
+        ? allUsers.filter(u => Number(u.department_id) === Number(authDeptId))
+        : allUsers
+
+    if (deptFilterParams.value.department_id) {
+        users = users.filter(u => Number(u.department_id) === Number(deptFilterParams.value.department_id))
+    }
+
+    if (deptFilterParams.value.department_node_id) {
+        const selectedNodeId = Number(deptFilterParams.value.department_node_id)
+        const allowedNodeIds = new Set([
+            selectedNodeId,
+            ...getDescendantNodeIds(selectedNodeId, props.departmentNodes),
+        ].map(Number))
+
+        users = users.filter(u => allowedNodeIds.has(Number(u.department_node_id)))
+    }
+
+    if (filterSubUnit.value) {
+        const filterValue = String(filterSubUnit.value).toLowerCase()
+        users = users.filter(u => String(u.sub_unit || '').toLowerCase().includes(filterValue))
+    }
+
+    if (filterUser.value === 'my') {
+        users = users.filter(u => Number(u.id) === Number(authUser.value?.id))
+    } else if (filterUser.value) {
+        users = users.filter(u => Number(u.id) === Number(filterUser.value))
+    }
+
+    return users
 })
 
 const calendarSchedules = computed(() => {
