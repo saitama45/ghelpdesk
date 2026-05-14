@@ -160,6 +160,9 @@ class AttendanceController extends Controller implements HasMiddleware
         $request->validate([
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
+            'location_accuracy' => 'nullable|numeric|min:0',
+            'location_client' => 'nullable|in:native,web',
+            'location_provider' => 'nullable|in:capacitor,browser',
             'photo' => 'required|string', // Base64 encoded image
         ]);
 
@@ -245,6 +248,9 @@ class AttendanceController extends Controller implements HasMiddleware
             'type' => $type,
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
+            'location_accuracy' => $request->input('location_accuracy'),
+            'location_client' => $request->input('location_client'),
+            'location_provider' => $request->input('location_provider'),
             'photo_path' => $fileName,
             'log_time' => now('Asia/Manila'),
             'device_info' => $request->input('device_info', $request->header('User-Agent')),

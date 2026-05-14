@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GHelpdesk</string>
+    <string name="title_activity_main">GHelpdesk</string>
+    <string name="package_name">com.ghelpdesk.app</string>
+    <string name="custom_url_scheme">com.ghelpdesk.app</string>
+</resources>
