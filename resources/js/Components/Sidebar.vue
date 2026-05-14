@@ -87,7 +87,7 @@ onMounted(() => {
     initPresence();
     initSidebar(page.props.sidebarLayout);
     ensureDynamicFormChildren(dynamicForms.value);
-    if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
+    if (route().current('attendance.*') || route().current('npc-statuses.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
         openMenus.value.adminTask = true;
     }
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
@@ -121,6 +121,7 @@ watch(dynamicForms, (forms) => {
 const canSeeAdminTask = computed(() => {
     return hasPermission('attendance.view') ||
            hasPermission('attendance.logs') ||
+           hasPermission('npc_status.view') ||
            hasPermission('schedules.view') ||
            hasPermission('presence.view') ||
            hasPermission('kb_articles.view');
@@ -386,7 +387,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('adminTask')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) && (isCollapsed || !openMenus.adminTask)
+                            (route().current('attendance.*') || route().current('npc-statuses.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) && (isCollapsed || !openMenus.adminTask)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -408,6 +409,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('attendance.logs')" :style="co('adminTask', 'attendance-logs')">
                                 <Link :href="route('attendance.logs')" :class="collapsedFlyoutLinkClass(route().current('attendance.logs'))">{{ getChildLabel('adminTask', 'attendance-logs') }}</Link>
                             </div>
+                            <div v-if="hasPermission('npc_status.view')" :style="co('adminTask', 'npc-status')">
+                                <Link :href="route('npc-statuses.index')" :class="collapsedFlyoutLinkClass(route().current('npc-statuses.*'))">{{ getChildLabel('adminTask', 'npc-status') }}</Link>
+                            </div>
                             <div v-if="hasPermission('schedules.view')" :style="co('adminTask', 'scheduling')">
                                 <Link :href="route('schedules.index')" :class="collapsedFlyoutLinkClass(route().current('schedules.*'))">{{ getChildLabel('adminTask', 'scheduling') }}</Link>
                             </div>
@@ -426,6 +430,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('attendance.logs')" :style="co('adminTask', 'attendance-logs')">
                             <Link :href="route('attendance.logs')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('attendance.logs') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'attendance-logs') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('npc_status.view')" :style="co('adminTask', 'npc-status')">
+                            <Link :href="route('npc-statuses.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('npc-statuses.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'npc-status') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('schedules.view')" :style="co('adminTask', 'scheduling')">
                             <Link :href="route('schedules.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('schedules.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'scheduling') }}</span></Link>

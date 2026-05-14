@@ -147,6 +147,12 @@ class RolesAndPermissionSeeder extends Seeder
             'attendance.logs' => 'View attendance logs',
             'attendance.create' => 'Can log attendance',
 
+            // Administrative - NPC Status
+            'npc_status.view' => 'View NPC Status',
+            'npc_status.create' => 'Create NPC Status records',
+            'npc_status.edit' => 'Edit NPC Status records',
+            'npc_status.delete' => 'Delete NPC Status records',
+
             // Administrative - Schedules
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',

@@ -21,7 +21,7 @@ export const DEFAULT_CHILD_ORDER = {
     projectTracker: [],
     services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests'],
     inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
-    adminTask: ['dtr', 'attendance-logs', 'scheduling', 'presence', 'kb-articles'],
+    adminTask: ['dtr', 'attendance-logs', 'npc-status', 'scheduling', 'presence', 'kb-articles'],
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
     userManagement: ['users', 'roles'],
@@ -45,6 +45,7 @@ export const CHILD_LABELS = {
     adminTask: {
         'dtr': 'DTR',
         'attendance-logs': 'Attendance Logs',
+        'npc-status': 'NPC Status',
         'scheduling': 'Scheduling',
         'presence': 'Presence',
         'kb-articles': 'KB Articles',

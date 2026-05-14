@@ -59,6 +59,13 @@ class Store extends Model
         return $this->hasMany(Ticket::class);
     }
 
+    public function npcStatuses(): BelongsToMany
+    {
+        return $this->belongsToMany(NpcStatus::class, 'npc_status_store')
+            ->withPivot('year')
+            ->withTimestamps();
+    }
+
     public function getClusterNameAttribute(): string
     {
         return $this->clusters->pluck('name')->implode(', ');

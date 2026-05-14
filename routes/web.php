@@ -5,6 +5,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\NpcStatusController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -42,6 +43,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/dtr', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/logs', [\App\Http\Controllers\AttendanceController::class, 'logs'])->name('attendance.logs');
     Route::post('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])->name('attendance.log');
+    Route::get('npc-statuses/{npcStatus}/attachments/{type}', [NpcStatusController::class, 'downloadAttachment'])
+        ->whereIn('type', ['seal', 'registration'])
+        ->name('npc-statuses.attachments.download');
+    Route::put('npc-statuses/{npcStatus}/stores', [NpcStatusController::class, 'syncStores'])->name('npc-statuses.stores.update');
+    Route::resource('npc-statuses', NpcStatusController::class)
+        ->parameters(['npc-statuses' => 'npcStatus'])
+        ->except(['show', 'create', 'edit']);
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     

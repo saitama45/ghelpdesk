@@ -415,6 +415,7 @@ const landingPageOptions = [
         options: [
             { label: 'DTR (Attendance)', value: 'attendance.index' },
             { label: 'Attendance Logs', value: 'attendance.logs' },
+            { label: 'NPC Status', value: 'npc-statuses.index' },
             { label: 'Scheduling', value: 'schedules.index' },
             { label: 'Presence', value: 'presence.index' },
             { label: 'KB Articles', value: 'kb-articles.index' },
@@ -607,7 +608,7 @@ const permissionGroups = computed(() => {
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Services', categories: servicesCategories },
         { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Stock_transfer', 'Receiving_stock', 'Reports'] },
-        { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
+        { name: 'Administrative', categories: ['Attendance', 'NPC Status', 'Schedules', 'Presence', 'KB Articles'] },
         { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },

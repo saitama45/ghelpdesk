@@ -57,6 +57,7 @@ class RoleService
             'stock transfer',
             'receiving stock',
             'attendance',
+            'npc status',
             'schedules',
             'presence',
             'kb articles',
@@ -90,6 +91,8 @@ class RoleService
             // We use the raw category for keys that are special like 'Pos_requests'
             if ($category === 'kb_articles') {
                 $categoryDisplay = 'KB Articles';
+            } elseif ($category === 'npc_status') {
+                $categoryDisplay = 'NPC Status';
             } elseif ($category === 'task_boards') {
                 $categoryDisplay = 'Task Board';
             } elseif ($category === 'stock_ins') {

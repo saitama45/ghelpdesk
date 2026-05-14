@@ -35,6 +35,11 @@ class Company extends Model
         return $this->hasMany(Ticket::class);
     }
 
+    public function npcStatuses()
+    {
+        return $this->hasMany(NpcStatus::class);
+    }
+
     public function roles()
     {
         return $this->belongsToMany(Role::class, 'role_company');
