@@ -71,7 +71,10 @@
         </div>
 
         <div class="content">
-            @if($isRequester)
+            @if($isApprover)
+                <p class="greeting">Hello Approver,</p>
+                <p class="intro-text">A POS System request is waiting for your Level {{ $approvalLevel }} approval. Please review the request in the help desk portal.</p>
+            @elseif($isRequester)
                 <p class="greeting">Hello {{ $posRequest->user ? $posRequest->user->name : $posRequest->requester_name }},</p>
                 <p class="intro-text">Thank you! Your POS System request has been successfully submitted and is now pending review.</p>
             @else

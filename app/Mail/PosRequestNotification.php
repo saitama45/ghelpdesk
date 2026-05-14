@@ -19,7 +19,9 @@ class PosRequestNotification extends Mailable
     public function __construct(
         public PosRequest $posRequest,
         public string $action = 'created',
-        public bool $isRequester = false
+        public bool $isRequester = false,
+        public bool $isApprover = false,
+        public ?int $approvalLevel = null
     ) {}
 
     /**
@@ -27,7 +29,9 @@ class PosRequestNotification extends Mailable
      */
     public function envelope(): Envelope
     {
-        if ($this->isRequester) {
+        if ($this->isApprover) {
+            $subject = 'Approval Required - Level ' . $this->approvalLevel;
+        } elseif ($this->isRequester) {
             $subject = 'Confirmation: Your POS Request has been received';
         } else {
             $subject = $this->action === 'created' ? 'New POS Request Submitted' : 'POS Request Updated';

@@ -236,6 +236,7 @@ class PosRequestController extends Controller implements HasMiddleware
         // Ensure the model and its relationships are fresh for Inertia
         $posRequest->refresh();
         $posRequest->load(['approvals.user', 'requestType', 'company', 'user', 'details']);
+        $this->posRequestService->notifyCurrentApprovers($posRequest);
 
         return redirect()->back()->with('success', 'Request approved successfully');
     }

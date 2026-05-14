@@ -201,6 +201,10 @@ class SapRequestController extends Controller implements HasMiddleware
             }
         });
 
+        $sapRequest->refresh();
+        $sapRequest->load(['company', 'requestType', 'items', 'user']);
+        $this->sapRequestService->notifyCurrentApprovers($sapRequest);
+
         return redirect()->back()->with('success', 'Request approved successfully.');
     }
 

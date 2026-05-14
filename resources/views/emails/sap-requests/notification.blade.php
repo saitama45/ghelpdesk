@@ -42,11 +42,16 @@
     <div class="wrapper">
         <div class="header">
             <div class="header-badge">SAP Request #{{ $sapRequest->id }} • {{ $sapRequest->requestType->name }}</div>
-            <h1>{{ $action === 'created' ? 'New SAP Request Submitted' : 'SAP Request Updated' }}</h1>
+            <h1>{{ $isApprover ? 'SAP Approval Required' : ($action === 'created' ? 'New SAP Request Submitted' : 'SAP Request Updated') }}</h1>
         </div>
 
         <div class="content">
-            @if($isRequester)
+            @if($isApprover)
+                <p class="greeting">Hello Approver,</p>
+                <p class="intro-text">
+                    An SAP data request is waiting for your Level {{ $approvalLevel }} approval. Please review the request in the help desk portal.
+                </p>
+            @elseif($isRequester)
                 <p class="greeting">Hello {{ $sapRequest->user ? $sapRequest->user->name : $sapRequest->requester_name }},</p>
                 <p class="intro-text">
                     Thank you! Your SAP data request has been successfully submitted and is now pending review.

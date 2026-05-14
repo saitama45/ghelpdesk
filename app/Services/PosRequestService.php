@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\PosRequest;
 use App\Models\RequestType;
 use App\Models\Ticket;
+use App\Models\User;
 use App\Mail\PosRequestNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -71,6 +73,9 @@ class PosRequestService
 
         // Send confirmation to requester
         $this->notifyRequester($posRequest, 'created');
+
+        // Notify the approvers assigned to the current active approval level.
+        $this->notifyCurrentApprovers($posRequest);
 
         return $posRequest;
     }
@@ -156,6 +161,44 @@ class PosRequestService
             Mail::to($emails)->send(new PosRequestNotification($posRequest, $action));
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error("Failed to send POS Request notification: " . $e->getMessage());
+        }
+    }
+
+    public function notifyCurrentApprovers(PosRequest $posRequest): void
+    {
+        $posRequest->loadMissing(['company', 'requestType', 'user', 'details']);
+
+        $level = (int) $posRequest->current_approval_level;
+        if ($level <= 0) {
+            return;
+        }
+
+        $matrixEntry = collect($posRequest->requestType->approver_matrix ?? [])
+            ->firstWhere('level', $level);
+        $approverIds = $matrixEntry['user_ids'] ?? [];
+
+        $emails = User::active()
+            ->whereIn('id', collect($approverIds)->map(fn ($id) => (int) $id)->filter()->unique()->values())
+            ->pluck('email')
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique(fn ($email) => strtolower($email))
+            ->values()
+            ->all();
+
+        if (empty($emails)) {
+            return;
+        }
+
+        try {
+            Mail::to($emails)->send(new PosRequestNotification(
+                $posRequest,
+                'approval_requested',
+                false,
+                true,
+                $level
+            ));
+        } catch (\Exception $e) {
+            Log::error('Failed to send POS Request approver notification: ' . $e->getMessage());
         }
     }
 

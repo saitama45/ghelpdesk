@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SapRequest;
 use App\Models\RequestType;
 use App\Models\Ticket;
+use App\Models\User;
 use App\Mail\SapRequestNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -57,6 +58,7 @@ class SapRequestService
         // Send notifications
         $this->notifyCcEmails($sapRequest, 'created');
         $this->notifyRequester($sapRequest, 'created');
+        $this->notifyCurrentApprovers($sapRequest);
 
         return $sapRequest;
     }
@@ -127,6 +129,46 @@ class SapRequestService
             Mail::to($emails)->send(new SapRequestNotification($sapRequest, $action));
         } catch (\Exception $e) {
             Log::error('Failed to send SAP Request notification: ' . $e->getMessage());
+        }
+    }
+
+    public function notifyCurrentApprovers(SapRequest $sapRequest): void
+    {
+        $sapRequest->loadMissing(['company', 'requestType', 'items', 'user']);
+
+        $level = (int) $sapRequest->current_approval_level;
+        if ($level <= 0) {
+            return;
+        }
+
+        $approverIds = $this->getApproverIdsForLevel(
+            $sapRequest->requestType,
+            $sapRequest->form_data ?? [],
+            $level
+        );
+
+        $emails = User::active()
+            ->whereIn('id', $approverIds)
+            ->pluck('email')
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique(fn ($email) => strtolower($email))
+            ->values()
+            ->all();
+
+        if (empty($emails)) {
+            return;
+        }
+
+        try {
+            Mail::to($emails)->send(new SapRequestNotification(
+                $sapRequest,
+                'approval_requested',
+                false,
+                true,
+                $level
+            ));
+        } catch (\Exception $e) {
+            Log::error('Failed to send SAP Request approver notification: ' . $e->getMessage());
         }
     }
 
