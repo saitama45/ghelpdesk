@@ -223,16 +223,29 @@
                             </div>
 
                             <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 md:col-span-2 space-y-4">
-                                <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Geofencing (Optional)</h4>
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Geofencing (Optional)</h4>
+                                    <button 
+                                        type="button" 
+                                        @click="getCurrentLocation"
+                                        class="inline-flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
+                                    >
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        <span>Get Current Location</span>
+                                    </button>
+                                </div>
                                 <div class="grid grid-cols-2 gap-4">
                                     <div>
                                         <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Latitude</label>
-                                        <input v-model="form.latitude" type="number" step="0.00000001"
+                                        <input v-model="form.latitude" type="number" step="any"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Longitude</label>
-                                        <input v-model="form.longitude" type="number" step="0.00000001"
+                                        <input v-model="form.longitude" type="number" step="any"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                     </div>
                                 </div>
@@ -439,6 +452,27 @@ const resetForm = () => {
 const closeModal = () => {
     showModal.value = false
 }
+
+const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+        showError('Geolocation is not supported by your browser');
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            // Round to 8 decimal places to match DB precision (decimal 10,8 / 11,8)
+            form.latitude = parseFloat(position.coords.latitude.toFixed(8));
+            form.longitude = parseFloat(position.coords.longitude.toFixed(8));
+            showSuccess('Coordinates updated from your current location');
+        },
+        (error) => {
+            let msg = 'Failed to get location';
+            if (error.code === error.PERMISSION_DENIED) msg = 'Location permission denied';
+            showError(msg);
+        }
+    );
+};
 
 const submitForm = () => {
     const url = isEditing.value ? `/stores/${currentStore.value.id}` : '/stores'

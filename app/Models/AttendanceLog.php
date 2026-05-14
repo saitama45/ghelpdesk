@@ -18,6 +18,7 @@ class AttendanceLog extends Model
         'latitude',
         'longitude',
         'location_accuracy',
+        'location_captured_at',
         'location_client',
         'location_provider',
         'photo_path',
@@ -31,6 +32,7 @@ class AttendanceLog extends Model
         'schedule_id' => 'integer',
         'schedule_store_id' => 'integer',
         'location_accuracy' => 'float',
+        'location_captured_at' => 'datetime',
         'log_time' => 'datetime',
     ];
 

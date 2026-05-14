@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -8,7 +8,6 @@ import {
     ArrowPathIcon,
     CameraIcon,
     CheckCircleIcon,
-    DevicePhoneMobileIcon,
     ExclamationCircleIcon,
     GlobeAsiaAustraliaIcon,
     MapPinIcon,
@@ -33,6 +32,7 @@ const props = defineProps({
 
 const PRECISE_LOCATION_ACCURACY_METERS = 100;
 const PRECISE_LOCATION_TIMEOUT_MS = 15000;
+const LOCATION_FRESHNESS_THRESHOLD_MS = 15000;
 const DEFAULT_GRACE_PERIOD_MINUTES = 30;
 const LOCATION_SAMPLE_WINDOW_MS = 30000;
 const MAX_LOCATION_SAMPLES = 5;
@@ -50,6 +50,7 @@ const cameraError = ref(null);
 const latitude = ref(null);
 const longitude = ref(null);
 const locationAccuracy = ref(null);
+const locationCapturedAt = ref(null);
 const locationMode = ref('idle');
 const locationError = ref(null);
 const locationHint = ref(null);
@@ -70,6 +71,7 @@ const form = useForm({
     latitude: null,
     longitude: null,
     location_accuracy: null,
+    location_captured_at: null,
     location_client: getLocationClient(),
     location_provider: getLocationProvider(),
     photo: null,
@@ -192,6 +194,28 @@ const isPreciseEnough = computed(() => {
     return locationAccuracy.value !== null && locationAccuracy.value <= PRECISE_LOCATION_ACCURACY_METERS;
 });
 
+const locationAgeMs = computed(() => {
+    if (!locationCapturedAt.value) return null;
+
+    return Math.max(0, nowMs.value - locationCapturedAt.value);
+});
+
+const isLocationFresh = computed(() => {
+    if (!locationCapturedAt.value) return false;
+
+    return locationAgeMs.value !== null && locationAgeMs.value <= LOCATION_FRESHNESS_THRESHOLD_MS;
+});
+
+const browserGeofenceRequiresFreshFix = computed(() => requiresGeofencing.value && !isNativeApp.value);
+
+const locationFreshnessLabel = computed(() => {
+    if (!locationCapturedAt.value || locationAgeMs.value === null) return 'Waiting for fix';
+
+    const totalSeconds = Math.floor(locationAgeMs.value / 1000);
+
+    return totalSeconds <= 0 ? 'Just now' : `${totalSeconds}s ago`;
+});
+
 const isWithinStoreVicinity = computed(() => {
     if (!props.todaySchedule) return false;
     if (!requiresGeofencing.value) return true;
@@ -206,6 +230,8 @@ const hasLocationFix = computed(() => latitude.value !== null && longitude.value
 
 const locationSubmissionReady = computed(() => {
     if (!hasLocationFix.value) return false;
+    if (browserGeofenceRequiresFreshFix.value && !isLocationFresh.value) return false;
+    if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) return false;
     return isWithinStoreVicinity.value;
 });
 
@@ -258,6 +284,9 @@ const statusMessage = computed(() => {
     if (!capturedImage.value) return 'Please take a selfie first.';
     if (!hasLocationFix.value) return 'Acquiring location...';
     if (locationMode.value === 'error') return locationError.value || 'Unable to secure your location.';
+    if (browserGeofenceRequiresFreshFix.value && !isLocationFresh.value) {
+        return 'Browser location is stale. Refresh GPS and wait for a fresh fix from your current position before logging attendance.';
+    }
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) {
         return 'Waiting for a precise native GPS fix within 100m accuracy. Enable precise/full accuracy location if your device is only giving an approximate pin.';
     }
@@ -315,11 +344,23 @@ const startLocationAttemptProgress = () => {
                 : 'Using the best available fix while location continues updating.';
         } else if (!hasLocationFix.value && !locationError.value) {
             locationHint.value = 'Still trying to obtain a location fix. Check that location services are enabled and move to an area with better signal.';
+
+            if (!isNativeApp.value) {
+                getIpGeolocation().then((ipFix) => {
+                    if (!isMounted.value || hasLocationFix.value || !ipFix) return;
+                    recordLocationSample({
+                        coords: { latitude: ipFix.latitude, longitude: ipFix.longitude, accuracy: ipFix.accuracy },
+                        timestamp: Date.now(),
+                    });
+                    locationMode.value = 'approximate';
+                    locationHint.value = `Using IP-based location${ipFix.city ? ` (${ipFix.city})` : ''}. For precise geofencing, enable GPS or move to an area with better signal.`;
+                });
+            }
         }
 
         clearLocationAttemptTimers();
 
-        if (currentWatchHighAccuracy) {
+        if (currentWatchHighAccuracy && (isNativeApp.value || !requiresGeofencing.value)) {
             void startTracking(false, false);
         }
     }, PRECISE_LOCATION_TIMEOUT_MS);
@@ -337,9 +378,11 @@ const applySelectedLocationSample = (sample) => {
     latitude.value = sample.latitude;
     longitude.value = sample.longitude;
     locationAccuracy.value = sample.accuracy;
+    locationCapturedAt.value = sample.timestamp;
     form.latitude = sample.latitude;
     form.longitude = sample.longitude;
     form.location_accuracy = sample.accuracy;
+    form.location_captured_at = new Date(sample.timestamp).toISOString();
 };
 
 const updateSelectedLocationSample = () => {
@@ -349,11 +392,11 @@ const updateSelectedLocationSample = () => {
     locationSamples.value = recentSamples;
 
     const bestSample = [...recentSamples].sort((left, right) => {
-        if (left.accuracy !== right.accuracy) {
-            return left.accuracy - right.accuracy;
+        if (left.timestamp !== right.timestamp) {
+            return right.timestamp - left.timestamp;
         }
 
-        return right.timestamp - left.timestamp;
+        return left.accuracy - right.accuracy;
     })[0];
 
     applySelectedLocationSample(bestSample);
@@ -366,7 +409,19 @@ const updateSelectedLocationSample = () => {
         return;
     }
 
-    if (!isNativeApp.value || bestSample.accuracy <= PRECISE_LOCATION_ACCURACY_METERS) {
+    if (!isNativeApp.value) {
+        locationMode.value = isLocationFresh.value ? 'ready' : 'approximate';
+        locationHint.value = isLocationFresh.value
+            ? (isWithinStoreVicinity.value ? null : 'Location is fresh now. Move within the assigned store radius to unlock attendance.')
+            : 'Browser geolocation returned an older last-known fix. Keep the page open or refresh GPS until the location updates from your current position.';
+        if (isLocationFresh.value) {
+            locationAttemptProgress.value = 100;
+            clearLocationAttemptTimers();
+        }
+        return;
+    }
+
+    if (bestSample.accuracy <= PRECISE_LOCATION_ACCURACY_METERS) {
         locationMode.value = 'ready';
         locationHint.value = isWithinStoreVicinity.value
             ? null
@@ -420,9 +475,11 @@ const startTracking = async (highAccuracy = true, resetSamples = true) => {
         latitude.value = null;
         longitude.value = null;
         locationAccuracy.value = null;
+        locationCapturedAt.value = null;
         form.latitude = null;
         form.longitude = null;
         form.location_accuracy = null;
+        form.location_captured_at = null;
     }
 
     currentWatchHighAccuracy = highAccuracy;
@@ -462,6 +519,12 @@ const startTracking = async (highAccuracy = true, resetSamples = true) => {
                 }
 
                 if (highAccuracy) {
+                    if (!isNativeApp.value && requiresGeofencing.value) {
+                        locationMode.value = hasLocationFix.value && isLocationFresh.value ? 'ready' : 'approximate';
+                        locationHint.value = 'Browser geolocation is still returning a stale or weak fix. Keep the page open, move if needed, or refresh GPS for a new reading.';
+                        return;
+                    }
+
                     locationHint.value = 'High-accuracy GPS is still settling. Falling back to broader fused location updates while waiting for a precise fix.';
                     void startTracking(false, false);
                     return;
@@ -647,6 +710,17 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     return radius * c;
 };
 
+const getIpGeolocation = async () => {
+    try {
+        const response = await fetch('https://ip-api.com/json?fields=status,lat,lon,city');
+        const data = await response.json();
+        if (data.status !== 'success' || !data.lat || !data.lon) return null;
+        return { latitude: data.lat, longitude: data.lon, accuracy: 5000, city: data.city };
+    } catch {
+        return null;
+    }
+};
+
 const getRefinedDeviceInfo = async () => {
     let info = navigator.userAgent;
     const hardwareDetails = [];
@@ -733,6 +807,7 @@ const submit = async () => {
     form.location_client = getLocationClient();
     form.location_provider = getLocationProvider();
     form.location_accuracy = locationAccuracy.value;
+    form.location_captured_at = locationCapturedAt.value ? new Date(locationCapturedAt.value).toISOString() : null;
     form.device_info = await getRefinedDeviceInfo();
     form.public_ip = await getPublicIp();
 
@@ -746,6 +821,7 @@ const submit = async () => {
             form.latitude = latitude.value;
             form.longitude = longitude.value;
             form.location_accuracy = locationAccuracy.value;
+            form.location_captured_at = locationCapturedAt.value ? new Date(locationCapturedAt.value).toISOString() : null;
         },
     });
 };
@@ -769,6 +845,12 @@ onUnmounted(async () => {
     if (clockInterval) {
         clearInterval(clockInterval);
     }
+});
+
+watch([latitude, longitude, mapElement, activeScheduleStore], () => {
+    if (!mapElement.value) return;
+
+    void nextTick(() => updateMap());
 });
 </script>
 
@@ -827,23 +909,6 @@ onUnmounted(async () => {
                     </div>
                 </div>
 
-                <div
-                    v-if="false"
-                    class="rounded-2xl border border-amber-300 bg-amber-50 p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-                >
-                    <div class="flex items-start gap-3">
-                        <DevicePhoneMobileIcon class="w-6 h-6 text-amber-700 mt-0.5" />
-                        <div>
-                            <p class="text-sm font-black text-amber-900 uppercase tracking-widest">Mobile App Required</p>
-                            <p class="text-sm text-amber-800">
-                                {{ todaySchedule?.status }} attendance uses native fused location now. Open this page inside the Capacitor mobile app to continue. Browser access remains available for WFH.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="text-xs font-bold text-amber-800 bg-white/70 border border-amber-200 rounded-lg px-3 py-2">
-                        Client: Web · Required: Native
-                    </div>
-                </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div class="space-y-4">
@@ -899,23 +964,17 @@ onUnmounted(async () => {
                             </div>
                         </div>
 
-                        <div v-if="false" class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-                            <p class="font-bold mb-1">Browser geolocation is disabled for geofenced attendance.</p>
-                            <p>Use the Android or iOS mobile app so attendance is checked against native fused GPS, Wi-Fi, and cellular location.</p>
-                        </div>
+                        <div class="relative aspect-video bg-gray-100 rounded-lg border-2 overflow-hidden" :class="isWithinStoreVicinity ? 'border-blue-500' : 'border-gray-200'">
+                            <div ref="mapElement" class="w-full h-full"></div>
 
-                        <template v-else>
-                            <div class="relative aspect-video bg-gray-100 rounded-lg border-2 overflow-hidden" :class="isWithinStoreVicinity ? 'border-blue-500' : 'border-gray-200'">
-                                <div ref="mapElement" class="w-full h-full"></div>
-
-                                <div v-if="!latitude || locationError" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/90 p-4 text-center">
-                                    <template v-if="!latitude && !locationError">
-                                        <ArrowPathIcon class="w-8 h-8 animate-spin text-gray-400 mb-2" />
-                                        <p class="text-gray-500">Acquiring location...</p>
-                                    </template>
-                                    <p v-else-if="locationError" class="text-red-500 text-sm font-medium">{{ locationError }}</p>
-                                </div>
+                            <div v-if="!latitude || locationError" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/90 p-4 text-center">
+                                <template v-if="!latitude && !locationError">
+                                    <ArrowPathIcon class="w-8 h-8 animate-spin text-gray-400 mb-2" />
+                                    <p class="text-gray-500">Acquiring location...</p>
+                                </template>
+                                <p v-else-if="locationError" class="text-red-500 text-sm font-medium">{{ locationError }}</p>
                             </div>
+                        </div>
 
                             <div class="flex items-center justify-between gap-3">
                                 <div>
@@ -948,6 +1007,10 @@ onUnmounted(async () => {
                                         <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Distance To Store</p>
                                         <p class="font-bold text-gray-900">{{ requiresGeofencing ? locationDistanceLabel : 'Not required for WFH' }}</p>
                                     </div>
+                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2 sm:col-span-2">
+                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Last Updated</p>
+                                        <p class="font-bold text-gray-900">{{ locationFreshnessLabel }}</p>
+                                    </div>
                                 </div>
                                 <p v-if="locationHint" class="text-[11px] text-amber-700 font-medium">
                                     {{ locationHint }}
@@ -956,7 +1019,6 @@ onUnmounted(async () => {
                                     {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }}
                                 </p>
                             </div>
-                        </template>
                     </div>
 
                     <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100">

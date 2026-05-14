@@ -32,12 +32,14 @@ class AttendanceLogNativeLocationTest extends TestCase
     public function test_geofenced_log_is_accepted_from_browser_when_inside_store_radius(): void
     {
         [$user, $store, $schedule, $scheduleStore] = $this->createGeofencedAttendanceContext();
+        $capturedAt = Carbon::now('UTC')->subSeconds(5);
 
         $response = $this->actingAs($user)
             ->post(route('attendance.log'), $this->payload([
                 'latitude' => $store->latitude,
                 'longitude' => $store->longitude,
                 'location_accuracy' => 250,
+                'location_captured_at' => $capturedAt->toIso8601String(),
                 'location_client' => 'web',
                 'location_provider' => 'browser',
             ]));
@@ -51,6 +53,33 @@ class AttendanceLogNativeLocationTest extends TestCase
             'location_client' => 'web',
             'location_provider' => 'browser',
         ]);
+
+        $log = AttendanceLog::firstOrFail();
+        $this->assertNotNull($log->location_captured_at);
+    }
+
+    public function test_geofenced_log_is_rejected_from_browser_when_location_is_stale(): void
+    {
+        [$user, $store] = $this->createGeofencedAttendanceContext();
+
+        $response = $this->actingAs($user)
+            ->from('/dtr')
+            ->post(route('attendance.log'), $this->payload([
+                'latitude' => $store->latitude,
+                'longitude' => $store->longitude,
+                'location_accuracy' => 250,
+                'location_captured_at' => Carbon::now('UTC')->subSeconds(20)->toIso8601String(),
+                'location_client' => 'web',
+                'location_provider' => 'browser',
+            ]));
+
+        $response->assertRedirect('/dtr');
+        $response->assertSessionHas('error');
+        $this->assertSame(
+            'Browser location is stale. Refresh GPS and wait for a fresh fix from your current position before logging attendance.',
+            session('error')
+        );
+        $this->assertDatabaseCount('attendance_logs', 0);
     }
 
     public function test_geofenced_log_is_rejected_when_outside_store_radius(): void
@@ -82,6 +111,7 @@ class AttendanceLogNativeLocationTest extends TestCase
                 'latitude' => $store->latitude,
                 'longitude' => $store->longitude,
                 'location_accuracy' => 8.5,
+                'location_captured_at' => Carbon::now('UTC')->subSeconds(3)->toIso8601String(),
                 'location_client' => 'native',
                 'location_provider' => 'capacitor',
             ]));
@@ -100,6 +130,7 @@ class AttendanceLogNativeLocationTest extends TestCase
 
         $log = AttendanceLog::firstOrFail();
         Storage::disk('public')->assertExists($log->photo_path);
+        $this->assertNotNull($log->location_captured_at);
     }
 
     private function createGeofencedAttendanceContext(): array
@@ -147,6 +178,7 @@ class AttendanceLogNativeLocationTest extends TestCase
             'latitude' => 14.5995,
             'longitude' => 120.9842,
             'location_accuracy' => 10,
+            'location_captured_at' => Carbon::now('UTC')->toIso8601String(),
             'location_client' => 'native',
             'location_provider' => 'capacitor',
             'photo' => self::TEST_PHOTO,
