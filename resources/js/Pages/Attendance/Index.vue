@@ -987,6 +987,65 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                                 </SecondaryButton>
                             </div>
 
+                    </div>
+
+                    <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+
+                            <!-- Time In / Out box -->
+                            <div class="bg-gray-50 rounded-xl p-4 sm:p-6 flex flex-col items-center gap-3 border border-gray-100 shadow-inner">
+                                <div class="text-center">
+                                    <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
+                                    <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
+                                    <div class="flex items-center gap-2 mt-1 justify-center">
+                                        <div :class="['w-2 h-2 rounded-full animate-pulse', presenceState === 'in' ? 'bg-green-500' : presenceState === 'out' ? 'bg-red-500' : 'bg-gray-400']"></div>
+                                        <p class="text-xs sm:text-sm font-bold" :class="presenceState === 'in' ? 'text-green-600' : presenceState === 'out' ? 'text-red-600' : 'text-gray-500'">
+                                            Status: {{ presenceState === 'in' ? 'IN' : presenceState === 'out' ? 'OUT' : 'Not Yet Logged' }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div v-if="!canSave" class="flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100 text-[10px] sm:text-xs font-bold text-center w-full justify-center">
+                                    <ExclamationCircleIcon class="w-4 h-4 flex-shrink-0" />
+                                    {{ statusMessage }}
+                                </div>
+
+                                <PrimaryButton
+                                    @click="submit"
+                                    :disabled="!canSave"
+                                    class="w-full py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl uppercase tracking-widest transition-all"
+                                    :class="[
+                                        canSave
+                                            ? (nextAction === 'Time In' ? 'bg-green-600 hover:bg-green-700 active:scale-95' : 'bg-orange-600 hover:bg-orange-700 active:scale-95')
+                                            : 'bg-gray-300'
+                                    ]"
+                                >
+                                    <template v-if="form.processing">
+                                        <ArrowPathIcon class="w-5 h-5 sm:w-6 sm:h-6 animate-spin mr-2" />
+                                        Saving...
+                                    </template>
+                                    <template v-else>
+                                        {{ nextAction }}
+                                    </template>
+                                </PrimaryButton>
+
+                                <div class="flex gap-4 sm:gap-6">
+                                    <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="capturedImage ? 'text-green-600' : 'text-gray-400'">
+                                        <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        Selfie
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="hasLocationFix ? 'text-green-600' : 'text-gray-400'">
+                                        <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        Location
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="locationSubmissionReady ? 'text-green-600' : 'text-gray-400'">
+                                        <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        Ready
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- GPS Accuracy box -->
                             <div class="space-y-3 rounded-xl border border-gray-200 p-4 bg-gray-50">
                                 <div class="flex justify-between text-sm">
                                     <span class="text-gray-600 font-medium">GPS Accuracy</span>
@@ -1019,61 +1078,7 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                                     {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }}
                                 </p>
                             </div>
-                    </div>
 
-                    <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100">
-                        <div class="bg-gray-50 rounded-xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-6 border border-gray-100 shadow-inner">
-                            <div class="text-center md:text-left">
-                                <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
-                                <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
-                                <div class="flex items-center gap-2 mt-1 justify-center md:justify-start">
-                                    <div :class="['w-2 h-2 rounded-full animate-pulse', presenceState === 'in' ? 'bg-green-500' : presenceState === 'out' ? 'bg-red-500' : 'bg-gray-400']"></div>
-                                    <p class="text-xs sm:text-sm font-bold" :class="presenceState === 'in' ? 'text-green-600' : presenceState === 'out' ? 'text-red-600' : 'text-gray-500'">
-                                        Status: {{ presenceState === 'in' ? 'IN' : presenceState === 'out' ? 'OUT' : 'Not Yet Logged' }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col items-center gap-3 w-full sm:w-auto">
-                                <div v-if="!canSave" class="flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100 text-[10px] sm:text-xs font-bold text-center">
-                                    <ExclamationCircleIcon class="w-4 h-4 flex-shrink-0" />
-                                    {{ statusMessage }}
-                                </div>
-
-                                <PrimaryButton
-                                    @click="submit"
-                                    :disabled="!canSave"
-                                    class="w-full sm:px-16 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl uppercase tracking-widest transition-all"
-                                    :class="[
-                                        canSave
-                                            ? (nextAction === 'Time In' ? 'bg-green-600 hover:bg-green-700 active:scale-95' : 'bg-orange-600 hover:bg-orange-700 active:scale-95')
-                                            : 'bg-gray-300'
-                                    ]"
-                                >
-                                    <template v-if="form.processing">
-                                        <ArrowPathIcon class="w-5 h-5 sm:w-6 sm:h-6 animate-spin mr-2" />
-                                        Saving...
-                                    </template>
-                                    <template v-else>
-                                        {{ nextAction }}
-                                    </template>
-                                </PrimaryButton>
-
-                                <div class="flex gap-4 sm:gap-6">
-                                    <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="capturedImage ? 'text-green-600' : 'text-gray-400'">
-                                        <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                        Selfie
-                                    </div>
-                                    <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="hasLocationFix ? 'text-green-600' : 'text-gray-400'">
-                                        <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                        Location
-                                    </div>
-                                    <div class="flex items-center gap-1.5 text-[9px] sm:text-[10px] uppercase font-black" :class="locationSubmissionReady ? 'text-green-600' : 'text-gray-400'">
-                                        <CheckCircleIcon class="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                        Ready
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
