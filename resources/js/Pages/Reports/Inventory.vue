@@ -246,6 +246,9 @@
                         <p class="text-sm text-gray-500" v-if="selectedAssetForHistory">
                             History for <span class="font-bold text-blue-600">{{ selectedAssetForHistory.item_code }}</span> at <span class="font-bold text-gray-900">{{ historyLocation }}</span>
                         </p>
+                        <p class="text-xs font-bold uppercase tracking-widest text-emerald-700 mt-1" v-if="selectedHistorySoh !== null">
+                            Current SOH: {{ formatPlainQuantity(selectedHistorySoh) }}
+                        </p>
                     </div>
                     <button @click="closeHistoryModal" class="text-gray-400 hover:text-gray-600">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -297,8 +300,36 @@
                                         </td>
                                         <td class="px-4 py-3 text-xs text-gray-500">
                                             <div class="flex flex-col">
-                                                <span class="font-bold text-gray-700 leading-tight">Batch Record</span>
-                                                <span v-if="tx.dr_numbers.length" class="text-[10px] text-blue-500 font-semibold mt-0.5">DR: {{ tx.dr_numbers.join(', ') }}</span>
+                                                <span class="font-bold text-gray-700 leading-tight">{{ isTransferTransaction(tx) ? 'Transfer Record' : 'Batch Record' }}</span>
+                                                <span v-if="isTransferTransaction(tx) && tx.transfer_no" class="text-[10px] text-blue-500 font-semibold mt-0.5">
+                                                    Transfer No.:
+                                                    <a
+                                                        v-if="tx.transfer_reference_id"
+                                                        :href="transferTransactionHref(tx.transfer_reference_id)"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="underline underline-offset-2 hover:text-blue-700"
+                                                    >
+                                                        {{ tx.transfer_no }}
+                                                    </a>
+                                                    <span v-else>{{ tx.transfer_no }}</span>
+                                                </span>
+                                                <span v-if="tx.dr_links.length" class="text-[10px] text-blue-500 font-semibold mt-0.5">
+                                                    DR No.:
+                                                    <template v-for="(dr, index) in tx.dr_links" :key="`${dr.number}-${dr.reference_id || index}`">
+                                                        <span v-if="index > 0">, </span>
+                                                        <a
+                                                            v-if="dr.reference_id"
+                                                            :href="stockInTransactionHref(dr.reference_id)"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="underline underline-offset-2 hover:text-blue-700"
+                                                        >
+                                                            {{ dr.number }}
+                                                        </a>
+                                                        <span v-else>{{ dr.number }}</span>
+                                                    </template>
+                                                </span>
                                                 <span v-if="formatMovement(tx)" class="text-[10px] text-gray-500 font-semibold mt-0.5">{{ formatMovement(tx) }}</span>
                                                 <span v-if="tx.source_count > 1" class="text-[10px] text-gray-400 font-semibold mt-0.5">
                                                     {{ tx.source_count }} rows grouped
@@ -425,6 +456,7 @@ const showHistoryModal = ref(false)
 const isLoadingHistory = ref(false)
 const selectedAssetForHistory = ref(null)
 const historyLocation = ref('')
+const selectedHistorySoh = ref(null)
 const transactionHistory = ref([])
 
 const groupedHistory = computed(() => {
@@ -437,6 +469,7 @@ const groupedHistory = computed(() => {
         const childKey = [
             tx.transaction_type || 'Transaction',
             receivedBy,
+            tx.transfer_no || 'No Transfer',
             tx.dr_no || 'No DR',
             tx.origin_location || 'No Origin',
             tx.destination_location || 'No Destination',
@@ -462,7 +495,9 @@ const groupedHistory = computed(() => {
                 total_quantity: 0,
                 source_count: 0,
                 latest_tx_at: tx.latest_tx_at,
-                dr_numbers: [],
+                transfer_no: tx.transfer_no || '',
+                transfer_reference_id: tx.transfer_reference_id || null,
+                dr_links: [],
                 origin_locations: [],
                 destination_locations: [],
             })
@@ -472,8 +507,15 @@ const groupedHistory = computed(() => {
         child.total_quantity += quantity
         child.source_count += Number(tx.record_count ?? 1)
 
-        if (tx.dr_no && !child.dr_numbers.includes(tx.dr_no)) {
-            child.dr_numbers.push(tx.dr_no)
+        if (tx.transfer_reference_id && !child.transfer_reference_id) {
+            child.transfer_reference_id = tx.transfer_reference_id
+        }
+
+        if (tx.dr_no && !child.dr_links.some(link => link.number === tx.dr_no && link.reference_id === (tx.stock_in_reference_id || null))) {
+            child.dr_links.push({
+                number: tx.dr_no,
+                reference_id: tx.stock_in_reference_id || null,
+            })
         }
 
         pushUnique(child.origin_locations, tx.origin_location)
@@ -496,6 +538,7 @@ const groupedHistory = computed(() => {
 const viewHistory = async (row) => {
     selectedAssetForHistory.value = row.asset
     historyLocation.value = row.location
+    selectedHistorySoh.value = Number(row.soh || 0)
     showHistoryModal.value = true
     isLoadingHistory.value = true
     transactionHistory.value = []
@@ -514,6 +557,7 @@ const viewHistory = async (row) => {
 
 const closeHistoryModal = () => {
     showHistoryModal.value = false
+    selectedHistorySoh.value = null
 }
 
 const pushUnique = (items, value) => {
@@ -586,6 +630,12 @@ const formatSignedQuantity = (value) => {
 const formatPlainQuantity = (value) => {
     return new Intl.NumberFormat('en-US').format(Number(value || 0))
 }
+
+const isTransferTransaction = (tx) => (tx.transaction_type || '').toLowerCase().includes('transfer')
+
+const stockInTransactionHref = (referenceId) => route('stock-ins.index', { open_stock_in: referenceId })
+
+const transferTransactionHref = (referenceId) => route('stock-transfers.index', { open_transfer: referenceId })
 
 const formatLocationList = (locations = []) => locations.filter(Boolean).join(', ')
 

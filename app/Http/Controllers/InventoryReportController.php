@@ -6,6 +6,8 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
 use App\Models\StockIn;
+use App\Models\StockReceiving;
+use App\Models\StockTransfer;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +30,7 @@ class InventoryReportController extends Controller implements HasMiddleware
         $query = $this->inventoryRowsQuery($request);
 
         $assets = (clone $query)
-            ->orderBy('stock_ins.destination_location')
+            ->orderBy('location')
             ->orderBy('assets.item_code')
             ->paginate($request->integer('per_page', 10))
             ->withQueryString();
@@ -45,13 +47,7 @@ class InventoryReportController extends Controller implements HasMiddleware
             ->orderBy('location')
             ->get();
 
-        $postedTransactionsBase = fn () => InventoryTransaction::query()
-            ->join('stock_ins', function ($join) {
-                $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
-                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
-            })
-            ->where('stock_ins.status', 'Posted')
-            ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS);
+        $postedTransactionsBase = fn () => $this->reportLedgerQuery();
 
         $internalStockByAsset = $postedTransactionsBase()
             ->select('inventory_transactions.asset_id', DB::raw('SUM(inventory_transactions.quantity) as soh'))
@@ -68,7 +64,7 @@ class InventoryReportController extends Controller implements HasMiddleware
             'out_of_stock_count' => Asset::leftJoinSub($internalStockByAsset, 'internal_stock', function ($join) {
                 $join->on('assets.id', '=', 'internal_stock.asset_id');
             })
-                ->whereRaw('ISNULL(internal_stock.soh, 0) <= 0')
+                ->whereRaw('COALESCE(internal_stock.soh, 0) <= 0')
                 ->count(),
         ];
 
@@ -77,12 +73,11 @@ class InventoryReportController extends Controller implements HasMiddleware
             'locationSummaries' => $locationSummaries,
             'categories' => Category::orderBy('name')->get(),
             'brands' => Asset::whereNotNull('brand')->distinct()->pluck('brand'),
-            'locations' => StockIn::whereNotNull('destination_location')
-                ->where('status', 'Posted')
-                ->whereNotIn('destination_location', self::EXCLUDED_REPORT_LOCATIONS)
+            'locations' => $postedTransactionsBase()
+                ->whereNotNull('inventory_transactions.location')
                 ->distinct()
-                ->orderBy('destination_location')
-                ->pluck('destination_location'),
+                ->orderBy('inventory_transactions.location')
+                ->pluck('inventory_transactions.location'),
             'summary' => $summary,
             'filters' => $request->only(['category_id', 'sub_category_id', 'type', 'brand', 'location', 'stock_status', 'search'])
         ]);
@@ -94,23 +89,35 @@ class InventoryReportController extends Controller implements HasMiddleware
 
         $history = InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
             ->where('inventory_transactions.location', $location)
-            ->leftJoin('stock_ins', function($join) {
-                $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
+            ->leftJoin('stock_ins as stock_in_history', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stock_in_history.id')
                      ->where('inventory_transactions.reference_type', '=', StockIn::class);
             })
+            ->leftJoin('stock_transfers as stock_transfer_history', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stock_transfer_history.id')
+                    ->where('inventory_transactions.reference_type', '=', StockTransfer::class);
+            })
+            ->leftJoin('stock_receivings as stock_receiving_history', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stock_receiving_history.id')
+                    ->where('inventory_transactions.reference_type', '=', StockReceiving::class);
+            })
+            ->leftJoin('stock_transfers as receiving_transfer_history', 'stock_receiving_history.stock_transfer_id', '=', 'receiving_transfer_history.id')
             ->where(function ($q) {
                 $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                  ->orWhere('stock_ins.status', 'Posted');
+                  ->orWhere('stock_in_history.status', 'Posted');
             })
             ->leftJoin('users', 'inventory_transactions.created_by', '=', 'users.id')
             ->select(
                 'inventory_transactions.transaction_type',
                 'users.name as creator_name',
-                'stock_ins.dr_no',
-                'stock_ins.receive_date',
-                'stock_ins.received_by',
-                'stock_ins.origin_location',
-                'stock_ins.destination_location',
+                'stock_in_history.dr_no',
+                DB::raw('MIN(stock_in_history.id) as stock_in_reference_id'),
+                'stock_in_history.receive_date',
+                DB::raw('COALESCE(stock_in_history.received_by, stock_receiving_history.received_by, receiving_transfer_history.received_by, stock_transfer_history.received_by) as received_by'),
+                DB::raw('COALESCE(stock_transfer_history.transfer_no, receiving_transfer_history.transfer_no) as transfer_no'),
+                DB::raw('MIN(COALESCE(stock_transfer_history.id, receiving_transfer_history.id)) as transfer_reference_id'),
+                DB::raw('COALESCE(stock_transfer_history.origin_location, stock_receiving_history.origin_location, receiving_transfer_history.origin_location, stock_in_history.origin_location) as origin_location'),
+                DB::raw('COALESCE(stock_transfer_history.destination_location, stock_receiving_history.destination_location, receiving_transfer_history.destination_location, stock_in_history.destination_location) as destination_location'),
                 DB::raw('SUM(inventory_transactions.quantity) as total_quantity'),
                 DB::raw('COUNT(*) as record_count'),
                 DB::raw('MAX(inventory_transactions.created_at) as latest_tx_at')
@@ -118,11 +125,12 @@ class InventoryReportController extends Controller implements HasMiddleware
             ->groupBy(
                 'inventory_transactions.transaction_type',
                 'users.name',
-                'stock_ins.dr_no',
-                'stock_ins.receive_date',
-                'stock_ins.received_by',
-                'stock_ins.origin_location',
-                'stock_ins.destination_location'
+                'stock_in_history.dr_no',
+                'stock_in_history.receive_date',
+                DB::raw('COALESCE(stock_in_history.received_by, stock_receiving_history.received_by, receiving_transfer_history.received_by, stock_transfer_history.received_by)'),
+                DB::raw('COALESCE(stock_transfer_history.transfer_no, receiving_transfer_history.transfer_no)'),
+                DB::raw('COALESCE(stock_transfer_history.origin_location, stock_receiving_history.origin_location, receiving_transfer_history.origin_location, stock_in_history.origin_location)'),
+                DB::raw('COALESCE(stock_transfer_history.destination_location, stock_receiving_history.destination_location, receiving_transfer_history.destination_location, stock_in_history.destination_location)')
             )
             ->orderBy('latest_tx_at', 'desc')
             ->get();
@@ -136,21 +144,15 @@ class InventoryReportController extends Controller implements HasMiddleware
 
     private function inventoryRowsQuery(Request $request)
     {
-        $query = InventoryTransaction::query()
+        $query = $this->reportLedgerQuery()
             ->join('assets', 'inventory_transactions.asset_id', '=', 'assets.id')
-            ->join('stock_ins', function ($join) {
-                $join->on('inventory_transactions.reference_id', '=', 'stock_ins.id')
-                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
-            })
-            ->where('stock_ins.status', 'Posted')
-            ->whereNotIn('stock_ins.destination_location', self::EXCLUDED_REPORT_LOCATIONS)
             ->select(
                 'inventory_transactions.asset_id',
-                'stock_ins.destination_location as location',
+                'inventory_transactions.location as location',
                 DB::raw('SUM(inventory_transactions.quantity) as soh'),
                 DB::raw('SUM(inventory_transactions.quantity * assets.cost) as total_value')
             )
-            ->groupBy('inventory_transactions.asset_id', 'stock_ins.destination_location', 'assets.id', 'assets.item_code')
+            ->groupBy('inventory_transactions.asset_id', 'inventory_transactions.location', 'assets.id', 'assets.item_code')
             ->with(['asset.category', 'asset.subCategory']);
 
         if ($request->filled('category_id')) {
@@ -178,7 +180,7 @@ class InventoryReportController extends Controller implements HasMiddleware
         }
 
         if ($request->filled('location')) {
-            $query->where('stock_ins.destination_location', $request->location);
+            $query->where('inventory_transactions.location', $request->location);
         }
 
         if ($request->filled('stock_status')) {
@@ -200,5 +202,19 @@ class InventoryReportController extends Controller implements HasMiddleware
         }
 
         return $query;
+    }
+
+    private function reportLedgerQuery()
+    {
+        return InventoryTransaction::query()
+            ->leftJoin('stock_ins as report_stock_ins', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'report_stock_ins.id')
+                    ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where(function ($query) {
+                $query->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                    ->orWhere('report_stock_ins.status', 'Posted');
+            })
+            ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS);
     }
 }

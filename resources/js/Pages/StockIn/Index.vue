@@ -391,8 +391,12 @@
         <!-- Modal -->
         <Modal :show="showModal" @close="closeModal" max-width="4xl">
             <div class="p-6">
-                <h3 class="text-lg font-bold text-gray-900 mb-4">{{ isEditing ? 'Edit Stock In' : 'Add Stock In' }}</h3>
+                <h3 class="text-lg font-bold text-gray-900 mb-4">{{ readOnlyMode ? 'View Stock In' : (isEditing ? 'Edit Stock In' : 'Add Stock In') }}</h3>
                 <form @submit.prevent="submitForm()" class="space-y-4">
+                    <p v-if="readOnlyMode" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                        This stock-in record is read-only because it has already been posted.
+                    </p>
+                    <fieldset :disabled="readOnlyMode" class="space-y-4 disabled:opacity-90">
                     <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
                         <div>
                             <h4 class="text-sm font-semibold text-gray-900">Header Details</h4>
@@ -427,6 +431,7 @@
                                     label-key="name"
                                     value-key="value"
                                     placeholder="Select Vendor"
+                                    :disabled="readOnlyMode"
                                 />
                             </div>
                             <div>
@@ -437,6 +442,7 @@
                                     label-key="name"
                                     value-key="value"
                                     placeholder="Select Origin Store"
+                                    :disabled="readOnlyMode"
                                 />
                             </div>
                         </div>
@@ -484,7 +490,7 @@
                                     label-key="name"
                                     value-key="id"
                                     placeholder="Select Asset Item"
-                                    :disabled="!form.brand || !form.model"
+                                    :disabled="readOnlyMode || !form.brand || !form.model"
                                     @update:modelValue="onAssetChange"
                                 />
                             </div>
@@ -598,6 +604,7 @@
                                             value-key="value"
                                             placeholder="Select Destination"
                                             size="sm"
+                                            :disabled="readOnlyMode"
                                         />
                                     </div>
                                 </div>
@@ -687,6 +694,7 @@
                                                 value-key="value"
                                                 placeholder="Select Destination Store"
                                                 size="sm"
+                                                :disabled="readOnlyMode"
                                             />
                                         </div>
                                     </div>
@@ -745,6 +753,7 @@
                                             value-key="value"
                                             placeholder="Select Destination Store"
                                             size="sm"
+                                            :disabled="readOnlyMode"
                                         />
                                     </div>
                                 </div>
@@ -842,11 +851,12 @@
                     </div>
 
                     <div class="flex justify-end space-x-3 mt-6">
-                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700">
+                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">{{ readOnlyMode ? 'Close' : 'Cancel' }}</button>
+                        <button v-if="!readOnlyMode" type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700">
                             {{ isEditing ? 'Update' : 'Save' }}
                         </button>
                     </div>
+                    </fieldset>
                 </form>
             </div>
         </Modal>
@@ -1088,6 +1098,7 @@ const normalizeLocationValue = (value) => {
 const showModal = ref(false)
 const showImportModal = ref(false)
 const isEditing = ref(false)
+const readOnlyMode = ref(false)
 const currentId = ref(null)
 const editingStockIn = ref(null)
 const importFileInput = ref(null)
@@ -1589,6 +1600,7 @@ const resetForm = () => {
 
 const openCreateModal = () => {
     isEditing.value = false
+    readOnlyMode.value = false
     currentId.value = null
     editingStockIn.value = null
     resetForm()
@@ -1614,10 +1626,21 @@ const editHeaderItem = async (header) => {
     }
 }
 
+const openLinkedStockIn = async () => {
+    const params = new URLSearchParams(window.location.search)
+    const referenceId = params.get('open_stock_in')
+
+    if (!referenceId) return
+
+    await editHeaderItem({ id: referenceId })
+    readOnlyMode.value = true
+}
+
 const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item], auditSource = item) => {
     const asset = normalizedAssets.value.find(a => a.id == item.asset_id)
     codeValidationAttempted.value = false
     isEditing.value = true
+    readOnlyMode.value = false
     currentId.value = item.id
     editingStockIn.value = auditSource
     Object.assign(form, {
@@ -1653,6 +1676,7 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
 const closeModal = () => {
     showModal.value = false
     codeValidationAttempted.value = false
+    readOnlyMode.value = false
 }
 
 const openImportModal = () => {
@@ -1891,6 +1915,7 @@ const handleWheel = (event) => {
 
 onMounted(() => {
     pagination.updateData(props.stockIns)
+    openLinkedStockIn()
 })
 
 watch(() => props.stockIns, (newVal) => {

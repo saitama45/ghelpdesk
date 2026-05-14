@@ -172,7 +172,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
                                     <button
-                                        v-if="hasPermission('stock_transfers.post') && item.status !== 'Posted'"
+                                        v-if="hasPermission('stock_transfers.post') && canPostTransfer(item.status)"
                                         @click="postTransfer(item)"
                                         class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
                                         title="Post Transfer"
@@ -182,7 +182,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('stock_transfers.edit') && item.status !== 'Posted'"
+                                        v-if="hasPermission('stock_transfers.edit') && canPostTransfer(item.status)"
                                         @click="editTransfer(item)"
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit"
@@ -192,7 +192,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('stock_transfers.delete') && item.status !== 'Posted'"
+                                        v-if="hasPermission('stock_transfers.delete') && canPostTransfer(item.status)"
                                         @click="deleteTransfer(item)"
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                         title="Delete"
@@ -212,8 +212,12 @@
         <!-- Modal -->
         <Modal :show="showModal" @close="closeModal" max-width="6xl">
             <div class="p-6">
-                <h3 class="text-lg font-bold text-gray-900 mb-4">{{ isEditing ? 'Edit Stock Transfer' : 'New Stock Transfer' }}</h3>
+                <h3 class="text-lg font-bold text-gray-900 mb-4">{{ readOnlyMode ? 'View Stock Transfer' : (isEditing ? 'Edit Stock Transfer' : 'New Stock Transfer') }}</h3>
                 <form @submit.prevent="submitForm" class="space-y-4">
+                    <p v-if="readOnlyMode" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                        This transfer is read-only because it has already been posted or received.
+                    </p>
+                    <fieldset :disabled="readOnlyMode" class="space-y-4 disabled:opacity-90">
                     <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
@@ -235,6 +239,7 @@
                                     label-key="name"
                                     value-key="value"
                                     placeholder="Select Origin Store"
+                                    :disabled="readOnlyMode"
                                     @update:modelValue="onOriginChange"
                                 />
                             </div>
@@ -246,6 +251,7 @@
                                     label-key="name"
                                     value-key="value"
                                     placeholder="Select Destination Store"
+                                    :disabled="readOnlyMode"
                                 />
                             </div>
                         </div>
@@ -274,7 +280,7 @@
                                             v-model="assetSearch"
                                             type="text"
                                             placeholder="Search by code, brand or model..."
-                                            :disabled="!form.origin_location"
+                                            :disabled="readOnlyMode || !form.origin_location"
                                             class="w-full pl-8 pr-3 py-1.5 text-xs border-0 bg-transparent focus:ring-0 focus:outline-none placeholder-gray-400 disabled:opacity-40"
                                         >
                                     </div>
@@ -308,15 +314,19 @@
                                             <tr
                                                 v-for="asset in filteredAssets"
                                                 :key="asset.id"
-                                                class="cursor-pointer transition-colors"
-                                                :class="isAssetSelected(asset) ? 'bg-blue-50' : 'hover:bg-gray-50'"
-                                                @click="toggleAsset(asset)"
+                                                class="transition-colors"
+                                                :class="[
+                                                    isAssetSelected(asset) ? 'bg-blue-50' : 'hover:bg-gray-50',
+                                                    readOnlyMode ? 'cursor-default' : 'cursor-pointer'
+                                                ]"
+                                                @click="!readOnlyMode && toggleAsset(asset)"
                                             >
                                                 <td class="px-3 py-2 text-center" @click.stop>
                                                     <input
                                                         type="checkbox"
                                                         :checked="isAssetSelected(asset)"
                                                         @change="toggleAsset(asset)"
+                                                        :disabled="readOnlyMode"
                                                         class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                                     >
                                                 </td>
@@ -338,6 +348,7 @@
                                                             @input="updateSelectionQty(asset, $event.target.value)"
                                                             :max="asset.soh"
                                                             min="1"
+                                                            :disabled="readOnlyMode"
                                                             class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500"
                                                         >
                                                     </template>
@@ -450,11 +461,12 @@
                     </div>
 
                     <div class="flex justify-end space-x-3 mt-6">
-                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700" :disabled="form.processing || assetSelections.length === 0">
+                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">{{ readOnlyMode ? 'Close' : 'Cancel' }}</button>
+                        <button v-if="!readOnlyMode" type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700" :disabled="form.processing || assetSelections.length === 0">
                             {{ isEditing ? 'Update Transfer' : 'Save Transfer' }}
                         </button>
                     </div>
+                    </fieldset>
                 </form>
             </div>
         </Modal>
@@ -521,7 +533,10 @@ const resetFilters = () => {
 
 const showModal = ref(false)
 const isEditing = ref(false)
+const readOnlyMode = ref(false)
 const currentId = ref(null)
+
+const canPostTransfer = (status) => String(status || '').trim().toLowerCase() === 'for posting'
 
 const formatDateForInput = (date) => {
     const year = date.getFullYear()
@@ -707,6 +722,7 @@ const onOriginChange = async (val) => {
 
 const openCreateModal = () => {
     isEditing.value = false
+    readOnlyMode.value = false
     currentId.value = null
     Object.assign(form, {
         transfer_date: formatDateForInput(new Date()),
@@ -725,6 +741,7 @@ const openCreateModal = () => {
 
 const editTransfer = async (item) => {
     isEditing.value = true
+    readOnlyMode.value = false
     currentId.value = item.id
 
     try {
@@ -805,6 +822,16 @@ const editTransfer = async (item) => {
     } catch (e) {
         showError('Failed to load transfer details')
     }
+}
+
+const openLinkedTransfer = async () => {
+    const params = new URLSearchParams(window.location.search)
+    const referenceId = params.get('open_transfer')
+
+    if (!referenceId) return
+
+    await editTransfer({ id: referenceId })
+    readOnlyMode.value = true
 }
 
 const buildEntries = (sel) => {
@@ -905,6 +932,7 @@ const deleteTransfer = async (item) => {
 
 const closeModal = () => {
     showModal.value = false
+    readOnlyMode.value = false
 }
 
 const formatDate = (date) => {
@@ -918,5 +946,6 @@ watch(() => props.stockTransfers, (newVal) => {
 
 onMounted(() => {
     pagination.updateData(props.stockTransfers)
+    openLinkedTransfer()
 })
 </script>
