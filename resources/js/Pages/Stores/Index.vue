@@ -46,7 +46,7 @@
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classification</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Techs</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Team</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geofencing</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -206,13 +206,22 @@
                             </div>
 
                             <div class="md:col-span-2">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned Technicians</label>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Team members</label>
+                                    <button 
+                                        type="button" 
+                                        @click="toggleAllTeamMembers"
+                                        class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
+                                    >
+                                        {{ form.user_ids.length === props.users.length ? 'Deselect All' : 'Select All' }}
+                                    </button>
+                                </div>
                                 <MultiAutocomplete
                                     v-model="form.user_ids"
                                     :options="users"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Select one or more technicians..."
+                                    placeholder="Select one or more team members..."
                                 />
                             </div>
 
@@ -451,6 +460,14 @@ const resetForm = () => {
 
 const closeModal = () => {
     showModal.value = false
+}
+
+const toggleAllTeamMembers = () => {
+    if (form.user_ids.length === props.users.length) {
+        form.user_ids = []
+    } else {
+        form.user_ids = props.users.map(u => u.id)
+    }
 }
 
 const getCurrentLocation = () => {

@@ -781,19 +781,27 @@ class TicketController extends Controller
             'store_id.required_unless' => 'Store is required before creating a child ticket.',
         ]);
 
-        // Check for an overlapping schedule for the same user + store
+        // Check for an overlapping schedule for the same user (regardless of store)
         $newStart = \Carbon\Carbon::parse($validated['start_time']);
         $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
 
-        $conflict = null;
+        // Check against specific schedule segments first
+        $conflictStore = \App\Models\ScheduleStore::whereHas('schedule', function($q) use ($validated) {
+                $q->where('user_id', $validated['user_id']);
+            })
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->first();
 
-        if (!empty($validated['store_id'])) {
+        $conflict = null;
+        if ($conflictStore) {
+            $conflict = $conflictStore;
+        } else {
+            // Check against schedules that don't have segments
             $conflict = Schedule::where('user_id', $validated['user_id'])
+                ->whereDoesntHave('scheduleStores')
                 ->where('start_time', '<', $newEnd)
                 ->where('end_time', '>', $newStart)
-                ->whereHas('scheduleStores', function($q) use ($validated) {
-                    $q->where('store_id', $validated['store_id']);
-                })
                 ->first();
         }
 
@@ -801,7 +809,7 @@ class TicketController extends Controller
             $from = $conflict->start_time->format('M d, Y h:i A');
             $to   = $conflict->end_time->format('M d, Y h:i A');
             return redirect()->back()->withErrors([
-                'schedule_conflict' => "A schedule already exists for this user at this store from {$from} to {$to}. Please choose a different date/time.",
+                'schedule_conflict' => "A schedule already exists for this user from {$from} to {$to}. Please choose a different date/time.",
             ]);
         }
 
