@@ -245,6 +245,8 @@ const hasLocationFix = computed(() => latitude.value !== null && longitude.value
 
 const locationSubmissionReady = computed(() => {
     if (!hasLocationFix.value) return false;
+    // Time Out only needs a location fix — no geofencing, freshness, or vicinity check
+    if (isTimeOutFlow.value) return true;
     if (browserGeofenceRequiresFreshFix.value && !isLocationFresh.value) return false;
     if (!isBrowserAccuracyUsable.value) return false;
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) return false;
@@ -309,7 +311,7 @@ const statusMessage = computed(() => {
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) {
         return 'Waiting for a precise native GPS fix within 100m accuracy. Enable precise/full accuracy location if your device is only giving an approximate pin.';
     }
-    if (requiresGeofencing.value && !isWithinStoreVicinity.value) {
+    if (!isTimeOutFlow.value && requiresGeofencing.value && !isWithinStoreVicinity.value) {
         return `You are outside the active schedule store vicinity for ${activeScheduleStore.value?.name ?? 'the scheduled store'} (${locationDistanceLabel.value}).`;
     }
 
@@ -870,7 +872,7 @@ const submit = async () => {
 
     if (!ok) return;
 
-    if (browserGeofenceRequiresFreshFix.value) {
+    if (browserGeofenceRequiresFreshFix.value && !isTimeOutFlow.value) {
         const refreshed = await acquireCurrentLocation(true, false);
         if (!refreshed || !locationSubmissionReady.value) return;
     }
