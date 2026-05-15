@@ -525,6 +525,7 @@
                                                                 {{ getEntriesForAsset(asset.id).length }} stock detail row<span v-if="getEntriesForAsset(asset.id).length !== 1">s</span>
                                                             </p>
                                                             <button
+                                                                v-if="!isEditing"
                                                                 type="button"
                                                                 @click="addEntryForAsset(asset)"
                                                                 class="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800"
@@ -547,12 +548,13 @@
                                                                 <span class="ml-1">({{ availableStockMap[asset.id]?.units?.length || 0 }})</span>
                                                             </button>
                                                             <button
+                                                                v-if="!isEditing"
                                                                 type="button"
                                                                 @click="setAssetDetailTab(asset.id, 'new')"
                                                                 class="rounded-md px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors"
                                                                 :class="getAssetDetailTab(asset.id) === 'new' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'"
                                                             >
-                                                                New/Add Unit Sub Items
+                                                                New/Add Unit
                                                                 <span class="ml-1">({{ getEntriesForAsset(asset.id).length }})</span>
                                                             </button>
                                                         </div>
@@ -584,7 +586,7 @@
                                                                             <th class="px-4 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-400">Serial / Barcode</th>
                                                                             <th class="px-4 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-400">QR Code</th>
                                                                             <th class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Cost</th>
-                                                                            <th class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Action</th>
+                                                                            <th v-if="isEditing" class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Action</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody class="divide-y divide-gray-50">
@@ -600,7 +602,7 @@
                                                                             </td>
                                                                             <td class="px-4 py-2 text-[10px] text-gray-500 truncate max-w-xs">{{ unit.qrcode || '-' }}</td>
                                                                             <td class="px-4 py-2 text-right text-[11px] font-mono text-gray-900">{{ unit.cost }}</td>
-                                                                            <td class="px-4 py-2 text-right">
+                                                                            <td v-if="isEditing" class="px-4 py-2 text-right">
                                                                                 <button
                                                                                     type="button"
                                                                                     @click="addEntryFromSourceUnit(asset, unit)"
@@ -633,21 +635,10 @@
                                                                 </svg>
                                                             </button>
 
-                                                            <div
-                                                                v-if="isTransferMode && asset.type === 'Fixed'"
-                                                                class="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"
-                                                            >
-                                                                <p class="text-[10px] font-black uppercase tracking-widest text-blue-700">Source Unit</p>
-                                                                <p class="mt-1 text-xs font-semibold text-blue-950">
-                                                                    {{ entry.serial_no || 'No Serial' }}
-                                                                    <span class="font-mono text-blue-700">/ {{ entry.barcode || 'No Barcode' }}</span>
-                                                                </p>
-                                                            </div>
-
                                                             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                                                                 <div>
                                                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Type</label>
-                                                                    <select v-model="entry.asset_type" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
+                                                                    <select v-model="entry.asset_type" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
                                                                         <option value="New">New</option>
                                                                         <option value="Used">Used</option>
                                                                     </select>
@@ -664,7 +655,7 @@
                                                                 </div>
                                                                 <div>
                                                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Serial No</label>
-                                                                    <input type="text" v-model="entry.serial_no" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <input type="text" v-model="entry.serial_no" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                                                 </div>
                                                                 <div>
                                                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Destination</label>
@@ -689,15 +680,15 @@
                                                                             type="text"
                                                                             v-model="entry.barcode"
                                                                             @input="entry.qrcode = ''"
-                                                                            :disabled="isTransferMode && asset.type === 'Fixed'"
                                                                             class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
                                                                             :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
                                                                         >
-                                                                        <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                                                        <button type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
                                                                     </div>
-                                                                    <div v-if="entry.barcode" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
-                                                                        <img :src="`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(entry.barcode)}&scale=1&height=10&includetext`" class="max-h-8" :alt="entry.barcode">
+                                                                    <div v-if="entry.barcodeDataUrl" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.barcodeDataUrl, text: entry.barcode }">
+                                                                        <img :src="entry.barcodeDataUrl" class="max-h-10" :alt="entry.barcode">
                                                                     </div>
+                                                                    <p v-if="entry.barcodeDataUrl" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
                                                                 </div>
 
                                                                 <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -708,35 +699,47 @@
                                                                         <input
                                                                             type="text"
                                                                             v-model="entry.qrcode"
-                                                                            :disabled="isTransferMode && asset.type === 'Fixed'"
                                                                             class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
                                                                             :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
                                                                             placeholder="Generate summary..."
                                                                         >
-                                                                        <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                                                        <button type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
                                                                     </div>
+                                                                    <div v-if="entry.qrcodeDataUrl" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.qrcodeDataUrl, text: entry.barcode, isQr: true }">
+                                                                        <img :src="entry.qrcodeDataUrl" class="max-h-20 max-w-20" alt="QR Code">
+                                                                    </div>
+                                                                    <p v-if="entry.qrcodeDataUrl" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
                                                                 </div>
                                                             </div>
 
                                                             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
                                                                 <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
                                                                     <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
-                                                                    <input type="number" v-model.number="entry.warranty_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <input type="number" v-model.number="entry.warranty_months" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                                                     <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(entry) }}</p>
                                                                 </div>
                                                                 <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
                                                                     <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
-                                                                    <input type="number" v-model.number="entry.eol_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <input type="number" v-model.number="entry.eol_months" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                                                     <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(entry) }}</p>
                                                                 </div>
                                                                 <div>
                                                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Cost</label>
-                                                                    <input type="number" step="0.01" v-model.number="entry.cost" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <input type="number" step="0.01" v-model.number="entry.cost" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                                                 </div>
                                                                 <div>
                                                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Price</label>
-                                                                    <input type="number" step="0.01" v-model.number="entry.price" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <input type="number" step="0.01" v-model.number="entry.price" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                                                 </div>
+                                                            </div>
+                                                            <div class="mt-4 flex justify-end">
+                                                                <button
+                                                                    type="button"
+                                                                    @click="async () => { const ok = await confirm({ title: 'Save Unit(s)', message: 'Are you sure you want to save these unit entries?' }); if (ok) submitForm() }"
+                                                                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 transition-colors"
+                                                                >
+                                                                    Save Unit(s)
+                                                                </button>
                                                             </div>
                                                         </div>
                                                         </div>
@@ -916,9 +919,10 @@
                                                     >
                                                     <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
                                                 </div>
-                                                <div v-if="entry.barcode" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
-                                                    <img :src="`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(entry.barcode)}&scale=1&height=10&includetext`" class="max-h-8" :alt="entry.barcode">
+                                                <div v-if="entry.barcode" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.barcodeDataUrl || makeBarcodeDataUrl(entry.barcode), text: entry.barcode }">
+                                                    <img :src="entry.barcodeDataUrl || makeBarcodeDataUrl(entry.barcode)" class="max-h-10" :alt="entry.barcode">
                                                 </div>
+                                                <p v-if="entry.barcode" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
                                             </div>
 
                                             <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -936,6 +940,10 @@
                                                     >
                                                     <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
                                                 </div>
+                                                <div v-if="entry.qrcodeDataUrl" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.qrcodeDataUrl, text: entry.barcode, isQr: true }">
+                                                    <img :src="entry.qrcodeDataUrl" class="max-h-20 max-w-20" alt="QR Code">
+                                                </div>
+                                                <p v-if="entry.qrcodeDataUrl" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
                                             </div>
                                         </div>
 
@@ -1047,11 +1055,44 @@
                 </div>
             </div>
         </Modal>
+
+        <!-- Barcode / QR Code Preview Modal -->
+        <Modal :show="barcodePreview.show" @close="barcodePreview.show = false" max-width="sm">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-gray-900">{{ barcodePreview.isQr ? 'QR Code Preview' : 'Barcode Preview' }}</h3>
+                    <button type="button" @click="barcodePreview.show = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex flex-col items-center gap-3 p-4 bg-white border border-gray-100 rounded-xl">
+                    <img v-if="barcodePreview.src" :src="barcodePreview.src" :alt="barcodePreview.text" :class="barcodePreview.isQr ? 'w-48 h-48' : 'w-full max-w-xs'">
+                    <p class="text-xs font-mono text-gray-600 text-center break-all">{{ barcodePreview.text }}</p>
+                </div>
+                <div class="mt-4 flex justify-end gap-2">
+                    <a
+                        v-if="barcodePreview.src"
+                        :href="barcodePreview.src"
+                        :download="`${barcodePreview.isQr ? 'qrcode' : 'barcode'}-${barcodePreview.text}.png`"
+                        class="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                        Download
+                    </a>
+                    <button type="button" @click="barcodePreview.show = false" class="px-3 py-1.5 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>
 
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
+import JsBarcode from 'jsbarcode'
+import QRCode from 'qrcode'
 import { router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -1226,6 +1267,7 @@ const normalizeLocationValue = (value) => {
 
 const showModal = ref(false)
 const showImportModal = ref(false)
+const barcodePreview = ref({ show: false, src: '', text: '' })
 const isEditing = ref(false)
 const readOnlyMode = ref(false)
 const currentId = ref(null)
@@ -1354,15 +1396,8 @@ const sourceUnitEntryDefaults = (unit) => ({
     price: Number(unit.price || 0),
 })
 
-const addEntryForAsset = (asset, unit = null) => {
+const addEntryForAsset = async (asset, unit = null) => {
     const aid = Number(asset.id)
-
-    if (isTransferMode.value && asset.type === 'Fixed' && !unit) {
-        expandAssetDetail(aid)
-        setAssetDetailTab(aid, 'existing')
-        fetchAvailableStockForAsset(aid, normalizedOriginLocation.value, availableStockRequestId)
-        return
-    }
 
     const defaults = {
         asset_id: aid,
@@ -1372,12 +1407,21 @@ const addEntryForAsset = (asset, unit = null) => {
         eol_months: 60,
         ...(unit ? sourceUnitEntryDefaults(unit) : {}),
     }
-    form.entries.push(createEntry(defaults))
+    const entry = createEntry(defaults)
+    form.entries.push(entry)
     form.quantity = form.entries.length
     setAssetDetailTab(aid, 'new')
-    
+    expandAssetDetail(aid)
+
     if (isTransferMode.value) {
-        fetchAvailableStockForAsset(aid, normalizedOriginLocation.value, availableStockRequestId)
+        await fetchAvailableStockForAsset(aid, normalizedOriginLocation.value, availableStockRequestId)
+
+        // For fixed assets, auto-pick the first available unselected source unit
+        if (asset.type === 'Fixed' && !entry.source_stock_in_id) {
+            const units = availableStockMap.value[aid]?.units || []
+            const firstFree = units.find(u => !isSourceUnitSelected(Number(u.id)))
+            if (firstFree) Object.assign(entry, sourceUnitEntryDefaults(firstFree))
+        }
     }
 }
 
@@ -1579,11 +1623,6 @@ const validateTransferStock = () => {
             return false
         }
 
-        if (asset?.type === 'Fixed' && !entry.source_stock_in_id) {
-            showError(`Select a source unit for ${asset?.item_code || 'Asset'}.`)
-            return false
-        }
-
         const destination = normalizeLocationValue(entry.destination_location)
         if (!destination || destination === normalizedOriginLocation.value) {
             showError(`Select a valid destination for ${asset?.item_code || 'Asset'}.`)
@@ -1610,12 +1649,31 @@ const validateTransferStock = () => {
     return true
 }
 
+const makeBarcodeDataUrl = (text) => {
+    try {
+        const canvas = document.createElement('canvas')
+        JsBarcode(canvas, text, { format: 'CODE128', width: 2, height: 60, displayValue: true, fontSize: 12, margin: 8 })
+        return canvas.toDataURL('image/png')
+    } catch {
+        return ''
+    }
+}
+
+const makeQrcodeDataUrl = async (text) => {
+    try {
+        return await QRCode.toDataURL(text, { width: 300, margin: 2, errorCorrectionLevel: 'M' })
+    } catch {
+        return ''
+    }
+}
+
 const generateBarcode = (entryIndex) => {
     const entry = form.entries[entryIndex]
     if (!entry) return
     const asset = getAssetForEntry(entry)
     const prefix = asset ? asset.item_code : 'ST'
     entry.barcode = `${prefix}-${Date.now()}-${entryIndex + 1}`
+    entry.barcodeDataUrl = makeBarcodeDataUrl(entry.barcode)
     entry.qrcode = ''
 }
 
@@ -1652,6 +1710,7 @@ const generateQrcode = (entryIndex) => {
     ]
     
     entry.qrcode = details.join('\n')
+    makeQrcodeDataUrl(entry.qrcode).then(url => { entry.qrcodeDataUrl = url })
 }
 
 const toggleSourceUnit = (unit, entry) => {

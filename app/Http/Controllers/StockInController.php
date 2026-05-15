@@ -1016,13 +1016,13 @@ class StockInController extends Controller
 
                 $entry = [
                     ...$entry,
-                    'serial_no' => $source->serial_no,
-                    'barcode' => $source->barcode,
-                    'qrcode' => $source->qrcode,
-                    'warranty_months' => $source->warranty_months,
-                    'eol_months' => $source->eol_months,
-                    'cost' => $source->cost,
-                    'price' => $source->price,
+                    'serial_no'       => !empty($entry['serial_no'])  ? $entry['serial_no']  : $source->serial_no,
+                    'barcode'         => !empty($entry['barcode'])     ? $entry['barcode']    : $source->barcode,
+                    'qrcode'          => !empty($entry['qrcode'])      ? $entry['qrcode']     : $source->qrcode,
+                    'warranty_months' => isset($entry['warranty_months']) && $entry['warranty_months'] !== '' ? $entry['warranty_months'] : $source->warranty_months,
+                    'eol_months'      => isset($entry['eol_months'])      && $entry['eol_months']      !== '' ? $entry['eol_months']      : $source->eol_months,
+                    'cost'            => isset($entry['cost'])            && $entry['cost']            !== '' ? $entry['cost']            : $source->cost,
+                    'price'           => isset($entry['price'])           && $entry['price']           !== '' ? $entry['price']           : $source->price,
                 ];
             } else {
                 // Consumable Transfer logic (if any specific validation needed)

@@ -34,6 +34,8 @@
         "@vueup/vue-quill": "^1.2.0",
         "html-to-image": "^1.11.13",
         "html2canvas": "^1.4.1",
+        "jsbarcode": "^3.12.3",
+        "qrcode": "^1.5.4",
         "vuedraggable": "^4.1.0"
     }
 }
