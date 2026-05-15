@@ -8,6 +8,7 @@ use App\Models\ApplicablePercentage;
 use App\Models\Garden;
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AttendanceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,6 +25,11 @@ Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // DTR / Attendance Routes
+    Route::get('/dtr/status', [AttendanceController::class, 'status']);
+    Route::post('/dtr/log', [AttendanceController::class, 'log']);
+    Route::get('/attendance/logs', [AttendanceController::class, 'logs']);
 });
 
 Route::middleware('api')->group(function () {
