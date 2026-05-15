@@ -15,6 +15,7 @@ import {
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 import {
+    getCurrentLocation,
     getLocationClient,
     getLocationPlatform,
     getLocationProvider,
@@ -32,7 +33,7 @@ const props = defineProps({
 
 const PRECISE_LOCATION_ACCURACY_METERS = 100;
 const PRECISE_LOCATION_TIMEOUT_MS = 15000;
-const LOCATION_FRESHNESS_THRESHOLD_MS = 15000;
+const LOCATION_FRESHNESS_THRESHOLD_MS = 60000;
 const DEFAULT_GRACE_PERIOD_MINUTES = 30;
 const LOCATION_SAMPLE_WINDOW_MS = 30000;
 const MAX_LOCATION_SAMPLES = 5;
@@ -51,6 +52,7 @@ const latitude = ref(null);
 const longitude = ref(null);
 const locationAccuracy = ref(null);
 const locationCapturedAt = ref(null);
+const locationReceivedAt = ref(null);
 const locationMode = ref('idle');
 const locationError = ref(null);
 const locationHint = ref(null);
@@ -72,6 +74,7 @@ const form = useForm({
     longitude: null,
     location_accuracy: null,
     location_captured_at: null,
+    location_received_at: null,
     location_client: getLocationClient(),
     location_provider: getLocationProvider(),
     photo: null,
@@ -194,14 +197,26 @@ const isPreciseEnough = computed(() => {
     return locationAccuracy.value !== null && locationAccuracy.value <= PRECISE_LOCATION_ACCURACY_METERS;
 });
 
-const locationAgeMs = computed(() => {
-    if (!locationCapturedAt.value) return null;
+const browserAccuracyLimitMeters = computed(() => {
+    const radius = activeScheduleStore.value?.radius_meters || 100;
 
-    return Math.max(0, nowMs.value - locationCapturedAt.value);
+    return Math.max(radius, PRECISE_LOCATION_ACCURACY_METERS);
+});
+
+const isBrowserAccuracyUsable = computed(() => {
+    if (!requiresGeofencing.value || isNativeApp.value) return true;
+
+    return locationAccuracy.value !== null && locationAccuracy.value <= browserAccuracyLimitMeters.value;
+});
+
+const locationAgeMs = computed(() => {
+    if (!locationReceivedAt.value) return null;
+
+    return Math.max(0, nowMs.value - locationReceivedAt.value);
 });
 
 const isLocationFresh = computed(() => {
-    if (!locationCapturedAt.value) return false;
+    if (!locationReceivedAt.value) return false;
 
     return locationAgeMs.value !== null && locationAgeMs.value <= LOCATION_FRESHNESS_THRESHOLD_MS;
 });
@@ -231,6 +246,7 @@ const hasLocationFix = computed(() => latitude.value !== null && longitude.value
 const locationSubmissionReady = computed(() => {
     if (!hasLocationFix.value) return false;
     if (browserGeofenceRequiresFreshFix.value && !isLocationFresh.value) return false;
+    if (!isBrowserAccuracyUsable.value) return false;
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) return false;
     return isWithinStoreVicinity.value;
 });
@@ -286,6 +302,9 @@ const statusMessage = computed(() => {
     if (locationMode.value === 'error') return locationError.value || 'Unable to secure your location.';
     if (browserGeofenceRequiresFreshFix.value && !isLocationFresh.value) {
         return 'Browser location is stale. Refresh GPS and wait for a fresh fix from your current position before logging attendance.';
+    }
+    if (!isBrowserAccuracyUsable.value) {
+        return `Browser location accuracy is too broad (${locationAccuracy.value?.toFixed(1) ?? 'unknown'}m). Refresh GPS until accuracy is within ${browserAccuracyLimitMeters.value}m.`;
     }
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) {
         return 'Waiting for a precise native GPS fix within 100m accuracy. Enable precise/full accuracy location if your device is only giving an approximate pin.';
@@ -347,10 +366,11 @@ const startLocationAttemptProgress = () => {
 
             if (!isNativeApp.value) {
                 getIpGeolocation().then((ipFix) => {
-                    if (!isMounted.value || hasLocationFix.value || !ipFix) return;
+                    if (!isMounted.value || hasLocationFix.value || !ipFix || requiresGeofencing.value) return;
                     recordLocationSample({
                         coords: { latitude: ipFix.latitude, longitude: ipFix.longitude, accuracy: ipFix.accuracy },
                         timestamp: Date.now(),
+                        receivedAt: Date.now(),
                     });
                     locationMode.value = 'approximate';
                     locationHint.value = `Using IP-based location${ipFix.city ? ` (${ipFix.city})` : ''}. For precise geofencing, enable GPS or move to an area with better signal.`;
@@ -369,7 +389,7 @@ const startLocationAttemptProgress = () => {
 const getRecentLocationSamples = () => {
     const cutoff = Date.now() - LOCATION_SAMPLE_WINDOW_MS;
 
-    return locationSamples.value.filter((sample) => sample.timestamp >= cutoff);
+    return locationSamples.value.filter((sample) => sample.receivedAt >= cutoff);
 };
 
 const applySelectedLocationSample = (sample) => {
@@ -379,10 +399,12 @@ const applySelectedLocationSample = (sample) => {
     longitude.value = sample.longitude;
     locationAccuracy.value = sample.accuracy;
     locationCapturedAt.value = sample.timestamp;
+    locationReceivedAt.value = sample.receivedAt;
     form.latitude = sample.latitude;
     form.longitude = sample.longitude;
     form.location_accuracy = sample.accuracy;
     form.location_captured_at = new Date(sample.timestamp).toISOString();
+    form.location_received_at = new Date(sample.receivedAt).toISOString();
 };
 
 const updateSelectedLocationSample = () => {
@@ -392,8 +414,8 @@ const updateSelectedLocationSample = () => {
     locationSamples.value = recentSamples;
 
     const bestSample = [...recentSamples].sort((left, right) => {
-        if (left.timestamp !== right.timestamp) {
-            return right.timestamp - left.timestamp;
+        if (left.receivedAt !== right.receivedAt) {
+            return right.receivedAt - left.receivedAt;
         }
 
         return left.accuracy - right.accuracy;
@@ -412,7 +434,9 @@ const updateSelectedLocationSample = () => {
     if (!isNativeApp.value) {
         locationMode.value = isLocationFresh.value ? 'ready' : 'approximate';
         locationHint.value = isLocationFresh.value
-            ? (isWithinStoreVicinity.value ? null : 'Location is fresh now. Move within the assigned store radius to unlock attendance.')
+            ? (isBrowserAccuracyUsable.value
+                ? (isWithinStoreVicinity.value ? null : 'Location is fresh now. Move within the assigned store radius to unlock attendance.')
+                : `Browser location is fresh but accuracy is too broad. Refresh GPS until accuracy is within ${browserAccuracyLimitMeters.value}m.`)
             : 'Browser geolocation returned an older last-known fix. Keep the page open or refresh GPS until the location updates from your current position.';
         if (isLocationFresh.value) {
             locationAttemptProgress.value = 100;
@@ -441,6 +465,7 @@ const recordLocationSample = (position) => {
         longitude: position.coords.longitude,
         accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : Number.POSITIVE_INFINITY,
         timestamp: position.timestamp ?? Date.now(),
+        receivedAt: position.receivedAt ?? Date.now(),
     };
 
     locationSamples.value = [...getRecentLocationSamples(), sample]
@@ -476,10 +501,12 @@ const startTracking = async (highAccuracy = true, resetSamples = true) => {
         longitude.value = null;
         locationAccuracy.value = null;
         locationCapturedAt.value = null;
+        locationReceivedAt.value = null;
         form.latitude = null;
         form.longitude = null;
         form.location_accuracy = null;
         form.location_captured_at = null;
+        form.location_received_at = null;
     }
 
     currentWatchHighAccuracy = highAccuracy;
@@ -549,8 +576,47 @@ const startTracking = async (highAccuracy = true, resetSamples = true) => {
     }
 };
 
+const acquireCurrentLocation = async (highAccuracy = true, resetSamples = false) => {
+    if (isMissingActiveGeofence.value) return false;
+
+    isRefreshingLocation.value = true;
+    locationError.value = null;
+
+    if (resetSamples) {
+        locationSamples.value = [];
+    }
+
+    try {
+        const position = await getCurrentLocation({ highAccuracy });
+        if (!isMounted.value) return false;
+
+        recordLocationSample(position);
+        void updateMap();
+        isRefreshingLocation.value = false;
+
+        return true;
+    } catch (error) {
+        if (!isMounted.value) return false;
+
+        isRefreshingLocation.value = false;
+        const message = error?.message || 'Location failed.';
+        const lowerMessage = message.toLowerCase();
+
+        if (lowerMessage.includes('denied') || lowerMessage.includes('permission')) {
+            clearLocationAttemptTimers();
+            locationMode.value = 'error';
+            locationError.value = 'Location permission was denied. Allow precise/full accuracy location access and try again.';
+            return false;
+        }
+
+        locationHint.value = 'Unable to get a fresh location request. The app will keep listening for location updates.';
+        return false;
+    }
+};
+
 const refreshGps = async () => {
     await startTracking(true, true);
+    await acquireCurrentLocation(true, false);
 };
 
 const startCamera = async () => {
@@ -804,10 +870,16 @@ const submit = async () => {
 
     if (!ok) return;
 
+    if (browserGeofenceRequiresFreshFix.value) {
+        const refreshed = await acquireCurrentLocation(true, false);
+        if (!refreshed || !locationSubmissionReady.value) return;
+    }
+
     form.location_client = getLocationClient();
     form.location_provider = getLocationProvider();
     form.location_accuracy = locationAccuracy.value;
     form.location_captured_at = locationCapturedAt.value ? new Date(locationCapturedAt.value).toISOString() : null;
+    form.location_received_at = locationReceivedAt.value ? new Date(locationReceivedAt.value).toISOString() : null;
     form.device_info = await getRefinedDeviceInfo();
     form.public_ip = await getPublicIp();
 
@@ -822,6 +894,7 @@ const submit = async () => {
             form.longitude = longitude.value;
             form.location_accuracy = locationAccuracy.value;
             form.location_captured_at = locationCapturedAt.value ? new Date(locationCapturedAt.value).toISOString() : null;
+            form.location_received_at = locationReceivedAt.value ? new Date(locationReceivedAt.value).toISOString() : null;
         },
     });
 };

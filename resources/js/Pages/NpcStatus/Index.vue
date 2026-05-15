@@ -211,6 +211,7 @@
                                 <p v-if="selectedCompany?.npc_status?.dpo_seal" class="mt-1 truncate text-xs font-medium text-gray-500">
                                     Current: {{ selectedCompany.npc_status.dpo_seal.name }}
                                 </p>
+                                <p class="mt-1 text-xs font-medium text-gray-400">PDF/image, max 1GB.</p>
                             </div>
                             <div>
                                 <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">DPO Registration</label>
@@ -224,6 +225,7 @@
                                 <p v-if="selectedCompany?.npc_status?.dpo_registration" class="mt-1 truncate text-xs font-medium text-gray-500">
                                     Current: {{ selectedCompany.npc_status.dpo_registration.name }}
                                 </p>
+                                <p class="mt-1 text-xs font-medium text-gray-400">PDF/image, max 1GB.</p>
                             </div>
                         </div>
 

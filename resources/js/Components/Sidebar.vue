@@ -139,10 +139,6 @@ const canSeeInventory = computed(() => {
     return hasPermission('stock_ins.view') || hasPermission('reports.inventory') || hasPermission('assets.view') || hasPermission('stock_transfers.view') || hasPermission('stock_receivings.view');
 });
 
-const canSeeForms = computed(() => {
-    return visibleDynamicForms.value.length > 0;
-});
-
 const canSeeReferences = computed(() => {
     return hasPermission('companies.view') ||
            hasPermission('departments.view') ||
@@ -289,9 +285,6 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
                                 <Link :href="route('sap-requests.index')" :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))">{{ getChildLabel('services', 'sap-requests') }}</Link>
                             </div>
-                            <div style="order: 998">
-                                <Link :href="route('dynamic-form.list')" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.list'))">All Dynamic Forms</Link>
-                            </div>
                             <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" :style="co('services', dynamicFormChildId(form))">
                                 <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ dynamicFormLabel(form) }}</Link>
                             </div>
@@ -310,9 +303,6 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
                             <Link :href="route('sap-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'sap-requests') }}</span></Link>
-                        </div>
-                        <div style="order: 998">
-                            <Link :href="route('dynamic-form.list')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.list') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>All Dynamic Forms</span></Link>
                         </div>
                         <div v-for="form in visibleDynamicForms" :key="form.slug" :style="co('services', dynamicFormChildId(form))">
                             <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ dynamicFormLabel(form) }}</span></Link>

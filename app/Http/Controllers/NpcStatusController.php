@@ -18,6 +18,8 @@ use Inertia\Inertia;
 
 class NpcStatusController extends Controller implements HasMiddleware
 {
+    private const MAX_ATTACHMENT_KILOBYTES = 1024000;
+
     public static function middleware(): array
     {
         return [
@@ -168,8 +170,8 @@ class NpcStatusController extends Controller implements HasMiddleware
             'validity_from' => 'required|date',
             'validity_to' => 'required|date|after_or_equal:validity_from',
             'status' => ['required', Rule::in(NpcStatus::STATUSES)],
-            'dpo_seal' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'dpo_registration' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'dpo_seal' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:' . self::MAX_ATTACHMENT_KILOBYTES,
+            'dpo_registration' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:' . self::MAX_ATTACHMENT_KILOBYTES,
         ];
 
         if ($isCreate) {

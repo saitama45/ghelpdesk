@@ -13,6 +13,7 @@ const normalizePosition = (position) => {
             accuracy: Number(coords.accuracy ?? Number.POSITIVE_INFINITY),
         },
         timestamp: position?.timestamp ?? Date.now(),
+        receivedAt: Date.now(),
     };
 };
 
@@ -38,6 +39,36 @@ export const getLocationClient = () => (isNative ? 'native' : 'web');
 export const getLocationProvider = () => (isNative ? 'capacitor' : 'browser');
 
 export const getLocationPlatform = () => Capacitor.getPlatform();
+
+export const getCurrentLocation = async ({ highAccuracy = true } = {}) => {
+    if (isNative) {
+        await Geolocation.requestPermissions();
+
+        const position = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: highAccuracy,
+            timeout: highAccuracy ? 15000 : 30000,
+            maximumAge: highAccuracy ? 0 : 15000,
+        });
+
+        return normalizePosition(position);
+    }
+
+    if (!navigator.geolocation) {
+        throw new Error('Geolocation is not supported by this browser.');
+    }
+
+    return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+            (position) => resolve(normalizePosition(position)),
+            (error) => reject(normalizeError(error)),
+            {
+                enableHighAccuracy: highAccuracy,
+                timeout: highAccuracy ? 15000 : 30000,
+                maximumAge: highAccuracy ? 0 : 15000,
+            }
+        );
+    });
+};
 
 export const startLocationWatch = async ({ highAccuracy = true, onPosition, onError }) => {
     if (isNative) {

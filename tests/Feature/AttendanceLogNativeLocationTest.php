@@ -29,17 +29,19 @@ class AttendanceLogNativeLocationTest extends TestCase
         Storage::fake('public');
     }
 
-    public function test_geofenced_log_is_accepted_from_browser_when_inside_store_radius(): void
+    public function test_geofenced_log_is_accepted_from_browser_when_request_was_recent_even_if_provider_timestamp_is_old(): void
     {
         [$user, $store, $schedule, $scheduleStore] = $this->createGeofencedAttendanceContext();
-        $capturedAt = Carbon::now('UTC')->subSeconds(5);
+        $capturedAt = Carbon::now('UTC')->subMinutes(5);
+        $receivedAt = Carbon::now('UTC')->subSeconds(5);
 
         $response = $this->actingAs($user)
             ->post(route('attendance.log'), $this->payload([
                 'latitude' => $store->latitude,
                 'longitude' => $store->longitude,
-                'location_accuracy' => 250,
+                'location_accuracy' => 80,
                 'location_captured_at' => $capturedAt->toIso8601String(),
+                'location_received_at' => $receivedAt->toIso8601String(),
                 'location_client' => 'web',
                 'location_provider' => 'browser',
             ]));
@@ -56,6 +58,7 @@ class AttendanceLogNativeLocationTest extends TestCase
 
         $log = AttendanceLog::firstOrFail();
         $this->assertNotNull($log->location_captured_at);
+        $this->assertNotNull($log->location_received_at);
     }
 
     public function test_geofenced_log_is_rejected_from_browser_when_location_is_stale(): void
@@ -67,8 +70,9 @@ class AttendanceLogNativeLocationTest extends TestCase
             ->post(route('attendance.log'), $this->payload([
                 'latitude' => $store->latitude,
                 'longitude' => $store->longitude,
-                'location_accuracy' => 250,
-                'location_captured_at' => Carbon::now('UTC')->subSeconds(20)->toIso8601String(),
+                'location_accuracy' => 80,
+                'location_captured_at' => Carbon::now('UTC')->subMinutes(5)->toIso8601String(),
+                'location_received_at' => Carbon::now('UTC')->subSeconds(61)->toIso8601String(),
                 'location_client' => 'web',
                 'location_provider' => 'browser',
             ]));
@@ -79,6 +83,28 @@ class AttendanceLogNativeLocationTest extends TestCase
             'Browser location is stale. Refresh GPS and wait for a fresh fix from your current position before logging attendance.',
             session('error')
         );
+        $this->assertDatabaseCount('attendance_logs', 0);
+    }
+
+    public function test_geofenced_log_is_rejected_from_browser_when_accuracy_is_too_broad(): void
+    {
+        [$user, $store] = $this->createGeofencedAttendanceContext();
+
+        $response = $this->actingAs($user)
+            ->from('/dtr')
+            ->post(route('attendance.log'), $this->payload([
+                'latitude' => $store->latitude,
+                'longitude' => $store->longitude,
+                'location_accuracy' => 250,
+                'location_captured_at' => Carbon::now('UTC')->toIso8601String(),
+                'location_received_at' => Carbon::now('UTC')->toIso8601String(),
+                'location_client' => 'web',
+                'location_provider' => 'browser',
+            ]));
+
+        $response->assertRedirect('/dtr');
+        $response->assertSessionHas('error');
+        $this->assertStringContainsString('Browser location accuracy is too broad', session('error'));
         $this->assertDatabaseCount('attendance_logs', 0);
     }
 
@@ -179,6 +205,7 @@ class AttendanceLogNativeLocationTest extends TestCase
             'longitude' => 120.9842,
             'location_accuracy' => 10,
             'location_captured_at' => Carbon::now('UTC')->toIso8601String(),
+            'location_received_at' => Carbon::now('UTC')->toIso8601String(),
             'location_client' => 'native',
             'location_provider' => 'capacitor',
             'photo' => self::TEST_PHOTO,

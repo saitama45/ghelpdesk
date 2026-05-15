@@ -18,7 +18,8 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class AttendanceController extends Controller implements HasMiddleware
 {
-    private const BROWSER_LOCATION_FRESHNESS_SECONDS = 15;
+    private const BROWSER_LOCATION_FRESHNESS_SECONDS = 60;
+    private const MIN_BROWSER_ACCURACY_LIMIT_METERS = 100;
 
     public static function middleware(): array
     {
@@ -165,10 +166,13 @@ class AttendanceController extends Controller implements HasMiddleware
             'longitude' => 'required|numeric',
             'location_accuracy' => 'nullable|numeric|min:0',
             'location_captured_at' => 'nullable|date',
+            'location_received_at' => 'nullable|date',
             'location_client' => 'nullable|in:native,web',
             'location_provider' => 'nullable|in:capacitor,browser',
             'photo' => 'required|string', // Base64 encoded image
         ]);
+
+        $locationClient = $request->input('location_client', 'web');
 
         $throttleKey = 'attendance-log:' . $user->id;
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
@@ -188,9 +192,11 @@ class AttendanceController extends Controller implements HasMiddleware
             $userLat = $request->latitude;
             $userLng = $request->longitude;
             $store = $activeStoreEntry?->store;
-            $locationClient = $request->input('location_client');
             $locationCapturedAt = $request->filled('location_captured_at')
                 ? Carbon::parse($request->input('location_captured_at'))
+                : null;
+            $locationReceivedAt = $request->filled('location_received_at')
+                ? Carbon::parse($request->input('location_received_at'))
                 : null;
 
             if (!$activeStoreEntry || !$store) {
@@ -202,16 +208,29 @@ class AttendanceController extends Controller implements HasMiddleware
             }
 
             if ($locationClient === 'web') {
-                if (!$locationCapturedAt) {
+                $freshnessTimestamp = $locationReceivedAt ?: $locationCapturedAt;
+
+                if (!$freshnessTimestamp) {
                     return back()->with('error', 'Browser location timestamp is missing. Refresh GPS and wait for a fresh fix before logging attendance.');
                 }
 
-                if ($locationCapturedAt->lt($now->copy()->subSeconds(self::BROWSER_LOCATION_FRESHNESS_SECONDS))) {
+                if ($freshnessTimestamp->lt($now->copy()->subSeconds(self::BROWSER_LOCATION_FRESHNESS_SECONDS))) {
                     return back()->with('error', 'Browser location is stale. Refresh GPS and wait for a fresh fix from your current position before logging attendance.');
                 }
             }
 
             $radius = $store->radius_meters ?: 100;
+            if ($locationClient === 'web') {
+                $accuracyLimit = max($radius, self::MIN_BROWSER_ACCURACY_LIMIT_METERS);
+                if (!$request->filled('location_accuracy')) {
+                    return back()->with('error', "Browser location accuracy is missing. Refresh GPS until accuracy is within {$accuracyLimit}m.");
+                }
+
+                if ((float) $request->input('location_accuracy') > $accuracyLimit) {
+                    return back()->with('error', "Browser location accuracy is too broad. Refresh GPS until accuracy is within {$accuracyLimit}m.");
+                }
+            }
+
             $distance = $this->calculateDistance($userLat, $userLng, $store->latitude, $store->longitude);
 
             if ($distance > $radius) {
@@ -268,7 +287,8 @@ class AttendanceController extends Controller implements HasMiddleware
             'longitude' => $request->longitude,
             'location_accuracy' => $request->input('location_accuracy'),
             'location_captured_at' => $request->input('location_captured_at'),
-            'location_client' => $request->input('location_client'),
+            'location_received_at' => $request->input('location_received_at'),
+            'location_client' => $locationClient,
             'location_provider' => $request->input('location_provider'),
             'photo_path' => $fileName,
             'log_time' => now('Asia/Manila'),

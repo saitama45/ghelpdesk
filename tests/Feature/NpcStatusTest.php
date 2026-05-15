@@ -57,6 +57,30 @@ class NpcStatusTest extends TestCase
         Storage::disk('public')->assertExists($npcStatus->dpo_registration_path);
     }
 
+    public function test_can_create_npc_status_with_one_gb_dpo_uploads(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.create');
+        $company = $this->company();
+
+        $response = $this->actingAs($user)->post(route('npc-statuses.store'), [
+            'company_id' => $company->id,
+            'year' => 2026,
+            'validity_from' => '2026-01-01',
+            'validity_to' => '2026-12-31',
+            'status' => 'Pending',
+            'dpo_seal' => UploadedFile::fake()->create('seal.pdf', 1024000, 'application/pdf'),
+            'dpo_registration' => UploadedFile::fake()->create('registration.pdf', 1024000, 'application/pdf'),
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+
+        $npcStatus = NpcStatus::firstOrFail();
+        Storage::disk('public')->assertExists($npcStatus->dpo_seal_path);
+        Storage::disk('public')->assertExists($npcStatus->dpo_registration_path);
+    }
+
     public function test_index_returns_all_entities_for_selected_year(): void
     {
         $user = User::factory()->create();

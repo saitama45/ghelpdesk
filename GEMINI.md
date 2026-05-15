@@ -39,4 +39,7 @@ When creating a new module, ensure the following checklist is followed:
 2. **Roles UI:** Update `resources/js/Pages/Roles/Index.vue` to include the new module in the `landingPageOptions` and ensure it appears in the permission management tabs.
 3. **Settings UI:** Ensure the module is discoverable in the Sidebar Layout management under `resources/js/Pages/Settings/Index.vue`.
 4. **Implementation:** Create the Migration, Model, Controller, and Vue Index page following the established patterns (e.g., grouping by location, audit fields).
-5. **Consistency:** Always ask for clarification on specific business requirements (e.g., stock handling, SOH logic) before implementation.
+5. **Dynamic Forms (if applicable):** If the module uses dynamic forms via the `/forms/{slug}` route:
+    - Create a dedicated service in `app/Services/DynamicForms/` implementing `FormServiceContract`.
+    - Register the service in `app/Services/DynamicForms/FormServiceFactory.php` using the form's slug.
+6. **Consistency:** Always ask for clarification on specific business requirements (e.g., stock handling, SOH logic) before implementation.
