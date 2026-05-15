@@ -294,6 +294,105 @@ class StockInCodeValidationTest extends TestCase
             ->count());
     }
 
+    public function test_available_stock_can_include_current_transfer_child_when_editing(): void
+    {
+        $user = User::factory()->create();
+        $asset = $this->createAsset();
+        $sourceStock = StockIn::create([
+            'receive_date' => '2026-05-04',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'serial_no' => 'SN-SOURCE',
+            'barcode' => 'BARCODE-SOURCE',
+            'qrcode' => 'QR-SOURCE',
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+            'origin_location' => 'SUPPLIER',
+            'destination_location' => 'CFE I',
+            'status' => 'Posted',
+        ]);
+        $transferChild = StockIn::create([
+            'receive_date' => '2026-05-05',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'source_stock_in_id' => $sourceStock->id,
+            'serial_no' => 'SN-SOURCE',
+            'barcode' => 'BARCODE-SOURCE',
+            'qrcode' => 'QR-SOURCE',
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+            'origin_location' => 'CFE I',
+            'destination_location' => 'CFE II',
+            'status' => 'For Posting',
+        ]);
+
+        InventoryTransaction::create([
+            'asset_id' => $asset->id,
+            'location' => 'CFE I',
+            'transaction_type' => 'Stock In',
+            'quantity' => 1,
+            'reference_type' => StockIn::class,
+            'reference_id' => $sourceStock->id,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('stock-ins.available-stock', [
+                'asset_id' => $asset->id,
+                'origin_location' => 'CFE I',
+            ]))
+            ->assertOk()
+            ->assertJsonPath('available_units', []);
+
+        $this->actingAs($user)
+            ->getJson(route('stock-ins.available-stock', [
+                'asset_id' => $asset->id,
+                'origin_location' => 'CFE I',
+                'exclude_child_ids' => [$transferChild->id],
+            ]))
+            ->assertOk()
+            ->assertJsonPath('available_units.0.id', $sourceStock->id);
+    }
+
+    public function test_stock_in_assets_with_stock_returns_assets_available_at_origin(): void
+    {
+        $user = User::factory()->create();
+        $asset = $this->createAsset();
+        $postedStock = StockIn::create([
+            'receive_date' => '2026-05-04',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'serial_no' => 'SN-SOURCE',
+            'barcode' => 'BARCODE-SOURCE',
+            'qrcode' => 'QR-SOURCE',
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+            'origin_location' => 'SUPPLIER',
+            'destination_location' => 'CFE I',
+            'status' => 'Posted',
+        ]);
+
+        InventoryTransaction::create([
+            'asset_id' => $asset->id,
+            'location' => 'CFE I',
+            'transaction_type' => 'Stock In',
+            'quantity' => 1,
+            'reference_type' => StockIn::class,
+            'reference_id' => $postedStock->id,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('stock-ins.assets-with-stock', ['location' => 'CFE I']))
+            ->assertOk()
+            ->assertJsonPath('0.id', $asset->id)
+            ->assertJsonPath('0.soh', 1);
+    }
+
     protected function createAsset(): Asset
     {
         $category = Category::create([
@@ -328,9 +427,12 @@ class StockInCodeValidationTest extends TestCase
             'quantity' => 1,
             'entries' => [
                 array_merge([
+                    'asset_id' => $asset->id,
                     'serial_no' => 'SN-001',
                     'barcode' => 'AST-001-1770000000000-1',
                     'qrcode' => "Item Code: AST-001\nBarcode: AST-001-1770000000000-1",
+                    'asset_type' => 'New',
+                    'is_allocation' => false,
                     'warranty_months' => 12,
                     'eol_months' => 60,
                     'cost' => 100,

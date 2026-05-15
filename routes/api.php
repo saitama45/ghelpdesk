@@ -7,6 +7,8 @@ use App\Models\AmortizationTerm;
 use App\Models\ApplicablePercentage;
 use App\Models\Garden;
 
+use App\Http\Controllers\Api\AuthController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -17,6 +19,12 @@ use App\Models\Garden;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
+
+Route::post('/login', [AuthController::class, 'login']);
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+});
 
 Route::middleware('api')->group(function () {
     // Get calculator data for dropdowns

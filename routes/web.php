@@ -102,6 +102,7 @@ Route::middleware('auth')->group(function () {
     Route::post('sap-requests/{sap_request}/approve', [\App\Http\Controllers\SapRequestController::class, 'approve'])->name('sap-requests.approve');
     Route::post('sap-requests/{sap_request}/reject', [\App\Http\Controllers\SapRequestController::class, 'reject'])->name('sap-requests.reject');
     Route::get('stock-ins/template', [\App\Http\Controllers\StockInController::class, 'template'])->name('stock-ins.template');
+    Route::get('stock-ins/assets-with-stock', [\App\Http\Controllers\StockInController::class, 'assetsWithStock'])->name('stock-ins.assets-with-stock');
     Route::get('stock-ins/available-stock', [\App\Http\Controllers\StockInController::class, 'availableStock'])->name('stock-ins.available-stock');
     Route::post('stock-ins/import', [\App\Http\Controllers\StockInController::class, 'import'])->name('stock-ins.import');
     Route::post('stock-ins/{stock_in}/post', [\App\Http\Controllers\StockInController::class, 'post'])->name('stock-ins.post');

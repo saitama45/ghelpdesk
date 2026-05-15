@@ -140,11 +140,47 @@ class StockInController extends Controller
         );
     }
 
+    public function assetsWithStock(Request $request)
+    {
+        $location = $this->normalizeStoreCode($request->input('location'));
+
+        if (! $location || $this->isSupplierLocation($location)) {
+            return response()->json([]);
+        }
+
+        $sohData = InventoryTransaction::where('inventory_transactions.location', $location)
+            ->leftJoin('stock_ins as si_soh', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
+                    ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where(function ($query) {
+                $query->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                    ->orWhere('si_soh.status', 'Posted');
+            })
+            ->groupBy('inventory_transactions.asset_id')
+            ->havingRaw('SUM(inventory_transactions.quantity) > 0')
+            ->selectRaw('inventory_transactions.asset_id, SUM(inventory_transactions.quantity) as soh')
+            ->pluck('soh', 'asset_id');
+
+        $assets = Asset::whereIn('id', $sohData->keys())
+            ->orderBy('item_code')
+            ->get(['id', 'item_code', 'brand', 'model', 'description', 'type', 'cost'])
+            ->map(fn (Asset $asset) => [
+                ...$asset->toArray(),
+                'soh' => (int) $sohData->get($asset->id, 0),
+            ])
+            ->values();
+
+        return response()->json($assets);
+    }
+
     public function availableStock(Request $request)
     {
         $validated = $request->validate([
             'asset_id' => 'required|exists:assets,id',
             'origin_location' => 'required|string|max:255',
+            'exclude_child_ids' => 'nullable|array',
+            'exclude_child_ids.*' => 'integer|exists:stock_ins,id',
         ]);
 
         $asset = Asset::select('id', 'item_code', 'brand', 'model', 'description', 'type', 'cost')
@@ -153,7 +189,7 @@ class StockInController extends Controller
 
         $availableUnits = collect();
         if ($originLocation && ! $this->isSupplierLocation($originLocation) && $this->isFixedAsset($asset)) {
-            $availableUnits = $this->availableFixedSourceRows($asset, $originLocation)
+            $availableUnits = $this->availableFixedSourceRows($asset, $originLocation, $validated['exclude_child_ids'] ?? [])
                 ->get([
                     'id',
                     'receive_date',
@@ -220,9 +256,9 @@ class StockInController extends Controller
             'memo_remarks' => 'nullable|string|max:2000',
             'posted_by' => 'nullable|string|max:255',
             'status' => 'required|in:For Posting,Posted',
-            'asset_id' => 'required|exists:assets,id',
             'quantity' => 'required|integer|min:1',
             'entries' => 'required|array|min:1',
+            'entries.*.asset_id' => 'required|exists:assets,id',
             'entries.*.source_stock_in_id' => 'nullable|integer|exists:stock_ins,id',
             'entries.*.serial_no' => 'nullable|string',
             'entries.*.barcode' => 'required|string',
@@ -236,9 +272,8 @@ class StockInController extends Controller
             'entries.*.destination_location' => 'nullable|string|max:255',
         ], $this->stockInCodeValidationMessages());
 
-        $asset = Asset::findOrFail($validated['asset_id']);
         $originLocation = $this->normalizeStoreCode($validated['origin_location'] ?? null);
-        $validated['entries'] = $this->prepareEntriesForSave($asset, $originLocation, $validated['entries']);
+        $validated['entries'] = $this->prepareMultiAssetEntriesForSave($originLocation, $validated['entries']);
 
         if ((int) $validated['quantity'] !== count($validated['entries'])) {
             throw ValidationException::withMessages([
@@ -257,7 +292,7 @@ class StockInController extends Controller
                 'memo_remarks' => $validated['memo_remarks'] ?? null,
                 'posted_by' => $validated['posted_by'] ?? null,
                 'status' => $validated['status'],
-                'asset_id' => $validated['asset_id'],
+                'asset_id' => $entry['asset_id'],
                 'quantity' => 1,
                 'created_by' => $request->user()?->id,
                 'updated_by' => $request->user()?->id,
@@ -292,10 +327,10 @@ class StockInController extends Controller
             'memo_remarks' => 'nullable|string|max:2000',
             'posted_by' => 'nullable|string|max:255',
             'status' => 'required|in:For Posting,Posted',
-            'asset_id' => 'required|exists:assets,id',
             'quantity' => 'required|integer|min:1',
             'header_mode' => 'nullable|boolean',
             'entries' => 'nullable|array|min:1',
+            'entries.*.asset_id' => 'required_with:entries|exists:assets,id',
             'entries.*.source_stock_in_id' => 'nullable|integer|exists:stock_ins,id',
             'entries.*.serial_no' => 'nullable|string',
             'entries.*.barcode' => 'required|string',
@@ -316,14 +351,15 @@ class StockInController extends Controller
             'destination_location' => 'nullable|string|max:255',
             'asset_type' => 'required_without:entries|string|in:New,Used',
             'is_allocation' => 'required_without:entries|boolean',
+            'asset_id' => 'required_without:entries|exists:assets,id',
         ], $this->stockInCodeValidationMessages());
 
-        $asset = Asset::findOrFail($validated['asset_id']);
         $originLocation = $this->normalizeStoreCode($validated['origin_location'] ?? null);
 
         if (! empty($validated['header_mode'])) {
             $relatedRows = $this->groupedStockInRows($stockIn)->get();
             $entryDetails = $validated['entries'] ?? [[
+                'asset_id' => $validated['asset_id'],
                 'source_stock_in_id' => $validated['source_stock_in_id'] ?? null,
                 'serial_no' => $validated['serial_no'] ?? null,
                 'barcode' => $validated['barcode'] ?? null,
@@ -336,8 +372,7 @@ class StockInController extends Controller
                 'price' => $validated['price'],
                 'destination_location' => $validated['destination_location'] ?? null,
             ]];
-            $validated['entries'] = $this->prepareEntriesForSave(
-                $asset,
+            $validated['entries'] = $this->prepareMultiAssetEntriesForSave(
                 $originLocation,
                 $entryDetails,
                 $relatedRows->pluck('id')->all()
@@ -354,10 +389,10 @@ class StockInController extends Controller
             return redirect()->back()->with('success', 'Stock In updated successfully');
         }
 
-        $entryPayload = $this->prepareEntriesForSave(
-            $asset,
+        $entryPayload = $this->prepareMultiAssetEntriesForSave(
             $originLocation,
             [Arr::only($validated, [
+                'asset_id',
                 'source_stock_in_id',
                 'serial_no',
                 'barcode',
@@ -387,6 +422,7 @@ class StockInController extends Controller
                     'price',
                     'destination_location',
                     'source_stock_in_id',
+                    'asset_id',
                 ]),
                 'origin_location' => $originLocation,
                 ...$entryPayload,
@@ -761,98 +797,6 @@ class StockInController extends Controller
         return $pdf->stream('qrcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf');
     }
 
-    protected function prepareEntriesForSave(Asset $asset, ?string $originLocation, array $entries, array $excludeChildIds = []): array
-    {
-        $originLocation = $this->normalizeStoreCode($originLocation);
-
-        if (! $this->isInternalTransferLocation($originLocation)) {
-            return array_map(function (array $entry) {
-                $entry['source_stock_in_id'] = null;
-
-                return $entry;
-            }, $entries);
-        }
-
-        $entries = array_map(function (array $entry) {
-            $entry['destination_location'] = $this->normalizeStoreCode($entry['destination_location'] ?? null);
-
-            return $entry;
-        }, $entries);
-
-        foreach ($entries as $index => $entry) {
-            if (empty($entry['destination_location'])) {
-                throw ValidationException::withMessages([
-                    "entries.{$index}.destination_location" => 'Destination location is required for an internal transfer.',
-                ]);
-            }
-
-            if ($this->sameLocation($originLocation, $entry['destination_location'])) {
-                throw ValidationException::withMessages([
-                    "entries.{$index}.destination_location" => 'Destination location must be different from the origin location.',
-                ]);
-            }
-        }
-
-        $soh = $this->inventorySoh($asset->id, $originLocation);
-        if (count($entries) > $soh) {
-            throw ValidationException::withMessages([
-                'quantity' => "Only {$soh} item(s) are available at {$originLocation}.",
-            ]);
-        }
-
-        if (! $this->isFixedAsset($asset)) {
-            return array_map(function (array $entry) {
-                $entry['source_stock_in_id'] = null;
-
-                return $entry;
-            }, $entries);
-        }
-
-        $sourceIds = array_map(
-            fn (array $entry) => isset($entry['source_stock_in_id']) ? (int) $entry['source_stock_in_id'] : null,
-            $entries
-        );
-
-        if (in_array(null, $sourceIds, true)) {
-            throw ValidationException::withMessages([
-                'entries' => 'Select the source stock unit for every fixed asset transfer row.',
-            ]);
-        }
-
-        if (count($sourceIds) !== count(array_unique($sourceIds))) {
-            throw ValidationException::withMessages([
-                'entries' => 'A source stock unit can only be selected once in the same transfer.',
-            ]);
-        }
-
-        $sourceRows = $this->availableFixedSourceRows($asset, $originLocation, $excludeChildIds)
-            ->whereIn('id', $sourceIds)
-            ->get()
-            ->keyBy('id');
-
-        if ($sourceRows->count() !== count($sourceIds)) {
-            throw ValidationException::withMessages([
-                'entries' => 'One or more selected source units are no longer available at the origin location.',
-            ]);
-        }
-
-        return array_map(function (array $entry) use ($sourceRows) {
-            $source = $sourceRows->get((int) $entry['source_stock_in_id']);
-
-            return [
-                ...$entry,
-                'source_stock_in_id' => $source->id,
-                'serial_no' => $source->serial_no,
-                'barcode' => $source->barcode,
-                'qrcode' => $source->qrcode,
-                'warranty_months' => $source->warranty_months,
-                'eol_months' => $source->eol_months,
-                'cost' => $source->cost,
-                'price' => $source->price,
-            ];
-        }, $entries);
-    }
-
     protected function validatePostableTransfers($itemsToPost): void
     {
         $transferItems = $itemsToPost->filter(
@@ -864,19 +808,15 @@ class StockInController extends Controller
         }
 
         $transferItems
-            ->groupBy(fn (StockIn $item) => $item->asset_id.'|'.$this->normalizeStoreCode($item->origin_location))
-            ->each(function ($items) {
-                $firstItem = $items->first();
-                $asset = Asset::findOrFail($firstItem->asset_id);
-                $originLocation = $this->normalizeStoreCode($firstItem->origin_location);
-
+            ->groupBy(fn (StockIn $item) => $this->normalizeStoreCode($item->origin_location))
+            ->each(function ($items, $originLocation) {
                 $entries = $items->map(fn (StockIn $item) => [
+                    'asset_id' => $item->asset_id,
                     'source_stock_in_id' => $item->source_stock_in_id,
                     'destination_location' => $item->destination_location,
                 ])->all();
 
-                $this->prepareEntriesForSave(
-                    $asset,
+                $this->prepareMultiAssetEntriesForSave(
                     $originLocation,
                     $entries,
                     $items->pluck('id')->all()
@@ -1018,9 +958,101 @@ class StockInController extends Controller
         return $query->orderBy('id');
     }
 
+    protected function prepareMultiAssetEntriesForSave(?string $originLocation, array $entries, array $excludeChildIds = []): array
+    {
+        $originLocation = $this->normalizeStoreCode($originLocation);
+        $isInternalTransfer = $this->isInternalTransferLocation($originLocation);
+
+        $assetIds = array_unique(array_map(fn($e) => $e['asset_id'], $entries));
+        $assets = Asset::whereIn('id', $assetIds)->get()->keyBy('id');
+
+        $result = [];
+        foreach ($entries as $index => $entry) {
+            $asset = $assets->get($entry['asset_id']);
+            if (!$asset) {
+                throw ValidationException::withMessages([
+                    "entries.{$index}.asset_id" => "Asset not found.",
+                ]);
+            }
+
+            if (!$isInternalTransfer) {
+                $entry['source_stock_in_id'] = null;
+                $result[] = $entry;
+                continue;
+            }
+
+            $entry['destination_location'] = $this->normalizeStoreCode($entry['destination_location'] ?? null);
+
+            if (empty($entry['destination_location'])) {
+                throw ValidationException::withMessages([
+                    "entries.{$index}.destination_location" => 'Destination location is required for an internal transfer.',
+                ]);
+            }
+
+            if ($this->sameLocation($originLocation, $entry['destination_location'])) {
+                throw ValidationException::withMessages([
+                    "entries.{$index}.destination_location" => 'Destination location must be different from the origin location.',
+                ]);
+            }
+
+            // Fixed Asset Transfer Logic
+            if ($this->isFixedAsset($asset)) {
+                $sourceId = isset($entry['source_stock_in_id']) ? (int) $entry['source_stock_in_id'] : null;
+                if (!$sourceId) {
+                    throw ValidationException::withMessages([
+                        "entries.{$index}.source_stock_in_id" => 'Select the source stock unit for fixed asset transfers.',
+                    ]);
+                }
+
+                $source = $this->availableFixedSourceRows($asset, $originLocation, $excludeChildIds)
+                    ->where('id', $sourceId)
+                    ->first();
+
+                if (!$source) {
+                    throw ValidationException::withMessages([
+                        "entries.{$index}.source_stock_in_id" => 'Selected source unit is no longer available.',
+                    ]);
+                }
+
+                $entry = [
+                    ...$entry,
+                    'serial_no' => $source->serial_no,
+                    'barcode' => $source->barcode,
+                    'qrcode' => $source->qrcode,
+                    'warranty_months' => $source->warranty_months,
+                    'eol_months' => $source->eol_months,
+                    'cost' => $source->cost,
+                    'price' => $source->price,
+                ];
+            } else {
+                // Consumable Transfer logic (if any specific validation needed)
+                $entry['source_stock_in_id'] = null;
+            }
+
+            $result[] = $entry;
+        }
+
+        // Global SOH check per asset
+        if ($isInternalTransfer) {
+            $countsByAsset = array_count_values(array_map(fn($e) => $e['asset_id'], $result));
+            foreach ($countsByAsset as $aid => $count) {
+                $soh = $this->inventorySoh((int)$aid, $originLocation);
+                if ($count > $soh) {
+                    $assetName = $assets->get($aid)?->item_code ?? "Asset #$aid";
+                    throw ValidationException::withMessages([
+                        'quantity' => "Only {$soh} unit(s) of {$assetName} are available at {$originLocation}.",
+                    ]);
+                }
+            }
+        }
+
+        return $result;
+    }
+
     protected function syncGroupedEntries(StockIn $stockIn, array $validated, $relatedRows = null): void
     {
         $entries = $validated['entries'] ?? [[
+            'asset_id' => $validated['asset_id'],
             'source_stock_in_id' => $validated['source_stock_in_id'] ?? null,
             'serial_no' => $validated['serial_no'] ?? null,
             'barcode' => $validated['barcode'] ?? null,
@@ -1047,7 +1079,7 @@ class StockInController extends Controller
                 'memo_remarks' => $validated['memo_remarks'] ?? null,
                 'posted_by' => $validated['posted_by'] ?? null,
                 'status' => $validated['status'],
-                'asset_id' => $validated['asset_id'],
+                'asset_id' => $entry['asset_id'],
                 'quantity' => 1,
                 'updated_by' => auth()->id(),
                 ...$this->normalizeStockEntry(Arr::only($entry, [

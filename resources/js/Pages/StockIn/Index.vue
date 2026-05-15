@@ -458,116 +458,310 @@
                             ></textarea>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Brand</label>
-                                <Autocomplete
-                                    v-model="form.brand"
-                                    :options="brandOptions"
-                                    label-key="name"
-                                    value-key="value"
-                                    placeholder="Select Brand"
-                                    @update:modelValue="onBrandChange"
-                                />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Model</label>
-                                <Autocomplete
-                                    v-model="form.model"
-                                    :options="modelOptions"
-                                    label-key="name"
-                                    value-key="value"
-                                    placeholder="Select Model"
-                                    :disabled="!form.brand"
-                                    @update:modelValue="onModelChange"
-                                />
-                            </div>
-                            <div class="xl:col-span-2">
-                                <label class="block text-sm font-medium text-gray-700">Asset Item</label>
-                                <Autocomplete
-                                    v-model="form.asset_id"
-                                    :options="assetOptions"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select Asset Item"
-                                    :disabled="readOnlyMode || !form.brand || !form.model"
-                                    @update:modelValue="onAssetChange"
-                                />
-                            </div>
-                        </div>
-
-                        <div
-                            v-if="isTransferMode && form.asset_id && !isEditing"
-                            class="grid grid-cols-1 md:grid-cols-3 gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4"
-                        >
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500">Transfer Origin</p>
-                                <p class="mt-1 text-sm font-semibold text-blue-950">{{ normalizedOriginLocation }}</p>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500">Current SOH</p>
-                                <p class="mt-1 text-2xl font-black text-blue-950">
-                                    <span v-if="isLoadingAvailableStock">...</span>
-                                    <span v-else>{{ availableSoh }}</span>
-                                </p>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-wider text-blue-500">Transfer Mode</p>
-                                <p class="mt-1 text-sm font-semibold text-blue-950">
-                                    {{ selectedAsset?.type === 'Fixed' ? 'Select fixed asset units below' : 'Qty is capped by origin SOH' }}
-                                </p>
-                            </div>
-                            <p v-if="availableStockError" class="md:col-span-3 text-xs font-semibold text-red-600">
-                                {{ availableStockError }}
-                            </p>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div v-if="isFixedTransfer && !isEditing">
-                                <label class="block text-sm font-medium text-gray-700">Selected Units</label>
-                                <div class="mt-1 flex min-h-[38px] items-center rounded-md border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-900 shadow-sm">
-                                    {{ form.entries.length }} selected
+                        <!-- Asset Selection Table -->
+                        <div v-if="!isEditing" class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-900">Select Assets to Add</h4>
+                                    <p v-if="isTransferMode" class="text-xs text-gray-500">Showing posted stock currently available at {{ normalizedOriginLocation }}.</p>
                                 </div>
-                                <p class="mt-1 text-[11px] text-gray-500">
-                                    Transfer quantity follows the fixed asset units selected below.
-                                </p>
+                                <div class="relative w-64">
+                                    <input
+                                        type="text"
+                                        v-model="assetSearch"
+                                        placeholder="Search asset code, brand..."
+                                        class="w-full pl-3 pr-10 py-1.5 border-gray-300 rounded-lg text-xs focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                    <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </div>
+                                </div>
                             </div>
-                            <div v-else>
-                                <label class="block text-sm font-medium text-gray-700">Qty</label>
-                                <input
-                                    type="number"
-                                    v-model.number="form.quantity"
-                                    required
-                                    min="1"
-                                    :max="isConsumableTransfer && availableSoh > 0 ? availableSoh : null"
-                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                >
-                                <p class="mt-1 text-[11px] text-gray-500">
-                                    {{ isConsumableTransfer && !isEditing ? `Up to ${availableSoh} item(s) can be transferred from the origin.` : (isEditing ? 'Qty updates how many grouped stock-in detail rows are kept below.' : 'Qty controls how many detail rows are prepared below.') }}
-                                </p>
-                                <p
-                                    v-if="pendingDetailRemovalCount > 0"
-                                    class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800"
-                                >
-                                    Saving this change will remove {{ pendingDetailRemovalCount }} existing Stock Detail row<span v-if="pendingDetailRemovalCount !== 1">s</span>. You will be asked to confirm before it is saved.
-                                </p>
+
+                            <div v-if="isLoadingOriginAssets" class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-6 text-center text-xs font-bold text-blue-700">
+                                Loading available stock from {{ normalizedOriginLocation }}...
+                            </div>
+
+                            <div v-else-if="isTransferMode && filteredAssets.length === 0" class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-6 text-center text-xs font-bold text-amber-700">
+                                No posted stock is available at this origin location.
+                            </div>
+
+                            <div v-else-if="filteredAssets.length > 0" class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Item Code</th>
+                                            <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Asset</th>
+                                            <th v-if="isTransferMode" class="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">SOH</th>
+                                            <th class="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template v-for="asset in filteredAssets" :key="asset.id">
+                                            <tr class="hover:bg-blue-50/50">
+                                                <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-900">{{ asset.item_code }}</td>
+                                                <td class="px-4 py-2">
+                                                    <p class="text-xs font-bold text-gray-900">{{ asset.brand }} {{ asset.model }}</p>
+                                                    <p class="text-[10px] text-gray-500 truncate max-w-xs">{{ asset.description }}</p>
+                                                </td>
+                                                <td v-if="isTransferMode" class="px-4 py-2 text-right text-xs font-black text-blue-700">{{ asset.soh }}</td>
+                                                <td class="px-4 py-2 text-right">
+                                                    <button
+                                                        type="button"
+                                                        @click="addEntryForAsset(asset)"
+                                                        class="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+                                                    >
+                                                        <PlusIcon class="w-4 h-4" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            <tr v-if="isAssetDetailExpanded(asset.id) || getEntriesForAsset(asset.id).length > 0" class="bg-slate-50/80">
+                                                <td :colspan="isTransferMode ? 4 : 3" class="px-4 py-4">
+                                                    <div class="space-y-4 border-l-2 border-blue-200 pl-4">
+                                                        <div class="flex items-center justify-between">
+                                                            <p class="text-[10px] font-black uppercase tracking-widest text-blue-600">
+                                                                {{ getEntriesForAsset(asset.id).length }} stock detail row<span v-if="getEntriesForAsset(asset.id).length !== 1">s</span>
+                                                            </p>
+                                                            <button
+                                                                type="button"
+                                                                @click="addEntryForAsset(asset)"
+                                                                class="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800"
+                                                            >
+                                                                + Add Unit
+                                                            </button>
+                                                        </div>
+
+                                                        <div
+                                                            v-if="isTransferMode && asset.type === 'Fixed'"
+                                                            class="inline-flex rounded-lg border border-gray-200 bg-white p-1"
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                @click="setAssetDetailTab(asset.id, 'existing')"
+                                                                class="rounded-md px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors"
+                                                                :class="getAssetDetailTab(asset.id) === 'existing' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'"
+                                                            >
+                                                                Existing Sub Items
+                                                                <span class="ml-1">({{ availableStockMap[asset.id]?.units?.length || 0 }})</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                @click="setAssetDetailTab(asset.id, 'new')"
+                                                                class="rounded-md px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors"
+                                                                :class="getAssetDetailTab(asset.id) === 'new' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'"
+                                                            >
+                                                                New/Add Unit Sub Items
+                                                                <span class="ml-1">({{ getEntriesForAsset(asset.id).length }})</span>
+                                                            </button>
+                                                        </div>
+
+                                                        <div
+                                                            v-if="isTransferMode && asset.type === 'Fixed' && getAssetDetailTab(asset.id) === 'existing'"
+                                                            class="rounded-xl border border-gray-200 bg-white shadow-sm"
+                                                        >
+                                                            <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                                                                <div>
+                                                                    <p class="text-xs font-black uppercase tracking-widest text-gray-700">Existing Sub Items</p>
+                                                                    <p class="text-[10px] text-gray-500">Select an existing source unit from {{ normalizedOriginLocation }} to add it as a transfer row.</p>
+                                                                </div>
+                                                                <span class="text-[10px] font-black uppercase tracking-widest text-blue-600">SOH: {{ availableStockMap[asset.id]?.soh || 0 }}</span>
+                                                            </div>
+                                                            <div v-if="availableStockMap[asset.id]?.loading" class="px-4 py-6 text-center text-xs font-bold text-gray-500">
+                                                                Loading existing sub items...
+                                                            </div>
+                                                            <div v-else-if="availableStockMap[asset.id]?.error" class="px-4 py-6 text-center text-xs font-bold text-red-600">
+                                                                {{ availableStockMap[asset.id].error }}
+                                                            </div>
+                                                            <div v-else-if="!(availableStockMap[asset.id]?.units || []).length" class="px-4 py-6 text-center text-xs font-bold text-gray-500">
+                                                                No existing sub items are available at this origin.
+                                                            </div>
+                                                            <div v-else class="max-h-64 overflow-y-auto">
+                                                                <table class="min-w-full divide-y divide-gray-100">
+                                                                    <thead class="bg-gray-50">
+                                                                        <tr>
+                                                                            <th class="px-4 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-400">Serial / Barcode</th>
+                                                                            <th class="px-4 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-400">QR Code</th>
+                                                                            <th class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Cost</th>
+                                                                            <th class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Action</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody class="divide-y divide-gray-50">
+                                                                        <tr
+                                                                            v-for="unit in availableStockMap[asset.id]?.units"
+                                                                            :key="unit.id"
+                                                                            class="hover:bg-blue-50/60"
+                                                                            :class="isSourceUnitSelected(unit.id) ? 'bg-blue-50' : ''"
+                                                                        >
+                                                                            <td class="px-4 py-2">
+                                                                                <p class="text-[11px] font-semibold text-gray-900">{{ unit.serial_no || 'No Serial' }}</p>
+                                                                                <p class="text-[9px] font-mono text-gray-500">{{ unit.barcode }}</p>
+                                                                            </td>
+                                                                            <td class="px-4 py-2 text-[10px] text-gray-500 truncate max-w-xs">{{ unit.qrcode || '-' }}</td>
+                                                                            <td class="px-4 py-2 text-right text-[11px] font-mono text-gray-900">{{ unit.cost }}</td>
+                                                                            <td class="px-4 py-2 text-right">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    @click="addEntryFromSourceUnit(asset, unit)"
+                                                                                    class="rounded-md px-2 py-1 text-[10px] font-black uppercase transition-colors"
+                                                                                    :class="isSourceUnitSelected(unit.id) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'"
+                                                                                    :disabled="isSourceUnitSelected(unit.id)"
+                                                                                >
+                                                                                    {{ isSourceUnitSelected(unit.id) ? 'Added' : 'Add' }}
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+
+                                                        <div v-if="getAssetDetailTab(asset.id) === 'new'" class="space-y-4">
+                                                        <div
+                                                            v-for="entry in getEntriesForAsset(asset.id)"
+                                                            :key="entry.uid"
+                                                            class="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                @click="removeEntry(form.entries.indexOf(entry))"
+                                                                class="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                                            >
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                                </svg>
+                                                            </button>
+
+                                                            <div
+                                                                v-if="isTransferMode && asset.type === 'Fixed'"
+                                                                class="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"
+                                                            >
+                                                                <p class="text-[10px] font-black uppercase tracking-widest text-blue-700">Source Unit</p>
+                                                                <p class="mt-1 text-xs font-semibold text-blue-950">
+                                                                    {{ entry.serial_no || 'No Serial' }}
+                                                                    <span class="font-mono text-blue-700">/ {{ entry.barcode || 'No Barcode' }}</span>
+                                                                </p>
+                                                            </div>
+
+                                                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                                <div>
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Type</label>
+                                                                    <select v-model="entry.asset_type" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
+                                                                        <option value="New">New</option>
+                                                                        <option value="Used">Used</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div>
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Allocation</label>
+                                                                    <div class="mt-1 flex items-center h-[34px]">
+                                                                        <label class="relative inline-flex items-center cursor-pointer">
+                                                                            <input type="checkbox" v-model="entry.is_allocation" class="sr-only peer">
+                                                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                                                                            <span class="ml-2 text-xs font-bold text-gray-900">{{ entry.is_allocation ? 'Yes' : 'No' }}</span>
+                                                                        </label>
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Serial No</label>
+                                                                    <input type="text" v-model="entry.serial_no" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                </div>
+                                                                <div>
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Destination</label>
+                                                                    <Autocomplete
+                                                                        v-model="entry.destination_location"
+                                                                        :options="storeOptions"
+                                                                        label-key="name"
+                                                                        value-key="value"
+                                                                        placeholder="Select Store"
+                                                                        size="sm"
+                                                                    />
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+                                                                <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                                                        Barcode <span class="text-red-500">*</span>
+                                                                    </label>
+                                                                    <div class="flex rounded-md shadow-sm">
+                                                                        <input
+                                                                            type="text"
+                                                                            v-model="entry.barcode"
+                                                                            @input="entry.qrcode = ''"
+                                                                            :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                                            class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                                                            :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
+                                                                        >
+                                                                        <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                                                    </div>
+                                                                    <div v-if="entry.barcode" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
+                                                                        <img :src="`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(entry.barcode)}&scale=1&height=10&includetext`" class="max-h-8" :alt="entry.barcode">
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                                                        QR Code <span class="text-red-500">*</span>
+                                                                    </label>
+                                                                    <div class="flex rounded-md shadow-sm">
+                                                                        <input
+                                                                            type="text"
+                                                                            v-model="entry.qrcode"
+                                                                            :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                                            class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                                                            :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
+                                                                            placeholder="Generate summary..."
+                                                                        >
+                                                                        <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+                                                                <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
+                                                                    <input type="number" v-model.number="entry.warranty_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(entry) }}</p>
+                                                                </div>
+                                                                <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
+                                                                    <input type="number" v-model.number="entry.eol_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                    <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(entry) }}</p>
+                                                                </div>
+                                                                <div>
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Cost</label>
+                                                                    <input type="number" step="0.01" v-model.number="entry.cost" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                </div>
+                                                                <div>
+                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Price</label>
+                                                                    <input type="number" step="0.01" v-model.number="entry.price" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
 
-                    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 overflow-hidden">
+                    <div v-if="isEditing" class="rounded-2xl border border-gray-200 bg-gray-50/70 overflow-hidden">
                         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
                             <div>
                                 <h4 class="text-sm font-semibold text-gray-900">Stock Details</h4>
-                                <p class="text-xs text-gray-500">Add serial, codes, pricing, warranty, and location per unit.</p>
+                                <p class="text-xs text-gray-500">Selected assets and their unit-level details.</p>
                             </div>
-                            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <div class="flex items-center gap-2">
                                 <div v-if="isEditing && editingStockIn" class="flex items-center gap-2">
                                     <button
                                         type="button"
                                         @click="printStockInCodes('barcodes')"
                                         class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-                                        title="Print barcode labels as PDF"
                                     >
                                         <PrinterIcon class="h-4 w-4" />
                                         <span>Print Barcodes</span>
@@ -576,258 +770,198 @@
                                         type="button"
                                         @click="printStockInCodes('qrcodes')"
                                         class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-                                        title="Print QR code labels as PDF"
                                     >
                                         <QrCodeIcon class="h-4 w-4" />
                                         <span>Print QR Codes</span>
                                     </button>
                                 </div>
-                                <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} row<span v-if="form.entries.length !== 1">s</span></span>
+                                <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} unit(s)</span>
                             </div>
                         </div>
 
-                        <div class="max-h-[55vh] overflow-y-auto p-4 space-y-4">
-                            <div v-if="isFixedTransfer && !isEditing" class="space-y-4">
-                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 rounded-xl border border-gray-200 bg-white p-4">
-                                    <div class="lg:col-span-2">
-                                        <p class="text-sm font-semibold text-gray-900">Available fixed asset units</p>
-                                        <p class="mt-1 text-xs text-gray-500">
-                                            Pick the posted units currently held by {{ normalizedOriginLocation }}. Selected units inherit their serial, barcode, QR code, cost, warranty, and EOL values.
-                                        </p>
+                        <div class="max-h-[55vh] overflow-y-auto p-4 space-y-6">
+                            <div v-if="form.entries.length === 0" class="text-center py-12">
+                                <p class="text-sm text-gray-500 italic">No assets selected. Search and add assets from the table above.</p>
+                            </div>
+
+                            <div v-for="asset in selectedAssets" :key="asset.id" class="space-y-3">
+                                <div class="flex items-center justify-between bg-gray-200/50 px-3 py-1.5 rounded-lg border border-gray-300">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-xs font-black text-gray-900">{{ asset.item_code }}</span>
+                                        <span class="text-xs text-gray-600 font-medium">{{ asset.brand }} {{ asset.model }}</span>
+                                        <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
+                                            {{ asset.type }}
+                                        </span>
                                     </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination for Selected</label>
-                                        <Autocomplete
-                                            v-model="bulkDestinationLocation"
-                                            :options="storeOptions"
-                                            label-key="name"
-                                            value-key="value"
-                                            placeholder="Select Destination"
-                                            size="sm"
-                                            :disabled="readOnlyMode"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div v-if="isLoadingAvailableStock" class="rounded-xl border border-gray-200 bg-white p-6 text-sm font-semibold text-gray-500">
-                                    Loading available stock...
-                                </div>
-
-                                <div v-else-if="availableStockError" class="rounded-xl border border-red-200 bg-red-50 p-6 text-sm font-semibold text-red-700">
-                                    {{ availableStockError }}
-                                </div>
-
-                                <div v-else-if="availableUnits.length === 0" class="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">
-                                    No available fixed asset units were found at {{ normalizedOriginLocation }}.
-                                </div>
-
-                                <div v-else class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                                    <div class="max-h-80 overflow-y-auto">
-                                        <table class="min-w-full divide-y divide-gray-200">
-                                            <thead class="bg-gray-50 sticky top-0 z-10">
-                                                <tr>
-                                                    <th class="w-12 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Pick</th>
-                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Serial / Barcode</th>
-                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Received</th>
-                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Cost</th>
-                                                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Current Location</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-gray-100 bg-white">
-                                                <tr
-                                                    v-for="unit in availableUnits"
-                                                    :key="unit.id"
-                                                    class="hover:bg-blue-50/60"
-                                                    :class="isSourceSelected(unit) ? 'bg-blue-50' : ''"
-                                                >
-                                                    <td class="px-4 py-3">
-                                                        <input
-                                                            type="checkbox"
-                                                            :checked="isSourceSelected(unit)"
-                                                            class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                            @change="toggleSourceUnit(unit)"
-                                                        >
-                                                    </td>
-                                                    <td class="px-4 py-3">
-                                                        <p class="text-sm font-semibold text-gray-900">{{ unit.serial_no || 'No serial' }}</p>
-                                                        <p class="text-xs font-mono text-gray-500">{{ unit.barcode || 'No barcode' }}</p>
-                                                    </td>
-                                                    <td class="px-4 py-3">
-                                                        <p class="text-sm text-gray-900">{{ formatDate(unit.receive_date) }}</p>
-                                                        <p class="text-xs text-gray-500">{{ unit.dr_no || 'No DR' }}</p>
-                                                    </td>
-                                                    <td class="px-4 py-3 text-sm font-semibold text-gray-900">
-                                                        {{ Number(unit.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-sm text-gray-700">
-                                                        {{ unit.destination_location || normalizedOriginLocation }}
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <div v-if="form.entries.length" class="rounded-xl border border-blue-200 bg-white p-4">
-                                    <div class="mb-3 flex items-center justify-between gap-3">
-                                        <div>
-                                            <p class="text-sm font-semibold text-gray-900">Selected transfer rows</p>
-                                            <p class="text-xs text-gray-500">Confirm the destination for each selected unit.</p>
+                                    <div class="flex items-center gap-3">
+                                        <div v-if="isTransferMode" class="flex items-center gap-2">
+                                            <span v-if="availableStockMap[asset.id]?.loading" class="text-[10px] text-gray-400">Loading SOH...</span>
+                                            <span v-else-if="availableStockMap[asset.id]?.error" class="text-[10px] text-red-500">{{ availableStockMap[asset.id].error }}</span>
+                                            <span v-else class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">SOH: {{ availableStockMap[asset.id]?.soh }}</span>
                                         </div>
-                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-800">{{ form.entries.length }} selected</span>
-                                    </div>
-                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                        <div
-                                            v-for="entry in form.entries"
-                                            :key="entry.uid"
-                                            class="rounded-lg border border-gray-200 bg-gray-50 p-3"
+                                        <button
+                                            v-if="!isEditing"
+                                            type="button"
+                                            @click="addEntryForAsset(asset)"
+                                            class="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800"
                                         >
-                                            <div class="mb-3">
-                                                <p class="text-sm font-semibold text-gray-900">{{ entry.serial_no || 'No serial' }}</p>
-                                                <p class="text-xs font-mono text-gray-500">{{ entry.barcode || 'No barcode' }}</p>
-                                            </div>
-                                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination Location</label>
-                                            <Autocomplete
-                                                v-model="entry.destination_location"
-                                                :options="storeOptions"
-                                                label-key="name"
-                                                value-key="value"
-                                                placeholder="Select Destination Store"
-                                                size="sm"
-                                                :disabled="readOnlyMode"
-                                            />
-                                        </div>
+                                            + Add Unit
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
 
-                            <template v-else>
-                            <div
-                                v-for="(entry, index) in form.entries"
-                                :key="entry.uid"
-                                class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                            >
-                                <div class="flex items-center justify-between mb-4">
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-900">Item {{ index + 1 }}</p>
-                                        <p class="text-xs text-gray-500">{{ selectedAssetLabel || 'Select an asset item above first.' }}</p>
-                                    </div>
-                                    <button
-                                        v-if="!isEditing && form.entries.length > 1"
-                                        type="button"
-                                        @click="removeEntry(index)"
-                                        class="text-xs font-semibold text-red-600 hover:text-red-700"
+                                <!-- Entries for this Asset -->
+                                <div class="space-y-4 pl-4 border-l-2 border-gray-200">
+                                    <div
+                                        v-for="(entry, eIdx) in form.entries"
+                                        :key="entry.uid"
+                                        v-show="Number(entry.asset_id) === Number(asset.id)"
+                                        class="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
                                     >
-                                        Remove
-                                    </button>
-                                </div>
+                                        <button
+                                            v-if="!isEditing"
+                                            type="button"
+                                            @click="removeEntry(form.entries.indexOf(entry))"
+                                            class="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
 
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Asset Type</label>
-                                        <select v-model="entry.asset_type" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white">
-                                            <option value="New">New</option>
-                                            <option value="Used">Used</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Allocation</label>
-                                        <div class="mt-1 flex items-center h-[38px]">
-                                            <label class="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" v-model="entry.is_allocation" class="sr-only peer">
-                                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                                <span class="ml-3 text-sm font-bold text-gray-900">{{ entry.is_allocation ? 'Yes' : 'No' }}</span>
-                                            </label>
+                                        <!-- Transfer Mode: Source Unit Pick -->
+                                        <div v-if="isTransferMode && asset.type === 'Fixed'" class="mb-4">
+                                            <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Pick Source Unit</label>
+                                            <div class="max-h-40 overflow-y-auto rounded-lg border border-gray-100">
+                                                <table class="min-w-full divide-y divide-gray-100">
+                                                    <thead class="bg-gray-50">
+                                                        <tr>
+                                                            <th class="w-8 px-2 py-1"></th>
+                                                            <th class="px-2 py-1 text-left text-[9px] font-bold text-gray-400 uppercase">Serial / Barcode</th>
+                                                            <th class="px-2 py-1 text-right text-[9px] font-bold text-gray-400 uppercase">Cost</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody class="divide-y divide-gray-50">
+                                                        <tr 
+                                                            v-for="unit in availableStockMap[asset.id]?.units" 
+                                                            :key="unit.id"
+                                                            @click="toggleSourceUnit(unit, entry)"
+                                                            class="hover:bg-blue-50"
+                                                            :class="[readOnlyMode ? 'cursor-not-allowed opacity-70' : 'cursor-pointer', entry.source_stock_in_id === unit.id ? 'bg-blue-50' : '']"
+                                                        >
+                                                            <td class="px-2 py-1">
+                                                                <input type="radio" :checked="entry.source_stock_in_id === unit.id" :disabled="readOnlyMode" class="h-3 w-3 text-blue-600 border-gray-300">
+                                                            </td>
+                                                            <td class="px-2 py-1">
+                                                                <p class="text-[11px] font-semibold text-gray-900">{{ unit.serial_no || 'No Serial' }}</p>
+                                                                <p class="text-[9px] font-mono text-gray-500">{{ unit.barcode }}</p>
+                                                            </td>
+                                                            <td class="px-2 py-1 text-right text-[11px] font-mono text-gray-900">{{ unit.cost }}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Serial No</label>
-                                        <input type="text" v-model="entry.serial_no" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination Location</label>
-                                        <Autocomplete
-                                            v-model="entry.destination_location"
-                                            :options="storeOptions"
-                                            label-key="name"
-                                            value-key="value"
-                                            placeholder="Select Destination Store"
-                                            size="sm"
-                                            :disabled="readOnlyMode"
-                                        />
-                                    </div>
-                                </div>
 
-                                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
-                                    <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                            Barcode Generated <span class="text-red-500">*</span>
-                                        </label>
-                                        <div class="flex rounded-md shadow-sm">
-                                            <input
-                                                type="text"
-                                                v-model="entry.barcode"
-                                                @input="entry.qrcode = ''"
-                                                class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                                :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-                                            >
-                                            <button type="button" @click="generateBarcode(index)" class="inline-flex items-center px-4 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-xs font-bold hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                        <!-- Detail Fields -->
+                                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Type</label>
+                                                <select v-model="entry.asset_type" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
+                                                    <option value="New">New</option>
+                                                    <option value="Used">Used</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Allocation</label>
+                                                <div class="mt-1 flex items-center h-[34px]">
+                                                    <label class="relative inline-flex items-center cursor-pointer">
+                                                        <input type="checkbox" v-model="entry.is_allocation" class="sr-only peer">
+                                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                                                        <span class="ml-2 text-xs font-bold text-gray-900">{{ entry.is_allocation ? 'Yes' : 'No' }}</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Serial No</label>
+                                                <input type="text" v-model="entry.serial_no" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Destination</label>
+                                                <Autocomplete
+                                                    v-model="entry.destination_location"
+                                                    :options="storeOptions"
+                                                    label-key="name"
+                                                    value-key="value"
+                                                    placeholder="Select Store"
+                                                    size="sm"
+                                                    :disabled="readOnlyMode"
+                                                />
+                                            </div>
                                         </div>
-                                        <p v-if="entryNeedsBarcode(entry)" class="mt-2 text-xs text-red-600">
-                                            Generate a barcode before saving.
-                                        </p>
-                                        <div v-if="entry.barcode" class="mt-3 p-4 bg-white border border-gray-200 rounded-lg flex justify-center cursor-pointer hover:border-blue-300 transition-all shadow-sm"
-                                             @click="openImageViewer(`https://barcode.tec-it.com/barcode.ashx?data=${encodeURIComponent(entry.barcode)}&code=Code128`, `Barcode: ${entry.barcode}`)">
-                                            <img :src="`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(entry.barcode)}&scale=1&height=10&includetext`" class="max-h-12" :alt="entry.barcode">
-                                        </div>
-                                    </div>
 
-                                    <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                            QR Code Generated <span class="text-red-500">*</span>
-                                        </label>
-                                        <div class="flex rounded-md shadow-sm">
-                                            <input
-                                                type="text"
-                                                v-model="entry.qrcode"
-                                                class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                                :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-                                                placeholder="Generate summary for scanning..."
-                                            >
-                                            <button type="button" @click="generateQrcode(index)" class="inline-flex items-center px-4 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-xs font-bold hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
-                                        </div>
-                                        <p v-if="entryNeedsQrcode(entry)" class="mt-2 text-xs text-red-600">
-                                            Generate a QR code before saving.
-                                        </p>
-                                        <div v-if="entry.qrcode" class="mt-3 p-4 bg-white border border-gray-200 rounded-lg flex justify-center cursor-pointer hover:border-blue-300 transition-all shadow-sm"
-                                             @click="openImageViewer(`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(entry.qrcode)}`, `QR Code Summary`)">
-                                            <img :src="`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(entry.qrcode)}`" class="w-24 h-24" :alt="entry.qrcode">
-                                        </div>
-                                    </div>
-                                </div>
+                                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+                                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                                    Barcode <span class="text-red-500">*</span>
+                                                </label>
+                                                <div class="flex rounded-md shadow-sm">
+                                                    <input
+                                                        type="text"
+                                                        v-model="entry.barcode"
+                                                        @input="entry.qrcode = ''"
+                                                        :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                        class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                                        :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
+                                                    >
+                                                    <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                                </div>
+                                                <div v-if="entry.barcode" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm">
+                                                    <img :src="`https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(entry.barcode)}&scale=1&height=10&includetext`" class="max-h-8" :alt="entry.barcode">
+                                                </div>
+                                            </div>
 
-                                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
-                                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Warranty (Months)</label>
-                                        <input type="number" v-model.number="entry.warranty_months" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                        <p class="mt-1 text-[10px] text-blue-600 font-medium italic">Computed: {{ computedWarrantyDate(entry) }}</p>
-                                    </div>
-                                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase mb-2">EOL (Months)</label>
-                                        <input type="number" v-model.number="entry.eol_months" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                        <p class="mt-1 text-[10px] text-blue-600 font-medium italic">Computed: {{ computedEolDate(entry) }}</p>
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cost</label>
-                                        <input type="number" step="0.01" v-model.number="entry.cost" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Price</label>
-                                        <input type="number" step="0.01" v-model.number="entry.price" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                                    QR Code <span class="text-red-500">*</span>
+                                                </label>
+                                                <div class="flex rounded-md shadow-sm">
+                                                    <input
+                                                        type="text"
+                                                        v-model="entry.qrcode"
+                                                        :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                        class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                                        :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
+                                                        placeholder="Generate summary..."
+                                                    >
+                                                    <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
+                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
+                                                <input type="number" v-model.number="entry.warranty_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(entry) }}</p>
+                                            </div>
+                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
+                                                <input type="number" v-model.number="entry.eol_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(entry) }}</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Cost</label>
+                                                <input type="number" step="0.01" v-model.number="entry.cost" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Price</label>
+                                                <input type="number" step="0.01" v-model.number="entry.price" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            </template>
                         </div>
                     </div>
 
@@ -917,7 +1051,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -1042,34 +1176,29 @@ const authUserName = computed(() => page.props.auth?.user?.name || '')
 const normalizedAssets = computed(() => {
     return (props.assets || []).map(asset => ({
         ...asset,
+        id: Number(asset.id),
         brand: asset.brand || 'Unbranded',
         model: asset.model || 'Unspecified Model',
     }))
 })
 
-const brandOptions = computed(() => {
-    return [...new Set(normalizedAssets.value.map(asset => asset.brand))]
-        .sort((a, b) => a.localeCompare(b))
-        .map(value => ({ value, name: value }))
-})
+const assetSearch = ref('')
+const availableOriginAssets = ref([])
+const isLoadingOriginAssets = ref(false)
+const filteredAssets = computed(() => {
+    const search = assetSearch.value.toLowerCase().trim()
+    const sourceAssets = isTransferMode.value ? availableOriginAssets.value : normalizedAssets.value
 
-const modelOptions = computed(() => {
-    return [...new Set(
-        normalizedAssets.value
-            .filter(asset => asset.brand === form.brand)
-            .map(asset => asset.model)
-    )]
-        .sort((a, b) => a.localeCompare(b))
-        .map(value => ({ value, name: value }))
-})
+    if (!search) {
+        return isTransferMode.value ? sourceAssets : []
+    }
 
-const assetOptions = computed(() => {
-    return normalizedAssets.value
-        .filter(asset => asset.brand === form.brand && asset.model === form.model)
-        .map(asset => ({
-            id: asset.id,
-            name: `${asset.item_code} - ${asset.description || asset.model}`
-        }))
+    return sourceAssets.filter(asset => 
+        asset.item_code.toLowerCase().includes(search) ||
+        asset.brand.toLowerCase().includes(search) ||
+        asset.model.toLowerCase().includes(search) ||
+        (asset.description || '').toLowerCase().includes(search)
+    ).slice(0, 10)
 })
 
 const storeOptions = computed(() => {
@@ -1158,25 +1287,24 @@ const form = reactive({
     received_by: authUserName.value,
     memo_remarks: '',
     status: 'For Posting',
-    brand: '',
-    model: '',
-    asset_id: '',
-    quantity: 1,
+    quantity: 0,
     entries: []
 })
 
 let entryUid = 0
 const codeValidationAttempted = ref(false)
 const supplierLocationCode = 'SUPPLIER'
-const availableStock = ref(null)
-const availableStockError = ref('')
-const isLoadingAvailableStock = ref(false)
-const selectedSourceIds = ref([])
+const availableStockMap = ref({}) // asset_id -> { soh, units, loading, error }
+const assetDetailTabs = ref({})
+const expandedAssetDetails = ref({})
 const bulkDestinationLocation = ref('')
 let availableStockRequestId = 0
+let availableOriginAssetsRequestId = 0
+let suppressOriginLocationWatch = false
 
 const createEntry = (overrides = {}) => ({
     uid: `entry-${entryUid++}`,
+    asset_id: null,
     source_stock_in_id: null,
     serial_no: '',
     barcode: '',
@@ -1188,7 +1316,94 @@ const createEntry = (overrides = {}) => ({
     cost: 0,
     price: 0,
     destination_location: '',
+    stock_in_id: null,
     ...overrides
+})
+
+const getAssetDetailTab = (assetId) => assetDetailTabs.value[Number(assetId)] || 'new'
+
+const setAssetDetailTab = (assetId, tab) => {
+    assetDetailTabs.value = {
+        ...assetDetailTabs.value,
+        [Number(assetId)]: tab,
+    }
+}
+
+const isAssetDetailExpanded = (assetId) => !!expandedAssetDetails.value[Number(assetId)]
+
+const expandAssetDetail = (assetId) => {
+    expandedAssetDetails.value = {
+        ...expandedAssetDetails.value,
+        [Number(assetId)]: true,
+    }
+}
+
+const isSourceUnitSelected = (sourceId) => form.entries.some(entry =>
+    Number(entry.source_stock_in_id) === Number(sourceId)
+)
+
+const sourceUnitEntryDefaults = (unit) => ({
+    source_stock_in_id: unit.id,
+    serial_no: unit.serial_no || '',
+    barcode: unit.barcode || '',
+    qrcode: unit.qrcode || '',
+    asset_type: 'Used',
+    warranty_months: Number(unit.warranty_months || 0),
+    eol_months: Number(unit.eol_months || 0),
+    cost: Number(unit.cost || 0),
+    price: Number(unit.price || 0),
+})
+
+const addEntryForAsset = (asset, unit = null) => {
+    const aid = Number(asset.id)
+
+    if (isTransferMode.value && asset.type === 'Fixed' && !unit) {
+        expandAssetDetail(aid)
+        setAssetDetailTab(aid, 'existing')
+        fetchAvailableStockForAsset(aid, normalizedOriginLocation.value, availableStockRequestId)
+        return
+    }
+
+    const defaults = {
+        asset_id: aid,
+        cost: asset.cost || 0,
+        price: 0,
+        warranty_months: 12,
+        eol_months: 60,
+        ...(unit ? sourceUnitEntryDefaults(unit) : {}),
+    }
+    form.entries.push(createEntry(defaults))
+    form.quantity = form.entries.length
+    setAssetDetailTab(aid, 'new')
+    
+    if (isTransferMode.value) {
+        fetchAvailableStockForAsset(aid, normalizedOriginLocation.value, availableStockRequestId)
+    }
+}
+
+const addEntryFromSourceUnit = (asset, unit) => {
+    if (isSourceUnitSelected(unit.id)) return
+    addEntryForAsset(asset, unit)
+}
+
+const removeEntry = (index) => {
+    form.entries.splice(index, 1)
+    form.quantity = form.entries.length
+}
+
+const getEntriesForAsset = (assetId) => {
+    const aid = Number(assetId)
+    return form.entries.filter(e => Number(e.asset_id) === aid)
+}
+
+const getAssetForEntry = (entry) => {
+    const aid = Number(entry.asset_id)
+    return normalizedAssets.value.find(a => a.id === aid)
+}
+
+const selectedAssets = computed(() => {
+    const ids = [...new Set(form.entries.map(e => Number(e.asset_id)))].filter(Boolean)
+    return normalizedAssets.value.filter(a => ids.includes(a.id))
 })
 
 const hasGeneratedCode = (value) => String(value || '').trim().length > 0
@@ -1228,176 +1443,110 @@ const validateGeneratedCodes = () => {
     return false
 }
 
-const selectedAsset = computed(() => normalizedAssets.value.find(asset => asset.id == form.asset_id) || null)
-const selectedAssetLabel = computed(() => selectedAsset.value ? `${selectedAsset.value.item_code} - ${selectedAsset.value.description || selectedAsset.value.model}` : '')
 const normalizedOriginLocation = computed(() => normalizeLocationValue(form.origin_location))
 const isTransferMode = computed(() => !!normalizedOriginLocation.value && normalizedOriginLocation.value !== supplierLocationCode)
-const isFixedTransfer = computed(() => isTransferMode.value && selectedAsset.value?.type === 'Fixed')
-const isConsumableTransfer = computed(() => isTransferMode.value && selectedAsset.value?.type === 'Consumables')
-const availableSoh = computed(() => Number(availableStock.value?.soh || 0))
-const availableUnits = computed(() => availableStock.value?.available_units || [])
-const selectedSourceIdSet = computed(() => new Set(selectedSourceIds.value.map(id => Number(id))))
-const sourceRowsById = computed(() => new Map(availableUnits.value.map(unit => [Number(unit.id), unit])))
-const normalizedQuantity = computed(() => Math.max(1, parseInt(form.quantity || 1, 10)))
-const pendingDetailRemovalCount = computed(() => {
-    if (!isEditing.value) return 0
 
-    return Math.max(0, form.entries.length - normalizedQuantity.value)
-})
-const toDateKey = (value) => {
-    if (!value) return ''
-    if (value instanceof Date) return toLocalDateKey(value)
+const currentEntryIds = () => form.entries
+    .map(entry => Number(entry.stock_in_id || entry.id))
+    .filter(Boolean)
 
-    const normalized = String(value).trim()
-    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized
+const clearTransferSourceSelections = () => {
+    form.entries.forEach(entry => {
+        const asset = getAssetForEntry(entry)
+        if (asset?.type !== 'Fixed') return
 
-    const parsed = new Date(normalized)
-    if (!Number.isNaN(parsed.getTime())) return toLocalDateKey(parsed)
-
-    const dateMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})/)
-    return dateMatch ? dateMatch[1] : ''
+        entry.source_stock_in_id = null
+        entry.serial_no = ''
+        entry.barcode = ''
+        entry.qrcode = ''
+    })
 }
 
-const toTimestamp = (value) => {
-    const timestamp = new Date(value || 0).getTime()
-    return Number.isNaN(timestamp) ? 0 : timestamp
-}
+const fetchAvailableStockForAsset = async (assetId, originLocation, requestId = availableStockRequestId) => {
+    if (!assetId || !originLocation || originLocation === supplierLocationCode) return
 
-const syncEntriesToQuantity = (quantity) => {
-    const target = Math.max(1, parseInt(quantity || 1, 10))
-    form.quantity = target
-
-    if (!form.entries.length) {
-        form.entries = [createEntry(isEditing.value ? {} : getEntryDefaults())]
+    const aid = Number(assetId)
+    // Update ref value to ensure reactivity
+    availableStockMap.value = {
+        ...availableStockMap.value,
+        [aid]: { loading: true, error: '', soh: 0, units: [] }
     }
-
-    while (form.entries.length < target) {
-        form.entries.push(createEntry(getEntryDefaults()))
-    }
-
-    while (form.entries.length > target) {
-        form.entries.pop()
-    }
-}
-
-const getEntryDefaults = () => ({
-    cost: selectedAsset.value?.cost || 0,
-    price: 0,
-    warranty_months: 12,
-    eol_months: 60,
-})
-
-const clearAvailableStock = () => {
-    availableStock.value = null
-    availableStockError.value = ''
-    selectedSourceIds.value = []
-    bulkDestinationLocation.value = ''
-}
-
-const resetFixedTransferEntries = () => {
-    selectedSourceIds.value = []
-    form.entries = []
-    form.quantity = 0
-}
-
-const unitToTransferEntry = (unit, existing = null) => createEntry({
-    source_stock_in_id: unit.id,
-    serial_no: unit.serial_no || '',
-    barcode: unit.barcode || '',
-    qrcode: unit.qrcode || '',
-    warranty_months: Number(unit.warranty_months || 0),
-    eol_months: Number(unit.eol_months || 0),
-    cost: Number(unit.cost || 0),
-    price: Number(unit.price || 0),
-    destination_location: normalizeLocationValue(existing?.destination_location || bulkDestinationLocation.value || ''),
-    ...(existing?.uid ? { uid: existing.uid } : {}),
-})
-
-const syncFixedTransferEntries = () => {
-    if (!isFixedTransfer.value || isEditing.value) return
-
-    const existingBySource = new Map(
-        form.entries
-            .filter(entry => entry.source_stock_in_id)
-            .map(entry => [Number(entry.source_stock_in_id), entry])
-    )
-
-    form.entries = selectedSourceIds.value
-        .map(id => sourceRowsById.value.get(Number(id)))
-        .filter(Boolean)
-        .map(unit => unitToTransferEntry(unit, existingBySource.get(Number(unit.id))))
-
-    form.quantity = form.entries.length
-}
-
-const isSourceSelected = (unit) => selectedSourceIdSet.value.has(Number(unit.id))
-
-const toggleSourceUnit = (unit) => {
-    const sourceId = Number(unit.id)
-    const current = new Set(selectedSourceIds.value.map(id => Number(id)))
-
-    if (current.has(sourceId)) {
-        current.delete(sourceId)
-    } else {
-        current.add(sourceId)
-    }
-
-    selectedSourceIds.value = Array.from(current)
-    syncFixedTransferEntries()
-}
-
-const applyBulkDestination = () => {
-    if (!isFixedTransfer.value || isEditing.value) return
-
-    const destination = normalizeLocationValue(bulkDestinationLocation.value)
-    form.entries = form.entries.map(entry => ({
-        ...entry,
-        destination_location: destination,
-    }))
-}
-
-const fetchAvailableStock = async () => {
-    const requestId = ++availableStockRequestId
-
-    if (isEditing.value || !isTransferMode.value || !form.asset_id) {
-        isLoadingAvailableStock.value = false
-        clearAvailableStock()
-        return
-    }
-
-    isLoadingAvailableStock.value = true
-    availableStockError.value = ''
 
     try {
         const response = await axios.get(route('stock-ins.available-stock'), {
             params: {
-                asset_id: form.asset_id,
-                origin_location: normalizedOriginLocation.value,
+                asset_id: aid,
+                origin_location: originLocation,
+                exclude_child_ids: currentEntryIds(),
             },
         })
 
         if (requestId !== availableStockRequestId) return
 
-        availableStock.value = response.data
-        selectedSourceIds.value = []
-
-        if (isFixedTransfer.value) {
-            resetFixedTransferEntries()
-        } else if (isConsumableTransfer.value && availableSoh.value > 0 && form.quantity > availableSoh.value) {
-            syncEntriesToQuantity(availableSoh.value)
+        availableStockMap.value = {
+            ...availableStockMap.value,
+            [aid]: {
+                loading: false,
+                error: '',
+                soh: Number(response.data.soh || 0),
+                units: response.data.available_units || []
+            }
         }
     } catch (error) {
         if (requestId !== availableStockRequestId) return
 
-        availableStock.value = null
-        availableStockError.value = error.response?.data?.message || 'Unable to load stock on hand for the selected origin.'
-
-        if (isFixedTransfer.value) {
-            resetFixedTransferEntries()
+        availableStockMap.value = {
+            ...availableStockMap.value,
+            [aid]: {
+                loading: false,
+                error: error.response?.data?.message || 'Unable to load stock.',
+                soh: 0,
+                units: []
+            }
         }
+    }
+}
+
+const refreshAvailableStockForSelectedAssets = (originLocation = normalizedOriginLocation.value) => {
+    availableStockRequestId++
+    availableStockMap.value = {}
+
+    if (!originLocation || originLocation === supplierLocationCode) return
+
+    const requestId = availableStockRequestId
+    selectedAssets.value.forEach(asset => fetchAvailableStockForAsset(asset.id, originLocation, requestId))
+}
+
+const loadAssetsForOrigin = async (originLocation = normalizedOriginLocation.value) => {
+    availableOriginAssetsRequestId++
+    const requestId = availableOriginAssetsRequestId
+    availableOriginAssets.value = []
+
+    if (!originLocation || originLocation === supplierLocationCode) return
+
+    isLoadingOriginAssets.value = true
+
+    try {
+        const response = await axios.get(route('stock-ins.assets-with-stock'), {
+            params: { location: originLocation },
+        })
+
+        if (requestId !== availableOriginAssetsRequestId) return
+
+        availableOriginAssets.value = (response.data || []).map(asset => ({
+            ...asset,
+            id: Number(asset.id),
+            brand: asset.brand || 'Unbranded',
+            model: asset.model || 'Unspecified Model',
+            soh: Number(asset.soh || 0),
+        }))
+    } catch (error) {
+        if (requestId !== availableOriginAssetsRequestId) return
+
+        showError('Failed to load available stock for this origin location.')
     } finally {
-        if (requestId === availableStockRequestId) {
-            isLoadingAvailableStock.value = false
+        if (requestId === availableOriginAssetsRequestId) {
+            isLoadingOriginAssets.value = false
         }
     }
 }
@@ -1405,98 +1554,78 @@ const fetchAvailableStock = async () => {
 const validateTransferStock = () => {
     if (!isTransferMode.value || isEditing.value) return true
 
-    if (!form.asset_id) {
-        showError('Select an asset item before preparing a transfer.')
+    if (form.entries.length === 0) {
+        showError('Add at least one asset item before preparing a transfer.')
         return false
     }
 
-    if (isLoadingAvailableStock.value) {
-        showError('Please wait for the current SOH lookup to finish.')
-        return false
-    }
+    for (const entry of form.entries) {
+        const asset = getAssetForEntry(entry)
+        const aid = Number(entry.asset_id)
+        const assetStock = availableStockMap.value[aid]
+        
+        if (!assetStock || assetStock.loading) {
+            showError(`Please wait for SOH lookup for ${asset?.item_code || 'Asset'}.`)
+            return false
+        }
 
-    if (availableStockError.value) {
-        showError(availableStockError.value)
-        return false
-    }
+        if (assetStock.error) {
+            showError(`${asset?.item_code || 'Asset'}: ${assetStock.error}`)
+            return false
+        }
 
-    if (availableSoh.value <= 0) {
-        showError(`No stock on hand is available at ${normalizedOriginLocation.value}.`)
-        return false
-    }
+        if (assetStock.soh <= 0) {
+            showError(`No stock on hand for ${asset?.item_code || 'Asset'} at ${normalizedOriginLocation.value}.`)
+            return false
+        }
 
-    if (isFixedTransfer.value && form.entries.length === 0) {
-        showError('Select at least one available fixed asset unit to transfer.')
-        return false
-    }
+        if (asset?.type === 'Fixed' && !entry.source_stock_in_id) {
+            showError(`Select a source unit for ${asset?.item_code || 'Asset'}.`)
+            return false
+        }
 
-    if (form.entries.length > availableSoh.value) {
-        showError(`Only ${availableSoh.value} item(s) are available at ${normalizedOriginLocation.value}.`)
-        return false
-    }
-
-    const invalidDestination = form.entries.find(entry => {
         const destination = normalizeLocationValue(entry.destination_location)
-        return !destination || destination === normalizedOriginLocation.value
-    })
+        if (!destination || destination === normalizedOriginLocation.value) {
+            showError(`Select a valid destination for ${asset?.item_code || 'Asset'}.`)
+            return false
+        }
+    }
 
-    if (invalidDestination) {
-        showError('Select a destination location different from the origin for every transfer row.')
-        return false
+    // Check quantity caps per asset
+    const countsByAsset = form.entries.reduce((acc, e) => {
+        const aid = Number(e.asset_id)
+        acc[aid] = (acc[aid] || 0) + 1
+        return acc
+    }, {})
+
+    for (const [aid, count] of Object.entries(countsByAsset)) {
+        const assetStock = availableStockMap.value[Number(aid)]
+        if (assetStock && count > assetStock.soh) {
+            const asset = normalizedAssets.value.find(a => a.id === Number(aid))
+            showError(`Only ${assetStock.soh} unit(s) of ${asset?.item_code || 'Asset'} are available.`);
+            return false
+        }
     }
 
     return true
 }
 
-const onBrandChange = () => {
-    form.model = ''
-    form.asset_id = ''
-    clearAvailableStock()
-    form.entries = form.entries.map(entry => ({
-        ...entry,
-        barcode: '',
-        qrcode: '',
-    }))
-}
-
-const onModelChange = () => {
-    form.asset_id = ''
-    clearAvailableStock()
-    form.entries = form.entries.map(entry => ({
-        ...entry,
-        barcode: '',
-        qrcode: '',
-    }))
-}
-
-const onAssetChange = () => {
-    clearAvailableStock()
-    const defaults = getEntryDefaults()
-    form.entries = form.entries.map(entry => ({
-        ...entry,
-        barcode: '',
-        qrcode: '',
-        cost: entry.cost || defaults.cost,
-        price: entry.price || defaults.price,
-    }))
-}
-
-const generateBarcode = (index) => {
-    const asset = selectedAsset.value
-    const prefix = asset ? asset.item_code : 'ST'
-    const entry = form.entries[index]
+const generateBarcode = (entryIndex) => {
+    const entry = form.entries[entryIndex]
     if (!entry) return
-    entry.barcode = `${prefix}-${Date.now()}-${index + 1}`
+    const asset = getAssetForEntry(entry)
+    const prefix = asset ? asset.item_code : 'ST'
+    entry.barcode = `${prefix}-${Date.now()}-${entryIndex + 1}`
     entry.qrcode = ''
 }
 
-const generateQrcode = (index) => {
-    const asset = selectedAsset.value
-    const entry = form.entries[index]
+const generateQrcode = (entryIndex) => {
+    const entry = form.entries[entryIndex]
     if (!entry) return
+    const asset = getAssetForEntry(entry)
 
     if (!asset) {
-        showError('Please select an asset first');
+        showError('Asset data missing for this entry');
         return
     }
 
@@ -1523,6 +1652,31 @@ const generateQrcode = (index) => {
     ]
     
     entry.qrcode = details.join('\n')
+}
+
+const toggleSourceUnit = (unit, entry) => {
+    if (readOnlyMode.value) return
+
+    const sourceId = Number(unit.id)
+    if (entry.source_stock_in_id === sourceId) {
+        entry.source_stock_in_id = null
+    } else {
+        // Check if this source unit is already used by another entry
+        const isUsed = form.entries.some(e => e !== entry && e.source_stock_in_id === sourceId)
+        if (isUsed) {
+            showError('This unit is already selected for another entry.')
+            return
+        }
+
+        entry.source_stock_in_id = sourceId
+        entry.serial_no = unit.serial_no || ''
+        entry.barcode = unit.barcode || ''
+        entry.qrcode = unit.qrcode || ''
+        entry.warranty_months = Number(unit.warranty_months || 0)
+        entry.eol_months = Number(unit.eol_months || 0)
+        entry.cost = Number(unit.cost || 0)
+        entry.price = Number(unit.price || 0)
+    }
 }
 
 const parseDateOnly = (value) => {
@@ -1580,7 +1734,12 @@ const computedEolDate = (entry) => {
 
 const resetForm = () => {
     codeValidationAttempted.value = false
-    clearAvailableStock()
+    assetSearch.value = ''
+    availableStockMap.value = {}
+    assetDetailTabs.value = {}
+    expandedAssetDetails.value = {}
+    availableOriginAssets.value = []
+    isLoadingOriginAssets.value = false
     Object.assign(form, {
         receive_date: getToday(),
         dr_no: '',
@@ -1590,11 +1749,8 @@ const resetForm = () => {
         received_by: authUserName.value,
         memo_remarks: '',
         status: 'For Posting',
-        brand: '',
-        model: '',
-        asset_id: '',
-        quantity: 1,
-        entries: [createEntry()],
+        quantity: 0,
+        entries: [],
     })
 }
 
@@ -1619,7 +1775,7 @@ const editHeaderItem = async (header) => {
                 updater: items[0].updater,
                 updated_by: items[0].updated_by
             }
-            editItem(items[0], items.reduce((sum, i) => sum + Number(i.quantity), 0), items, auditSource)
+            await editItem(items[0], items.reduce((sum, i) => sum + Number(i.quantity), 0), items, auditSource)
         }
     } catch (error) {
         showError('Could not fetch stock details. Please try again.')
@@ -1636,13 +1792,13 @@ const openLinkedStockIn = async () => {
     readOnlyMode.value = true
 }
 
-const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item], auditSource = item) => {
-    const asset = normalizedAssets.value.find(a => a.id == item.asset_id)
+const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = [item], auditSource = item) => {
     codeValidationAttempted.value = false
     isEditing.value = true
     readOnlyMode.value = false
     currentId.value = item.id
     editingStockIn.value = auditSource
+    suppressOriginLocationWatch = true
     Object.assign(form, {
         receive_date: toDateKey(item.receive_date),
         dr_no: item.dr_no || '',
@@ -1652,11 +1808,10 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
         received_by: item.received_by || authUserName.value,
         memo_remarks: item.memo_remarks || '',
         status: item.status || 'For Posting',
-        brand: asset?.brand || '',
-        model: asset?.model || '',
-        asset_id: item.asset_id,
         quantity: aggregatedQuantity,
         entries: relatedRows.map(row => createEntry({
+            stock_in_id: row.id,
+            asset_id: Number(row.asset_id),
             source_stock_in_id: row.source_stock_in_id || null,
             serial_no: row.serial_no,
             barcode: row.barcode || '',
@@ -1671,6 +1826,24 @@ const editItem = (item, aggregatedQuantity = item.quantity, relatedRows = [item]
         }))
     })
     showModal.value = true
+    await nextTick()
+    suppressOriginLocationWatch = false
+    void loadAssetsForOrigin()
+    refreshAvailableStockForSelectedAssets()
+}
+
+const toDateKey = (value) => {
+    if (!value) return ''
+    if (value instanceof Date) return toLocalDateKey(value)
+
+    const normalized = String(value).trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized
+
+    const parsed = new Date(normalized)
+    if (!Number.isNaN(parsed.getTime())) return toLocalDateKey(parsed)
+
+    const dateMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})/)
+    return dateMatch ? dateMatch[1] : ''
 }
 
 const closeModal = () => {
@@ -1779,31 +1952,8 @@ const postHeaderItem = async (item) => {
     })
 }
 
-const confirmPendingDetailRemoval = async () => {
-    if (pendingDetailRemovalCount.value <= 0) return true
-
-    const target = normalizedQuantity.value
-    const currentRows = form.entries.length
-    const confirmed = await confirm({
-        title: 'Reduce Stock Detail Rows',
-        message: `Qty is set to ${target}, but this header currently has ${currentRows} detail row(s). Saving will remove the last ${pendingDetailRemovalCount.value} row(s) from this stock-in header. Continue?`,
-        confirmLabel: 'Remove Rows and Save',
-        cancelLabel: 'Keep Existing Rows',
-        variant: 'danger',
-    })
-
-    if (!confirmed) {
-        form.quantity = currentRows
-        return false
-    }
-
-    syncEntriesToQuantity(target)
-    return true
-}
-
 const submitForm = async (statusOverride = form.status || 'For Posting') => {
     if (!validateTransferStock()) return
-    if (!(await confirmPendingDetailRemoval())) return
     if (!validateGeneratedCodes()) return
 
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
@@ -1817,9 +1967,6 @@ const submitForm = async (statusOverride = form.status || 'For Posting') => {
         received_by: form.received_by,
         memo_remarks: form.memo_remarks || null,
         status: statusOverride,
-        brand: form.brand,
-        model: form.model,
-        asset_id: form.asset_id,
         quantity: form.quantity,
         entries: form.entries.map(({ uid, ...entry }) => ({
             ...entry,
@@ -1829,7 +1976,6 @@ const submitForm = async (statusOverride = form.status || 'For Posting') => {
     if (isEditing.value) {
         Object.assign(payload, {
             header_mode: true,
-            quantity: form.quantity,
         })
     }
 
@@ -1841,12 +1987,6 @@ const submitForm = async (statusOverride = form.status || 'For Posting') => {
             showError(Object.values(errors)[0])
         }
     })
-}
-
-const removeEntry = (index) => {
-    if (isEditing.value || form.entries.length === 1) return
-    form.entries.splice(index, 1)
-    form.quantity = form.entries.length
 }
 
 const deleteItem = async (item) => {
@@ -1922,47 +2062,16 @@ watch(() => props.stockIns, (newVal) => {
     pagination.updateData(newVal)
 }, { deep: true })
 
-watch(() => form.quantity, (newVal) => {
-    if (isFixedTransfer.value && !isEditing.value) return
+watch(() => form.origin_location, (newVal) => {
+    if (suppressOriginLocationWatch || !showModal.value || readOnlyMode.value) return
 
-    if (isConsumableTransfer.value && !isEditing.value && availableSoh.value > 0 && Number(newVal || 0) > availableSoh.value) {
-        syncEntriesToQuantity(availableSoh.value)
-        return
-    }
+    const loc = normalizeLocationValue(newVal)
+    void loadAssetsForOrigin(loc)
 
     if (isEditing.value) {
-        const target = Math.max(1, parseInt(newVal || 1, 10))
-
-        if (Number(newVal) !== target) {
-            form.quantity = target
-        }
-
-        if (target < form.entries.length) {
-            return
-        }
+        clearTransferSourceSelections()
     }
 
-    syncEntriesToQuantity(newVal)
-})
-
-watch([() => form.origin_location, () => form.asset_id], () => {
-    if (isEditing.value) return
-
-    if (isFixedTransfer.value) {
-        resetFixedTransferEntries()
-    } else {
-        selectedSourceIds.value = []
-
-        if (!form.entries.length || form.entries.some(entry => entry.source_stock_in_id)) {
-            form.entries = [createEntry(getEntryDefaults())]
-            form.quantity = 1
-        }
-    }
-
-    fetchAvailableStock()
-})
-
-watch(bulkDestinationLocation, () => {
-    applyBulkDestination()
+    refreshAvailableStockForSelectedAssets(loc)
 })
 </script>
