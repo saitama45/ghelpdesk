@@ -12,6 +12,7 @@ class AttendanceLog extends Model
 
     protected $fillable = [
         'user_id',
+        'client_request_id',
         'schedule_id',
         'schedule_store_id',
         'type',

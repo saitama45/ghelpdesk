@@ -28,6 +28,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // DTR / Attendance Routes
     Route::get('/dtr/status', [AttendanceController::class, 'status']);
+    Route::get('/dtr/offline-bootstrap', [AttendanceController::class, 'offlineBootstrap']);
     Route::post('/dtr/log', [AttendanceController::class, 'log']);
     Route::get('/attendance/logs', [AttendanceController::class, 'logs']);
 });

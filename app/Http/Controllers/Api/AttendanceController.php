@@ -9,6 +9,7 @@ use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +19,66 @@ class AttendanceController extends Controller
 {
     private const BROWSER_LOCATION_FRESHNESS_SECONDS = 60;
     private const MIN_BROWSER_ACCURACY_LIMIT_METERS = 100;
+
+    public function offlineBootstrap(Request $request)
+    {
+        $user = auth()->user();
+
+        $validated = $request->validate([
+            'from' => 'required|date_format:Y-m-d',
+            'days' => 'required|integer|min:1',
+        ]);
+
+        $rangeStart = Carbon::createFromFormat('Y-m-d', $validated['from'], 'Asia/Manila')->startOfDay();
+        $rangeEnd = $rangeStart->copy()->addDays((int) $validated['days']);
+
+        $schedules = Schedule::where('user_id', $user->id)
+            ->whereIn('status', ['On-site', 'Off-site', 'WFH'])
+            ->where('start_time', '>=', $rangeStart)
+            ->where('start_time', '<', $rangeEnd)
+            ->with(['scheduleStores.store'])
+            ->orderBy('start_time')
+            ->get();
+
+        $bootstrapSchedules = $schedules->flatMap(function (Schedule $schedule) {
+            if ($schedule->scheduleStores->isEmpty()) {
+                return [[
+                    'id' => (string) $schedule->id,
+                    'schedule_store_id' => null,
+                    'user_id' => (string) $schedule->user_id,
+                    'status' => $schedule->status,
+                    'start_time' => $schedule->start_time->copy()->utc()->toIso8601String(),
+                    'end_time' => $schedule->end_time->copy()->utc()->toIso8601String(),
+                    'store' => null,
+                ]];
+            }
+
+            return $schedule->scheduleStores->map(function (ScheduleStore $scheduleStore) use ($schedule) {
+                return [
+                    'id' => (string) $schedule->id,
+                    'schedule_store_id' => (string) $scheduleStore->id,
+                    'user_id' => (string) $schedule->user_id,
+                    'status' => $schedule->status,
+                    'start_time' => $scheduleStore->start_time->copy()->utc()->toIso8601String(),
+                    'end_time' => $scheduleStore->end_time->copy()->utc()->toIso8601String(),
+                    'store' => $scheduleStore->store ? [
+                        'id' => (string) $scheduleStore->store->id,
+                        'code' => $scheduleStore->store->code,
+                        'name' => $scheduleStore->store->name,
+                        'latitude' => $scheduleStore->store->latitude,
+                        'longitude' => $scheduleStore->store->longitude,
+                        'radius_meters' => $scheduleStore->store->radius_meters ?: 100,
+                    ] : null,
+                ];
+            });
+        })->values();
+
+        return response()->json([
+            'data' => [
+                'schedules' => $bootstrapSchedules,
+            ],
+        ]);
+    }
 
     public function status(Request $request)
     {
@@ -139,13 +200,28 @@ class AttendanceController extends Controller
         $user = auth()->user();
 
         $request->validate([
+            'client_request_id' => ['nullable', 'string', 'regex:/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i'],
+        ]);
+
+        $clientRequestId = $request->input('client_request_id');
+        if ($clientRequestId) {
+            $existingLog = AttendanceLog::where('user_id', $user->id)
+                ->where('client_request_id', $clientRequestId)
+                ->first();
+
+            if ($existingLog) {
+                return $this->attendanceLogSuccessResponse($existingLog);
+            }
+        }
+
+        $request->validate([
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'location_accuracy' => 'nullable|numeric|min:0',
             'location_captured_at' => 'nullable|date',
             'location_received_at' => 'nullable|date',
             'location_client' => 'nullable|in:native,web',
-            'location_provider' => 'nullable|in:capacitor,browser',
+            'location_provider' => 'nullable|in:capacitor,browser,android,ios',
             'photo' => 'required|string', // Base64 encoded image
         ]);
 
@@ -235,31 +311,60 @@ class AttendanceController extends Controller
         $fileName = 'attendance/' . $user->id . '/' . now()->timestamp . '_' . Str::random(10) . '.' . $extension;
         Storage::disk('public')->put($fileName, $photoData);
 
-        $log = AttendanceLog::create([
-            'user_id' => $user->id,
-            'schedule_id' => $schedule->id,
-            'schedule_store_id' => $activeStoreEntry?->id,
-            'type' => $type,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-            'location_accuracy' => $request->input('location_accuracy'),
-            'location_captured_at' => $request->input('location_captured_at'),
-            'location_received_at' => $request->input('location_received_at'),
-            'location_client' => $locationClient,
-            'location_provider' => $request->input('location_provider'),
-            'photo_path' => $fileName,
-            'log_time' => now('Asia/Manila'),
-            'device_info' => $request->input('device_info', $request->header('User-Agent')),
-            'ip_address' => $request->input('public_ip', $request->ip()),
-        ]);
+        try {
+            $log = AttendanceLog::create([
+                'user_id' => $user->id,
+                'client_request_id' => $clientRequestId,
+                'schedule_id' => $schedule->id,
+                'schedule_store_id' => $activeStoreEntry?->id,
+                'type' => $type,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'location_accuracy' => $request->input('location_accuracy'),
+                'location_captured_at' => $request->input('location_captured_at'),
+                'location_received_at' => $request->input('location_received_at'),
+                'location_client' => $locationClient,
+                'location_provider' => $request->input('location_provider'),
+                'photo_path' => $fileName,
+                'log_time' => now('Asia/Manila'),
+                'device_info' => $request->input('device_info', $request->header('User-Agent')),
+                'ip_address' => $request->input('public_ip', $request->ip()),
+            ]);
+        } catch (QueryException $exception) {
+            if (!$clientRequestId || !$this->isDuplicateKeyException($exception)) {
+                throw $exception;
+            }
+
+            $existingLog = AttendanceLog::where('user_id', $user->id)
+                ->where('client_request_id', $clientRequestId)
+                ->first();
+
+            if (!$existingLog) {
+                throw $exception;
+            }
+
+            Storage::disk('public')->delete($fileName);
+            return $this->attendanceLogSuccessResponse($existingLog);
+        }
 
         RateLimiter::clear($throttleKey);
 
+        return $this->attendanceLogSuccessResponse($log);
+    }
+
+    private function attendanceLogSuccessResponse(AttendanceLog $log)
+    {
         return response()->json([
             'success' => true,
-            'message' => 'Successfully ' . ($type === 'time_in' ? 'Timed In' : 'Timed Out'),
+            'message' => 'Successfully ' . ($log->type === 'time_in' ? 'Timed In' : 'Timed Out'),
             'log' => $log
         ]);
+    }
+
+    private function isDuplicateKeyException(QueryException $exception): bool
+    {
+        return (string) $exception->getCode() === '23000'
+            || ($exception->errorInfo[0] ?? null) === '23000';
     }
 
     private function buildWorkHoursSummary(Request $request, string $dateFrom, string $dateTo): array
