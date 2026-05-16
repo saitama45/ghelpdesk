@@ -384,7 +384,8 @@ class AttendanceController extends Controller implements HasMiddleware
         foreach ($logQuery->get() as $log) {
             $uid    = $log->user_id;
             $date   = $log->log_time->toDateString();
-            $segKey = $log->schedule_store_id ? 'ss_'.$log->schedule_store_id : 's_'.$log->schedule_id;
+            // Key by date and segment to handle multi-day schedules and multiple segments per day
+            $segKey = ($log->schedule_store_id ? 'ss_'.$log->schedule_store_id : 's_'.$log->schedule_id) . '_' . $date;
 
             if (!isset($actualByUser[$uid])) {
                 $actualByUser[$uid] = ['segments' => [], 'days_present' => []];
