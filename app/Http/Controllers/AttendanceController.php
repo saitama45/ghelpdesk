@@ -530,11 +530,15 @@ class AttendanceController extends Controller implements HasMiddleware
             return [$schedule, $this->resolveActiveScheduleStore($schedule, $now)];
         }
 
-        // Allow Time Out for an already-open same-day attendance session,
-        // even if the strict active window is no longer matched.
+        // Allow Time Out for an already-open attendance session even when
+        // the strict active window has passed. Looks back 24h so a Time In
+        // from the previous day (e.g., a near-midnight schedule) is still
+        // closable, then enforces a 6h ceiling past the schedule end_time.
+        $lateGraceMinutes = 6 * 60;
+
         $lastOpenLog = AttendanceLog::with(['schedule.scheduleStores.store', 'scheduleStore.store'])
             ->where('user_id', $userId)
-            ->whereDate('log_time', $now->toDateString())
+            ->where('log_time', '>=', $now->copy()->subHours(24))
             ->where('type', 'time_in')
             ->latest('log_time')
             ->first();
@@ -549,9 +553,15 @@ class AttendanceController extends Controller implements HasMiddleware
             return [null, null];
         }
 
-        $segmentLogs = $this->buildSegmentLogsQuery($userId, $schedule, $lastOpenLog->scheduleStore, $now)->pluck('type');
+        $activeStoreEntry = $lastOpenLog->scheduleStore;
+        $effectiveEnd = $activeStoreEntry ? $activeStoreEntry->end_time : $schedule->end_time;
+        if ($now->gt($effectiveEnd->copy()->addMinutes($lateGraceMinutes))) {
+            return [null, null];
+        }
+
+        $segmentLogs = $this->buildSegmentLogsQuery($userId, $schedule, $activeStoreEntry, $now)->pluck('type');
         if ($segmentLogs->contains('time_in') && !$segmentLogs->contains('time_out')) {
-            return [$schedule->loadMissing(['scheduleStores.store']), $lastOpenLog->scheduleStore];
+            return [$schedule->loadMissing(['scheduleStores.store']), $activeStoreEntry];
         }
 
         return [null, null];
@@ -567,10 +577,14 @@ class AttendanceController extends Controller implements HasMiddleware
 
     private function buildSegmentLogsQuery(int $userId, Schedule $schedule, ?ScheduleStore $activeStoreEntry, $now)
     {
+        $lateGraceMinutes = 6 * 60;
+        $lookbackStart = $schedule->start_time->copy()->subMinutes(60);
+        $lookbackEnd = $schedule->end_time->copy()->addMinutes($lateGraceMinutes);
+
         $query = AttendanceLog::where('user_id', $userId)
             ->where('schedule_id', $schedule->id)
-            ->where('log_time', '>=', $now->copy()->startOfDay())
-            ->where('log_time', '<=', $now->copy()->endOfDay());
+            ->where('log_time', '>=', $lookbackStart)
+            ->where('log_time', '<=', $lookbackEnd);
 
         if (!$activeStoreEntry) {
             return $query;
@@ -578,7 +592,7 @@ class AttendanceController extends Controller implements HasMiddleware
 
         $graceMinutes = (int) ($activeStoreEntry->grace_period_minutes ?? 30);
         $windowStart = $activeStoreEntry->start_time->copy()->subMinutes($graceMinutes);
-        $windowEnd = $activeStoreEntry->end_time->copy();
+        $windowEnd = $activeStoreEntry->end_time->copy()->addMinutes($lateGraceMinutes);
 
         return $query->where(function ($logQuery) use ($activeStoreEntry, $windowStart, $windowEnd) {
             $logQuery->where('schedule_store_id', $activeStoreEntry->id)

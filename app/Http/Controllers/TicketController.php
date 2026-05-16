@@ -8,7 +8,9 @@ use App\Mail\NewTicketCreated;
 use App\Mail\TicketMergedNotification;
 use App\Mail\TicketAssigned;
 use App\Mail\TicketCommentAdded;
+use App\Mail\TicketStatusChanged;
 use App\Models\Ticket;
+use App\Models\TicketCc;
 use App\Models\TicketComment;
 use App\Models\TicketAttachment;
 use App\Models\User;
@@ -182,7 +184,7 @@ class TicketController extends Controller
         $tickets = $query->paginate($request->get('per_page', 10))->withQueryString();
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'org_path')->get();
+        })->select('id', 'name', 'email', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
@@ -449,11 +451,17 @@ class TicketController extends Controller
         // Notify requester conditionally
         if ($request->boolean('notify_requester', true)) {
             if ($ticket->reporter && $ticket->reporter->email) {
-                Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
+                $pending = Mail::to($ticket->reporter->email);
+                $cc = $this->attachTicketCcs($pending, $ticket, [$ticket->reporter->email]);
+                $pending->send(new NewTicketCreated($ticket, $ticket->reporter->name));
                 $sentTo[] = $ticket->reporter->email;
+                $sentTo = array_merge($sentTo, $cc);
             } elseif ($ticket->sender_email) {
-                Mail::to($ticket->sender_email)->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
+                $pending = Mail::to($ticket->sender_email);
+                $cc = $this->attachTicketCcs($pending, $ticket, [$ticket->sender_email]);
+                $pending->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
                 $sentTo[] = $ticket->sender_email;
+                $sentTo = array_merge($sentTo, $cc);
             }
         }
 
@@ -519,7 +527,13 @@ class TicketController extends Controller
             'slaMetric',
             'children' => function($query) {
                 $query->with(['scheduleStore.schedule', 'scheduleStore.store', 'schedule', 'store', 'reporter', 'assignee'])->orderBy('created_at', 'asc');
-            }
+            },
+            'ccs' => function($query) {
+                $query->with('user:id,name,email')->orderBy('email');
+            },
+            'parent.ccs' => function($query) {
+                $query->with('user:id,name,email')->orderBy('email');
+            },
         ]);
 
         if (!$ticket->slaMetric) {
@@ -532,7 +546,7 @@ class TicketController extends Controller
 
         $staff = User::whereHas('roles', function($q) {
             $q->where('is_assignable', true);
-        })->select('id', 'name', 'org_path')->get();
+        })->select('id', 'name', 'email', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
@@ -640,6 +654,7 @@ class TicketController extends Controller
             }
             
             $statusChanged = $ticket->isDirty('status');
+            $oldStatus = $ticket->getOriginal('status');
             $newStatus = $ticket->status;
             $ticket->save();
 
@@ -651,8 +666,11 @@ class TicketController extends Controller
                     $ticket->load('assignee');
                     if ($ticket->assignee && $ticket->assignee->email) {
                         if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
-                            Mail::to($ticket->assignee->email)->send(new TicketAssigned($ticket, $ticket->assignee->name));
+                            $pending = Mail::to($ticket->assignee->email);
+                            $cc = $this->attachTicketCcs($pending, $ticket, [$ticket->assignee->email]);
+                            $pending->send(new TicketAssigned($ticket, $ticket->assignee->name));
                             $alreadyNotified[] = $ticket->assignee->email;
+                            $alreadyNotified = array_merge($alreadyNotified, $cc);
                         }
                     }
                 }
@@ -666,6 +684,30 @@ class TicketController extends Controller
                         if ($watcher->email && !in_array($watcher->email, $alreadyNotified)) {
                             Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
                             $alreadyNotified[] = $watcher->email;
+                        }
+                    }
+                }
+
+                // Status change notification — primarily for CC list, but also reporter
+                if ($statusChanged) {
+                    $ticket->loadMissing('reporter');
+                    $primary = $ticket->reporter?->email ?: $ticket->sender_email;
+                    $primaryName = $ticket->reporter?->name ?: ($ticket->sender_name ?? 'Requester');
+
+                    if ($primary && !in_array($primary, $alreadyNotified, true)) {
+                        $pending = Mail::to($primary);
+                        $cc = $this->attachTicketCcs($pending, $ticket, array_merge($alreadyNotified, [$primary]));
+                        $pending->send(new TicketStatusChanged($ticket, $primaryName, (string) $oldStatus, (string) $newStatus));
+                        $alreadyNotified[] = $primary;
+                        $alreadyNotified = array_merge($alreadyNotified, $cc);
+                    } else {
+                        // No primary recipient available — CC list still notified directly
+                        $effective = $ticket->effectiveCcs();
+                        foreach ($effective as $cc) {
+                            if ($cc->email && !in_array($cc->email, $alreadyNotified, true)) {
+                                Mail::to($cc->email)->send(new TicketStatusChanged($ticket, $cc->name ?: 'Subscriber', (string) $oldStatus, (string) $newStatus));
+                                $alreadyNotified[] = $cc->email;
+                            }
                         }
                     }
                 }
@@ -770,8 +812,9 @@ class TicketController extends Controller
             'user_id' => 'required|exists:users,id',
             'store_id' => 'required_unless:status,SL,VL,Restday,Holiday|nullable|exists:stores,id',
             'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
-            'start_time' => 'required|date',
-            'end_time' => 'required|date|after_or_equal:start_time',
+            'set_schedule' => 'sometimes|boolean',
+            'start_time' => 'required_if:set_schedule,true|nullable|date',
+            'end_time' => 'required_if:set_schedule,true|nullable|date|after_or_equal:start_time',
             'pickup_start' => 'nullable|string',
             'pickup_end' => 'nullable|string',
             'backlogs_start' => 'nullable|string',
@@ -781,39 +824,45 @@ class TicketController extends Controller
             'store_id.required_unless' => 'Store is required before creating a child ticket.',
         ]);
 
-        // Check for an overlapping schedule for the same user (regardless of store)
-        $newStart = \Carbon\Carbon::parse($validated['start_time']);
-        $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
+        $hasSchedule = $request->boolean('set_schedule', true)
+            && !empty($validated['start_time'])
+            && !empty($validated['end_time']);
 
-        // Check against specific schedule segments first
-        $conflictStore = \App\Models\ScheduleStore::whereHas('schedule', function($q) use ($validated) {
-                $q->where('user_id', $validated['user_id']);
-            })
-            ->where('start_time', '<', $newEnd)
-            ->where('end_time', '>', $newStart)
-            ->first();
+        if ($hasSchedule) {
+            // Check for an overlapping schedule for the same user (regardless of store)
+            $newStart = \Carbon\Carbon::parse($validated['start_time']);
+            $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
 
-        $conflict = null;
-        if ($conflictStore) {
-            $conflict = $conflictStore;
-        } else {
-            // Check against schedules that don't have segments
-            $conflict = Schedule::where('user_id', $validated['user_id'])
-                ->whereDoesntHave('scheduleStores')
+            // Check against specific schedule segments first
+            $conflictStore = \App\Models\ScheduleStore::whereHas('schedule', function($q) use ($validated) {
+                    $q->where('user_id', $validated['user_id']);
+                })
                 ->where('start_time', '<', $newEnd)
                 ->where('end_time', '>', $newStart)
                 ->first();
+
+            $conflict = null;
+            if ($conflictStore) {
+                $conflict = $conflictStore;
+            } else {
+                // Check against schedules that don't have segments
+                $conflict = Schedule::where('user_id', $validated['user_id'])
+                    ->whereDoesntHave('scheduleStores')
+                    ->where('start_time', '<', $newEnd)
+                    ->where('end_time', '>', $newStart)
+                    ->first();
+            }
+
+            if ($conflict) {
+                $from = $conflict->start_time->format('M d, Y h:i A');
+                $to   = $conflict->end_time->format('M d, Y h:i A');
+                return redirect()->back()->withErrors([
+                    'schedule_conflict' => "A schedule already exists for this user from {$from} to {$to}. Please choose a different date/time.",
+                ]);
+            }
         }
 
-        if ($conflict) {
-            $from = $conflict->start_time->format('M d, Y h:i A');
-            $to   = $conflict->end_time->format('M d, Y h:i A');
-            return redirect()->back()->withErrors([
-                'schedule_conflict' => "A schedule already exists for this user from {$from} to {$to}. Please choose a different date/time.",
-            ]);
-        }
-
-        $childTicket = DB::transaction(function () use ($validated, $ticket) {
+        $childTicket = DB::transaction(function () use ($validated, $ticket, $hasSchedule) {
             $company = $ticket->company;
             $companyCode = $company->code;
 
@@ -847,28 +896,30 @@ class TicketController extends Controller
                 'created_at' => now('Asia/Manila'),
             ]);
 
-            $schedule = Schedule::create([
-                'user_id' => $validated['user_id'],
-                'status' => $validated['status'],
-                'start_time' => $validated['start_time'],
-                'end_time' => $validated['end_time'],
-                'pickup_start' => $validated['pickup_start'],
-                'pickup_end' => $validated['pickup_end'],
-                'backlogs_start' => $validated['backlogs_start'],
-                'backlogs_end' => $validated['backlogs_end'],
-                'remarks' => $validated['remarks'],
-                'created_at' => now('Asia/Manila'),
-            ]);
+            if ($hasSchedule) {
+                $schedule = Schedule::create([
+                    'user_id' => $validated['user_id'],
+                    'status' => $validated['status'],
+                    'start_time' => $validated['start_time'],
+                    'end_time' => $validated['end_time'],
+                    'pickup_start' => $validated['pickup_start'] ?? null,
+                    'pickup_end' => $validated['pickup_end'] ?? null,
+                    'backlogs_start' => $validated['backlogs_start'] ?? null,
+                    'backlogs_end' => $validated['backlogs_end'] ?? null,
+                    'remarks' => $validated['remarks'] ?? null,
+                    'created_at' => now('Asia/Manila'),
+                ]);
 
-            // Always create a scheduleStore entry for child tickets so the ticket_id link is preserved
-            $schedule->scheduleStores()->create([
-                'store_id' => $validated['store_id'] ?? null,
-                'ticket_id' => $childTicket->id,
-                'start_time' => $validated['start_time'],
-                'end_time' => $validated['end_time'],
-                'grace_period_minutes' => 30,
-                'remarks' => $validated['remarks'],
-            ]);
+                // Always create a scheduleStore entry for child tickets so the ticket_id link is preserved
+                $schedule->scheduleStores()->create([
+                    'store_id' => $validated['store_id'] ?? null,
+                    'ticket_id' => $childTicket->id,
+                    'start_time' => $validated['start_time'],
+                    'end_time' => $validated['end_time'],
+                    'grace_period_minutes' => 30,
+                    'remarks' => $validated['remarks'] ?? null,
+                ]);
+            }
 
             // Set parent to For Schedule when a new child is added
             $ticket->update(['status' => 'for_schedule']);
@@ -877,6 +928,250 @@ class TicketController extends Controller
         });
 
         return redirect()->back()->with('success', 'Child ticket and schedule created successfully.');
+    }
+
+    /**
+     * Assign a schedule to an existing (child) ticket that was created without one.
+     */
+    public function assignSchedule(Request $request, Ticket $ticket)
+    {
+        if (!auth()->user()?->is_manager) {
+            abort(403, 'Only managers can assign schedules.');
+        }
+
+        $existing = \App\Models\ScheduleStore::where('ticket_id', $ticket->id)->first();
+        if ($existing) {
+            return redirect()->back()->withErrors(['error' => 'This ticket already has a schedule assigned.']);
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'store_id' => 'required_unless:status,SL,VL,Restday,Holiday|nullable|exists:stores,id',
+            'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date|after_or_equal:start_time',
+            'pickup_start' => 'nullable|string',
+            'pickup_end' => 'nullable|string',
+            'backlogs_start' => 'nullable|string',
+            'backlogs_end' => 'nullable|string',
+            'remarks' => 'nullable|string',
+        ], [
+            'store_id.required_unless' => 'Store is required before assigning a schedule.',
+        ]);
+
+        $newStart = \Carbon\Carbon::parse($validated['start_time']);
+        $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
+
+        $conflictStore = \App\Models\ScheduleStore::whereHas('schedule', function($q) use ($validated) {
+                $q->where('user_id', $validated['user_id']);
+            })
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->first();
+
+        $conflict = $conflictStore ?: Schedule::where('user_id', $validated['user_id'])
+            ->whereDoesntHave('scheduleStores')
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->first();
+
+        if ($conflict) {
+            $from = $conflict->start_time->format('M d, Y h:i A');
+            $to   = $conflict->end_time->format('M d, Y h:i A');
+            return redirect()->back()->withErrors([
+                'schedule_conflict' => "A schedule already exists for this user from {$from} to {$to}. Please choose a different date/time.",
+            ]);
+        }
+
+        DB::transaction(function () use ($validated, $ticket) {
+            $schedule = Schedule::create([
+                'user_id' => $validated['user_id'],
+                'status' => $validated['status'],
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'pickup_start' => $validated['pickup_start'] ?? null,
+                'pickup_end' => $validated['pickup_end'] ?? null,
+                'backlogs_start' => $validated['backlogs_start'] ?? null,
+                'backlogs_end' => $validated['backlogs_end'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            $schedule->scheduleStores()->create([
+                'store_id' => $validated['store_id'] ?? null,
+                'ticket_id' => $ticket->id,
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'grace_period_minutes' => 30,
+                'remarks' => $validated['remarks'] ?? null,
+            ]);
+
+            if ($validated['store_id'] ?? null) {
+                $ticket->update(['store_id' => $validated['store_id']]);
+            }
+        });
+
+        return redirect()->back()->with('success', 'Schedule assigned successfully.');
+    }
+
+    /**
+     * Update an existing schedule attached to a (child) ticket. Managers only.
+     */
+    public function updateSchedule(Request $request, Ticket $ticket)
+    {
+        if (!auth()->user()?->is_manager) {
+            abort(403, 'Only managers can edit schedules.');
+        }
+
+        $scheduleStore = \App\Models\ScheduleStore::where('ticket_id', $ticket->id)->with('schedule')->first();
+        if (!$scheduleStore || !$scheduleStore->schedule) {
+            return redirect()->back()->withErrors(['error' => 'No schedule found for this ticket.']);
+        }
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'store_id' => 'required_unless:status,SL,VL,Restday,Holiday|nullable|exists:stores,id',
+            'status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date|after_or_equal:start_time',
+            'pickup_start' => 'nullable|string',
+            'pickup_end' => 'nullable|string',
+            'backlogs_start' => 'nullable|string',
+            'backlogs_end' => 'nullable|string',
+            'remarks' => 'nullable|string',
+        ], [
+            'store_id.required_unless' => 'Store is required for this schedule status.',
+        ]);
+
+        $schedule = $scheduleStore->schedule;
+        $newStart = \Carbon\Carbon::parse($validated['start_time']);
+        $newEnd   = \Carbon\Carbon::parse($validated['end_time']);
+
+        // Conflict check excluding the current schedule
+        $conflictStore = \App\Models\ScheduleStore::whereHas('schedule', function($q) use ($validated, $schedule) {
+                $q->where('user_id', $validated['user_id'])
+                  ->where('id', '!=', $schedule->id);
+            })
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->first();
+
+        $conflict = $conflictStore ?: Schedule::where('user_id', $validated['user_id'])
+            ->where('id', '!=', $schedule->id)
+            ->whereDoesntHave('scheduleStores')
+            ->where('start_time', '<', $newEnd)
+            ->where('end_time', '>', $newStart)
+            ->first();
+
+        if ($conflict) {
+            $from = $conflict->start_time->format('M d, Y h:i A');
+            $to   = $conflict->end_time->format('M d, Y h:i A');
+            return redirect()->back()->withErrors([
+                'schedule_conflict' => "A schedule already exists for this user from {$from} to {$to}. Please choose a different date/time.",
+            ]);
+        }
+
+        DB::transaction(function () use ($validated, $ticket, $schedule, $scheduleStore) {
+            $schedule->update([
+                'user_id' => $validated['user_id'],
+                'status' => $validated['status'],
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'pickup_start' => $validated['pickup_start'] ?? null,
+                'pickup_end' => $validated['pickup_end'] ?? null,
+                'backlogs_start' => $validated['backlogs_start'] ?? null,
+                'backlogs_end' => $validated['backlogs_end'] ?? null,
+                'remarks' => $validated['remarks'] ?? null,
+                'updated_by' => auth()->id(),
+            ]);
+
+            $scheduleStore->update([
+                'store_id' => $validated['store_id'] ?? null,
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'remarks' => $validated['remarks'] ?? null,
+            ]);
+
+            $ticket->update([
+                'assignee_id' => $validated['user_id'],
+                'store_id' => $validated['store_id'] ?? $ticket->store_id,
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Schedule updated successfully.');
+    }
+
+    /**
+     * Replace the CC list for a (parent) ticket. Child tickets inherit
+     * from their parent and cannot be edited directly here.
+     */
+    public function syncCcs(Request $request, Ticket $ticket)
+    {
+        if (!auth()->user()->can('tickets.edit')) {
+            abort(403);
+        }
+
+        if ($ticket->parent_id) {
+            return redirect()->back()->withErrors([
+                'error' => 'CC list is managed on the parent ticket. Child tickets inherit from the parent.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'ccs' => 'array',
+            'ccs.*.email' => 'required|email:rfc',
+            'ccs.*.name' => 'nullable|string|max:255',
+            'ccs.*.user_id' => 'nullable|exists:users,id',
+        ]);
+
+        $incoming = collect($validated['ccs'] ?? [])
+            ->map(fn ($cc) => [
+                'email' => strtolower(trim($cc['email'])),
+                'name' => $cc['name'] ?? null,
+                'user_id' => $cc['user_id'] ?? null,
+            ])
+            ->unique('email')
+            ->values();
+
+        DB::transaction(function () use ($ticket, $incoming) {
+            $ticket->ccs()->delete();
+            foreach ($incoming as $cc) {
+                $ticket->ccs()->create([
+                    'email' => $cc['email'],
+                    'name' => $cc['name'],
+                    'user_id' => $cc['user_id'],
+                    'created_by' => auth()->id(),
+                ]);
+            }
+        });
+
+        return redirect()->back()->with('success', 'CC list updated.');
+    }
+
+    /**
+     * Apply effective CCs to a pending mail, excluding addresses already in $alreadySentTo.
+     * Returns the email addresses that were added as CCs.
+     */
+    private function attachTicketCcs($pendingMail, Ticket $ticket, array $alreadySentTo = []): array
+    {
+        $effective = $ticket->effectiveCcs();
+        $excluded = collect($alreadySentTo)->map(fn ($e) => strtolower((string) $e))->all();
+        $ccEmails = $effective
+            ->pluck('email')
+            ->filter()
+            ->map(fn ($e) => strtolower($e))
+            ->unique()
+            ->reject(fn ($e) => in_array($e, $excluded, true))
+            ->values()
+            ->all();
+
+        if (!empty($ccEmails)) {
+            $pendingMail->cc($ccEmails);
+        }
+
+        return $ccEmails;
     }
 
     /**
@@ -1440,14 +1735,25 @@ class TicketController extends Controller
 
         \Illuminate\Support\Facades\Log::info("Notifying recipients for comment on ticket {$ticket->ticket_key}: " . $recipients->pluck('email')->implode(', '));
 
-        foreach ($recipients as $recipient) {
+        $recipientList = $recipients->values()->all();
+        $primaryEmails = array_column($recipientList, 'email');
+
+        foreach ($recipientList as $index => $recipient) {
             $mail = new TicketCommentAdded($ticket, $comment, $recipient['name']);
 
             if ($supportEmail) {
                 $mail->replyTo($supportEmail);
             }
 
-            Mail::to($recipient['email'])->send($mail);
+            $pending = Mail::to($recipient['email']);
+
+            // Only attach the CC list to the first email to avoid CCs
+            // receiving duplicate copies for each primary recipient.
+            if ($index === 0) {
+                $this->attachTicketCcs($pending, $ticket, $primaryEmails);
+            }
+
+            $pending->send($mail);
         }
     }
 

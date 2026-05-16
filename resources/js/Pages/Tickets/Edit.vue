@@ -174,6 +174,7 @@ const childForm = useForm({
     user_id: isManager.value ? authUser.value?.id ?? null : null,
     store_id: defaultChildStoreId(),
     status: 'On-site',
+    set_schedule: true,
     start_time: '',
     end_time: '',
     pickup_start: '',
@@ -248,7 +249,8 @@ const openChildModal = () => {
     childForm.end_time = formatDateForInput(end);
     childForm.user_id = isManager.value ? authUser.value?.id ?? null : null;
     childForm.store_id = defaultChildStoreId();
-    
+    childForm.set_schedule = true;
+
     showChildModal.value = true
 };
 
@@ -269,6 +271,171 @@ const submitChildTicket = () => {
         }
     });
 };
+
+// Assign Schedule (to existing child ticket without schedule)
+const hasSchedule = computed(() => {
+    const ss = props.ticket.schedule_store || props.ticket.scheduleStore;
+    return !!(ss && ss.schedule);
+});
+const canAssignSchedule = computed(() => !!props.ticket.parent_id && !hasSchedule.value && isManager.value);
+const canEditSchedule = computed(() => !!props.ticket.parent_id && hasSchedule.value && isManager.value);
+
+const assignScheduleMode = ref('assign'); // 'assign' | 'edit'
+const showAssignScheduleModal = ref(false);
+const assignScheduleForm = useForm({
+    user_id: null,
+    store_id: null,
+    status: 'On-site',
+    start_time: '',
+    end_time: '',
+    pickup_start: '',
+    pickup_end: '',
+    backlogs_start: '',
+    backlogs_end: '',
+    remarks: ''
+});
+
+const isAssignLocationRequired = computed(() => !childOptionalLocationStatuses.has(assignScheduleForm.status));
+const assignStoreOptions = computed(() => {
+    return isAssignLocationRequired.value
+        ? storesWithLabel.value
+        : [{ id: null, display_name: 'No location' }, ...storesWithLabel.value];
+});
+
+const openAssignScheduleModal = () => {
+    assignScheduleMode.value = 'assign';
+    assignScheduleForm.reset();
+    const start = new Date();
+    start.setHours(7, 0, 0, 0);
+    assignScheduleForm.start_time = formatDateForInput(start);
+    const end = new Date(start);
+    end.setHours(17, 0, 0, 0);
+    assignScheduleForm.end_time = formatDateForInput(end);
+    assignScheduleForm.user_id = props.ticket.assignee_id || props.ticket.assignee?.id || null;
+    assignScheduleForm.store_id = props.ticket.store_id || null;
+    showAssignScheduleModal.value = true;
+};
+
+const openEditScheduleModal = () => {
+    const ss = props.ticket.schedule_store || props.ticket.scheduleStore;
+    const sch = ss?.schedule;
+    if (!sch) return;
+    assignScheduleMode.value = 'edit';
+    assignScheduleForm.reset();
+    assignScheduleForm.user_id = sch.user_id || props.ticket.assignee_id || null;
+    assignScheduleForm.store_id = ss.store_id ?? props.ticket.store_id ?? null;
+    assignScheduleForm.status = sch.status || 'On-site';
+    assignScheduleForm.start_time = sch.start_time ? formatDateForInput(sch.start_time) : '';
+    assignScheduleForm.end_time = sch.end_time ? formatDateForInput(sch.end_time) : '';
+    assignScheduleForm.pickup_start = sch.pickup_start || '';
+    assignScheduleForm.pickup_end = sch.pickup_end || '';
+    assignScheduleForm.backlogs_start = sch.backlogs_start || '';
+    assignScheduleForm.backlogs_end = sch.backlogs_end || '';
+    assignScheduleForm.remarks = sch.remarks || ss.remarks || '';
+    showAssignScheduleModal.value = true;
+};
+
+const submitAssignSchedule = () => {
+    if (isAssignLocationRequired.value && !assignScheduleForm.store_id) {
+        showError('Store is required before saving the schedule.');
+        return;
+    }
+    const handlers = {
+        onSuccess: () => { showAssignScheduleModal.value = false; },
+        onError: (errors) => {
+            showAssignScheduleModal.value = false;
+            const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
+            showError(errorMessage);
+        }
+    };
+    if (assignScheduleMode.value === 'edit') {
+        assignScheduleForm.put(route('tickets.update-schedule', props.ticket.id), handlers);
+    } else {
+        assignScheduleForm.post(route('tickets.assign-schedule', props.ticket.id), handlers);
+    }
+};
+
+// CC Recipients (parent ticket only — children inherit)
+const isChildTicket = computed(() => !!props.ticket.parent_id);
+const inheritedCcs = computed(() => props.ticket.parent?.ccs || []);
+const initialCcs = computed(() => (props.ticket.ccs || []).map(c => ({
+    email: c.email,
+    name: c.name || c.user?.name || '',
+    user_id: c.user_id || c.user?.id || null,
+})));
+
+const ccForm = useForm({ ccs: [] });
+const ccDraftEmail = ref('');
+const ccDraftName = ref('');
+const ccUserSearch = ref('');
+const showCcUserDropdown = ref(false);
+
+const syncCcFormFromProps = () => {
+    ccForm.ccs = initialCcs.value.map(c => ({ ...c }));
+};
+syncCcFormFromProps();
+
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
+
+const addCcEmail = () => {
+    const email = ccDraftEmail.value.trim().toLowerCase();
+    if (!email) return;
+    if (!isValidEmail(email)) {
+        showError('Please enter a valid email address.');
+        return;
+    }
+    if (ccForm.ccs.some(c => c.email.toLowerCase() === email)) {
+        showError('That email is already in the CC list.');
+        return;
+    }
+    ccForm.ccs.push({ email, name: ccDraftName.value.trim() || null, user_id: null });
+    ccDraftEmail.value = '';
+    ccDraftName.value = '';
+};
+
+const addCcUser = (user) => {
+    if (!user?.email) return;
+    const email = user.email.toLowerCase();
+    if (ccForm.ccs.some(c => c.email.toLowerCase() === email)) {
+        showError(`${user.name} is already in the CC list.`);
+        return;
+    }
+    ccForm.ccs.push({ email, name: user.name || null, user_id: user.id || null });
+    ccUserSearch.value = '';
+    showCcUserDropdown.value = false;
+};
+
+const removeCc = (index) => {
+    ccForm.ccs.splice(index, 1);
+};
+
+const hideCcDropdownSoon = () => {
+    setTimeout(() => { showCcUserDropdown.value = false; }, 150);
+};
+
+const ccUserOptions = computed(() => {
+    const term = ccUserSearch.value.trim().toLowerCase();
+    if (!term) return [];
+    const existing = new Set(ccForm.ccs.map(c => c.email.toLowerCase()));
+    return (props.staff || [])
+        .filter(u => u.email && !existing.has(u.email.toLowerCase()))
+        .filter(u => (u.name || '').toLowerCase().includes(term) || (u.email || '').toLowerCase().includes(term))
+        .slice(0, 8);
+});
+
+const saveCcList = () => {
+    ccForm.put(route('tickets.sync-ccs', props.ticket.id), {
+        preserveScroll: true,
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Failed to save CC list.';
+            showError(errorMessage);
+        },
+    });
+};
+
+watch(() => props.ticket.ccs, () => {
+    syncCcFormFromProps();
+});
 
 // Image Viewer State
 const showImageViewer = ref(false);
@@ -1764,8 +1931,95 @@ const linkify = (text) => {
                             </CustomSelect>
                         </div>
 
+                        <!-- CC Recipients -->
+                        <div class="pt-6 border-t">
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">CC on Notifications</label>
+                                <span v-if="isChildTicket" class="text-[9px] font-black uppercase tracking-widest text-purple-600">Inherited</span>
+                            </div>
+
+                            <!-- Child ticket: read-only display of parent's CC list -->
+                            <div v-if="isChildTicket">
+                                <div v-if="inheritedCcs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-3 border border-dashed border-gray-200">
+                                    Parent ticket has no CC recipients.
+                                </div>
+                                <div v-else class="flex flex-wrap gap-1.5">
+                                    <span v-for="cc in inheritedCcs" :key="cc.id" class="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-[10px] font-bold border border-purple-100">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                        {{ cc.name || cc.email }}
+                                    </span>
+                                </div>
+                                <p class="text-[10px] text-gray-400 mt-2">Managed on the parent ticket.</p>
+                            </div>
+
+                            <!-- Parent ticket: editable CC manager -->
+                            <div v-else class="space-y-2">
+                                <div v-if="ccForm.ccs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200">
+                                    No CC recipients. Add emails below to notify them on comments, status changes, and assignment changes.
+                                </div>
+                                <div v-else class="flex flex-wrap gap-1.5">
+                                    <span v-for="(cc, idx) in ccForm.ccs" :key="cc.email" class="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-[10px] font-bold border border-blue-100">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                        <span :title="cc.email">{{ cc.name || cc.email }}</span>
+                                        <button v-if="hasPermission('tickets.edit')" type="button" @click="removeCc(idx)" class="ml-0.5 text-blue-400 hover:text-red-600">
+                                            <XMarkIcon class="w-3 h-3" />
+                                        </button>
+                                    </span>
+                                </div>
+
+                                <div v-if="hasPermission('tickets.edit')" class="space-y-2 pt-2">
+                                    <!-- Search internal users -->
+                                    <div class="relative">
+                                        <input
+                                            v-model="ccUserSearch"
+                                            @focus="showCcUserDropdown = true"
+                                            @blur="hideCcDropdownSoon"
+                                            type="text"
+                                            placeholder="Search internal users..."
+                                            class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                        <div v-if="showCcUserDropdown && ccUserOptions.length > 0" class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                            <button
+                                                v-for="user in ccUserOptions"
+                                                :key="user.id"
+                                                type="button"
+                                                @mousedown.prevent="addCcUser(user)"
+                                                class="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                            >
+                                                <div class="text-xs font-bold text-gray-800">{{ user.name }}</div>
+                                                <div class="text-[10px] text-gray-500">{{ user.email }}</div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Free-form email entry -->
+                                    <div class="flex gap-1.5">
+                                        <input
+                                            v-model="ccDraftEmail"
+                                            @keydown.enter.prevent="addCcEmail"
+                                            type="email"
+                                            placeholder="Add external email..."
+                                            class="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                        />
+                                        <button type="button" @click="addCcEmail" class="px-3 py-1.5 text-xs font-black text-white bg-blue-600 rounded-lg hover:bg-blue-700 uppercase tracking-widest">
+                                            Add
+                                        </button>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        @click="saveCcList"
+                                        :disabled="ccForm.processing"
+                                        class="w-full px-3 py-1.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 uppercase tracking-widest disabled:opacity-60"
+                                    >
+                                        {{ ccForm.processing ? 'Saving...' : 'Save CC List' }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="pt-6 border-t space-y-3">
-                            <button 
+                            <button
                                 v-if="hasPermission('tickets.edit') && (ticket.status === 'open' || ticket.status === 'in_progress')"
                                 type="button" 
                                 @click="openChildModal" 
@@ -1773,7 +2027,25 @@ const linkify = (text) => {
                             >
                                 Create Child Ticket
                             </button>
-                            
+
+                            <button
+                                v-if="canAssignSchedule && hasPermission('tickets.edit')"
+                                type="button"
+                                @click="openAssignScheduleModal"
+                                class="w-full flex justify-center py-2 px-4 border border-amber-600 rounded-md text-sm font-black text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors uppercase tracking-widest"
+                            >
+                                Assign Schedule
+                            </button>
+
+                            <button
+                                v-if="canEditSchedule && hasPermission('tickets.edit')"
+                                type="button"
+                                @click="openEditScheduleModal"
+                                class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-black text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors uppercase tracking-widest"
+                            >
+                                Edit Schedule
+                            </button>
+
                             <button v-if="hasPermission('tickets.delete')" type="button" @click="deleteTicket" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md text-sm font-black text-red-600 bg-red-50 hover:bg-red-100 transition-colors uppercase tracking-widest">
                                 Archive Ticket
                             </button>
@@ -1883,13 +2155,35 @@ const linkify = (text) => {
                                         </div>
                                     </div>
 
+                                    <!-- Empty Schedule State (Child Ticket without Schedule) -->
+                                    <div v-if="canAssignSchedule" class="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-3">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+                                                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                            </div>
+                                            <div class="flex flex-col">
+                                                <span class="text-xs font-black text-amber-700 uppercase tracking-widest">No schedule assigned</span>
+                                                <span class="text-[11px] text-amber-600">This child ticket was created without a schedule. Assign one to set start/end times.</span>
+                                            </div>
+                                        </div>
+                                        <button @click="openAssignScheduleModal" type="button" class="px-3 py-2 text-xs font-black text-white bg-amber-600 rounded-lg hover:bg-amber-700 shadow-sm uppercase tracking-widest whitespace-nowrap">
+                                            + Assign Schedule
+                                        </button>
+                                    </div>
+
                                     <!-- Child Schedule Context (for Child Tickets) -->
                                     <div v-if="ticket.parent_id && (activity.schedule || activity.schedule_store || activity.scheduleStore)" class="mb-6 bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
                                         <div class="flex items-center justify-between border-b border-blue-100 pb-2 mb-2">
                                             <span class="text-[10px] font-black text-blue-400 uppercase tracking-widest">Schedule Assignment</span>
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200">
-                                                {{ (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.status }}
-                                            </span>
+                                            <div class="flex items-center gap-2">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200">
+                                                    {{ (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.status }}
+                                                </span>
+                                                <button v-if="canEditSchedule" @click="openEditScheduleModal" type="button" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest text-blue-700 bg-white border border-blue-200 hover:bg-blue-50">
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    Edit
+                                                </button>
+                                            </div>
                                         </div>
                                         
                                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2457,17 +2751,24 @@ const linkify = (text) => {
                                 <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
                             </select>
                         </div>
-                        <div>
+                        <div class="md:col-span-2">
+                            <label class="inline-flex items-center gap-2 cursor-pointer">
+                                <input v-model="childForm.set_schedule" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Set schedule times</span>
+                            </label>
+                            <p class="text-[10px] text-gray-500 mt-1">Uncheck to create the child ticket without a fixed schedule (can be scheduled later).</p>
+                        </div>
+                        <div v-if="childForm.set_schedule">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
                             <input v-model="childForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         </div>
-                        <div>
+                        <div v-if="childForm.set_schedule">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
                             <input v-model="childForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         </div>
                     </div>
 
-                    <div class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
+                    <div v-if="childForm.set_schedule" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
                         <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Times</h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-2">
@@ -2500,6 +2801,93 @@ const linkify = (text) => {
                         </button>
                         <button type="submit" class="px-6 py-2 text-sm font-black text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95 uppercase tracking-widest">
                             Create Ticket
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </Modal>
+
+        <!-- Assign Schedule Modal (for existing child ticket without schedule) -->
+        <Modal :show="showAssignScheduleModal" max-width="2xl" @close="showAssignScheduleModal = false">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4 pb-3 border-b">
+                    <h3 class="text-base font-black text-gray-900 uppercase tracking-widest">
+                        {{ assignScheduleMode === 'edit' ? 'Edit Schedule' : 'Assign Schedule' }}
+                    </h3>
+                    <button @click="showAssignScheduleModal = false" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+
+                <form @submit.prevent="submitAssignSchedule" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned User</label>
+                            <Autocomplete v-model="assignScheduleForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location{{ isAssignLocationRequired ? '' : ' (Optional)' }}</label>
+                            <Autocomplete
+                                v-model="assignScheduleForm.store_id"
+                                :options="assignStoreOptions"
+                                label-key="display_name"
+                                value-key="id"
+                                :placeholder="isAssignLocationRequired ? 'Select store...' : 'Select store if needed...'"
+                            />
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Schedule Status</label>
+                            <select v-model="assignScheduleForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
+                            </select>
+                        </div>
+                        <div></div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
+                            <input v-model="assignScheduleForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
+                            <input v-model="assignScheduleForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
+                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Times</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="block text-xs font-medium text-gray-600">Pickup Time (From - To)</label>
+                                <div class="flex items-center space-x-2">
+                                    <input v-model="assignScheduleForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <span class="text-gray-400">-</span>
+                                    <input v-model="assignScheduleForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="block text-xs font-medium text-gray-600">Backlogs Time (From - To)</label>
+                                <div class="flex items-center space-x-2">
+                                    <input v-model="assignScheduleForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <span class="text-gray-400">-</span>
+                                    <input v-model="assignScheduleForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Remarks</label>
+                        <textarea v-model="assignScheduleForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Schedule notes..."></textarea>
+                    </div>
+
+                    <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
+                        <button type="button" @click="showAssignScheduleModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest">
+                            Cancel
+                        </button>
+                        <button type="submit" :disabled="assignScheduleForm.processing" :class="['px-6 py-2 text-sm font-black text-white rounded-lg shadow-md transition-all active:scale-95 uppercase tracking-widest disabled:opacity-60', assignScheduleMode === 'edit' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700']">
+                            {{ assignScheduleMode === 'edit' ? 'Save Changes' : 'Assign Schedule' }}
                         </button>
                     </div>
                 </form>

@@ -90,6 +90,23 @@ class Ticket extends Model
         return $this->hasMany(TicketComment::class);
     }
 
+    public function ccs()
+    {
+        return $this->hasMany(TicketCc::class);
+    }
+
+    /**
+     * Returns the effective CC list for notifications.
+     * Child tickets inherit from their parent.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function effectiveCcs()
+    {
+        $owner = $this->parent_id ? ($this->parent ?? static::find($this->parent_id)) : $this;
+        return $owner ? $owner->ccs()->get() : collect();
+    }
+
     public function histories()
     {
         return $this->hasMany(TicketHistory::class);
