@@ -249,6 +249,39 @@ Route::middleware('auth')->group(function () {
     Route::resource('projects-tasks', \App\Http\Controllers\ProjectTaskController::class)->only(['store', 'update', 'destroy']);
     Route::resource('projects-assets', \App\Http\Controllers\ProjectAssetController::class)->only(['store', 'update', 'destroy']);
     Route::resource('projects-team-members', \App\Http\Controllers\ProjectTeamMemberController::class)->only(['store', 'destroy']);
+
+    // Payments & SOA Monitoring
+    Route::prefix('payments')->name('payments.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\PaymentMonitoringController::class, 'index'])->name('index');
+
+        // Renewals
+        Route::post('renewals', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeRenewal'])->name('renewals.store');
+        Route::put('renewals/{renewal}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateRenewal'])->name('renewals.update');
+        Route::delete('renewals/{renewal}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyRenewal'])->name('renewals.destroy');
+
+        // Invoices
+        Route::post('invoices', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeInvoice'])->name('invoices.store');
+        Route::put('invoices/{invoice}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateInvoice'])->name('invoices.update');
+        Route::delete('invoices/{invoice}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyInvoice'])->name('invoices.destroy');
+
+        // Overpayments
+        Route::post('overpayments', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeOverpayment'])->name('overpayments.store');
+        Route::delete('overpayments/{overpayment}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyOverpayment'])->name('overpayments.destroy');
+
+        // Weekly Plans
+        Route::post('weekly-plans', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeWeeklyPlan'])->name('weekly-plans.store');
+        Route::put('weekly-plans/{weekly_plan}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateWeeklyPlan'])->name('weekly-plans.update');
+        Route::delete('weekly-plans/{weekly_plan}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyWeeklyPlan'])->name('weekly-plans.destroy');
+
+        // Records / Approval
+        Route::post('records', [\App\Http\Controllers\PaymentMonitoringController::class, 'submitRecord'])->name('records.submit');
+        Route::post('records/{record}/approve', [\App\Http\Controllers\PaymentMonitoringController::class, 'approveRecord'])->name('records.approve');
+        Route::post('records/{record}/reject', [\App\Http\Controllers\PaymentMonitoringController::class, 'rejectRecord'])->name('records.reject');
+        Route::post('records/{record}/mark-paid', [\App\Http\Controllers\PaymentMonitoringController::class, 'markPaid'])->name('records.mark-paid');
+
+        // Settings
+        Route::put('settings', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateSettings'])->name('settings.update');
+    });
 });
 
 // Public Routes (No Auth)

@@ -79,6 +79,7 @@ class RoleService
             'settings',
             'canned_messages',
             'projects',
+            'payments',
         ];
 
         foreach ($permissions as $permissionName) {
@@ -101,6 +102,8 @@ class RoleService
                 $categoryDisplay = 'Stock Transfer';
             } elseif ($category === 'stock_receivings') {
                 $categoryDisplay = 'Receiving Stock';
+            } elseif ($category === 'payments') {
+                $categoryDisplay = 'Payments & SOA';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 

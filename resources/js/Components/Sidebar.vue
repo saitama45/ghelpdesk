@@ -87,7 +87,7 @@ onMounted(() => {
     initPresence();
     initSidebar(page.props.sidebarLayout);
     ensureDynamicFormChildren(dynamicForms.value);
-    if (route().current('attendance.*') || route().current('npc-statuses.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) {
+    if (route().current('attendance.*') || route().current('npc-statuses.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('payments.*')) {
         openMenus.value.adminTask = true;
     }
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
@@ -124,7 +124,8 @@ const canSeeAdminTask = computed(() => {
            hasPermission('npc_status.view') ||
            hasPermission('schedules.view') ||
            hasPermission('presence.view') ||
-           hasPermission('kb_articles.view');
+           hasPermission('kb_articles.view') ||
+           hasPermission('payments.view');
 });
 
 const canSeeServices = computed(() => {
@@ -377,7 +378,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('adminTask')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('attendance.*') || route().current('npc-statuses.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*')) && (isCollapsed || !openMenus.adminTask)
+                            (route().current('attendance.*') || route().current('npc-statuses.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('payments.*')) && (isCollapsed || !openMenus.adminTask)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -411,6 +412,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('kb_articles.view')" :style="co('adminTask', 'kb-articles')">
                                 <Link :href="route('kb-articles.index')" :class="collapsedFlyoutLinkClass(route().current('kb-articles.*'))">{{ getChildLabel('adminTask', 'kb-articles') }}</Link>
                             </div>
+                            <div v-if="hasPermission('payments.view')" :style="co('adminTask', 'payments')">
+                                <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('adminTask', 'payments') }}</Link>
+                            </div>
                         </div>
                     </div>
 
@@ -432,6 +436,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('kb_articles.view')" :style="co('adminTask', 'kb-articles')">
                             <Link :href="route('kb-articles.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('kb-articles.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'kb-articles') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('payments.view')" :style="co('adminTask', 'payments')">
+                            <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('adminTask', 'payments') }}</span></Link>
                         </div>
                     </div>
                 </div>

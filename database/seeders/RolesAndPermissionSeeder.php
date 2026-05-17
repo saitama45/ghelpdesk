@@ -202,6 +202,17 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.manage_tasks' => 'Manage project tasks',
             'projects.manage_assets' => 'Manage project assets',
 
+            // Payments & SOA Monitoring
+            'payments.view' => 'View payments & SOA records',
+            'payments.create' => 'Create payment records',
+            'payments.edit' => 'Edit payment records',
+            'payments.delete' => 'Delete payment records',
+            'payments.submit' => 'Submit payment record for approval',
+            'payments.approve' => 'Approve payment record',
+            'payments.mark_paid' => 'Mark payment record as paid',
+            'payments.manage_vendors' => 'Manage payment vendor settings',
+            'payments.manage_settings' => 'Manage payment reminder & approval settings',
+
         ];
 
         // Create permissions
@@ -266,6 +277,10 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.manage_tasks',
             'projects.manage_assets',
             'presence.view',
+            'payments.view',
+            'payments.create',
+            'payments.edit',
+            'payments.submit',
         ]);
         
         $user->givePermissionTo([
