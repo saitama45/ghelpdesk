@@ -22,6 +22,7 @@ class PaymentRenewal extends Model
         'expiration_date',
         'payment_terms',
         'assignee_user_id',
+        'cc_emails',
         'status',
         'notes',
         'created_by',

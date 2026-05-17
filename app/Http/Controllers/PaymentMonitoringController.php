@@ -37,7 +37,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             new Middleware('can:payments.delete', only: [
                 'destroyRenewal', 'destroyInvoice', 'destroyWeeklyPlan', 'destroyOverpayment',
             ]),
-            new Middleware('can:payments.submit', only: ['submitRecord']),
+            new Middleware('can:payments.submit', only: ['submitRecord', 'sendManualReminder']),
             new Middleware('can:payments.approve', only: ['approveRecord', 'rejectRecord']),
             new Middleware('can:payments.mark_paid', only: ['markPaid']),
             new Middleware('can:payments.manage_settings', only: ['updateSettings']),
@@ -71,6 +71,73 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $shared['records'] = $this->recordsList($request);
 
         return Inertia::render('Payments/Index', $shared);
+    }
+
+    public function sendManualReminder(string $type, int $id)
+    {
+        $settings = PaymentSetting::current();
+        $bcc = $settings->global_bcc ? [$settings->global_bcc] : [];
+        $ccEmails = [];
+        if ($settings->cc_role_id) {
+            $role = \Spatie\Permission\Models\Role::find($settings->cc_role_id);
+            if ($role) {
+                $ccEmails = $role->users()->pluck('email')->filter()->values()->all();
+            }
+        }
+
+        if ($type === 'invoice') {
+            $inv = PaymentInvoice::with('assignee:id,name,email', 'vendor:id,name')->findOrFail($id);
+            $due = Carbon::parse($inv->due_date)->startOfDay();
+            $payload = [
+                'title' => trim(($inv->apv_no ? "APV {$inv->apv_no} " : '') . ($inv->si_number ? "SI {$inv->si_number} " : '') . ($inv->store_code ?? '')),
+                'amount' => (float) $inv->outstanding_amount,
+                'due_date' => $due->toDateString(),
+            ];
+            $toEmail = $inv->assignee?->email;
+            $rowCc = $this->parseCcEmails($inv->cc_emails);
+            $vendorName = $inv->vendor?->name;
+        } elseif ($type === 'renewal') {
+            $r = PaymentRenewal::with('assignee:id,name,email', 'vendor:id,name')->findOrFail($id);
+            $due = Carbon::parse($r->next_due_date)->startOfDay();
+            $payload = [
+                'title' => trim("{$r->service_type}" . ($r->sub_type ? " — {$r->sub_type}" : '') . ($r->purpose ? " ({$r->purpose})" : '')),
+                'amount' => (float) $r->total_amount,
+                'due_date' => $due->toDateString(),
+            ];
+            $toEmail = $r->assignee?->email;
+            $rowCc = $this->parseCcEmails($r->cc_emails);
+            $vendorName = $r->vendor?->name;
+        } else {
+            abort(404);
+        }
+
+        $mergedCc = array_values(array_filter(array_unique(array_merge($ccEmails, $rowCc))));
+        
+        $diff = (int) round(Carbon::now()->startOfDay()->diffInDays($due, false));
+        $reminderType = $diff < 0 ? 'overdue' : ($diff === 0 ? 'due' : ($diff <= 1 ? '1d' : ($diff <= 7 ? '7d' : '30d')));
+
+        $mailable = new \App\Mail\PaymentDueReminderMail($type, $payload, $reminderType, $vendorName);
+        $pending = $toEmail ? \Illuminate\Support\Facades\Mail::to($toEmail) : \Illuminate\Support\Facades\Mail::to($mergedCc[0] ?? $bcc[0]);
+        if (!empty($mergedCc)) $pending->cc($mergedCc);
+        if (!empty($bcc)) $pending->bcc($bcc);
+        $pending->send($mailable);
+
+        \App\Models\PaymentReminderLog::create([
+            'payable_type' => $type,
+            'payable_id' => $id,
+            'reminder_type' => $reminderType . ' (manual)',
+            'window_date' => Carbon::now()->toDateString(),
+            'sent_at' => now(),
+            'recipients' => array_values(array_filter(array_unique(array_merge([$toEmail], $mergedCc, $bcc)))),
+        ]);
+
+        return back()->with('success', 'Manual reminder sent successfully.');
+    }
+
+    protected function parseCcEmails(?string $emails): array
+    {
+        if (!$emails) return [];
+        return array_filter(array_map('trim', explode(',', $emails)));
     }
 
     protected function dashboardSummary(): array
@@ -139,6 +206,12 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 ->where('status', 'posted')
                 ->orderByDesc('paid_on')
                 ->limit(1),
+            ])
+            ->addSelect(['last_reminder_sent_at' => \App\Models\PaymentReminderLog::select('sent_at')
+                ->whereColumn('payable_id', 'payment_renewals.id')
+                ->where('payable_type', 'renewal')
+                ->orderByDesc('id')
+                ->limit(1),
             ]);
 
         if ($s = $request->get('search')) {
@@ -180,6 +253,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'expiration_date' => 'nullable|date',
             'payment_terms' => 'nullable|string|max:255',
             'assignee_user_id' => 'nullable|exists:users,id',
+            'cc_emails' => 'nullable|string',
             'status' => 'nullable|in:active,paused,cancelled',
             'notes' => 'nullable|string',
         ]);
@@ -213,6 +287,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'expiration_date' => 'nullable|date',
             'payment_terms' => 'nullable|string|max:255',
             'assignee_user_id' => 'nullable|exists:users,id',
+            'cc_emails' => 'nullable|string',
             'status' => 'nullable|in:active,paused,cancelled',
             'notes' => 'nullable|string',
         ]);
@@ -237,6 +312,12 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 ->whereColumn('payable_id', 'payment_invoices.id')
                 ->where('payable_type', 'invoice')
                 ->whereIn('status', ['pending', 'approved'])
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->addSelect(['last_reminder_sent_at' => \App\Models\PaymentReminderLog::select('sent_at')
+                ->whereColumn('payable_id', 'payment_invoices.id')
+                ->where('payable_type', 'invoice')
                 ->orderByDesc('id')
                 ->limit(1),
             ]);
@@ -283,6 +364,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'status' => 'nullable|in:Pending,Due,Overdue,Paid,Cancelled',
             'remarks' => 'nullable|string',
             'assignee_user_id' => 'nullable|exists:users,id',
+            'cc_emails' => 'nullable|string',
         ]);
         $data['created_by'] = $request->user()->id;
         $data['updated_by'] = $request->user()->id;
@@ -313,6 +395,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'status' => 'nullable|in:Pending,Due,Overdue,Paid,Cancelled',
             'remarks' => 'nullable|string',
             'assignee_user_id' => 'nullable|exists:users,id',
+            'cc_emails' => 'nullable|string',
         ]);
         $data['updated_by'] = $request->user()->id;
         $invoice->update($data);
@@ -397,6 +480,16 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 ->limit(1),
             ]);
 
+        if ($s = $request->get('search')) {
+            $query->where(function ($q) use ($s) {
+                $q->where('project_label', 'like', "%{$s}%")
+                  ->orWhere('month', 'like', "%{$s}%")
+                  ->orWhere('category', 'like', "%{$s}%")
+                  ->orWhereHas('vendor', function ($vq) use ($s) {
+                      $vq->where('name', 'like', "%{$s}%");
+                  });
+            });
+        }
         if ($v = $request->get('wp_vendor_id')) {
             $query->where('vendor_id', $v);
         }
@@ -470,6 +563,17 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
     protected function recordsList(Request $request)
     {
         $query = PaymentRecord::with(['vendor:id,name', 'payer:id,name', 'approvals.user:id,name']);
+
+        if ($s = $request->get('search')) {
+            $query->where(function ($q) use ($s) {
+                $q->where('payable_type', 'like', "%{$s}%")
+                  ->orWhere('payable_id', 'like', "%{$s}%")
+                  ->orWhere('reference_no', 'like', "%{$s}%")
+                  ->orWhereHas('vendor', function ($vq) use ($s) {
+                      $vq->where('name', 'like', "%{$s}%");
+                  });
+            });
+        }
         if ($st = $request->get('rec_status')) {
             $query->where('status', $st);
         }

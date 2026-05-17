@@ -69,11 +69,14 @@ class SendPaymentDueReminders extends Command
             ];
 
             $toEmail = $inv->assignee?->email;
-            if (!$toEmail && empty($ccEmails) && empty($bcc)) {
+            $rowCc = $this->parseCcEmails($inv->cc_emails);
+            $mergedCc = array_values(array_filter(array_unique(array_merge($ccEmails, $rowCc))));
+
+            if (!$toEmail && empty($mergedCc) && empty($bcc)) {
                 continue;
             }
 
-            $this->dispatchReminder('invoice', $inv->id, $toEmail, $ccEmails, $bcc, $payload, $reminderType, $inv->vendor?->name, $windowDate, $pretend);
+            $this->dispatchReminder('invoice', $inv->id, $toEmail, $mergedCc, $bcc, $payload, $reminderType, $inv->vendor?->name, $windowDate, $pretend);
             $sentCount++;
         }
 
@@ -104,16 +107,25 @@ class SendPaymentDueReminders extends Command
             ];
 
             $toEmail = $r->assignee?->email;
-            if (!$toEmail && empty($ccEmails) && empty($bcc)) {
+            $rowCc = $this->parseCcEmails($r->cc_emails);
+            $mergedCc = array_values(array_filter(array_unique(array_merge($ccEmails, $rowCc))));
+
+            if (!$toEmail && empty($mergedCc) && empty($bcc)) {
                 continue;
             }
 
-            $this->dispatchReminder('renewal', $r->id, $toEmail, $ccEmails, $bcc, $payload, $reminderType, $r->vendor?->name, $windowDate, $pretend);
+            $this->dispatchReminder('renewal', $r->id, $toEmail, $mergedCc, $bcc, $payload, $reminderType, $r->vendor?->name, $windowDate, $pretend);
             $sentCount++;
         }
 
         $this->info(($pretend ? '[DRY-RUN] ' : '') . "Reminders queued: {$sentCount}");
         return self::SUCCESS;
+    }
+
+    protected function parseCcEmails(?string $emails): array
+    {
+        if (!$emails) return [];
+        return array_filter(array_map('trim', explode(',', $emails)));
     }
 
     protected function resolveReminderType(Carbon $today, Carbon $due): ?string

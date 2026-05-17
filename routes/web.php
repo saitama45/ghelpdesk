@@ -279,6 +279,9 @@ Route::middleware('auth')->group(function () {
         Route::post('records/{record}/reject', [\App\Http\Controllers\PaymentMonitoringController::class, 'rejectRecord'])->name('records.reject');
         Route::post('records/{record}/mark-paid', [\App\Http\Controllers\PaymentMonitoringController::class, 'markPaid'])->name('records.mark-paid');
 
+        // Reminders
+        Route::post('{type}/{id}/remind', [\App\Http\Controllers\PaymentMonitoringController::class, 'sendManualReminder'])->name('remind');
+
         // Settings
         Route::put('settings', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateSettings'])->name('settings.update');
     });

@@ -1,7 +1,10 @@
 import { ref, computed, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 
-export function usePagination(initialData = {}, routeName = '', extraParams = {}) {
+export function usePagination(initialData = {}, routeName = '', extraParams = {}, options = {}) {
+    const searchKey = options.searchKey || 'search'
+    const dataKey = options.dataKey || null
+
     const search = ref('')
     const perPage = ref(10)
     const currentPage = ref(1)
@@ -34,7 +37,7 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
         const searchUrl = url || route(routeName)
         const globalParams = typeof extraParams === 'function' ? extraParams() : extraParams
         const params = {
-            search: search.value,
+            [searchKey]: search.value,
             per_page: perPage.value,
             page: currentPage.value,
             ...globalParams,
@@ -46,26 +49,31 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
             preserveState: true,
             preserveScroll: true,
             onSuccess: (page) => {
-                const routeParts = routeName.split('.')
-                const base = routeParts[0]
-                const underscored = base.replace(/-/g, '_')
-                const potentialKeys = [
-                    base,
-                    underscored,
-                    toCamelCase(base),
-                    toCamelCase(underscored),
-                    base.replace(/s$/, ''),
-                    'forms',
-                    'records',
-                    'tables',
-                    'data',
-                ]
-
                 let responseData = null
-                for (const key of potentialKeys) {
-                    if (page.props[key]) {
-                        responseData = page.props[key]
-                        break
+
+                if (dataKey && page.props[dataKey]) {
+                    responseData = page.props[dataKey]
+                } else {
+                    const routeParts = routeName.split('.')
+                    const base = routeParts[0]
+                    const underscored = base.replace(/-/g, '_')
+                    const potentialKeys = [
+                        base,
+                        underscored,
+                        toCamelCase(base),
+                        toCamelCase(underscored),
+                        base.replace(/s$/, ''),
+                        'forms',
+                        'records',
+                        'tables',
+                        'data',
+                    ]
+
+                    for (const key of potentialKeys) {
+                        if (page.props[key]) {
+                            responseData = page.props[key]
+                            break
+                        }
                     }
                 }
 

@@ -21,6 +21,7 @@ class PaymentInvoice extends Model
         'status',
         'remarks',
         'assignee_user_id',
+        'cc_emails',
         'created_by',
         'updated_by',
     ];

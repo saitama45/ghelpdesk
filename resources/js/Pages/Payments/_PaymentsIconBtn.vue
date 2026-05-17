@@ -27,6 +27,9 @@
             <!-- view / external-link arrow -->
             <path v-else-if="kind === 'view'" stroke-linecap="round" stroke-linejoin="round"
                   d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            <!-- remind / bell -->
+            <path v-else-if="kind === 'remind'" stroke-linecap="round" stroke-linejoin="round"
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
     </button>
 </template>
@@ -35,7 +38,7 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-    kind: { type: String, required: true }, // submit | edit | delete | approve | reject | paid
+    kind: { type: String, required: true }, // submit | edit | delete | approve | reject | paid | remind
     title: { type: String, default: '' },
 })
 defineEmits(['click'])
@@ -48,6 +51,7 @@ const TONES = {
     reject:  { text: 'text-red-600',    hoverText: 'hover:text-red-900',    hoverBg: 'hover:bg-red-50' },
     paid:    { text: 'text-indigo-600', hoverText: 'hover:text-indigo-900', hoverBg: 'hover:bg-indigo-50' },
     view:    { text: 'text-purple-600', hoverText: 'hover:text-purple-900', hoverBg: 'hover:bg-purple-50' },
+    remind:  { text: 'text-amber-600',  hoverText: 'hover:text-amber-900',  hoverBg: 'hover:bg-amber-50' },
 }
 const tone = computed(() => TONES[props.kind] || TONES.edit)
 </script>

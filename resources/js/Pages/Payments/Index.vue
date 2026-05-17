@@ -40,22 +40,22 @@
                             <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Due This Month</p>
                             <p class="text-2xl font-bold text-orange-600 mt-2">₱{{ formatAmount(summary.due_this_month) }}</p>
                         </div>
-                        <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Overdue Invoices</p>
+                        <button @click="quickFilterInvoices('Overdue')" class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left hover:border-red-200 hover:bg-red-50 transition-colors group">
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider group-hover:text-red-600">Overdue Invoices</p>
                             <p class="text-2xl font-bold text-red-600 mt-2">{{ summary.overdue_count }}</p>
-                        </div>
-                        <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Upcoming Renewals (30d)</p>
+                        </button>
+                        <button @click="switchTab('renewals')" class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left hover:border-blue-200 hover:bg-blue-50 transition-colors group">
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider group-hover:text-blue-600">Upcoming Renewals (30d)</p>
                             <p class="text-2xl font-bold text-blue-600 mt-2">{{ summary.upcoming_renewals_30d }}</p>
-                        </div>
+                        </button>
                         <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
                             <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Annual Renewal Spend</p>
                             <p class="text-2xl font-bold text-purple-600 mt-2">₱{{ formatAmount(summary.annual_renewal_spend) }}</p>
                         </div>
-                        <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Pending Approvals</p>
+                        <button @click="switchTab('records')" class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left hover:border-yellow-200 hover:bg-yellow-50 transition-colors group">
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider group-hover:text-yellow-600">Pending Approvals</p>
                             <p class="text-2xl font-bold text-yellow-600 mt-2">{{ summary.pending_approvals }}</p>
-                        </div>
+                        </button>
                     </div>
                     <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
                         <p class="font-semibold mb-1">Quick Tips</p>
@@ -70,7 +70,21 @@
                 </div>
 
                 <!-- RENEWALS TAB -->
-                <div v-if="currentTab === 'renewals'">
+                <div v-if="currentTab === 'renewals'" class="space-y-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="s in ['active', 'paused', 'cancelled']" :key="s"
+                                @click="renewalsPagination.updateSearchParam('status', s)"
+                                :class="[
+                                    'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                                    renewalsPagination.filters?.status === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                                ]">
+                            {{ s.charAt(0).toUpperCase() + s.slice(1) }}
+                        </button>
+                        <button @click="renewalsPagination.updateSearchParam('status', null)"
+                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50">
+                            Clear
+                        </button>
+                    </div>
                     <DataTable
                         title="Recurring Renewals"
                         subtitle="Subscriptions and recurring vendor charges"
@@ -129,9 +143,14 @@
                                             Last Paid: {{ formatDateShort(r.last_paid_on) }}
                                         </span>
                                     </div>
+                                    <div v-if="r.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400" :title="'Last reminder sent on ' + r.last_reminder_sent_at">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                                        {{ formatDateShort(r.last_reminder_sent_at) }}
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <div v-if="!isRowFinal('renewal', r)" class="flex justify-end space-x-1">
+                                        <IconBtn kind="remind" title="Send Manual Reminder" @click="sendManualReminder('renewal', r.id)" />
                                         <IconBtn v-if="hasPermission('payments.submit') && !r.latest_record_status" kind="submit" title="Submit for Approval" @click="openSubmitModal('renewal', r)" />
                                         <IconBtn v-if="r.latest_record_status === 'approved' && hasPermission('payments.mark_paid')" kind="paid" title="Mark as Paid" @click="openMarkPaidForPayable('renewal', r.id)" />
                                         <IconBtn v-if="hasPermission('payments.edit') && r.latest_record_status !== 'approved'" kind="edit" title="Edit Renewal" @click="openRenewalModal(r)" />
@@ -146,6 +165,20 @@
 
                 <!-- INVOICES TAB -->
                 <div v-if="currentTab === 'invoices'" class="space-y-6">
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="s in ['Pending', 'Due', 'Overdue']" :key="s"
+                                @click="invoicesPagination.updateSearchParam('inv_status', s)"
+                                :class="[
+                                    'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                                    invoicesPagination.filters?.inv_status === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                                ]">
+                            {{ s }}
+                        </button>
+                        <button @click="invoicesPagination.updateSearchParam('inv_status', null)"
+                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50">
+                            Clear
+                        </button>
+                    </div>
                     <DataTable
                         title="SOA / Vendor Invoices"
                         subtitle="Aged invoices with outstanding balances"
@@ -210,9 +243,14 @@
                                             {{ approvalLabel(i.latest_record_status) }}
                                         </span>
                                     </div>
+                                    <div v-if="i.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400" :title="'Last reminder sent on ' + i.last_reminder_sent_at">
+                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                                        {{ formatDateShort(i.last_reminder_sent_at) }}
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <div v-if="!isRowFinal('invoice', i)" class="flex justify-end space-x-1">
+                                        <IconBtn kind="remind" title="Send Manual Reminder" @click="sendManualReminder('invoice', i.id)" />
                                         <IconBtn v-if="hasPermission('payments.submit') && !i.latest_record_status" kind="submit" title="Submit for Approval" @click="openSubmitModal('invoice', i)" />
                                         <IconBtn v-if="i.latest_record_status === 'approved' && hasPermission('payments.mark_paid')" kind="paid" title="Mark as Paid" @click="openMarkPaidForPayable('invoice', i.id)" />
                                         <IconBtn v-if="hasPermission('payments.edit') && i.latest_record_status !== 'approved'" kind="edit" title="Edit Invoice" @click="openInvoiceModal(i)" />
@@ -458,6 +496,9 @@
                     <FormField label="Assignee">
                         <Autocomplete v-model="renewalForm.assignee_user_id" :options="userOptions" placeholder="Search user..." />
                     </FormField>
+                    <FormField label="CC Emails (comma-separated)">
+                        <input v-model="renewalForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
                     <FormField label="Status">
                         <Autocomplete v-model="renewalForm.status" :options="renewalStatusOptions" placeholder="Select status..." />
                     </FormField>
@@ -505,6 +546,9 @@
                     </FormField>
                     <FormField label="Assignee">
                         <Autocomplete v-model="invoiceForm.assignee_user_id" :options="userOptions" placeholder="Search user..." />
+                    </FormField>
+                    <FormField label="CC Emails (comma-separated)">
+                        <input v-model="invoiceForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
                     </FormField>
                 </div>
                 <FormField label="Remarks">
@@ -731,6 +775,11 @@ const switchTab = (id) => {
     router.get('/payments', { tab: id }, { preserveScroll: true, preserveState: true, replace: true })
 }
 
+const quickFilterInvoices = (status) => {
+    currentTab.value = 'invoices'
+    router.get('/payments', { tab: 'invoices', inv_status: status }, { preserveScroll: true, preserveState: true, replace: true })
+}
+
 const summary = computed(() => props.summary || {})
 const weeklyCategories = ['POS', 'CCTV', 'Internet', 'Speaker', 'Anti-virus', 'Router', 'Google']
 
@@ -755,10 +804,49 @@ const invoiceForOverpaymentOptions = computed(() => [
     })),
 ])
 
-const renewalsPagination = usePagination(props.renewals, 'payments.index')
-const invoicesPagination = usePagination(props.invoices, 'payments.index')
-const weeklyPagination = usePagination(props.weeklyPlans, 'payments.index')
-const recordsPagination = usePagination(props.records, 'payments.index')
+const renewalsPagination = usePagination(props.renewals, 'payments.index', () => ({
+    tab: 'renewals',
+    ...renewalsPagination.filters
+}), { dataKey: 'renewals' })
+renewalsPagination.filters = reactive({ status: null })
+renewalsPagination.updateSearchParam = (key, val) => {
+    renewalsPagination.filters[key] = val
+    renewalsPagination.currentPage.value = 1
+    renewalsPagination.performSearch()
+}
+
+const invoicesPagination = usePagination(props.invoices, 'payments.index', () => ({
+    tab: 'invoices',
+    ...invoicesPagination.filters
+}), { dataKey: 'invoices', searchKey: 'inv_search' })
+invoicesPagination.filters = reactive({ inv_status: null })
+invoicesPagination.updateSearchParam = (key, val) => {
+    invoicesPagination.filters[key] = val
+    invoicesPagination.currentPage.value = 1
+    invoicesPagination.performSearch()
+}
+
+const weeklyPagination = usePagination(props.weeklyPlans, 'payments.index', () => ({
+    tab: 'weekly',
+    ...weeklyPagination.filters
+}), { dataKey: 'weeklyPlans' })
+weeklyPagination.filters = reactive({ wp_status: null, wp_vendor_id: null, wp_month: null, wp_category: null })
+weeklyPagination.updateSearchParam = (key, val) => {
+    weeklyPagination.filters[key] = val
+    weeklyPagination.currentPage.value = 1
+    weeklyPagination.performSearch()
+}
+
+const recordsPagination = usePagination(props.records, 'payments.index', () => ({
+    tab: 'records',
+    ...recordsPagination.filters
+}), { dataKey: 'records' })
+recordsPagination.filters = reactive({ rec_status: null, rec_vendor_id: null })
+recordsPagination.updateSearchParam = (key, val) => {
+    recordsPagination.filters[key] = val
+    recordsPagination.currentPage.value = 1
+    recordsPagination.performSearch()
+}
 
 onMounted(() => {
     renewalsPagination.updateData(props.renewals)
@@ -840,6 +928,7 @@ function blankRenewal() {
         unit_cost: 0, qty: 1, total_amount: 0, currency: 'PHP',
         cycle: 'monthly', cycle_anchor_date: '', next_due_date: '',
         expiration_date: '', payment_terms: '', assignee_user_id: null,
+        cc_emails: '',
         status: 'active', notes: '',
     }
 }
@@ -879,6 +968,7 @@ function blankInvoice() {
         vendor_id: '', apv_no: '', store_code: '', po_number: '', si_number: '',
         si_date: '', due_date: '', invoice_amount: 0, outstanding_amount: 0,
         currency: 'PHP', status: 'Pending', remarks: '', assignee_user_id: null,
+        cc_emails: '',
     }
 }
 const openInvoiceModal = (i = null) => {
@@ -1024,6 +1114,14 @@ const confirmMarkPaid = () => {
         preserveState: true,
         onSuccess: () => { markPaidModal.open = false },
         onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Mark paid failed'),
+    })
+}
+
+const sendManualReminder = (type, id) => {
+    post(`/payments/${type}/${id}/remind`, {}, {
+        preserveScroll: true,
+        onSuccess: () => showSuccess('Reminder sent successfully'),
+        onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Failed to send reminder'),
     })
 }
 
