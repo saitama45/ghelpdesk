@@ -59,6 +59,7 @@ const locationHint = ref(null);
 const locationAttemptProgress = ref(0);
 const locationSamples = ref([]);
 const isRefreshingLocation = ref(false);
+const isSubmittingAttendance = ref(false);
 let watchHandle = null;
 let currentWatchHighAccuracy = true;
 let locationAttemptInterval = null;
@@ -70,6 +71,7 @@ let marker = null;
 let geofenceCircle = null;
 
 const form = useForm({
+    client_request_id: null,
     latitude: null,
     longitude: null,
     location_accuracy: null,
@@ -81,6 +83,19 @@ const form = useForm({
     device_info: null,
     public_ip: null,
 });
+
+const makeClientRequestId = () => {
+    if (window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+        const random = Math.random() * 16 | 0;
+        const value = char === 'x' ? random : (random & 0x3 | 0x8);
+
+        return value.toString(16);
+    });
+};
 
 const activeScheduleStore = computed(() => props.todaySchedule?.store || null);
 const requiresGeofencing = computed(() => Boolean(props.todaySchedule && props.todaySchedule.status !== 'WFH'));
@@ -285,6 +300,7 @@ const canSave = computed(() => {
         !isRecentlyLogged.value &&
         !!capturedImage.value &&
         locationSubmissionReady.value &&
+        !isSubmittingAttendance.value &&
         !form.processing;
 });
 
@@ -855,7 +871,9 @@ const { confirm } = useConfirm();
 const { hasPermission } = usePermission();
 
 const submit = async () => {
-    if (!canSave.value) return;
+    if (!canSave.value || isSubmittingAttendance.value) return;
+
+    isSubmittingAttendance.value = true;
 
     const action = nextAction.value;
     const locationName = props.todaySchedule?.status === 'WFH'
@@ -870,13 +888,20 @@ const submit = async () => {
         variant: 'primary',
     });
 
-    if (!ok) return;
+    if (!ok) {
+        isSubmittingAttendance.value = false;
+        return;
+    }
 
     if (browserGeofenceRequiresFreshFix.value && !isTimeOutFlow.value) {
         const refreshed = await acquireCurrentLocation(true, false);
-        if (!refreshed || !locationSubmissionReady.value) return;
+        if (!refreshed || !locationSubmissionReady.value) {
+            isSubmittingAttendance.value = false;
+            return;
+        }
     }
 
+    form.client_request_id = form.client_request_id || makeClientRequestId();
     form.location_client = getLocationClient();
     form.location_provider = getLocationProvider();
     form.location_accuracy = locationAccuracy.value;
@@ -897,6 +922,9 @@ const submit = async () => {
             form.location_accuracy = locationAccuracy.value;
             form.location_captured_at = locationCapturedAt.value ? new Date(locationCapturedAt.value).toISOString() : null;
             form.location_received_at = locationReceivedAt.value ? new Date(locationReceivedAt.value).toISOString() : null;
+        },
+        onFinish: () => {
+            isSubmittingAttendance.value = false;
         },
     });
 };

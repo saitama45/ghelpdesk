@@ -8,6 +8,7 @@ use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -162,6 +163,22 @@ class AttendanceController extends Controller implements HasMiddleware
         }
 
         $request->validate([
+            'client_request_id' => 'nullable|uuid',
+        ]);
+
+        $clientRequestId = $request->input('client_request_id');
+
+        if ($clientRequestId) {
+            $existingLog = AttendanceLog::where('user_id', $user->id)
+                ->where('client_request_id', $clientRequestId)
+                ->first();
+
+            if ($existingLog) {
+                return $this->attendanceLogRedirect($existingLog);
+            }
+        }
+
+        $request->validate([
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'location_accuracy' => 'nullable|numeric|min:0',
@@ -278,27 +295,59 @@ class AttendanceController extends Controller implements HasMiddleware
         $fileName = 'attendance/' . $user->id . '/' . now()->timestamp . '_' . Str::random(10) . '.' . $extension;
         Storage::disk('public')->put($fileName, $photoData);
 
-        AttendanceLog::create([
-            'user_id' => $user->id,
-            'schedule_id' => $schedule->id,
-            'schedule_store_id' => $activeStoreEntry?->id,
-            'type' => $type,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-            'location_accuracy' => $request->input('location_accuracy'),
-            'location_captured_at' => $request->input('location_captured_at'),
-            'location_received_at' => $request->input('location_received_at'),
-            'location_client' => $locationClient,
-            'location_provider' => $request->input('location_provider'),
-            'photo_path' => $fileName,
-            'log_time' => now('Asia/Manila'),
-            'device_info' => $request->input('device_info', $request->header('User-Agent')),
-            'ip_address' => $request->input('public_ip', $request->ip()),
-        ]);
+        try {
+            $log = AttendanceLog::create([
+                'user_id' => $user->id,
+                'client_request_id' => $clientRequestId,
+                'schedule_id' => $schedule->id,
+                'schedule_store_id' => $activeStoreEntry?->id,
+                'type' => $type,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'location_accuracy' => $request->input('location_accuracy'),
+                'location_captured_at' => $request->input('location_captured_at'),
+                'location_received_at' => $request->input('location_received_at'),
+                'location_client' => $locationClient,
+                'location_provider' => $request->input('location_provider'),
+                'photo_path' => $fileName,
+                'log_time' => now('Asia/Manila'),
+                'device_info' => $request->input('device_info', $request->header('User-Agent')),
+                'ip_address' => $request->input('public_ip', $request->ip()),
+            ]);
+        } catch (QueryException $e) {
+            if (!$clientRequestId || !$this->isDuplicateKeyException($e)) {
+                throw $e;
+            }
+
+            Storage::disk('public')->delete($fileName);
+
+            $log = AttendanceLog::where('user_id', $user->id)
+                ->where('client_request_id', $clientRequestId)
+                ->first();
+
+            if (!$log) {
+                throw $e;
+            }
+        }
 
         RateLimiter::clear($throttleKey);
 
-        return redirect()->route('attendance.logs')->with('success', 'Successfully ' . ($type === 'time_in' ? 'Timed In' : 'Timed Out'));
+        return $this->attendanceLogRedirect($log);
+    }
+
+    private function attendanceLogRedirect(AttendanceLog $log)
+    {
+        return redirect()
+            ->route('attendance.logs')
+            ->with('success', 'Successfully ' . ($log->type === 'time_in' ? 'Timed In' : 'Timed Out'));
+    }
+
+    private function isDuplicateKeyException(QueryException $e): bool
+    {
+        $sqlState = $e->errorInfo[0] ?? null;
+        $driverCode = (string) ($e->errorInfo[1] ?? '');
+
+        return $sqlState === '23000' || in_array($driverCode, ['2601', '2627', '1062', '1555', '19'], true);
     }
 
     private function buildWorkHoursSummary(Request $request, string $dateFrom, string $dateTo): array

@@ -159,6 +159,35 @@ class AttendanceLogNativeLocationTest extends TestCase
         $this->assertNotNull($log->location_captured_at);
     }
 
+    public function test_web_attendance_log_reuses_client_request_id_without_duplicate_insert(): void
+    {
+        [$user, $store, $schedule, $scheduleStore] = $this->createGeofencedAttendanceContext();
+        $clientRequestId = '550e8400-e29b-41d4-a716-446655440000';
+        $payload = $this->payload([
+            'client_request_id' => $clientRequestId,
+            'latitude' => $store->latitude,
+            'longitude' => $store->longitude,
+            'location_accuracy' => 10,
+            'location_client' => 'native',
+            'location_provider' => 'capacitor',
+        ]);
+
+        $firstResponse = $this->actingAs($user)->post(route('attendance.log'), $payload);
+        $retryResponse = $this->actingAs($user)->post(route('attendance.log'), $payload);
+
+        $firstResponse->assertRedirect(route('attendance.logs'));
+        $retryResponse->assertRedirect(route('attendance.logs'));
+
+        $this->assertDatabaseCount('attendance_logs', 1);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $user->id,
+            'client_request_id' => $clientRequestId,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_in',
+        ]);
+    }
+
     private function createGeofencedAttendanceContext(): array
     {
         $user = User::factory()->create();
