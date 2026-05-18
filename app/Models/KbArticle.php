@@ -14,6 +14,11 @@ class KbArticle extends Model
         'content',
         'kb_category_id',
         'author_id',
+        'source_item_id',
+        'source_ticket_id',
+        'source_ticket_comment_id',
+        'source_content_fingerprint',
+        'is_ticket_generated',
         'is_published',
         'views'
     ];
@@ -21,6 +26,8 @@ class KbArticle extends Model
     protected $casts = [
         'kb_category_id' => 'integer',
         'author_id' => 'integer',
+        'source_item_id' => 'integer',
+        'is_ticket_generated' => 'boolean',
         'is_published' => 'boolean',
     ];
 
@@ -43,5 +50,20 @@ class KbArticle extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_id');
+    }
+
+    public function sourceItem(): BelongsTo
+    {
+        return $this->belongsTo(Item::class, 'source_item_id');
+    }
+
+    public function sourceTicket(): BelongsTo
+    {
+        return $this->belongsTo(Ticket::class, 'source_ticket_id');
+    }
+
+    public function sourceTicketComment(): BelongsTo
+    {
+        return $this->belongsTo(TicketComment::class, 'source_ticket_comment_id');
     }
 }

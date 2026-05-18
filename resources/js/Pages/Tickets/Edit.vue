@@ -2963,7 +2963,7 @@ const linkify = (text) => {
                 <div class="flex justify-between items-center mb-6">
                     <div>
                         <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest">
-                            Resolve Ticket
+                            {{ commentForm.status === 'closed' ? 'Close Ticket' : 'Resolve Ticket' }}
                         </h3>
                         <p class="text-xs text-gray-500 mt-1">Please provide the details of the resolution.</p>
                     </div>
@@ -2973,6 +2973,10 @@ const linkify = (text) => {
                 </div>
 
                 <div class="space-y-6">
+                    <div v-if="commentForm.status === 'closed'" class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+                        Closing this ticket will create a draft Knowledge Base article under the selected Item bucket unless an existing draft or published article already covers the same concern and resolution.
+                    </div>
+
                     <div>
                         <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center">
                             Action Taken
@@ -3020,8 +3024,8 @@ const linkify = (text) => {
                             :disabled="commentForm.processing"
                             class="px-8 py-2 text-sm font-black text-white bg-green-600 rounded-lg hover:bg-green-700 shadow-md transition-all active:scale-95 uppercase tracking-widest disabled:opacity-50"
                         >
-                            <template v-if="commentForm.processing">Resolving...</template>
-                            <template v-else>Submit Resolution</template>
+                            <template v-if="commentForm.processing">{{ commentForm.status === 'closed' ? 'Closing...' : 'Resolving...' }}</template>
+                            <template v-else>{{ commentForm.status === 'closed' ? 'Close Ticket' : 'Submit Resolution' }}</template>
                         </button>
                     </div>
                 </div>

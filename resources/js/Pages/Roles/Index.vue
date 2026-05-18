@@ -246,7 +246,6 @@ const openCreateModal = () => {
     form.notify_on_ticket_assign = false
     form.notify_on_urgent_ticket = false
     form.notify_on_user_registration = false
-    permissionSearch.value = ''
     showModal.value = true
 }
 
@@ -262,7 +261,6 @@ const editRole = (role) => {
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket
     form.notify_on_user_registration = !!role.notify_on_user_registration
-    permissionSearch.value = ''
     showModal.value = true
 }
 
@@ -278,7 +276,6 @@ const copyRole = (role) => {
     form.notify_on_ticket_assign = !!role.notify_on_ticket_assign;
     form.notify_on_urgent_ticket = !!role.notify_on_urgent_ticket;
     form.notify_on_user_registration = !!role.notify_on_user_registration;
-    permissionSearch.value = ''
     showModal.value = true;
 };
 
@@ -293,7 +290,6 @@ const closeModal = () => {
     form.notify_on_ticket_assign = false
     form.notify_on_urgent_ticket = false
     form.notify_on_user_registration = false
-    permissionSearch.value = ''
 }
 
 const submitForm = () => {

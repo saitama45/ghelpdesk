@@ -18,6 +18,7 @@ use App\Models\Company;
 use App\Models\Store;
 use App\Models\Vendor;
 use App\Models\Schedule;
+use App\Services\TicketKnowledgeBaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -29,7 +30,8 @@ use Inertia\Inertia;
 class TicketController extends Controller
 {
     public function __construct(
-        private \App\Services\OrganizationReferenceService $organizationReferences
+        private \App\Services\OrganizationReferenceService $organizationReferences,
+        private TicketKnowledgeBaseService $ticketKnowledgeBaseService
     ) {}
 
     /**
@@ -1254,6 +1256,8 @@ class TicketController extends Controller
         // Load user relationship immediately to avoid null errors in emails
         $comment->load('user');
 
+        $kbGenerationStatus = null;
+
         // HANDLE AUTOMATIC STATUS CHANGE
         if ($request->filled('status')) {
             $oldStatus = $ticket->status;
@@ -1275,6 +1279,10 @@ class TicketController extends Controller
                 if ($ticket->parent_id) {
                     $this->syncParentStatus($ticket->parent_id, $newStatus);
                 }
+
+                if ($newStatus === 'closed') {
+                    $kbGenerationStatus = $this->ticketKnowledgeBaseService->createDraftFromClosedTicket($ticket, $comment);
+                }
             }
         }
 
@@ -1290,7 +1298,17 @@ class TicketController extends Controller
         $this->notifyTicketCommentRecipients($ticket, $comment);
         $this->storeCommentAttachments($request, $ticket, $comment);
 
-        return redirect()->back()->with('success', 'Comment added and status updated.');
+        return redirect()->back()->with('success', $this->commentSuccessMessage($kbGenerationStatus));
+    }
+
+    private function commentSuccessMessage(?string $kbGenerationStatus): string
+    {
+        return match ($kbGenerationStatus) {
+            TicketKnowledgeBaseService::CREATED => 'Comment added, status updated, and KB draft created.',
+            TicketKnowledgeBaseService::DUPLICATE => 'Comment added and status updated. KB draft skipped because an existing article already covers this concern.',
+            TicketKnowledgeBaseService::SKIPPED_NO_ITEM => 'Comment added and status updated. KB draft skipped because no Item is selected.',
+            default => 'Comment added and status updated.',
+        };
     }
 
     public function getCategories()
