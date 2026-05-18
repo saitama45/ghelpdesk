@@ -313,6 +313,7 @@
                                                 <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500">Item Code</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500">Brand / Model</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500 hidden md:table-cell">Description</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500">Status</th>
                                                 <th class="px-3 py-2 text-right text-[10px] font-black uppercase text-gray-500">SOH</th>
                                                 <th class="px-3 py-2 text-right text-[10px] font-black uppercase text-gray-500">Transfer Qty</th>
                                             </tr>
@@ -323,40 +324,48 @@
                                                 :key="asset.id"
                                                 class="transition-colors"
                                                 :class="[
-                                                    isAssetSelected(asset) ? 'bg-blue-50' : 'hover:bg-gray-50',
-                                                    readOnlyMode ? 'cursor-default' : 'cursor-pointer'
+                                                    isAssetSelected(asset) ? 'bg-blue-50' : (asset.is_in_pending_transfer ? 'bg-amber-50/30' : 'hover:bg-gray-50'),
+                                                    (readOnlyMode || asset.is_in_pending_transfer) ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
                                                 ]"
-                                                @click="!readOnlyMode && toggleAsset(asset)"
+                                                @click="!(readOnlyMode || asset.is_in_pending_transfer) && toggleAsset(asset)"
                                             >
                                                 <td class="px-3 py-2 text-center" @click.stop>
                                                     <input
                                                         type="checkbox"
                                                         :checked="isAssetSelected(asset)"
                                                         @change="toggleAsset(asset)"
-                                                        :disabled="readOnlyMode"
-                                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                                        :disabled="readOnlyMode || asset.is_in_pending_transfer"
+                                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40"
                                                     >
                                                 </td>
                                                 <td class="px-3 py-2 text-xs font-bold text-gray-900 whitespace-nowrap">{{ asset.item_code }}</td>
                                                 <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{{ asset.brand }} {{ asset.model }}</td>
                                                 <td class="px-3 py-2 text-xs text-gray-500 hidden md:table-cell max-w-xs truncate">{{ asset.description }}</td>
+                                                <td class="px-3 py-2 whitespace-nowrap">
+                                                    <span v-if="asset.is_in_pending_transfer" class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-tighter">
+                                                        For Posting
+                                                    </span>
+                                                    <span v-else class="text-[10px] text-gray-400 font-medium">Available</span>
+                                                </td>
                                                 <td class="px-3 py-2 text-right">
                                                     <span class="text-xs font-bold" :class="(asset.soh ?? 0) > 0 ? 'text-emerald-600' : 'text-red-500'">{{ asset.soh ?? '?' }}</span>
                                                 </td>
                                                 <td class="px-3 py-2 text-right" @click.stop>
                                                     <template v-if="isAssetSelected(asset)">
-                                                        <span v-if="asset.type === 'Fixed' && getSelection(asset)?.isLoadingUnits" class="text-xs text-gray-400">...</span>
-                                                        <span v-else-if="asset.type === 'Fixed' && getSelection(asset)?.availableUnits.length > 0" class="text-xs font-bold text-blue-600">
-                                                            {{ getSelection(asset)?.entries.length }}/{{ getSelection(asset)?.availableUnits.length }}
-                                                        </span>
+                                                        <template v-if="asset.type === 'Fixed'">
+                                                            <span v-if="getSelection(asset)?.isLoadingUnits" class="text-xs text-gray-400">...</span>
+                                                            <span v-else class="text-xs font-bold" :class="getSelection(asset)?.availableUnits.length > 0 ? 'text-blue-600' : 'text-red-400'">
+                                                                {{ getSelection(asset)?.entries.length }}/{{ getSelection(asset)?.availableUnits.length }}
+                                                            </span>
+                                                        </template>
                                                         <input v-else
                                                             type="number"
                                                             :value="getSelection(asset)?.qty ?? 1"
                                                             @input="updateSelectionQty(asset, $event.target.value)"
                                                             :max="asset.soh"
                                                             min="1"
-                                                            :disabled="readOnlyMode"
-                                                            class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500"
+                                                            :disabled="readOnlyMode || (asset.soh ?? 0) <= 1"
+                                                            class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                                                         >
                                                     </template>
                                                 </td>
@@ -382,7 +391,7 @@
                                             <p class="text-xs text-gray-500 truncate">{{ sel.asset.brand }} {{ sel.asset.model }}</p>
                                         </div>
                                         <!-- Non-Fixed: qty input -->
-                                        <template v-if="sel.asset.type !== 'Fixed' || sel.availableUnits.length === 0">
+                                        <template v-if="sel.asset.type !== 'Fixed'">
                                             <div class="flex items-center gap-1.5">
                                                 <label class="text-[10px] font-bold text-gray-500 uppercase">Qty</label>
                                                 <input
@@ -391,16 +400,16 @@
                                                     @input="updateSelectionQty(sel.asset, $event.target.value)"
                                                     :max="sel.asset.soh"
                                                     min="1"
-                                                    class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500"
+                                                    :disabled="readOnlyMode || (sel.asset.soh ?? 0) <= 1"
+                                                    class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                                                 >
                                             </div>
                                         </template>
-                                        <!-- Fixed: loading state or unit count badge -->
                                         <template v-else>
                                             <span v-if="sel.isLoadingUnits" class="text-xs text-gray-400 italic">Loading...</span>
                                             <span v-else class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold"
-                                                :class="sel.entries.length > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'">
-                                                {{ sel.entries.length }}/{{ sel.availableUnits.filter(u => !u.is_reserved).length }} units selected
+                                                :class="sel.availableUnits.length > 0 ? (sel.entries.length > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600') : 'bg-red-50 text-red-500'">
+                                                {{ sel.availableUnits.length > 0 ? `${sel.entries.length}/${sel.availableUnits.filter(u => !u.is_reserved).length} units selected` : `No serialized units at ${form.origin_location}` }}
                                             </span>
                                         </template>
                                         <!-- Remove button -->
@@ -437,12 +446,18 @@
                                             </thead>
                                             <tbody class="bg-white divide-y divide-gray-100">
                                                 <tr v-for="unit in sel.availableUnits" :key="unit.id"
-                                                    :class="unit.is_reserved ? 'bg-amber-50/50 opacity-70' : 'hover:bg-blue-50/50'">
-                                                    <td class="px-4 py-2">
+                                                    class="transition-colors"
+                                                    :class="[
+                                                        unit.is_reserved ? 'bg-amber-50/50 opacity-70 cursor-not-allowed' : 'hover:bg-blue-50/50 cursor-pointer',
+                                                        isUnitSelected(sel, unit) ? 'bg-blue-50/70' : ''
+                                                    ]"
+                                                    @click="!readOnlyMode && !unit.is_reserved && toggleUnit(sel, unit)"
+                                                >
+                                                    <td class="px-4 py-2" @click.stop>
                                                         <input type="checkbox"
                                                             :checked="isUnitSelected(sel, unit)"
-                                                            @change="!unit.is_reserved && toggleUnit(sel, unit)"
-                                                            :disabled="unit.is_reserved"
+                                                            @change="toggleUnit(sel, unit)"
+                                                            :disabled="unit.is_reserved || readOnlyMode"
                                                             class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed">
                                                     </td>
                                                     <td class="px-4 py-2">

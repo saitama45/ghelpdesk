@@ -115,7 +115,7 @@
                 <DataTable
                     title="Stock Transaction Headers"
                     subtitle="Manage stock movements (In/Transfers) and their quantity"
-                    search-placeholder="Search by serial no..."
+                    search-placeholder="Search by DR, Serial, Item Code or Desc..."
                     :search="pagination.search.value"
                     :data="pagination.data.value"
                     :current-page="pagination.currentPage.value"

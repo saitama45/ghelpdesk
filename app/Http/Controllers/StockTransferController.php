@@ -119,16 +119,41 @@ class StockTransferController extends Controller
 
         $locationVariants = $this->locationVariants($location);
 
-        $sohData = InventoryTransaction::whereIn('location', $locationVariants)
-            ->groupBy('asset_id')
-            ->havingRaw('SUM(quantity) > 0')
-            ->selectRaw('asset_id, SUM(quantity) as soh')
+        $sohData = InventoryTransaction::whereIn('inventory_transactions.location', $locationVariants)
+            ->leftJoin('stock_ins as si_soh', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
+                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
+            })
+            ->where(function ($q) {
+                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                  ->orWhere(function ($sq) {
+                      $sq->where('si_soh.status', 'Posted')
+                         ->whereColumn('inventory_transactions.location', 'si_soh.destination_location');
+                  });
+            })
+            ->groupBy('inventory_transactions.asset_id')
+            ->havingRaw('SUM(inventory_transactions.quantity) > 0')
+            ->selectRaw('inventory_transactions.asset_id, SUM(inventory_transactions.quantity) as soh')
             ->pluck('soh', 'asset_id');
+
+        $pendingData = StockTransfer::whereIn('origin_location', $locationVariants)
+            ->where('status', 'For Posting')
+            ->groupBy('asset_id')
+            ->selectRaw('asset_id, SUM(quantity) as pending_qty')
+            ->pluck('pending_qty', 'asset_id');
 
         $assets = Asset::whereIn('id', $sohData->keys())
             ->orderBy('item_code')
             ->get(['id', 'item_code', 'brand', 'model', 'description', 'type', 'cost'])
-            ->map(fn ($a) => array_merge($a->toArray(), ['soh' => (int) $sohData->get($a->id, 0)]));
+            ->map(function ($a) use ($sohData, $pendingData) {
+                $soh = (int) $sohData->get($a->id, 0);
+                $pending = (int) $pendingData->get($a->id, 0);
+                return array_merge($a->toArray(), [
+                    'soh' => $soh,
+                    'pending_qty' => $pending,
+                    'is_in_pending_transfer' => $pending > 0
+                ]);
+            });
 
         return response()->json($assets);
     }
@@ -176,31 +201,22 @@ class StockTransferController extends Controller
                 ->orderBy('serial_no')
                 ->get();
 
-            // Pull the "Stock In" inventory transaction location for each unit
-            // (this is the SOH source of truth, and survives legacy data where
-            // stock_ins.destination_location was stored differently).
-            $stockInIds = $stockInRecords->pluck('id')->all();
-            $initialLocations = InventoryTransaction::query()
-                ->where('reference_type', StockIn::class)
-                ->whereIn('reference_id', $stockInIds)
-                ->where('transaction_type', 'Stock In')
-                ->pluck('location', 'reference_id');
-
             $availableUnits = $stockInRecords
-                ->filter(function ($unit) use ($locationVariants, $excludeTransferIds, $initialLocations) {
+                ->filter(function ($unit) use ($locationVariants, $excludeTransferIds) {
                     // Current location precedence:
-                    //   1. Latest "Received" transfer destination (excluding the
-                    //      transfer currently being edited)
-                    //   2. The "Stock In" InventoryTransaction location
-                    //   3. Original stock_ins.destination_location (last-resort fallback)
+                    // 1. Latest "Received" transfer destination
                     $lastReceived = $unit->sourceStockTransfers
                         ->filter(fn ($t) => $t->status === 'Received'
                             && ! in_array($t->id, $excludeTransferIds))
                         ->first();
-                    $currentLocation = $lastReceived
-                        ? $lastReceived->destination_location
-                        : ($initialLocations->get($unit->id) ?? $unit->destination_location);
-                    return in_array($currentLocation, $locationVariants, true);
+
+                    if ($lastReceived) {
+                        return in_array($lastReceived->destination_location, $locationVariants, true);
+                    }
+
+                    // 2. If never moved, its location is the StockIn destination field
+                    // (This matches StockIn/Index.vue and avoids phantom ledger entries)
+                    return in_array($unit->destination_location, $locationVariants, true);
                 })
                 ->map(function ($unit) use ($excludeTransferIds) {
                     // Reservation = any active "For Posting"/"Posted" transfer,

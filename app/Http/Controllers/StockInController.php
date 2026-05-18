@@ -48,7 +48,12 @@ class StockInController extends Controller
                 $query->where(function ($q) use ($search) {
                     $q->where('dr_no', 'like', "%{$search}%")
                       ->orWhere('vendor', 'like', "%{$search}%")
-                      ->orWhere('received_by', 'like', "%{$search}%");
+                      ->orWhere('received_by', 'like', "%{$search}%")
+                      ->orWhere('serial_no', 'like', "%{$search}%")
+                      ->orWhereHas('asset', function ($sq) use ($search) {
+                          $sq->where('item_code', 'like', "%{$search}%")
+                             ->orWhere('description', 'like', "%{$search}%");
+                      });
                 });
             }
             if (! empty($statuses)) {
