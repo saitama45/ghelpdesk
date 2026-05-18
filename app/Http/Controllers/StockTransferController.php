@@ -130,20 +130,40 @@ class StockTransferController extends Controller
             return response()->json([]);
         }
 
-        $sohData = InventoryTransaction::whereIn('inventory_transactions.location', $locationVariants)
+        // Part 1: units received here — use StockIn directly (bypasses IT.location backfill errors)
+        $stockInQty = StockIn::whereIn('destination_location', $locationVariants)
+            ->where('status', 'Posted')
+            ->whereIn('asset_id', $validAssetIds)
+            ->groupBy('asset_id')
+            ->selectRaw('asset_id, SUM(quantity) as total')
+            ->pluck('total', 'asset_id');
+
+        // Part 2: net transfer movements (StockTransfer Transfer Out, StockReceiving Transfer In)
+        $transferQty = InventoryTransaction::whereIn('inventory_transactions.location', $locationVariants)
             ->whereIn('inventory_transactions.asset_id', $validAssetIds)
-            ->leftJoin('stock_ins as si_soh', function ($join) {
-                $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
-                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
-            })
-            ->where(function ($q) {
-                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                  ->orWhere('si_soh.status', 'Posted');
-            })
+            ->where('inventory_transactions.reference_type', '!=', StockIn::class)
             ->groupBy('inventory_transactions.asset_id')
-            ->havingRaw('SUM(inventory_transactions.quantity) > 0')
-            ->selectRaw('inventory_transactions.asset_id, SUM(inventory_transactions.quantity) as soh')
-            ->pluck('soh', 'asset_id');
+            ->selectRaw('inventory_transactions.asset_id, SUM(inventory_transactions.quantity) as total')
+            ->pluck('total', 'asset_id');
+
+        // Part 3: internal-StockIn Transfer Out deductions (origin=store, not SUPPLIER)
+        $internalOutQty = InventoryTransaction::from('inventory_transactions as it')
+            ->whereIn('it.location', $locationVariants)
+            ->whereIn('it.asset_id', $validAssetIds)
+            ->where('it.reference_type', '=', StockIn::class)
+            ->where('it.transaction_type', 'Transfer Out')
+            ->join('stock_ins as si_out', 'it.reference_id', '=', 'si_out.id')
+            ->where('si_out.status', 'Posted')
+            ->groupBy('it.asset_id')
+            ->selectRaw('it.asset_id, SUM(it.quantity) as total')
+            ->pluck('total', 'asset_id');
+
+        $sohData = $validAssetIds->mapWithKeys(function ($assetId) use ($stockInQty, $transferQty, $internalOutQty) {
+            $soh = ($stockInQty->get($assetId) ?? 0)
+                 + ($transferQty->get($assetId) ?? 0)
+                 + ($internalOutQty->get($assetId) ?? 0);
+            return [$assetId => $soh];
+        })->filter(fn ($soh) => $soh > 0);
 
         $pendingData = StockTransfer::whereIn('origin_location', $locationVariants)
             ->where('status', 'For Posting')
@@ -180,17 +200,22 @@ class StockTransferController extends Controller
         $originLocation = $this->normalizeStoreCode($validated['origin_location']);
         $locationVariants = $this->locationVariants($originLocation);
 
-        $soh = (int) InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
-            ->whereIn('inventory_transactions.location', $locationVariants)
-            ->leftJoin('stock_ins as si_soh', function ($join) {
-                $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
-                     ->where('inventory_transactions.reference_type', '=', StockIn::class);
-            })
-            ->where(function ($q) {
-                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                  ->orWhere('si_soh.status', 'Posted');
-            })
-            ->sum('inventory_transactions.quantity');
+        $soh = (int) StockIn::whereIn('destination_location', $locationVariants)
+                ->where('status', 'Posted')
+                ->where('asset_id', $asset->id)
+                ->sum('quantity')
+            + (int) InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
+                ->whereIn('inventory_transactions.location', $locationVariants)
+                ->where('inventory_transactions.reference_type', '!=', StockIn::class)
+                ->sum('inventory_transactions.quantity')
+            + (int) InventoryTransaction::from('inventory_transactions as it')
+                ->where('it.asset_id', $asset->id)
+                ->whereIn('it.location', $locationVariants)
+                ->where('it.reference_type', '=', StockIn::class)
+                ->where('it.transaction_type', 'Transfer Out')
+                ->join('stock_ins as si_out', 'it.reference_id', '=', 'si_out.id')
+                ->where('si_out.status', 'Posted')
+                ->sum('it.quantity');
 
         $excludeTransferIds = array_filter(
             (array) $request->input('exclude_transfer_ids', []),
