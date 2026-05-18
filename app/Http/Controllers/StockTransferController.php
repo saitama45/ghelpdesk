@@ -119,17 +119,26 @@ class StockTransferController extends Controller
 
         $locationVariants = $this->locationVariants($location);
 
+        // Only show assets formally received here via a Posted StockIn — matches StockIn/Index.vue
+        $validAssetIds = StockIn::whereIn('destination_location', $locationVariants)
+            ->where('status', 'Posted')
+            ->pluck('asset_id')
+            ->unique()
+            ->values();
+
+        if ($validAssetIds->isEmpty()) {
+            return response()->json([]);
+        }
+
         $sohData = InventoryTransaction::whereIn('inventory_transactions.location', $locationVariants)
+            ->whereIn('inventory_transactions.asset_id', $validAssetIds)
             ->leftJoin('stock_ins as si_soh', function ($join) {
                 $join->on('inventory_transactions.reference_id', '=', 'si_soh.id')
                      ->where('inventory_transactions.reference_type', '=', StockIn::class);
             })
             ->where(function ($q) {
                 $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                  ->orWhere(function ($sq) {
-                      $sq->where('si_soh.status', 'Posted')
-                         ->whereColumn('inventory_transactions.location', 'si_soh.destination_location');
-                  });
+                  ->orWhere('si_soh.status', 'Posted');
             })
             ->groupBy('inventory_transactions.asset_id')
             ->havingRaw('SUM(inventory_transactions.quantity) > 0')
