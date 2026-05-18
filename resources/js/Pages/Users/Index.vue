@@ -6,6 +6,8 @@ import DataTable from '@/Components/DataTable.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
+import RoleFormModal from '@/Components/Roles/RoleFormModal.vue';
+import { roleLandingPageOptions } from '@/Components/Roles/roleLandingPageOptions';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -39,6 +41,7 @@ const { hasPermission } = usePermission();
 
 const allStoreIds = computed(() => props.stores.map(s => s.id));
 const departmentOptions = computed(() => props.departmentTree || []);
+const landingPageOptions = roleLandingPageOptions;
 
 const flattenNodes = (nodes, level = 0) => {
     let flat = [];
@@ -323,8 +326,8 @@ const groupedRolePermissions = computed(() => {
     rolePermissionGroups.value.forEach(group => {
         const groupCategories = [];
         group.categories.forEach(catName => {
-            const normalizedCatName = catName.toLowerCase().replace(/[\s_]/g, '');
-            const actualKey = availableCategories.find(k => k.toLowerCase().replace(/[\s_]/g, '') === normalizedCatName);
+            const normalizedCatName = catName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const actualKey = availableCategories.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedCatName);
             if (actualKey && !mappedKeys.has(actualKey)) {
                 const perms = props.permissions[actualKey];
                 if (perms) {
@@ -930,8 +933,21 @@ const sortRolePermissions = (permissions) => {
                 </div>
             </div>
         </div>
-        <!-- Role Edit Modal -->
-        <div v-if="showRoleModal" class="fixed inset-0 z-50 overflow-y-auto">
+        <RoleFormModal
+            :show="showRoleModal"
+            :title="`Edit Role: ${editingRole?.name || ''}`"
+            submit-label="Update Role"
+            :form="roleForm"
+            :permissions="permissions"
+            :companies="companies"
+            :dynamic-forms="dynamicForms"
+            :landing-page-options="landingPageOptions"
+            @close="closeRoleModal"
+            @submit="submitRoleForm"
+        />
+
+        <!-- Legacy inline role modal kept inactive; RoleFormModal is the shared source. -->
+        <div v-if="false && showRoleModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeRoleModal"></div>
                 <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all">
