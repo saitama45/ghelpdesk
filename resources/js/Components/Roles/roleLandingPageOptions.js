@@ -33,6 +33,7 @@ export const roleLandingPageOptions = [
             { label: 'Presence', value: 'presence.index' },
             { label: 'KB Articles', value: 'kb-articles.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
+            { label: 'Service Vehicle Trips', value: 'service-vehicle-trips.index' },
         ]
     },
     {

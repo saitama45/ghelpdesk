@@ -56,6 +56,7 @@ class RoleService
             'stock in',
             'stock transfer',
             'receiving stock',
+            'service vehicle trips',
             'attendance',
             'npc status',
             'schedules',
@@ -102,6 +103,8 @@ class RoleService
                 $categoryDisplay = 'Stock Transfer';
             } elseif ($category === 'stock_receivings') {
                 $categoryDisplay = 'Receiving Stock';
+            } elseif ($category === 'service_vehicle_trips') {
+                $categoryDisplay = 'Service Vehicle Trips';
             } elseif ($category === 'payments') {
                 $categoryDisplay = 'Payments & SOA';
             } else {

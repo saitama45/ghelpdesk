@@ -160,7 +160,7 @@ class EmailTicketService
     {
         $messageId = $this->normalizeMessageId($message->getMessageId());
         $messageIdCandidates = $this->messageIdentifierVariants($message->getMessageId());
-        $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
+        $senderEmail = $this->normalizeEmailAddress($message->getFrom()[0]->mail ?? '');
         Log::debug("EmailTicketService: Processing message {$messageId} from {$senderEmail}");
 
         // 1. Deduplication
@@ -170,7 +170,7 @@ class EmailTicketService
             return false;
         }
 
-        $supportEmail = strtolower(Setting::get('imap_username', ''));
+        $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', ''));
 
         // 2. Ignore Bounce Messages
         $bannedSenders = ['mailer-daemon', 'postmaster', 'no-reply', 'noreply'];
@@ -191,7 +191,7 @@ class EmailTicketService
         foreach ([$to, $cc, $bcc] as $recipients) {
             if ($recipients) {
                 foreach ($recipients as $recipient) {
-                    if (isset($recipient->mail) && strtolower($recipient->mail) === $supportEmail) {
+                    if (isset($recipient->mail) && $this->normalizeEmailAddress($recipient->mail) === $supportEmail) {
                         $isDirectlySent = true;
                         break 2;
                     }
@@ -205,7 +205,7 @@ class EmailTicketService
             // Fallback
             if ($supportEmail) {
                 $headers = $message->getHeaders();
-                if (str_contains(strtolower((string)$headers->get('to')), $supportEmail) || 
+                if (str_contains(strtolower((string)$headers->get('to')), $supportEmail) ||
                     str_contains(strtolower((string)$headers->get('cc')), $supportEmail)) {
                     $isDirectlySent = true;
                 }
@@ -299,7 +299,7 @@ class EmailTicketService
     protected function addEmailAsComment(Ticket $ticket, $message, $user, ?string $cleanBody = null, ?string $emailBodyHash = null, ?string $messageId = null)
     {
         $messageId ??= $this->normalizeMessageId($message->getMessageId());
-        $senderEmail = strtolower($message->getFrom()[0]->mail ?? '');
+        $senderEmail = $this->normalizeEmailAddress($message->getFrom()[0]->mail ?? '');
         $senderName = $this->decodeMimeHeader($message->getFrom()[0]->full ?? $senderEmail);
 
         // LOCK-OUT LOGIC: If ticket is closed, do not allow new comments via email.
@@ -616,17 +616,37 @@ class EmailTicketService
 
     protected function extractCleanMessageBody($message): string
     {
-        $body = $message->getTextBody();
+        $textBody = $this->normalizeFetchedEmailBody((string) $message->getTextBody());
+        $htmlBody = $this->normalizeFetchedEmailBody(
+            $this->htmlEmailBodyToText((string) $message->getHTMLBody())
+        );
 
-        // If text body is empty, extract from HTML body carefully.
-        if (!$body) {
-            $html = (string) $message->getHTMLBody();
-            $html = preg_replace('/<(br|p|div|li|tr|h1|h2|h3|h4|h5|h6)[^>]*>/i', "\n$0", $html);
-            $body = strip_tags($html ?? '');
-            $body = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if ($textBody === '') {
+            return $htmlBody;
         }
 
-        return $this->normalizeFetchedEmailBody((string) $body);
+        if ($htmlBody === '') {
+            return $textBody;
+        }
+
+        return mb_strlen($htmlBody, 'UTF-8') > mb_strlen($textBody, 'UTF-8')
+            ? $htmlBody
+            : $textBody;
+    }
+
+    protected function htmlEmailBodyToText(string $html): string
+    {
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $html = preg_replace('/<(script|style)\b[^>]*>.*?<\/\1>/is', '', $html) ?? $html;
+        $html = preg_replace('/<br\s*\/?>/i', "\n", $html) ?? $html;
+        $html = preg_replace('/<\/(p|div|li|tr|table|blockquote|h1|h2|h3|h4|h5|h6)>/i', "\n", $html) ?? $html;
+        $html = preg_replace('/<(p|div|li|tr|table|blockquote|h1|h2|h3|h4|h5|h6)\b[^>]*>/i', "\n", $html) ?? $html;
+        $html = preg_replace('/<\/(td|th)>/i', ' ', $html) ?? $html;
+
+        return html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     protected function normalizeFetchedEmailBody(string $body): string
@@ -658,6 +678,11 @@ class EmailTicketService
         $body = preg_replace('/\s+/u', ' ', trim($body)) ?? '';
 
         return mb_strtolower($body, 'UTF-8');
+    }
+
+    protected function normalizeEmailAddress($email): string
+    {
+        return strtolower(trim((string) $email));
     }
 
     protected function isMeaningfulEmailBody(string $normalizedBody): bool

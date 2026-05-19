@@ -209,6 +209,16 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/sla-performance/tickets', [\App\Http\Controllers\SlaReportController::class, 'getTickets'])->name('reports.sla-performance.tickets');
     Route::get('reports/assignee-performance', [\App\Http\Controllers\AssigneePerformanceReportController::class, 'index'])->name('reports.assignee-performance');
     Route::get('reports/assignee-performance/pdf', [\App\Http\Controllers\AssigneePerformanceReportController::class, 'pdf'])->name('reports.assignee-performance.pdf');
+    // Service Vehicle Trips
+    Route::get('service-vehicle-trips/conflict-check', [\App\Http\Controllers\ServiceVehicleTripController::class, 'detectConflict'])->name('service-vehicle-trips.conflict-check');
+    Route::patch('service-vehicle-trips/{serviceVehicleTrip}/approve',  [\App\Http\Controllers\ServiceVehicleTripController::class, 'approve' ])->name('service-vehicle-trips.approve');
+    Route::patch('service-vehicle-trips/{serviceVehicleTrip}/reject',   [\App\Http\Controllers\ServiceVehicleTripController::class, 'reject'  ])->name('service-vehicle-trips.reject');
+    Route::patch('service-vehicle-trips/{serviceVehicleTrip}/start',    [\App\Http\Controllers\ServiceVehicleTripController::class, 'start'   ])->name('service-vehicle-trips.start');
+    Route::patch('service-vehicle-trips/{serviceVehicleTrip}/complete', [\App\Http\Controllers\ServiceVehicleTripController::class, 'complete'])->name('service-vehicle-trips.complete');
+    Route::patch('service-vehicle-trips/{serviceVehicleTrip}/cancel',   [\App\Http\Controllers\ServiceVehicleTripController::class, 'cancel'  ])->name('service-vehicle-trips.cancel');
+    Route::resource('service-vehicle-trips', \App\Http\Controllers\ServiceVehicleTripController::class)->except(['create', 'edit']);
+    Route::resource('service-vehicles', \App\Http\Controllers\ServiceVehicleController::class)->except(['create', 'edit', 'show']);
+
     Route::get('reports/inventory', [\App\Http\Controllers\InventoryReportController::class, 'index'])->name('reports.inventory');
     Route::get('reports/inventory/movement', [\App\Http\Controllers\InventoryReportController::class, 'movement'])->name('reports.inventory.movement');
     Route::get('reports/inventory/{asset}/history', [\App\Http\Controllers\InventoryReportController::class, 'history'])->name('reports.inventory.history');

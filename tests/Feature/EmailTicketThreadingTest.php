@@ -222,6 +222,79 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertStringContainsString('Original message details should remain visible', $ticket->description);
     }
 
+    public function test_email_ccd_to_support_address_is_processed(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<cc-support@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Branch internet concern',
+            body: 'The branch internet connection keeps disconnecting during lunch operations.',
+            toRecipients: ['manager@example.test'],
+            ccRecipients: [' SUPPORT@example.test '],
+        ));
+
+        $ticket = Ticket::firstOrFail();
+
+        $this->assertSame('Branch internet concern', $ticket->title);
+        $this->assertTrue($ticket->is(Ticket::first()));
+    }
+
+    public function test_html_reply_history_is_preserved_when_plain_text_is_shorter(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<root-html-reply@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Cashier workstation issue',
+            body: 'The cashier workstation cannot open the POS application after restart.',
+        ));
+
+        $htmlBody = '<div>Please check this also.</div>'
+            . '<blockquote>'
+            . '<div>On Tue, May 12, 2026 at 10:15 AM Support &lt;support@example.test&gt; wrote:</div>'
+            . '<div>We already asked for the workstation number.</div>'
+            . '<div>Please include the error screenshot.</div>'
+            . '</blockquote>';
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<html-reply-history@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'RE: Cashier workstation issue',
+            body: 'Please check this also.',
+            htmlBody: $htmlBody,
+        ));
+
+        $comment = TicketComment::latest('created_at')->firstOrFail();
+
+        $this->assertStringContainsString('Please check this also.', $comment->comment_text);
+        $this->assertStringContainsString('On Tue, May 12, 2026 at 10:15 AM Support', $comment->comment_text);
+        $this->assertStringContainsString('We already asked for the workstation number.', $comment->comment_text);
+        $this->assertStringContainsString('Please include the error screenshot.', $comment->comment_text);
+    }
+
+    public function test_html_forwarded_history_is_preserved_when_plain_text_is_shorter(): void
+    {
+        $htmlBody = '<div>Kindly create a ticket for the concern below.</div>'
+            . '<div>---------- Forwarded message ---------</div>'
+            . '<div>From: Store Manager &lt;manager@example.test&gt;</div>'
+            . '<div>Subject: POS concern</div>'
+            . '<blockquote><div>Original forwarded details should remain visible.</div></blockquote>';
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<html-forwarded@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'FW: POS concern',
+            body: 'Kindly create a ticket for the concern below.',
+            htmlBody: $htmlBody,
+        ));
+
+        $ticket = Ticket::firstOrFail();
+
+        $this->assertStringContainsString('Kindly create a ticket for the concern below.', $ticket->description);
+        $this->assertStringContainsString('Forwarded message', $ticket->description);
+        $this->assertStringContainsString('Store Manager', $ticket->description);
+        $this->assertStringContainsString('Original forwarded details should remain visible.', $ticket->description);
+    }
+
     public function test_nested_re_and_fw_subject_matches_existing_ticket_for_same_sender(): void
     {
         $this->service->processFake(new FakeEmailMessage(
@@ -267,6 +340,10 @@ class FakeEmailMessage
         private array $inReplyTo = [],
         private string $senderName = 'Customer',
         private string $supportEmail = 'support@example.test',
+        private string $htmlBody = '',
+        private array $toRecipients = [],
+        private array $ccRecipients = [],
+        private array $bccRecipients = [],
     ) {}
 
     public function getMessageId(): string
@@ -299,22 +376,27 @@ class FakeEmailMessage
 
     public function getTo(): array
     {
-        return [(object) ['mail' => $this->supportEmail]];
+        $recipients = $this->toRecipients ?: [$this->supportEmail];
+
+        return array_map(fn ($email) => (object) ['mail' => $email], $recipients);
     }
 
     public function getCc(): array
     {
-        return [];
+        return array_map(fn ($email) => (object) ['mail' => $email], $this->ccRecipients);
     }
 
     public function getBcc(): array
     {
-        return [];
+        return array_map(fn ($email) => (object) ['mail' => $email], $this->bccRecipients);
     }
 
     public function getHeaders(): FakeEmailHeaders
     {
-        return new FakeEmailHeaders($this->supportEmail);
+        return new FakeEmailHeaders(
+            $this->toRecipients ?: [$this->supportEmail],
+            $this->ccRecipients,
+        );
     }
 
     public function getTextBody(): string
@@ -324,7 +406,7 @@ class FakeEmailMessage
 
     public function getHTMLBody(): string
     {
-        return '';
+        return $this->htmlBody;
     }
 
     public function getAttachments(): Collection
@@ -342,10 +424,14 @@ class FakeEmailMessage
 
 class FakeEmailHeaders
 {
-    public function __construct(private string $supportEmail) {}
+    public function __construct(private array $toRecipients, private array $ccRecipients) {}
 
     public function get(string $key): string
     {
-        return in_array(strtolower($key), ['to', 'cc'], true) ? $this->supportEmail : '';
+        return match (strtolower($key)) {
+            'to' => implode(', ', $this->toRecipients),
+            'cc' => implode(', ', $this->ccRecipients),
+            default => '',
+        };
     }
 }

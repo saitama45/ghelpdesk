@@ -14,12 +14,13 @@ const props = defineProps({
     posRequests: Object,
     companies: Array,
     filters: Object,
+    isApprover: Boolean,
 })
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { destroy: performDelete } = useErrorHandler()
-const status = ref(props.filters?.status ?? '')
+const status = ref(props.filters?.status ?? (props.isApprover ? 'for_my_approval' : ''))
 const entityDeptId = ref(props.filters?.company_id ? String(props.filters.company_id) : '')
 const pagination = usePagination(props.posRequests, 'pos-requests.index', () => ({
     status: status.value,
@@ -152,6 +153,7 @@ const getStageDisplay = (request) => {
 
                             <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
                                 <option value="">All Statuses</option>
+                                <option v-if="props.isApprover" value="for_my_approval" class="font-bold text-indigo-700">For My Approval</option>
                                 <option value="Open">Open</option>
                                 <option value="Approved">Approved</option>
                                 <option value="Rejected">Rejected</option>

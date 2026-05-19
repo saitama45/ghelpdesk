@@ -142,6 +142,13 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_receivings.post' => 'Post Receiving Stock',
             'stock_receivings.delete' => 'Delete Receiving Stock',
 
+            // Service Vehicle Trips
+            'service_vehicle_trips.view'    => 'View Service Vehicle Trips',
+            'service_vehicle_trips.create'  => 'Book Service Vehicle Trip',
+            'service_vehicle_trips.edit'    => 'Edit Service Vehicle Trip',
+            'service_vehicle_trips.delete'  => 'Delete Service Vehicle Trip',
+            'service_vehicle_trips.approve' => 'Approve / Reject Service Vehicle Trip',
+
             // Administrative - Attendance
             'attendance.view' => 'View DTR',
             'attendance.logs' => 'View attendance logs',
@@ -269,6 +276,11 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_receivings.edit',
             'stock_receivings.post',
             'stock_receivings.delete',
+            'service_vehicle_trips.view',
+            'service_vehicle_trips.create',
+            'service_vehicle_trips.edit',
+            'service_vehicle_trips.delete',
+            'service_vehicle_trips.approve',
             'stores.view',
             'schedules.view',
             'canned_messages.view',

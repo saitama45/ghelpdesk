@@ -1472,7 +1472,7 @@ watch(activeDashboardFilter, () => {
                                     <div class="break-words text-sm font-bold leading-5 text-black">
                                         {{ ticket.title }}
                                     </div>
-                                    <p class="max-h-10 overflow-hidden break-words text-xs leading-5 text-black">
+                                    <p class="whitespace-pre-wrap break-words text-xs leading-5 text-black">
                                         {{ ticket.description || 'No description provided.' }}
                                     </p>
                                 </div>
