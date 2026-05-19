@@ -36,7 +36,7 @@ class SapRequestController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = SapRequest::with(['company', 'requestType', 'user', 'ticket', 'items']);
+        $query = SapRequest::query()->with(['company', 'requestType', 'user', 'ticket', 'items']);
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -47,25 +47,106 @@ class SapRequestController extends Controller implements HasMiddleware
             });
         }
 
-        if ($request->filled('status')) {
-            $status = $request->status;
-            $ticketStatus = strtolower(str_replace(' ', '_', $status));
-            $query->where(function ($q) use ($status, $ticketStatus) {
-                $q->where('status', $status)
-                  ->orWhereHas('ticket', function ($tq) use ($ticketStatus) {
-                      $tq->where('status', $ticketStatus);
-                  });
-            });
+        // Determine if the current user is an approver in any RequestType
+        $userId = auth()->id();
+        $isApprover = RequestType::where('is_active', true)
+            ->whereJsonContains('request_for', 'SAP')
+            ->where(function ($q) use ($userId) {
+                // Base approver matrix
+                $q->whereRaw("approver_matrix IS NOT NULL AND EXISTS (
+                      SELECT 1 FROM OPENJSON(approver_matrix) 
+                      WITH (user_ids nvarchar(max) '$.user_ids' AS JSON) as m
+                      CROSS APPLY OPENJSON(m.user_ids) as ids WHERE ids.[value] = ?
+                  )", [$userId])
+                  // Custom approval matrix in form_schema options
+                  ->orWhereRaw("form_schema IS NOT NULL AND EXISTS (
+                      SELECT 1 
+                      FROM OPENJSON(form_schema, '$.fields') as fields
+                      CROSS APPLY OPENJSON(fields.[value], '$.options') as options
+                      CROSS APPLY OPENJSON(options.[value], '$.approval_matrix') 
+                      WITH (user_ids nvarchar(max) '$.user_ids' AS JSON) as matrix
+                      CROSS APPLY OPENJSON(matrix.user_ids) as ids
+                      WHERE ids.[value] = ?
+                  )", [$userId]);
+            })->exists();
+
+        // Handle Status Filter
+        $status = $request->get('status');
+        
+        // Default to for_my_approval if user is an approver and no status filter key is provided in URL
+        if (!$request->has('status') && $isApprover) {
+            $status = 'for_my_approval';
         }
 
-        $sapRequests = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
+        if ($status) {
+            if ($status === 'for_my_approval') {
+                $query->whereNotIn('sap_requests.status', ['Approved', 'Rejected', 'Cancelled'])
+                      ->whereNull('sap_requests.ticket_id')
+                      ->where('sap_requests.current_approval_level', '>', 0)
+                      ->where(function ($q) use ($userId) {
+                          // Check Base Matrix
+                          $q->whereHas('requestType', function ($sub) use ($userId) {
+                              $sub->whereRaw("EXISTS (
+                                  SELECT 1 
+                                  FROM OPENJSON(request_types.approver_matrix) 
+                                  WITH (
+                                      level int '$.level',
+                                      user_ids nvarchar(max) '$.user_ids' AS JSON
+                                  ) as matrix
+                                  WHERE matrix.level = sap_requests.current_approval_level
+                                  AND EXISTS (
+                                      SELECT 1 FROM OPENJSON(matrix.user_ids) WHERE CAST([value] AS NVARCHAR(MAX)) = CAST(? AS NVARCHAR(MAX))
+                                  )
+                              )", [$userId]);
+                          })
+                          // OR Check Custom Matrix from form_schema + form_data
+                          ->orWhereHas('requestType', function ($sub) use ($userId) {
+                              $sub->whereRaw("EXISTS (
+                                  SELECT 1 
+                                  FROM OPENJSON(request_types.form_schema, '$.fields') as fields
+                                  CROSS APPLY OPENJSON(fields.[value], '$.options') as options
+                                  CROSS APPLY OPENJSON(options.[value], '$.approval_matrix') 
+                                  WITH (
+                                      level int '$.level',
+                                      user_ids nvarchar(max) '$.user_ids' AS JSON
+                                  ) as matrix
+                                  CROSS APPLY OPENJSON(matrix.user_ids) as ids
+                                  WHERE matrix.level = sap_requests.current_approval_level
+                                    AND ids.[value] = ?
+                                    -- Check if this option value is selected in SapRequest form_data
+                                    AND EXISTS (
+                                        SELECT 1 FROM OPENJSON(sap_requests.form_data, '$.' + JSON_VALUE(fields.[value], '$.key')) as selected
+                                        WHERE CAST(selected.[value] AS NVARCHAR(MAX)) = CAST(JSON_VALUE(options.[value], '$.value') AS NVARCHAR(MAX))
+                                    )
+                              )", [$userId]);
+                          });
+                      })
+                      ->whereDoesntHave('approvals', function ($sub) use ($userId) {
+                          $sub->where('user_id', $userId)
+                              ->whereColumn('level', 'sap_requests.current_approval_level');
+                      });
+            } else {
+                $ticketStatus = strtolower(str_replace(' ', '_', $status));
+                $query->where(function ($q) use ($status, $ticketStatus) {
+                    $q->where('status', $status)
+                      ->orWhereHas('ticket', function ($tq) use ($ticketStatus) {
+                          $tq->where('status', $ticketStatus);
+                      });
+                });
+            }
+        }
+
+        $sapRequests = $query->orderBy('sap_requests.created_at', 'desc')
+                            ->paginate($request->get('per_page', 10))
+                            ->withQueryString();
 
         return Inertia::render('SapRequests/Index', [
             'sapRequests' => $sapRequests,
-            'filters' => $request->only(['search', 'status', 'per_page']),
+            'filters' => array_merge($request->only(['search', 'status', 'per_page']), ['status' => $status]),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'SAP')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
+            'isApprover' => $isApprover,
         ]);
     }
 

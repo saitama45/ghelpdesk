@@ -210,6 +210,7 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/assignee-performance', [\App\Http\Controllers\AssigneePerformanceReportController::class, 'index'])->name('reports.assignee-performance');
     Route::get('reports/assignee-performance/pdf', [\App\Http\Controllers\AssigneePerformanceReportController::class, 'pdf'])->name('reports.assignee-performance.pdf');
     Route::get('reports/inventory', [\App\Http\Controllers\InventoryReportController::class, 'index'])->name('reports.inventory');
+    Route::get('reports/inventory/movement', [\App\Http\Controllers\InventoryReportController::class, 'movement'])->name('reports.inventory.movement');
     Route::get('reports/inventory/{asset}/history', [\App\Http\Controllers\InventoryReportController::class, 'history'])->name('reports.inventory.history');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

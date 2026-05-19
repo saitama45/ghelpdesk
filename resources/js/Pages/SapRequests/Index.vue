@@ -10,12 +10,13 @@ const props = defineProps({
     sapRequests: Object,
     filters: Object,
     requestTypes: Array,
+    isApprover: Boolean,
 })
 
 const { hasPermission } = usePermission()
 const { confirm } = useConfirm()
 const search = ref(props.filters?.search ?? '')
-const status = ref(props.filters?.status ?? '')
+const status = ref(props.filters?.status ?? (props.isApprover ? 'for_my_approval' : ''))
 const showCreateSection = ref(false)
 
 const showCopyModal = ref(false)
@@ -163,6 +164,7 @@ function getStageDisplay(request) {
                     <select v-model="status" @change="applyFilter"
                         class="border-2 border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
                         <option value="">All Statuses</option>
+                        <option v-if="isApprover" value="for_my_approval" class="font-bold text-teal-700">For My Approval</option>
                         <option value="Open">Open</option>
                         <option value="Approved">Approved</option>
                         <option value="Rejected">Rejected</option>

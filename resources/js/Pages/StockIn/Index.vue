@@ -653,6 +653,8 @@
                                                                     <select v-model="entry.asset_type" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
                                                                         <option value="New">New</option>
                                                                         <option value="Used">Used</option>
+                                                                        <option value="For Disposal">For Disposal</option>
+                                                                        <option value="For Repair">For Repair</option>
                                                                     </select>
                                                                 </div>
                                                                 <div>
@@ -887,6 +889,8 @@
                                                 <select v-model="entry.asset_type" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
                                                     <option value="New">New</option>
                                                     <option value="Used">Used</option>
+                                                    <option value="For Disposal">For Disposal</option>
+                                                    <option value="For Repair">For Repair</option>
                                                 </select>
                                             </div>
                                             <div>

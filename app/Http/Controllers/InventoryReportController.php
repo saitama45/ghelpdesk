@@ -8,6 +8,7 @@ use App\Models\InventoryTransaction;
 use App\Models\StockIn;
 use App\Models\StockReceiving;
 use App\Models\StockTransfer;
+use App\Models\Store;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,7 @@ class InventoryReportController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:reports.inventory', only: ['index']),
+            new Middleware('can:reports.inventory', only: ['index', 'movement']),
         ];
     }
 
@@ -139,6 +140,108 @@ class InventoryReportController extends Controller implements HasMiddleware
             'asset' => $asset,
             'location' => $location,
             'history' => $history
+        ]);
+    }
+
+    public function movement(Request $request)
+    {
+        $warehouseLocations = Store::where('class', 'Office')
+            ->whereNotIn('code', self::EXCLUDED_REPORT_LOCATIONS)
+            ->pluck('code');
+
+        $stagingLocations = Store::where('class', 'Regular')
+            ->whereIn('code', ['CFE I', 'CFE II'])
+            ->pluck('code');
+
+        $userStoreLocations = Store::whereNotNull('code')
+            ->whereNotIn('code', self::EXCLUDED_REPORT_LOCATIONS)
+            ->where(function ($q) {
+                $q->where('class', '!=', 'Office')
+                  ->orWhereNull('class');
+            })
+            ->whereNotIn('code', ['CFE I', 'CFE II'])
+            ->pluck('code');
+
+        $countWithBreakdown = function ($baseQuery, string $locationColumn) {
+            $rows = (clone $baseQuery)
+                ->selectRaw("{$locationColumn} as loc, SUM(quantity) as qty")
+                ->groupBy($locationColumn)
+                ->get();
+
+            return [
+                'total' => (int) $rows->sum('qty'),
+                'by_location' => $rows->mapWithKeys(fn ($r) => [$r->loc ?? 'Unknown' => (int) $r->qty])->all(),
+            ];
+        };
+
+        $stages = [
+            // Stage 1: Item Receive — StockIn For Posting at warehouse
+            'item_receive' => $countWithBreakdown(
+                StockIn::where('status', 'For Posting')
+                    ->whereIn('destination_location', $warehouseLocations),
+                'destination_location'
+            ),
+
+            // Stage 2: Basic Setup — StockTransfer For Posting, WH origin & WH destination
+            'basic_setup' => $countWithBreakdown(
+                StockTransfer::where('status', 'For Posting')
+                    ->whereIn('origin_location', $warehouseLocations)
+                    ->whereIn('destination_location', $warehouseLocations),
+                'destination_location'
+            ),
+
+            // Stage 3: Item Allocation (Posted at WH, SD)
+            'item_allocation_sd_posted' => $countWithBreakdown(
+                StockTransfer::where('status', 'Posted')
+                    ->whereIn('destination_location', $warehouseLocations),
+                'destination_location'
+            ),
+
+            // Stage 4: Complete Setup — StockTransfer Posted (per user: regardless of is_allocation or destination)
+            'complete_setup' => $countWithBreakdown(
+                StockTransfer::where('status', 'Posted'),
+                'destination_location'
+            ),
+
+            // Stage 5: Item Allocation (For Posting, SO/CT staging)
+            'item_allocation_so_for_posting' => $countWithBreakdown(
+                StockTransfer::where('status', 'For Posting')
+                    ->whereIn('destination_location', $stagingLocations),
+                'destination_location'
+            ),
+
+            // Stage 6: Customized Setup — StockTransfer For Posting, origin at SO/CT staging
+            'customized_setup' => $countWithBreakdown(
+                StockTransfer::where('status', 'For Posting')
+                    ->whereIn('origin_location', $stagingLocations),
+                'origin_location'
+            ),
+
+            // Stage 7: Item Allocation (Received at User Store)
+            'item_allocation_user_store' => $countWithBreakdown(
+                StockTransfer::where('status', 'Received')
+                    ->whereIn('destination_location', $userStoreLocations),
+                'destination_location'
+            ),
+
+            // Stage 8: Item Repair — StockIn with asset_type='For Repair'
+            'item_repair' => $countWithBreakdown(
+                StockIn::where('asset_type', 'For Repair')->where('status', 'Posted'),
+                'destination_location'
+            ),
+
+            // Stage 9: Item Retire — StockIn with asset_type='For Disposal'
+            'item_retire' => $countWithBreakdown(
+                StockIn::where('asset_type', 'For Disposal')->where('status', 'Posted'),
+                'destination_location'
+            ),
+        ];
+
+        return response()->json([
+            'stages' => $stages,
+            'warehouse_locations' => $warehouseLocations->values(),
+            'staging_locations' => $stagingLocations->values(),
+            'user_store_locations_count' => $userStoreLocations->count(),
         ]);
     }
 

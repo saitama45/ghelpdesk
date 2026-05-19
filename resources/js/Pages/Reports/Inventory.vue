@@ -2,7 +2,120 @@
     <AppLayout title="Inventory Report">
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-                
+
+                <!-- Tab switcher -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-1 inline-flex">
+                    <button
+                        type="button"
+                        @click="setActiveTab('soh')"
+                        class="px-4 py-2 text-sm font-bold rounded-lg transition-colors"
+                        :class="activeTab === 'soh' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'"
+                    >Stock on Hand</button>
+                    <button
+                        type="button"
+                        @click="setActiveTab('movement')"
+                        class="px-4 py-2 text-sm font-bold rounded-lg transition-colors"
+                        :class="activeTab === 'movement' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50'"
+                    >Item Movement</button>
+                </div>
+
+                <!-- Item Movement matrix -->
+                <div v-if="activeTab === 'movement'" class="space-y-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 class="text-lg font-black text-gray-900 uppercase tracking-tight">Item Movement</h2>
+                                <p class="text-sm text-gray-500">Asset lifecycle counts across all stages</p>
+                            </div>
+                            <button
+                                type="button"
+                                @click="loadMovement"
+                                :disabled="isLoadingMovement"
+                                class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                            >{{ isLoadingMovement ? 'Loading...' : 'Refresh' }}</button>
+                        </div>
+
+                        <div v-if="isLoadingMovement && !movementData" class="py-12 flex items-center justify-center">
+                            <svg class="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"></path>
+                            </svg>
+                        </div>
+
+                        <div v-else-if="movementData" class="overflow-x-auto">
+                            <table class="min-w-full border border-gray-200 text-xs">
+                                <thead>
+                                    <tr>
+                                        <th class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500 bg-gray-50 border-b border-gray-200">Row</th>
+                                        <th v-for="stage in movementStages" :key="`hdr-${stage.key}`"
+                                            class="px-3 py-2 text-center text-[10px] font-black uppercase tracking-wider border-b border-gray-200"
+                                            :class="stage.dept === 'SD' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'">
+                                            {{ stage.dept }}
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <th class="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-white border-b border-gray-200">Sub-status</th>
+                                        <th v-for="stage in movementStages" :key="`sub-${stage.key}`"
+                                            class="px-3 py-2 text-center text-[10px] font-semibold text-gray-600 bg-white border-b border-gray-200">
+                                            {{ stage.subStatus }}
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="px-3 py-2 font-bold text-gray-700 bg-gray-50 border-b border-gray-100">Process</td>
+                                        <td v-for="stage in movementStages" :key="`proc-${stage.key}`" class="px-3 py-2 text-center font-bold text-gray-900 border-b border-gray-100">
+                                            {{ stage.process }}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-2 font-bold text-gray-700 bg-gray-50 border-b border-gray-100">SC Status</td>
+                                        <td v-for="stage in movementStages" :key="`sc-${stage.key}`" class="px-3 py-2 text-center text-gray-700 border-b border-gray-100">
+                                            {{ stage.scStatus }}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-2 font-bold text-gray-700 bg-gray-50 border-b border-gray-100">Responsible</td>
+                                        <td v-for="stage in movementStages" :key="`resp-${stage.key}`"
+                                            class="px-3 py-2 text-center font-bold border-b border-gray-100"
+                                            :class="stage.dept === 'SD' ? 'text-blue-700' : 'text-amber-700'">
+                                            {{ stage.dept }}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-2 font-bold text-gray-700 bg-gray-50 border-b border-gray-100">Location</td>
+                                        <td v-for="stage in movementStages" :key="`loc-${stage.key}`" class="px-3 py-2 text-center text-[10px] text-gray-500 border-b border-gray-100 whitespace-pre-line">
+                                            {{ stage.locationLabel }}
+                                        </td>
+                                    </tr>
+                                    <tr class="bg-emerald-50/40">
+                                        <td class="px-3 py-3 font-black text-emerald-700 uppercase tracking-wider text-[10px]">Total Count</td>
+                                        <td v-for="stage in movementStages" :key="`cnt-${stage.key}`" class="px-3 py-3 text-center">
+                                            <span class="text-lg font-black"
+                                                  :class="(movementData.stages[stage.key]?.total ?? 0) > 0 ? 'text-emerald-700' : 'text-gray-300'">
+                                                {{ movementData.stages[stage.key]?.total ?? 0 }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-3 py-3 font-bold text-gray-700 bg-gray-50 align-top">Per Location</td>
+                                        <td v-for="stage in movementStages" :key="`loc-bd-${stage.key}`" class="px-3 py-3 text-[10px] text-gray-600 align-top">
+                                            <div v-if="Object.keys(movementData.stages[stage.key]?.by_location || {}).length === 0" class="text-gray-300 italic text-center">—</div>
+                                            <div v-else class="space-y-0.5">
+                                                <div v-for="(qty, loc) in movementData.stages[stage.key].by_location" :key="loc" class="flex items-center justify-between gap-2">
+                                                    <span class="truncate">{{ loc }}</span>
+                                                    <span class="font-bold text-gray-800">{{ qty }}</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <template v-if="activeTab === 'soh'">
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -234,6 +347,7 @@
                         </template>
                     </template>
                 </DataTable>
+                </template>
             </div>
         </div>
 
@@ -373,6 +487,46 @@ const props = defineProps({
     summary: Object,
     filters: Object
 })
+
+const activeTab = ref(new URLSearchParams(window.location.search).get('tab') === 'movement' ? 'movement' : 'soh')
+const isLoadingMovement = ref(false)
+const movementData = ref(null)
+
+const movementStages = [
+    { key: 'item_receive',                  dept: 'SD',    subStatus: 'for posting',           process: 'Item Receive',      scStatus: 'Stock-in',   locationLabel: 'CFE I-WH\nCFE II-WH' },
+    { key: 'basic_setup',                   dept: 'SD',    subStatus: 'for allocation',  process: 'Basic Setup',       scStatus: 'For setup',  locationLabel: 'CFE I-WH\nCFE II-WH' },
+    { key: 'item_allocation_sd_posted',     dept: 'SD',    subStatus: 'posted',                process: 'Item Allocation',   scStatus: 'Allocated',  locationLabel: 'CFE I-WH\nCFE II-WH' },
+    { key: 'complete_setup',                dept: 'SD',    subStatus: 'for allocation',  process: 'Complete Setup',    scStatus: 'Setup',      locationLabel: 'CFE I-WH\nCFE II-WH' },
+    { key: 'item_allocation_so_for_posting',dept: 'SO/CT', subStatus: 'for posting',           process: 'Item Allocation',   scStatus: 'Allocated',  locationLabel: 'CFE I\nCFE II' },
+    { key: 'customized_setup',              dept: 'SO/CT', subStatus: 'for allocation',        process: 'Customized Setup',  scStatus: 'For setup',  locationLabel: 'CFE I\nCFE II' },
+    { key: 'item_allocation_user_store',    dept: 'SO/CT', subStatus: 'for repair',            process: 'Item Allocation',   scStatus: 'Allocated',  locationLabel: 'User Store' },
+    { key: 'item_repair',                   dept: 'SO/CT', subStatus: 'for disposal',          process: 'Item Repair',       scStatus: 'For repair', locationLabel: 'CFE I-WH\nCFE II-WH' },
+    { key: 'item_retire',                   dept: 'SD',    subStatus: 'for retire',            process: 'Item Retire',       scStatus: 'For retire', locationLabel: 'CFE I-WH\nCFE II-WH' },
+]
+
+const loadMovement = async () => {
+    isLoadingMovement.value = true
+    try {
+        const response = await axios.get(route('reports.inventory.movement'))
+        movementData.value = response.data
+    } catch (error) {
+        console.error('Failed to fetch item movement:', error)
+    } finally {
+        isLoadingMovement.value = false
+    }
+}
+
+const setActiveTab = (tab) => {
+    activeTab.value = tab
+    const url = new URL(window.location.href)
+    if (tab === 'movement') {
+        url.searchParams.set('tab', 'movement')
+        if (!movementData.value) loadMovement()
+    } else {
+        url.searchParams.delete('tab')
+    }
+    window.history.replaceState({}, '', url)
+}
 
 const filterForm = reactive({
     category_id: props.filters.category_id || null,
@@ -742,6 +896,7 @@ const resetFilters = () => {
 
 onMounted(() => {
     pagination.updateData(props.assets)
+    if (activeTab.value === 'movement') loadMovement()
 })
 
 watch(() => props.assets, (newAssets) => {

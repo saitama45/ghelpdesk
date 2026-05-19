@@ -268,7 +268,7 @@ class StockInController extends Controller
             'entries.*.serial_no' => 'nullable|string',
             'entries.*.barcode' => 'required|string',
             'entries.*.qrcode' => 'required|string',
-            'entries.*.asset_type' => 'required|string|in:New,Used',
+            'entries.*.asset_type' => 'required|string|in:New,Used,For Repair,For Disposal',
             'entries.*.is_allocation' => 'required|boolean',
             'entries.*.warranty_months' => 'required|integer|min:0',
             'entries.*.eol_months' => 'required|integer|min:0',
@@ -354,7 +354,7 @@ class StockInController extends Controller
             'cost' => 'required_without:entries|numeric|min:0',
             'price' => 'required_without:entries|numeric|min:0',
             'destination_location' => 'nullable|string|max:255',
-            'asset_type' => 'required_without:entries|string|in:New,Used',
+            'asset_type' => 'required_without:entries|string|in:New,Used,For Repair,For Disposal',
             'is_allocation' => 'required_without:entries|boolean',
             'asset_id' => 'required_without:entries|exists:assets,id',
         ], $this->stockInCodeValidationMessages());
