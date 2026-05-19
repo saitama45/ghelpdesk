@@ -409,7 +409,7 @@
                                             <span v-if="sel.isLoadingUnits" class="text-xs text-gray-400 italic">Loading...</span>
                                             <span v-else class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold"
                                                 :class="sel.availableUnits.length > 0 ? (sel.entries.length > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600') : 'bg-red-50 text-red-500'">
-                                                {{ sel.availableUnits.length > 0 ? `${sel.entries.length}/${sel.availableUnits.filter(u => !u.is_reserved).length} units selected` : `No serialized units at ${form.origin_location}` }}
+                                                {{ sel.availableUnits.length > 0 ? `${sel.entries.length}/${sel.availableUnits.filter(u => !u.is_reserved).length} units selected` : `No available units at ${form.origin_location}` }}
                                             </span>
                                         </template>
                                         <!-- Remove button -->

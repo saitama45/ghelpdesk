@@ -1220,9 +1220,10 @@ class TicketController extends Controller
         $ticket->loadMissing('item');
         $isTerminalStatusChange = in_array($request->input('status'), ['resolved', 'closed'], true);
         $requiresRcaOnResolve = (bool) $ticket->item?->requires_rca_on_resolve;
+        $hasAttachments = count($request->file('attachments', []) ?: []) > 0;
 
         $request->validate([
-            'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange), 'nullable', 'string'],
+            'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange && !$hasAttachments), 'nullable', 'string'],
             'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
             'action_taken' => [Rule::requiredIf($isTerminalStatusChange), 'nullable', 'string'],

@@ -129,6 +129,33 @@ const handleNoteFileSelect = (event) => {
     event.target.value = '';
 };
 
+const handleNotePaste = (event) => {
+    const items = Array.from((event.clipboardData || event.originalEvent?.clipboardData)?.items || []);
+    const maxSize = 1000 * 1024 * 1024; // 1GB for notes
+    const validFiles = [];
+
+    items.forEach((item) => {
+        if (!item.type?.startsWith('image/')) return;
+
+        const blob = item.getAsFile();
+        if (!blob) return;
+
+        if (blob.size > maxSize) {
+            showError('Pasted image exceeds the 1GB limit.');
+            return;
+        }
+
+        const extension = item.type.split('/')[1] || 'png';
+        const file = new File([blob], `internal-note-image-${Date.now()}.${extension}`, { type: blob.type });
+        validFiles.push(createFileObject(file));
+    });
+
+    if (!validFiles.length) return;
+
+    event.preventDefault();
+    noteForm.attachments = [...noteForm.attachments, ...validFiles];
+};
+
 const removeNoteAttachment = (index) => {
     const attachment = noteForm.attachments[index];
     if (attachment.preview) URL.revokeObjectURL(attachment.preview);
@@ -2642,6 +2669,7 @@ const linkify = (text) => {
                                                                 rows="2"
                                                                 class="block w-full border-gray-200 rounded-lg text-xs focus:ring-amber-500 focus:border-amber-500 resize-none mb-3"
                                                                 placeholder="Type an internal note..."
+                                                                @paste="handleNotePaste"
                                                             ></textarea>
 
                                                             <div class="flex flex-col gap-3">

@@ -113,6 +113,35 @@ class TicketBulkResponseTest extends TestCase
         ]);
     }
 
+    public function test_ticket_internal_note_accepts_attachment_without_text(): void
+    {
+        Mail::fake();
+        Storage::fake('public');
+
+        $ticket = $this->ticket();
+        $file = UploadedFile::fake()->image('internal-proof.png')->size(32);
+
+        $response = $this->actingAs($this->agent)->post(route('tickets.comments.store', $ticket->id), [
+            'is_internal' => true,
+            'attachments' => [$file],
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('ticket_comments', [
+            'ticket_id' => $ticket->id,
+            'comment_text' => '',
+            'is_internal' => true,
+            'user_id' => $this->agent->id,
+        ]);
+
+        $this->assertDatabaseHas('ticket_attachments', [
+            'ticket_id' => $ticket->id,
+            'file_name' => 'internal-proof.png',
+        ]);
+    }
+
     public function test_bulk_response_updates_first_response_sla_and_notifies_reporter(): void
     {
         Mail::fake();

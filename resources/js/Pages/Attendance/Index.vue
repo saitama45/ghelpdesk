@@ -60,6 +60,7 @@ const locationAttemptProgress = ref(0);
 const locationSamples = ref([]);
 const isRefreshingLocation = ref(false);
 const isSubmittingAttendance = ref(false);
+const attendanceSubmitStatus = ref(null);
 let watchHandle = null;
 let currentWatchHighAccuracy = true;
 let locationAttemptInterval = null;
@@ -208,6 +209,64 @@ const activeScheduleStoreDistance = computed(() => {
     );
 });
 
+const getSampleDistanceFromActiveStore = (sample) => {
+    if (!sample || !activeScheduleStoreHasCoordinates.value) return Infinity;
+
+    return calculateDistance(
+        sample.latitude,
+        sample.longitude,
+        activeScheduleStore.value.latitude,
+        activeScheduleStore.value.longitude
+    );
+};
+
+const isSampleFresh = (sample) => {
+    return sample?.receivedAt && (nowMs.value - sample.receivedAt) <= LOCATION_FRESHNESS_THRESHOLD_MS;
+};
+
+const isSampleBrowserAccuracyUsable = (sample) => {
+    if (!sample || !requiresGeofencing.value || isNativeApp.value) return true;
+
+    return sample.accuracy <= browserAccuracyLimitMeters.value;
+};
+
+const isSamplePreciseEnough = (sample) => {
+    return sample?.accuracy !== null && sample.accuracy <= PRECISE_LOCATION_ACCURACY_METERS;
+};
+
+const isSampleWithinStoreVicinity = (sample) => {
+    if (!props.todaySchedule) return false;
+    if (!requiresGeofencing.value) return true;
+    if (!sample || !activeScheduleStoreHasCoordinates.value) return false;
+
+    const radius = activeScheduleStore.value.radius_meters || 100;
+
+    return getSampleDistanceFromActiveStore(sample) <= radius;
+};
+
+const sampleReadinessScore = (sample) => {
+    if (!sample) return -Infinity;
+
+    let score = 0;
+
+    if (!requiresGeofencing.value || isTimeOutFlow.value) {
+        score += 1000;
+    } else {
+        if (isSampleFresh(sample)) score += 1000;
+        if (isSampleBrowserAccuracyUsable(sample)) score += 500;
+        if (!isNativeApp.value || isSamplePreciseEnough(sample)) score += 250;
+        if (isSampleWithinStoreVicinity(sample)) score += 750;
+    }
+
+    if (Number.isFinite(sample.accuracy)) {
+        score -= sample.accuracy;
+    }
+
+    score += sample.receivedAt / 100000000;
+
+    return score;
+};
+
 const isPreciseEnough = computed(() => {
     return locationAccuracy.value !== null && locationAccuracy.value <= PRECISE_LOCATION_ACCURACY_METERS;
 });
@@ -304,7 +363,19 @@ const canSave = computed(() => {
         !form.processing;
 });
 
+const attendanceButtonLabel = computed(() => {
+    if (form.processing || attendanceSubmitStatus.value === 'saving') return 'Saving...';
+    if (attendanceSubmitStatus.value === 'gps') return 'Securing GPS...';
+
+    return nextAction.value;
+});
+
 const statusMessage = computed(() => {
+    if (isSubmittingAttendance.value) {
+        return attendanceSubmitStatus.value === 'gps'
+            ? 'Securing a fresh GPS fix before saving attendance...'
+            : 'Saving attendance...';
+    }
     if (!hasPermission('attendance.create')) return 'You do not have permission to log attendance. Please contact your manager or administrator.';
     if (!props.todaySchedule) return 'No active On-site, Off-site, or WFH schedule for your current time.';
     if (!isWithinScheduleWindow.value) return scheduleWindowMessage.value;
@@ -432,8 +503,11 @@ const updateSelectedLocationSample = () => {
     locationSamples.value = recentSamples;
 
     const bestSample = [...recentSamples].sort((left, right) => {
-        if (left.receivedAt !== right.receivedAt) {
-            return right.receivedAt - left.receivedAt;
+        const rightScore = sampleReadinessScore(right);
+        const leftScore = sampleReadinessScore(left);
+
+        if (rightScore !== leftScore) {
+            return rightScore - leftScore;
         }
 
         return left.accuracy - right.accuracy;
@@ -874,6 +948,7 @@ const submit = async () => {
     if (!canSave.value || isSubmittingAttendance.value) return;
 
     isSubmittingAttendance.value = true;
+    attendanceSubmitStatus.value = 'confirming';
 
     const action = nextAction.value;
     const locationName = props.todaySchedule?.status === 'WFH'
@@ -890,17 +965,21 @@ const submit = async () => {
 
     if (!ok) {
         isSubmittingAttendance.value = false;
+        attendanceSubmitStatus.value = null;
         return;
     }
 
-    if (browserGeofenceRequiresFreshFix.value && !isTimeOutFlow.value) {
+    if (browserGeofenceRequiresFreshFix.value && !isTimeOutFlow.value && !locationSubmissionReady.value) {
+        attendanceSubmitStatus.value = 'gps';
         const refreshed = await acquireCurrentLocation(true, false);
         if (!refreshed || !locationSubmissionReady.value) {
             isSubmittingAttendance.value = false;
+            attendanceSubmitStatus.value = null;
             return;
         }
     }
 
+    attendanceSubmitStatus.value = 'saving';
     form.client_request_id = form.client_request_id || makeClientRequestId();
     form.location_client = getLocationClient();
     form.location_provider = getLocationProvider();
@@ -925,6 +1004,7 @@ const submit = async () => {
         },
         onFinish: () => {
             isSubmittingAttendance.value = false;
+            attendanceSubmitStatus.value = null;
         },
     });
 };
@@ -1123,12 +1203,12 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                                             : 'bg-gray-300'
                                     ]"
                                 >
-                                    <template v-if="form.processing">
+                                    <template v-if="form.processing || isSubmittingAttendance">
                                         <ArrowPathIcon class="w-5 h-5 sm:w-6 sm:h-6 animate-spin mr-2" />
-                                        Saving...
+                                        {{ attendanceButtonLabel }}
                                     </template>
                                     <template v-else>
-                                        {{ nextAction }}
+                                        {{ attendanceButtonLabel }}
                                     </template>
                                 </PrimaryButton>
 
