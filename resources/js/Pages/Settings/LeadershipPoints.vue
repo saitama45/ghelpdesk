@@ -24,7 +24,7 @@ const props = defineProps({
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { put, post, destroy } = useErrorHandler()
-const pagination = usePagination(props.quests, 'leadership-points.index')
+const pagination = usePagination(props.quests, 'leadership-points.index', {}, { dataKey: 'quests' })
 const { hasPermission } = usePermission()
 
 const activeTab = ref('points')
@@ -305,49 +305,66 @@ const levels = [
                 </div>
 
                 <DataTable
+                    title="Leadership Quests"
+                    subtitle="Manage reward challenges for support agents."
+                    search-placeholder="Search quests..."
+                    empty-message="No quests configured."
+                    :search="pagination.search.value"
                     :data="pagination.data.value"
-                    :columns="[
-                        { key: 'title', label: 'Quest' },
-                        { key: 'criteria_type', label: 'Criteria' },
-                        { key: 'criteria_value', label: 'Target' },
-                        { key: 'bonus_points', label: 'Bonus Pts' },
-                        { key: 'is_active', label: 'Status' },
-                    ]"
-                    :pagination="pagination.meta.value"
-                    @page-change="pagination.goToPage"
+                    :current-page="pagination.currentPage.value"
+                    :last-page="pagination.lastPage.value"
+                    :per-page="pagination.perPage.value"
+                    :showing-text="pagination.showingText.value"
+                    :is-loading="pagination.isLoading.value"
+                    @update:search="pagination.search.value = $event"
+                    @go-to-page="pagination.goToPage"
+                    @change-per-page="pagination.changePerPage"
                 >
-                    <template #cell-title="{ row }">
-                        <div class="font-medium text-gray-900 dark:text-white">{{ row.title }}</div>
-                        <div v-if="row.description" class="text-xs text-gray-500 truncate max-w-xs">{{ row.description }}</div>
-                        <div v-if="row.badge_name" class="inline-flex items-center gap-1 mt-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                            <SparklesIcon class="w-3 h-3" /> {{ row.badge_name }}
-                        </div>
+                    <template #header>
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Quest</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Criteria</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Target</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Bonus Pts</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                            <th v-if="hasPermission('leadership_points.edit')" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Actions</th>
+                        </tr>
                     </template>
-                    <template #cell-criteria_type="{ row }">
-                        <span class="text-sm text-gray-700 dark:text-gray-300">{{ criteriaTypeLabels[row.criteria_type] || row.criteria_type }}</span>
-                    </template>
-                    <template #cell-criteria_value="{ row }">
-                        <span class="text-sm font-medium">{{ row.criteria_value }}</span>
-                    </template>
-                    <template #cell-bonus_points="{ row }">
-                        <span :class="['text-sm font-semibold', row.bonus_points >= 0 ? 'text-green-600' : 'text-red-500']">
-                            {{ row.bonus_points >= 0 ? '+' : '' }}{{ row.bonus_points }}
-                        </span>
-                    </template>
-                    <template #cell-is_active="{ row }">
-                        <span :class="['inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', row.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500']">
-                            {{ row.is_active ? 'Active' : 'Inactive' }}
-                        </span>
-                    </template>
-                    <template #actions="{ row }">
-                        <div class="flex items-center gap-2">
-                            <button v-if="hasPermission('leadership_points.edit')" @click="openEditQuest(row)" class="text-blue-500 hover:text-blue-700">
-                                <PencilSquareIcon class="w-4 h-4" />
-                            </button>
-                            <button v-if="hasPermission('leadership_points.edit')" @click="deleteQuest(row)" class="text-red-500 hover:text-red-700">
-                                <TrashIcon class="w-4 h-4" />
-                            </button>
-                        </div>
+
+                    <template #body="{ data }">
+                        <tr v-for="row in data" :key="row.id" class="hover:bg-gray-50">
+                            <td class="px-4 py-3">
+                                <div class="font-medium text-gray-900 dark:text-white">{{ row.title }}</div>
+                                <div v-if="row.description" class="max-w-xs truncate text-xs text-gray-500">{{ row.description }}</div>
+                                <div v-if="row.badge_name" class="mt-1 inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">
+                                    <SparklesIcon class="h-3 w-3" /> {{ row.badge_name }}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-sm font-semibold text-slate-900">
+                                {{ criteriaTypeLabels[row.criteria_type] || row.criteria_type }}
+                            </td>
+                            <td class="px-4 py-3 text-sm font-medium">{{ row.criteria_value }}</td>
+                            <td class="px-4 py-3">
+                                <span :class="['text-sm font-semibold', row.bonus_points >= 0 ? 'text-green-600' : 'text-red-500']">
+                                    {{ row.bonus_points >= 0 ? '+' : '' }}{{ row.bonus_points }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span :class="['inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', row.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500']">
+                                    {{ row.is_active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </td>
+                            <td v-if="hasPermission('leadership_points.edit')" class="px-4 py-3">
+                                <div class="flex items-center justify-end gap-2">
+                                    <button @click="openEditQuest(row)" class="text-blue-500 hover:text-blue-700" title="Edit quest">
+                                        <PencilSquareIcon class="h-4 w-4" />
+                                    </button>
+                                    <button @click="deleteQuest(row)" class="text-red-500 hover:text-red-700" title="Delete quest">
+                                        <TrashIcon class="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                     </template>
                 </DataTable>
             </div>

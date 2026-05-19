@@ -34,12 +34,25 @@ class LeadershipPointsController extends Controller implements HasMiddleware
         ];
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $stored = Setting::where('key', 'LIKE', 'leadership.%')->pluck('value', 'key')->toArray();
         $settings = array_merge(self::DEFAULTS, $stored);
 
-        $quests = Quest::orderByDesc('created_at')->paginate(20)->withQueryString();
+        $quests = Quest::query()
+            ->when($request->filled('search'), function ($query) use ($request) {
+                $search = $request->input('search');
+
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery->where('title', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%")
+                        ->orWhere('criteria_type', 'like', "%{$search}%")
+                        ->orWhere('badge_name', 'like', "%{$search}%");
+                });
+            })
+            ->orderByDesc('created_at')
+            ->paginate((int) $request->input('per_page', 10))
+            ->withQueryString();
 
         return Inertia::render('Settings/LeadershipPoints', [
             'settings' => $settings,
