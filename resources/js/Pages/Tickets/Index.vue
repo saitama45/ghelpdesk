@@ -24,6 +24,7 @@ const props = defineProps({
     filters: Object,
     departments: Array,
     hierarchicalDepartments: Array,
+    summaryStats: Object,
 });
 
 const page = usePage();
@@ -178,6 +179,7 @@ const ticketFilterParams = () => ({
     assignee_id: filterAssignee.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
+    dashboard_filter: activeDashboardFilter.value,
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
@@ -234,6 +236,7 @@ const clearFilters = () => {
     filterAssignee.value = [];
     filterStartDate.value = '';
     filterEndDate.value = '';
+    activeDashboardFilter.value = 'all';
     pagination.search.value = '';
     applyFilter();
 };
@@ -319,7 +322,7 @@ watch(defaultCompanyId, (newId) => {
 
 // ── Bulk Selection ────────────────────────────────────────────────────────
 const selectedIds = ref([])
-const activeDashboardFilter = ref('all')
+const activeDashboardFilter = ref(props.filters?.dashboard_filter || 'all')
 
 const allSelected = computed(() =>
     displayedTickets.value.length > 0 &&
@@ -858,14 +861,14 @@ const isNewTicket = (ticket) => {
 };
 
 const summaryCards = computed(() => {
-    const data = pagination.data.value || [];
+    const stats = props.summaryStats || {};
 
     return [
         {
             key: 'new',
             filterKey: 'new',
             label: 'New',
-            value: data.filter(isNewTicket).length,
+            value: stats.new ?? 0,
             hint: 'Open, uncategorized, and unassigned',
             shellClass: 'border-purple-200 bg-purple-50/80',
             valueClass: 'text-purple-900',
@@ -875,7 +878,7 @@ const summaryCards = computed(() => {
             key: 'unassigned',
             filterKey: 'unassigned',
             label: 'Unassigned',
-            value: data.filter(ticket => !ticket.assignee).length,
+            value: stats.unassigned ?? 0,
             hint: 'Tickets waiting for ownership',
             shellClass: 'border-blue-200 bg-blue-50/80',
             valueClass: 'text-blue-900',
@@ -885,7 +888,7 @@ const summaryCards = computed(() => {
             key: 'breached',
             filterKey: 'breached',
             label: 'SLA Breached',
-            value: data.filter(hasBreachedSla).length,
+            value: stats.breached ?? 0,
             hint: 'Immediate follow-up required',
             shellClass: 'border-red-200 bg-red-50/80',
             valueClass: 'text-red-900',
@@ -895,7 +898,7 @@ const summaryCards = computed(() => {
             key: 'nearly_due',
             filterKey: 'due_soon',
             label: 'Due Soon',
-            value: data.filter(isTicketNearlyDue).length,
+            value: stats.due_soon ?? 0,
             hint: 'Targets due within one hour',
             shellClass: 'border-amber-200 bg-amber-50/80',
             valueClass: 'text-amber-900',
@@ -905,7 +908,7 @@ const summaryCards = computed(() => {
             key: 'in_progress',
             filterKey: 'in_progress',
             label: 'In Progress',
-            value: data.filter(ticket => ticket.status === 'in_progress').length,
+            value: stats.in_progress ?? 0,
             hint: 'Actively being worked on',
             shellClass: 'border-violet-200 bg-violet-50/80',
             valueClass: 'text-violet-900',
@@ -947,6 +950,8 @@ const getDashboardFilterLabel = (filterKey) => {
 
 const toggleDashboardFilter = (filterKey) => {
     activeDashboardFilter.value = activeDashboardFilter.value === filterKey ? 'all' : filterKey;
+    pagination.currentPage.value = 1;
+    applyFilter();
 };
 
 const activeFilterBadges = computed(() => {
@@ -1112,7 +1117,7 @@ watch(activeDashboardFilter, () => {
                             <div class="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
                                 <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Current Scope</div>
                                 <div class="mt-2 text-lg font-bold text-white">{{ pagination.showingText.value }}</div>
-                                <div class="mt-1 text-xs text-slate-300">Metrics below reflect the currently visible page results.</div>
+                                <div class="mt-1 text-xs text-slate-300">Metrics below reflect all matching tickets in the current filter scope.</div>
                             </div>
                         </div>
                     </div>

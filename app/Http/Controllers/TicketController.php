@@ -137,9 +137,15 @@ class TicketController extends Controller
         if ($filterNodeId) {
             $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
             $nodeIds = array_merge([$filterNodeId], $descendantIds);
-            $query->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
+            $query->where(function ($departmentQuery) use ($nodeIds) {
+                $departmentQuery->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds))
+                    ->orWhereNull('assignee_id');
+            });
         } elseif ($filterDeptId) {
-            $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+            $query->where(function ($departmentQuery) use ($filterDeptId) {
+                $departmentQuery->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId))
+                    ->orWhereNull('assignee_id');
+            });
         }
 
         // Apply Assignee filter
@@ -181,6 +187,74 @@ class TicketController extends Controller
                   });
             });
         }
+
+        $summaryQuery = clone $query;
+        $summaryStats = [
+            'new' => (clone $summaryQuery)
+                ->where('status', 'open')
+                ->whereNull('category_id')
+                ->whereNull('sub_category_id')
+                ->whereNull('item_id')
+                ->whereNull('assignee_id')
+                ->count(),
+            'unassigned' => (clone $summaryQuery)->whereNull('assignee_id')->count(),
+            'breached' => (clone $summaryQuery)
+                ->whereHas('slaMetric', function ($slaQuery) {
+                    $slaQuery->where('is_response_breached', true)
+                        ->orWhere('is_resolution_breached', true);
+                })
+                ->count(),
+            'due_soon' => (clone $summaryQuery)
+                ->whereHas('slaMetric', function ($slaQuery) {
+                    $now = now();
+                    $soon = $now->copy()->addHour();
+
+                    $slaQuery->where(function ($q) use ($now, $soon) {
+                        $q->whereNotNull('response_target_at')
+                            ->whereNull('first_response_at')
+                            ->where('is_response_breached', false)
+                            ->whereBetween('response_target_at', [$now, $soon]);
+                    })->orWhere(function ($q) use ($now, $soon) {
+                        $q->whereNotNull('resolution_target_at')
+                            ->whereNull('resolved_at')
+                            ->where('is_resolution_breached', false)
+                            ->whereBetween('resolution_target_at', [$now, $soon]);
+                    });
+                })
+                ->count(),
+            'in_progress' => (clone $summaryQuery)->where('status', 'in_progress')->count(),
+        ];
+
+        match ($request->input('dashboard_filter')) {
+            'new' => $query->where('status', 'open')
+                ->whereNull('category_id')
+                ->whereNull('sub_category_id')
+                ->whereNull('item_id')
+                ->whereNull('assignee_id'),
+            'unassigned' => $query->whereNull('assignee_id'),
+            'breached' => $query->whereHas('slaMetric', function ($slaQuery) {
+                $slaQuery->where('is_response_breached', true)
+                    ->orWhere('is_resolution_breached', true);
+            }),
+            'due_soon' => $query->whereHas('slaMetric', function ($slaQuery) {
+                $now = now();
+                $soon = $now->copy()->addHour();
+
+                $slaQuery->where(function ($q) use ($now, $soon) {
+                    $q->whereNotNull('response_target_at')
+                        ->whereNull('first_response_at')
+                        ->where('is_response_breached', false)
+                        ->whereBetween('response_target_at', [$now, $soon]);
+                })->orWhere(function ($q) use ($now, $soon) {
+                    $q->whereNotNull('resolution_target_at')
+                        ->whereNull('resolved_at')
+                        ->where('is_resolution_breached', false)
+                        ->whereBetween('resolution_target_at', [$now, $soon]);
+                });
+            }),
+            'in_progress' => $query->where('status', 'in_progress'),
+            default => null,
+        };
         
         $query->orderBy('created_at', 'desc');
         $tickets = $query->paginate($request->get('per_page', 10))->withQueryString();
@@ -204,6 +278,7 @@ class TicketController extends Controller
             'cannedMessages' => $cannedMessages,
             'departments' => $departments,
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
+            'summaryStats' => $summaryStats,
             'filters' => [
                 'status' => $statusFilters->all(),
                 'search' => $request->search,
@@ -214,6 +289,7 @@ class TicketController extends Controller
                 'end_date' => $request->end_date,
                 'year' => $request->year,
                 'month' => $request->month,
+                'dashboard_filter' => $request->input('dashboard_filter', 'all'),
             ],
         ]);
     }
