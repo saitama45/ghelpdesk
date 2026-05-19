@@ -196,6 +196,10 @@ class RolesAndPermissionSeeder extends Seeder
             'settings.view' => 'View system settings',
             'settings.edit' => 'Edit system settings',
 
+            // Leadership Points Settings
+            'leadership_points.view' => 'View leadership points settings',
+            'leadership_points.edit' => 'Edit leadership points settings',
+
             // Canned Messages
             'canned_messages.view' => 'View canned messages',
             'canned_messages.create' => 'Create canned messages',
@@ -285,6 +289,8 @@ class RolesAndPermissionSeeder extends Seeder
             'schedules.view',
             'canned_messages.view',
             'canned_messages.edit',
+            'leadership_points.view',
+            'leadership_points.edit',
             'projects.view',
             'projects.manage_tasks',
             'projects.manage_assets',

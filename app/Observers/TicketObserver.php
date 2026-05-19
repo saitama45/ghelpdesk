@@ -6,6 +6,7 @@ use App\Models\Ticket;
 use App\Models\TicketSlaMetric;
 use App\Models\Company;
 use App\Services\SlaService;
+use App\Services\LeadershipPointService;
 use App\Models\PosRequest;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -174,6 +175,11 @@ class TicketObserver
             // --- Parent Ticket Status Sync ---
             if ($ticket->parent_id) {
                 $this->syncParentStatus($ticket->parent_id, $newStatus);
+            }
+
+            // --- Leadership Points Award ---
+            if ($newStatus === 'closed' && $ticket->assignee_id) {
+                app(LeadershipPointService::class)->awardPointsForClosedTicket($ticket);
             }
         }
 

@@ -102,7 +102,7 @@ onMounted(() => {
     if (route().current('users.*') || route().current('roles.*')) {
         openMenus.value.userManagement = true;
     }
-    if (route().current('profile.*') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*')) {
+    if (route().current('profile.*') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*') || route().current('leadership-points.*')) {
         openMenus.value.settings = true;
     }
     if (route().current('reports.*') && !route().current('reports.inventory')) {
@@ -169,7 +169,7 @@ const canSeeReports = computed(() => {
 });
 
 const canSeeSettings = computed(() => {
-    return hasPermission('settings.view') || hasPermission('canned_messages.view');
+    return hasPermission('settings.view') || hasPermission('canned_messages.view') || hasPermission('leadership_points.view');
 });
 </script>
 
@@ -639,7 +639,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('settings')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('profile.edit') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*')) && (isCollapsed || !openMenus.settings)
+                            (route().current('profile.edit') || route().current('settings.*') || route().current('ticket-archive.*') || route().current('canned-messages.*') || route().current('leadership-points.*')) && (isCollapsed || !openMenus.settings)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -664,6 +664,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('canned_messages.view')" :style="co('settings', 'canned-messages')">
                                 <Link :href="route('canned-messages.index')" :class="collapsedFlyoutLinkClass(route().current('canned-messages.*'))">{{ getChildLabel('settings', 'canned-messages') }}</Link>
                             </div>
+                            <div v-if="hasPermission('leadership_points.view')" :style="co('settings', 'leadership-points')">
+                                <Link :href="route('leadership-points.index')" :class="collapsedFlyoutLinkClass(route().current('leadership-points.*'))">{{ getChildLabel('settings', 'leadership-points') }}</Link>
+                            </div>
                             <div :style="co('settings', 'profile')">
                                 <Link :href="route('profile.edit')" :class="collapsedFlyoutLinkClass(route().current('profile.edit'))">{{ getChildLabel('settings', 'profile') }}</Link>
                             </div>
@@ -679,6 +682,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('canned_messages.view')" :style="co('settings', 'canned-messages')">
                             <Link :href="route('canned-messages.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('canned-messages.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'canned-messages') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('leadership_points.view')" :style="co('settings', 'leadership-points')">
+                            <Link :href="route('leadership-points.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('leadership-points.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'leadership-points') }}</span></Link>
                         </div>
                         <div :style="co('settings', 'profile')">
                             <Link :href="route('profile.edit')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('profile.edit') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('settings', 'profile') }}</span></Link>

@@ -79,6 +79,7 @@ class RoleService
             'activity_templates',
             'settings',
             'canned_messages',
+            'leadership_points',
             'projects',
             'payments',
         ];
@@ -107,6 +108,8 @@ class RoleService
                 $categoryDisplay = 'Service Vehicle Trips';
             } elseif ($category === 'payments') {
                 $categoryDisplay = 'Payments & SOA';
+            } elseif ($category === 'leadership_points') {
+                $categoryDisplay = 'Leadership Points';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 

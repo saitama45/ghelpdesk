@@ -424,6 +424,9 @@ class DashboardController extends Controller
 
         $activities = $histories->concat($comments)->sortByDesc('timestamp')->take(10)->values();
 
+        // Leadership Leaderboard (top 3 agents this month by points)
+        $leaderboard = $this->buildLeaderboard();
+
         // Dropdown Data
         $currentYear = date('Y');
         $years = range($currentYear, $currentYear - 3);
@@ -463,7 +466,82 @@ class DashboardController extends Controller
             ],
             'years' => $years,
             'months' => $months,
+            'leaderboard' => $leaderboard,
         ]);
+    }
+
+    private function buildLeaderboard(): array
+    {
+        $now = \Carbon\Carbon::now();
+
+        // Top 3 agents by total points this month
+        $top = \App\Models\AgentPointTransaction::query()
+            ->whereYear('awarded_at', $now->year)
+            ->whereMonth('awarded_at', $now->month)
+            ->selectRaw('agent_id, SUM(points) as total_points, COUNT(DISTINCT ticket_id) as ticket_count')
+            ->groupBy('agent_id')
+            ->orderByDesc('total_points')
+            ->limit(3)
+            ->get();
+
+        $agentIds = $top->pluck('agent_id')->toArray();
+
+        // Load agent names separately (avoids eager-loading conflict with selectRaw+groupBy)
+        $agents = \App\Models\User::whereIn('id', $agentIds)->get(['id', 'name'])->keyBy('id');
+
+        // Avg closing time (minutes) per agent this month
+        $avgClosingTimes = \Illuminate\Support\Facades\DB::table('ticket_sla_metrics as sm')
+            ->join('tickets as t', 't.id', '=', 'sm.ticket_id')
+            ->whereYear('sm.resolved_at', $now->year)
+            ->whereMonth('sm.resolved_at', $now->month)
+            ->whereIn('t.assignee_id', $agentIds)
+            ->whereNotNull('sm.resolved_at')
+            ->selectRaw('t.assignee_id, AVG(DATEDIFF(MINUTE, t.created_at, sm.resolved_at)) as avg_minutes')
+            ->groupBy('t.assignee_id')
+            ->pluck('avg_minutes', 'assignee_id');
+
+        // Monthly trophies (top agent per category)
+        $trophies = $this->buildTrophies($now);
+
+        return [
+            'top3' => $top->map(function ($row, $index) use ($agents, $avgClosingTimes) {
+                return [
+                    'rank'          => $index + 1,
+                    'agent_id'      => $row->agent_id,
+                    'name'          => $agents[$row->agent_id]?->name ?? 'Unknown',
+                    'total_points'  => (int) $row->total_points,
+                    'ticket_count'  => (int) $row->ticket_count,
+                    'avg_close_min' => isset($avgClosingTimes[$row->agent_id])
+                        ? (int) round($avgClosingTimes[$row->agent_id])
+                        : null,
+                ];
+            })->values()->toArray(),
+            'trophies' => $trophies,
+        ];
+    }
+
+    private function buildTrophies(\Carbon\Carbon $now): array
+    {
+        $byType = function (array $types) use ($now) {
+            $row = \App\Models\AgentPointTransaction::query()
+                ->whereYear('awarded_at', $now->year)
+                ->whereMonth('awarded_at', $now->month)
+                ->whereIn('type', $types)
+                ->selectRaw('agent_id, SUM(points) as total')
+                ->groupBy('agent_id')
+                ->orderByDesc('total')
+                ->first();
+            if (!$row) return null;
+            $agent = \App\Models\User::find($row->agent_id, ['id', 'name']);
+            return ['name' => $agent?->name, 'points' => (int) $row->total];
+        };
+
+        return [
+            ['icon' => '🏆', 'label' => 'Most Valuable Player',    'winner' => $byType(['fast_resolution','ontime_resolution','late_resolution','fcr_bonus','happy_customer','unhappy_customer','quest_bonus'])],
+            ['icon' => '⭐', 'label' => 'Customer Wow Champion',   'winner' => $byType(['happy_customer'])],
+            ['icon' => '🧙', 'label' => 'Wizard',                  'winner' => $byType(['fcr_bonus'])],
+            ['icon' => '🏎️', 'label' => 'Speed Racer',             'winner' => $byType(['fast_resolution'])],
+        ];
     }
 
     private function extractLastOrgPathSegment(?string $orgPath): string

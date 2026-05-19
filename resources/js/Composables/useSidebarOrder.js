@@ -25,7 +25,7 @@ export const DEFAULT_CHILD_ORDER = {
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
     userManagement: ['users', 'roles'],
-    settings: ['system-settings', 'ticket-archive', 'canned-messages', 'profile'],
+    settings: ['system-settings', 'ticket-archive', 'canned-messages', 'leadership-points', 'profile'],
 }
 
 export const CHILD_LABELS = {
@@ -78,6 +78,7 @@ export const CHILD_LABELS = {
         'system-settings': 'System Settings',
         'ticket-archive': 'Ticket Archive',
         'canned-messages': 'Canned Messages',
+        'leadership-points': 'Leadership Points',
         'profile': 'My Profile',
     },
 }

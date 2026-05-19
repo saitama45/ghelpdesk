@@ -201,6 +201,13 @@ Route::middleware('auth')->group(function () {
     Route::delete('settings/ticket-archive/{ticket}/purge', [\App\Http\Controllers\TicketArchiveController::class, 'purge'])->name('ticket-archive.purge');
     Route::resource('canned-messages', \App\Http\Controllers\CannedMessageController::class)->except(['show', 'create', 'edit']);
 
+    // Leadership Points Settings
+    Route::get('leadership-points', [\App\Http\Controllers\LeadershipPointsController::class, 'index'])->name('leadership-points.index');
+    Route::put('leadership-points', [\App\Http\Controllers\LeadershipPointsController::class, 'update'])->name('leadership-points.update');
+    Route::post('leadership-points/quests', [\App\Http\Controllers\LeadershipPointsController::class, 'storeQuest'])->name('leadership-points.quests.store');
+    Route::put('leadership-points/quests/{quest}', [\App\Http\Controllers\LeadershipPointsController::class, 'updateQuest'])->name('leadership-points.quests.update');
+    Route::delete('leadership-points/quests/{quest}', [\App\Http\Controllers\LeadershipPointsController::class, 'destroyQuest'])->name('leadership-points.quests.destroy');
+
     Route::get('reports/store-health', [\App\Http\Controllers\StoreReportController::class, 'index'])->name('reports.store-health');
     Route::get('reports/store-health/pdf', [\App\Http\Controllers\StoreReportController::class, 'pdf'])->name('reports.store-health.pdf');
     Route::get('reports/store-health/{store}/tickets', [\App\Http\Controllers\StoreReportController::class, 'getTickets'])->name('reports.store-health.tickets');

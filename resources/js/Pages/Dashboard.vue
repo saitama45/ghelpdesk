@@ -28,6 +28,7 @@ const props = defineProps({
     stores: Array,
     subUnits: Array,
     hierarchicalDepartments: Array,
+    leaderboard: Object,
 });
 
 const { hasPermission } = usePermission();
@@ -711,6 +712,56 @@ const exportToExcel = (type) => {
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- Leadership Leaderboard -->
+                <div v-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Top 3 Agents -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="text-xl">🏅</span>
+                            <h3 class="text-base font-bold text-gray-900">Top Agents This Month</h3>
+                        </div>
+                        <div v-if="leaderboard.top3?.length" class="space-y-3">
+                            <div v-for="agent in leaderboard.top3" :key="agent.agent_id"
+                                class="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
+                                <span class="text-lg font-black" :class="['text-yellow-500','text-gray-400','text-amber-600'][agent.rank-1]">
+                                    {{ ['🥇','🥈','🥉'][agent.rank-1] }}
+                                </span>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-semibold text-gray-800 truncate">{{ agent.name }}</div>
+                                    <div class="flex gap-3 text-xs text-gray-500 mt-0.5">
+                                        <span>{{ agent.ticket_count }} ticket{{ agent.ticket_count !== 1 ? 's' : '' }}</span>
+                                        <span v-if="agent.avg_close_min !== null">avg {{ agent.avg_close_min }}m close</span>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm font-bold text-blue-600">{{ agent.total_points.toLocaleString() }}</div>
+                                    <div class="text-xs text-gray-400">pts</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-else class="text-sm text-gray-400 text-center py-4">No points awarded yet this month.</div>
+                    </div>
+
+                    <!-- Monthly Trophies -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="text-xl">🏆</span>
+                            <h3 class="text-base font-bold text-gray-900">Monthly Trophies</h3>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div v-for="trophy in leaderboard.trophies" :key="trophy.label"
+                                class="p-3 rounded-lg bg-gray-50 flex items-start gap-2">
+                                <span class="text-xl leading-none mt-0.5">{{ trophy.icon }}</span>
+                                <div class="min-w-0">
+                                    <div class="text-xs font-semibold text-gray-700 leading-tight">{{ trophy.label }}</div>
+                                    <div v-if="trophy.winner" class="text-xs text-gray-500 mt-1 truncate">{{ trophy.winner.name }}</div>
+                                    <div v-else class="text-xs text-gray-400 mt-1 italic">No winner yet</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

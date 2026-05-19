@@ -69,6 +69,7 @@ export const roleLandingPageOptions = [
         options: [
             { label: 'System Settings', value: 'settings.index' },
             { label: 'Canned Messages', value: 'canned-messages.index' },
+            { label: 'Leadership Points', value: 'leadership-points.index' },
             { label: 'My Profile', value: 'profile.edit' },
         ]
     }

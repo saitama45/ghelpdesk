@@ -167,4 +167,40 @@ class User extends Authenticatable
     {
         return $this->hasMany(Schedule::class);
     }
+
+    public function pointTransactions()
+    {
+        return $this->hasMany(AgentPointTransaction::class, 'agent_id');
+    }
+
+    public function totalPoints(): int
+    {
+        return (int) $this->pointTransactions()->sum('points');
+    }
+
+    public function currentLevel(): string
+    {
+        $total = $this->totalPoints();
+        $settings = \App\Models\Setting::whereIn('key', [
+            'leadership.level_beginner', 'leadership.level_intermediate', 'leadership.level_professional',
+            'leadership.level_expert', 'leadership.level_master', 'leadership.level_guru',
+        ])->pluck('value', 'key');
+
+        $levels = [
+            'Guru'         => (int) ($settings['leadership.level_guru'] ?? 1000000),
+            'Master'       => (int) ($settings['leadership.level_master'] ?? 500000),
+            'Expert'       => (int) ($settings['leadership.level_expert'] ?? 250000),
+            'Professional' => (int) ($settings['leadership.level_professional'] ?? 100000),
+            'Intermediate' => (int) ($settings['leadership.level_intermediate'] ?? 25000),
+            'Beginner'     => 0,
+        ];
+
+        foreach ($levels as $name => $threshold) {
+            if ($total >= $threshold) {
+                return $name;
+            }
+        }
+
+        return 'Beginner';
+    }
 }
