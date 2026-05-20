@@ -188,6 +188,92 @@ class AttendanceLogNativeLocationTest extends TestCase
         ]);
     }
 
+    public function test_web_attendance_log_rejects_stale_time_out_when_no_time_in_exists(): void
+    {
+        [$user, $store] = $this->createGeofencedAttendanceContext();
+
+        $response = $this->actingAs($user)
+            ->from('/dtr')
+            ->post(route('attendance.log'), $this->payload([
+                'expected_type' => 'time_out',
+                'latitude' => $store->latitude,
+                'longitude' => $store->longitude,
+                'location_client' => 'native',
+                'location_provider' => 'capacitor',
+            ]));
+
+        $response->assertRedirect('/dtr');
+        $response->assertSessionHasErrors('attendance');
+        $response->assertSessionHas('error', 'Attendance state changed before saving. Please refresh DTR and try again.');
+        $this->assertDatabaseCount('attendance_logs', 0);
+    }
+
+    public function test_web_time_out_is_allowed_outside_geofence_after_existing_time_in(): void
+    {
+        [$user, $store, $schedule, $scheduleStore] = $this->createGeofencedAttendanceContext();
+
+        $timeInLog = AttendanceLog::create([
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_in',
+            'latitude' => $store->latitude,
+            'longitude' => $store->longitude,
+            'photo_path' => 'attendance/test/time-in.png',
+            'log_time' => Carbon::now('Asia/Manila')->subMinutes(10),
+        ]);
+        $timeInLog->forceFill([
+            'created_at' => Carbon::now('Asia/Manila')->subMinutes(10),
+            'updated_at' => Carbon::now('Asia/Manila')->subMinutes(10),
+        ])->save();
+
+        $response = $this->actingAs($user)
+            ->post(route('attendance.log'), $this->payload([
+                'expected_type' => 'time_out',
+                'latitude' => $store->latitude + 0.01,
+                'longitude' => $store->longitude + 0.01,
+                'location_client' => 'native',
+                'location_provider' => 'capacitor',
+            ]));
+
+        $response->assertRedirect(route('attendance.logs'));
+        $this->assertDatabaseCount('attendance_logs', 2);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_out',
+        ]);
+    }
+
+    public function test_web_duplicate_client_request_id_must_match_expected_type(): void
+    {
+        [$user, $store] = $this->createGeofencedAttendanceContext();
+        $clientRequestId = '550e8400-e29b-41d4-a716-446655440000';
+
+        $this->actingAs($user)
+            ->post(route('attendance.log'), $this->payload([
+                'client_request_id' => $clientRequestId,
+                'expected_type' => 'time_in',
+                'latitude' => $store->latitude,
+                'longitude' => $store->longitude,
+            ]))
+            ->assertRedirect(route('attendance.logs'));
+
+        $response = $this->actingAs($user)
+            ->from('/dtr')
+            ->post(route('attendance.log'), $this->payload([
+                'client_request_id' => $clientRequestId,
+                'expected_type' => 'time_out',
+                'latitude' => $store->latitude,
+                'longitude' => $store->longitude,
+            ]));
+
+        $response->assertRedirect('/dtr');
+        $response->assertSessionHasErrors('attendance');
+        $this->assertDatabaseCount('attendance_logs', 1);
+    }
+
     private function createGeofencedAttendanceContext(): array
     {
         $user = User::factory()->create();

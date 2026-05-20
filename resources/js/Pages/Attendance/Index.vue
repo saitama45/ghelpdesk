@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -73,6 +73,7 @@ let geofenceCircle = null;
 
 const form = useForm({
     client_request_id: null,
+    expected_type: null,
     latitude: null,
     longitude: null,
     location_accuracy: null,
@@ -106,6 +107,7 @@ const nextAction = computed(() => {
     return !props.lastLog || props.lastLog.type === 'time_out' ? 'Time In' : 'Time Out';
 });
 const isTimeOutFlow = computed(() => nextAction.value === 'Time Out');
+const expectedAttendanceType = computed(() => isTimeOutFlow.value ? 'time_out' : 'time_in');
 
 const presenceState = computed(() => {
     if (!props.lastLog) return 'not-started';
@@ -376,6 +378,7 @@ const statusMessage = computed(() => {
             ? 'Securing a fresh GPS fix before saving attendance...'
             : 'Saving attendance...';
     }
+    if (form.errors.attendance) return form.errors.attendance;
     if (!hasPermission('attendance.create')) return 'You do not have permission to log attendance. Please contact your manager or administrator.';
     if (!props.todaySchedule) return 'No active On-site, Off-site, or WFH schedule for your current time.';
     if (!isWithinScheduleWindow.value) return scheduleWindowMessage.value;
@@ -981,6 +984,7 @@ const submit = async () => {
 
     attendanceSubmitStatus.value = 'saving';
     form.client_request_id = form.client_request_id || makeClientRequestId();
+    form.expected_type = expectedAttendanceType.value;
     form.location_client = getLocationClient();
     form.location_provider = getLocationProvider();
     form.location_accuracy = locationAccuracy.value;
@@ -996,11 +1000,19 @@ const submit = async () => {
             form.reset();
             form.location_client = getLocationClient();
             form.location_provider = getLocationProvider();
+            form.expected_type = null;
             form.latitude = latitude.value;
             form.longitude = longitude.value;
             form.location_accuracy = locationAccuracy.value;
             form.location_captured_at = locationCapturedAt.value ? new Date(locationCapturedAt.value).toISOString() : null;
             form.location_received_at = locationReceivedAt.value ? new Date(locationReceivedAt.value).toISOString() : null;
+        },
+        onError: () => {
+            void router.reload({
+                only: ['lastLog', 'isSegmentComplete', 'todaySchedule'],
+                preserveScroll: true,
+                preserveState: true,
+            });
         },
         onFinish: () => {
             isSubmittingAttendance.value = false;
@@ -1009,7 +1021,16 @@ const submit = async () => {
     });
 };
 
+const refreshAttendanceState = () => {
+    router.reload({
+        only: ['lastLog', 'isSegmentComplete', 'todaySchedule'],
+        preserveScroll: true,
+        preserveState: true,
+    });
+};
+
 onMounted(async () => {
+    refreshAttendanceState();
     await startCamera();
 
     if (!isMissingActiveGeofence.value) {
@@ -1018,6 +1039,8 @@ onMounted(async () => {
 
     void loadGoogleMaps().catch(() => {});
     clockInterval = setInterval(updateClock, 1000);
+    window.addEventListener('focus', refreshAttendanceState);
+    window.addEventListener('pageshow', refreshAttendanceState);
 });
 
 onUnmounted(async () => {
@@ -1028,6 +1051,9 @@ onUnmounted(async () => {
     if (clockInterval) {
         clearInterval(clockInterval);
     }
+
+    window.removeEventListener('focus', refreshAttendanceState);
+    window.removeEventListener('pageshow', refreshAttendanceState);
 });
 
 watch([latitude, longitude, mapElement, activeScheduleStore], () => {

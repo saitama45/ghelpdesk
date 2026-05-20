@@ -181,10 +181,93 @@ class DtrOfflineApiTest extends TestCase
         ]);
     }
 
+    public function test_dtr_log_rejects_stale_expected_time_out_when_no_time_in_exists(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-17 08:05:00', 'Asia/Manila'));
+
+        [$user, $store] = $this->createActiveAttendanceContext();
+
+        $this->withHeaders($this->bearerHeaders($user))
+            ->postJson('/api/dtr/log', $this->logPayload($store, [
+                'expected_type' => 'time_out',
+            ]))
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Attendance state changed before saving. Please refresh DTR and try again.');
+
+        $this->assertDatabaseCount('attendance_logs', 0);
+    }
+
+    public function test_dtr_time_out_is_allowed_outside_geofence_after_existing_time_in(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-17 08:05:00', 'Asia/Manila'));
+
+        [$user, $store, $schedule] = $this->createActiveAttendanceContext();
+        $scheduleStore = ScheduleStore::where('schedule_id', $schedule->id)->firstOrFail();
+
+        $timeInLog = AttendanceLog::create([
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_in',
+            'latitude' => $store->latitude,
+            'longitude' => $store->longitude,
+            'photo_path' => 'attendance/test/time-in.png',
+            'log_time' => Carbon::now('Asia/Manila')->subMinutes(10),
+        ]);
+        $timeInLog->forceFill([
+            'created_at' => Carbon::now('Asia/Manila')->subMinutes(10),
+            'updated_at' => Carbon::now('Asia/Manila')->subMinutes(10),
+        ])->save();
+
+        $this->withHeaders($this->bearerHeaders($user))
+            ->postJson('/api/dtr/log', $this->logPayload($store, [
+                'expected_type' => 'time_out',
+                'latitude' => $store->latitude + 0.01,
+                'longitude' => $store->longitude + 0.01,
+            ]))
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('log.type', 'time_out');
+
+        $this->assertDatabaseCount('attendance_logs', 2);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_out',
+        ]);
+    }
+
+    public function test_dtr_duplicate_client_request_id_must_match_expected_type(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-17 08:05:00', 'Asia/Manila'));
+
+        [$user, $store] = $this->createActiveAttendanceContext();
+        $clientRequestId = '550e8400-e29b-41d4-a716-446655440000';
+
+        $this->withHeaders($this->bearerHeaders($user))
+            ->postJson('/api/dtr/log', $this->logPayload($store, [
+                'client_request_id' => $clientRequestId,
+                'expected_type' => 'time_in',
+            ]))
+            ->assertOk()
+            ->assertJsonPath('log.type', 'time_in');
+
+        $this->withHeaders($this->bearerHeaders($user))
+            ->postJson('/api/dtr/log', $this->logPayload($store, [
+                'client_request_id' => $clientRequestId,
+                'expected_type' => 'time_out',
+            ]))
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Attendance state changed before saving. Please refresh DTR and try again.');
+
+        $this->assertDatabaseCount('attendance_logs', 1);
+    }
+
     private function bearerHeaders(User $user): array
     {
         return [
-            'Authorization' => 'Bearer ' . $user->createToken('test-device')->plainTextToken,
+            'Authorization' => 'Bearer '.$user->createToken('test-device')->plainTextToken,
         ];
     }
 
