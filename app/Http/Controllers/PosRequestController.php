@@ -35,6 +35,7 @@ class PosRequestController extends Controller implements HasMiddleware
             new Middleware('can:pos_requests.edit', only: ['edit', 'update']),
             new Middleware('can:pos_requests.delete', only: ['destroy']),
             new Middleware('can:pos_requests.approve', only: ['approve', 'reject']),
+            new Middleware('can:pos_requests.view', only: ['remind']),
         ];
     }
 
@@ -200,7 +201,7 @@ class PosRequestController extends Controller implements HasMiddleware
 
     public function show(PosRequest $posRequest)
     {
-        $posRequest->load(['company', 'requestType', 'user', 'details', 'approvals.user']);
+        $posRequest->load(['company', 'requestType', 'user', 'details', 'approvals.user', 'ticket.slaMetric']);
         
         return Inertia::render('PosRequests/Show', [
             'posRequest' => $posRequest,
@@ -352,6 +353,27 @@ class PosRequestController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+    public function remind(PosRequest $posRequest)
+    {
+        $status = $posRequest->status ?? '';
+        $currentLevel = (int) $posRequest->current_approval_level;
+
+        if ($currentLevel <= 0 || in_array($status, ['Approved', 'Rejected', 'Cancelled'])) {
+            return redirect()->back()->with('error', 'No pending approval stage to send a reminder for.');
+        }
+
+        $posRequest->load(['company', 'requestType', 'details', 'user']);
+
+        try {
+            $this->posRequestService->notifyCurrentApprovers($posRequest);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('POS Request reminder failed: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send reminder. Please try again.');
+        }
+
+        return redirect()->back()->with('success', "Reminder sent to Stage {$currentLevel} approvers.");
     }
 
     private function canUserApproveLevel(RequestType $requestType, int $level, int $userId): bool

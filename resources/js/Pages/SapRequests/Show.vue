@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Link, useForm, usePage } from '@inertiajs/vue3'
+import { Link, useForm, router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -23,6 +23,25 @@ const approvalForm = useForm({
     remarks: '',
     approver_data: { ... (props.sapRequest.form_data ?? {}) }
 })
+
+const reminderLoading = ref(false)
+
+async function sendReminder() {
+    const confirmed = await confirm({
+        title: 'Send Approval Reminder',
+        message: `Send an email reminder to the Stage ${props.sapRequest.current_approval_level} approver(s) for this SAP request?`,
+        confirmLabel: 'Send Reminder',
+        variant: 'warning'
+    })
+
+    if (!confirmed) return
+
+    reminderLoading.value = true
+    router.post(route('sap-requests.remind', props.sapRequest.id), {}, {
+        preserveScroll: true,
+        onFinish: () => { reminderLoading.value = false },
+    })
+}
 
 const authUserId = computed(() => page.props.auth.user.id)
 
@@ -529,9 +548,22 @@ const getFileUrl = (value) => {
                                                 <p v-else class="text-[9px] text-gray-400 font-bold uppercase">Approved without remarks</p>
                                             </div>
                                             <div v-else-if="Number(lvl) === Number(sapRequest.current_approval_level)" class="mt-3 p-4 bg-teal-50/50 rounded-2xl border-2 border-dashed border-teal-200">
-                                                <div class="flex items-center text-teal-600">
-                                                    <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                                    <span class="text-[10px] font-black uppercase tracking-widest">Awaiting Decision</span>
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex items-center text-teal-600">
+                                                        <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                                        <span class="text-[10px] font-black uppercase tracking-widest">Awaiting Decision</span>
+                                                    </div>
+                                                    <!-- Reminder Button -->
+                                                    <button
+                                                        @click="sendReminder"
+                                                        :disabled="reminderLoading"
+                                                        title="Send email reminder to approvers"
+                                                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                        :class="reminderLoading ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 hover:border-amber-300'"
+                                                    >
+                                                        <svg class="w-3 h-3" :class="{ 'animate-pulse': reminderLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                                        {{ reminderLoading ? 'Sending...' : 'Remind' }}
+                                                    </button>
                                                 </div>
                                                 <div v-if="(assignedApproversByLevel[Number(lvl)] ?? []).length > 0" class="mt-3 pt-3 border-t border-teal-100">
                                                     <p class="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-2">Assigned Approvers</p>

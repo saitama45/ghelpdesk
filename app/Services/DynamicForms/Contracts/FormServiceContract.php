@@ -27,4 +27,9 @@ interface FormServiceContract
      * Reject a form record.
      */
     public function reject(Request $request, FormDefinition $formDefinition, FormRecord $record): void;
+
+    /**
+     * Send email reminder to current approvers.
+     */
+    public function notifyCurrentApprovers(FormDefinition $formDefinition, FormRecord $record): void;
 }

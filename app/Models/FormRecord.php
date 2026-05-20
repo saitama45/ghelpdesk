@@ -9,6 +9,7 @@ class FormRecord extends Model
     protected $fillable = [
         'form_definition_id',
         'request_type_id',
+        'ticket_id',
         'data',
         'status',
         'current_approval_level',
@@ -23,6 +24,11 @@ class FormRecord extends Model
         'updated_by' => 'integer',
         'data' => 'array',
     ];
+
+    public function ticket()
+    {
+        return $this->belongsTo(Ticket::class);
+    }
 
     public function definition()
     {

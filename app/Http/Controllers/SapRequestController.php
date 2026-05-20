@@ -31,6 +31,7 @@ class SapRequestController extends Controller implements HasMiddleware
             new Middleware('can:sap_requests.edit', only: ['edit', 'update']),
             new Middleware('can:sap_requests.delete', only: ['destroy']),
             new Middleware('can:sap_requests.approve', only: ['approve', 'reject']),
+            new Middleware('can:sap_requests.view', only: ['remind']),
         ];
     }
 
@@ -319,6 +320,27 @@ class SapRequestController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+    public function remind(SapRequest $sapRequest)
+    {
+        $status = $sapRequest->status ?? '';
+        $currentLevel = (int) $sapRequest->current_approval_level;
+
+        if ($currentLevel <= 0 || in_array($status, ['Approved', 'Rejected', 'Cancelled'])) {
+            return redirect()->back()->with('error', 'No pending approval stage to send a reminder for.');
+        }
+
+        $sapRequest->load(['company', 'requestType', 'items', 'user']);
+
+        try {
+            $this->sapRequestService->notifyCurrentApprovers($sapRequest);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('SAP Request reminder failed: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Failed to send reminder. Please try again.');
+        }
+
+        return redirect()->back()->with('success', "Reminder sent to Stage {$currentLevel} approvers.");
     }
 
     private function canUserApproveLevel(RequestType $requestType, array $formData, int $level, int $userId): bool

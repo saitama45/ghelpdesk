@@ -95,12 +95,16 @@ Route::middleware('auth')->group(function () {
     Route::put('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'update'])->name('dynamic-form.update');
     Route::delete('forms/{slug}/{id}', [\App\Http\Controllers\DynamicFormController::class, 'destroy'])->name('dynamic-form.destroy');
     Route::post('forms/{slug}/{id}/approve', [\App\Http\Controllers\DynamicFormController::class, 'approve'])->name('dynamic-form.approve');
+    Route::post('forms/{slug}/{id}/reject', [\App\Http\Controllers\DynamicFormController::class, 'reject'])->name('dynamic-form.reject');
+    Route::post('forms/{slug}/{id}/remind', [\App\Http\Controllers\DynamicFormController::class, 'remind'])->name('dynamic-form.remind');
     Route::resource('pos-requests', \App\Http\Controllers\PosRequestController::class);
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
     Route::post('pos-requests/{pos_request}/reject', [\App\Http\Controllers\PosRequestController::class, 'reject'])->name('pos-requests.reject');
+    Route::post('pos-requests/{pos_request}/remind', [\App\Http\Controllers\PosRequestController::class, 'remind'])->name('pos-requests.remind');
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);
     Route::post('sap-requests/{sap_request}/approve', [\App\Http\Controllers\SapRequestController::class, 'approve'])->name('sap-requests.approve');
     Route::post('sap-requests/{sap_request}/reject', [\App\Http\Controllers\SapRequestController::class, 'reject'])->name('sap-requests.reject');
+    Route::post('sap-requests/{sap_request}/remind', [\App\Http\Controllers\SapRequestController::class, 'remind'])->name('sap-requests.remind');
     Route::get('stock-ins/template', [\App\Http\Controllers\StockInController::class, 'template'])->name('stock-ins.template');
     Route::get('stock-ins/assets-with-stock', [\App\Http\Controllers\StockInController::class, 'assetsWithStock'])->name('stock-ins.assets-with-stock');
     Route::get('stock-ins/available-stock', [\App\Http\Controllers\StockInController::class, 'availableStock'])->name('stock-ins.available-stock');

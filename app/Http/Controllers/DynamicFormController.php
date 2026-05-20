@@ -70,7 +70,7 @@ class DynamicFormController extends Controller
     public function show($slug, $id)
     {
         $form = FormDefinition::where('slug', $slug)->firstOrFail();
-        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition', 'requestType'])
+        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition', 'requestType', 'ticket.slaMetric'])
             ->where('form_definition_id', $form->id)
             ->findOrFail($id);
 
@@ -122,6 +122,19 @@ class DynamicFormController extends Controller
         $service->reject($request, $formDefinition, $record);
 
         return redirect()->back()->with('success', 'Record rejected successfully');
+    }
+
+    public function remind(Request $request, $slug, $id)
+    {
+        $formDefinition = FormDefinition::where('slug', $slug)->firstOrFail();
+        $record = FormRecord::where('form_definition_id', $formDefinition->id)->findOrFail($id);
+
+        $service = $this->serviceFactory->make($slug);
+        if (method_exists($service, 'notifyCurrentApprovers')) {
+            $service->notifyCurrentApprovers($formDefinition, $record);
+        }
+
+        return redirect()->back()->with('success', 'Reminder sent successfully.');
     }
 
     public function destroy($slug, $id)

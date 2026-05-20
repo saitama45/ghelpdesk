@@ -206,7 +206,50 @@ class DefaultFormService implements FormServiceContract
                 $data['form_data'][$field['key']] = $storedFiles;
             }
         }
-        
         return $data;
+    }
+
+    public function notifyCurrentApprovers(FormDefinition $formDefinition, FormRecord $record): void
+    {
+        $currentLevel = $record->current_approval_level;
+        if ($currentLevel <= 0 || $record->status === 'Approved' || $record->status === 'Rejected') {
+            return;
+        }
+
+        $approverEmails = [];
+
+        if ($formDefinition->workflow_type === 'checklist') {
+            $tasks = $record->data['_checklist_tasks'] ?? [];
+            foreach ($tasks as $task) {
+                if ($task['level'] == $currentLevel) {
+                    $assignees = $task['assignees'] ?? [];
+                    if (is_array($assignees) && count($assignees) > 0) {
+                        $users = \App\Models\User::whereIn('id', $assignees)->get();
+                        $approverEmails = array_merge($approverEmails, $users->pluck('email')->toArray());
+                    }
+                }
+            }
+        } else {
+            $matrix = $record->requestType ? $record->requestType->approver_matrix : $formDefinition->approver_matrix;
+            $levelData = null;
+            foreach ($matrix ?? [] as $levelObj) {
+                if (($levelObj['level'] ?? 0) == $currentLevel) {
+                    $levelData = $levelObj;
+                    break;
+                }
+            }
+            if ($levelData && !empty($levelData['user_ids'])) {
+                $users = \App\Models\User::whereIn('id', $levelData['user_ids'])->get();
+                $approverEmails = array_merge($approverEmails, $users->pluck('email')->toArray());
+            }
+        }
+
+        $approverEmails = array_filter(array_unique($approverEmails));
+
+        foreach ($approverEmails as $email) {
+            $user = \App\Models\User::where('email', $email)->first();
+            $name = $user ? $user->name : $email;
+            \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\DynamicFormApprovalReminder($formDefinition, $record, $name));
+        }
     }
 }

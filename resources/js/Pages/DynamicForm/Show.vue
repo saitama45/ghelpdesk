@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Link, useForm, usePage, Head } from '@inertiajs/vue3'
+import { Link, useForm, usePage, Head, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -25,6 +25,37 @@ const approvalForm = useForm({
     remarks: '',
     approver_data: { ... (props.record.data ?? {}) }
 })
+
+const reminderLoading = ref(false)
+
+async function sendReminder() {
+    const confirmed = await confirm({
+        title: 'Send Approval Reminder',
+        message: `Send an email reminder to the Stage ${props.record.current_approval_level} approver(s) for this request?`,
+        confirmLabel: 'Send Reminder',
+        variant: 'warning'
+    })
+    if (!confirmed) return
+    reminderLoading.value = true
+    router.post(route('dynamic-form.remind', { slug: props.form.slug, id: props.record.id }), {}, {
+        preserveScroll: true,
+        onFinish: () => { reminderLoading.value = false },
+    })
+}
+
+function ticketStatusClass(status) {
+    const s = status ? status.toLowerCase() : '';
+    const map = {
+        'open': 'bg-blue-100 text-blue-700',
+        'for_schedule': 'bg-teal-100 text-teal-700',
+        'in_progress': 'bg-purple-100 text-purple-700',
+        'resolved': 'bg-green-100 text-green-700',
+        'closed': 'bg-gray-100 text-gray-600',
+        'waiting_service_provider': 'bg-orange-100 text-orange-700',
+        'waiting_client_feedback': 'bg-blue-100 text-blue-700',
+    };
+    return map[s] ?? 'bg-gray-100 text-gray-500';
+}
 
 const authUserId = computed(() => page.props.auth.user.id)
 
@@ -382,6 +413,39 @@ const lineItems = computed(() => props.record.data?.items ?? [])
 
                     <!-- Right: Workflow Sidebar -->
                     <div v-if="totalLevels > 0" class="space-y-8">
+                        <!-- Linked Ticket & SLA Display -->
+                        <div v-if="record.ticket" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-lg font-black text-gray-900 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/></svg>
+                                    Linked Ticket
+                                </h3>
+                                <span :class="ticketStatusClass(record.ticket.status)" class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                    {{ record.ticket.status }}
+                                </span>
+                            </div>
+                            <div class="space-y-4">
+                                <a :href="route('tickets.show', record.ticket.ticket_key)" target="_blank" class="block w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold text-center transition-colors">
+                                    {{ record.ticket.ticket_key }}
+                                </a>
+
+                                <div v-if="record.ticket.slaMetric" class="grid grid-cols-2 gap-3 mt-4">
+                                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                                        <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Response Target</p>
+                                        <p class="text-xs font-bold text-gray-800" :class="{ 'text-red-600': record.ticket.slaMetric.first_response_breached }">
+                                            {{ record.ticket.slaMetric.first_response_target_at ? fmt(record.ticket.slaMetric.first_response_target_at) : 'N/A' }}
+                                        </p>
+                                    </div>
+                                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                                        <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Resolution Target</p>
+                                        <p class="text-xs font-bold text-gray-800" :class="{ 'text-red-600': record.ticket.slaMetric.resolution_breached }">
+                                            {{ record.ticket.slaMetric.resolution_target_at ? fmt(record.ticket.slaMetric.resolution_target_at) : 'N/A' }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
                             
                             <!-- Header -->
@@ -425,6 +489,16 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                             </span>
                                                         </template>
                                                         <span v-else class="text-[10px] text-gray-400 italic">Anyone can complete</span>
+                                                    </div>
+                                                    <div v-if="hasPermission('form_builder.edit') && record.status !== 'Rejected' && record.status !== 'Cancelled'" class="mt-3">
+                                                        <button 
+                                                            @click.stop="sendReminder"
+                                                            :disabled="reminderLoading"
+                                                            class="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-1.5">
+                                                            <svg v-if="reminderLoading" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                                            <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                                            {{ reminderLoading ? 'Sending...' : 'Remind' }}
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>
@@ -504,6 +578,16 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                             {{ approver.name }}
                                                         </span>
                                                     </div>
+                                                </div>
+                                                <div v-if="hasPermission('form_builder.edit') && record.status !== 'Rejected' && record.status !== 'Cancelled'" class="mt-4 pt-3 border-t border-indigo-100 flex justify-end">
+                                                    <button 
+                                                        @click="sendReminder"
+                                                        :disabled="reminderLoading"
+                                                        class="px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-2">
+                                                        <svg v-if="reminderLoading" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                                        <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                                        {{ reminderLoading ? 'Sending...' : 'Remind' }}
+                                                    </button>
                                                 </div>
                                             </div>
                                             <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic">Locked</div>

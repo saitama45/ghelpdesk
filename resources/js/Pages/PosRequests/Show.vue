@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Link, useForm, usePage } from '@inertiajs/vue3'
+import { Link, useForm, router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { useToast } from '@/Composables/useToast'
 import { usePermission } from '@/Composables/usePermission'
@@ -19,6 +19,37 @@ const page = usePage()
 const { showSuccess, showError } = useToast()
 const { hasPermission } = usePermission()
 const { confirm } = useConfirm()
+
+const reminderLoading = ref(false)
+
+async function sendReminder() {
+    const confirmed = await confirm({
+        title: 'Send Approval Reminder',
+        message: `Send an email reminder to the Stage ${props.posRequest.current_approval_level} approver(s) for this POS request?`,
+        confirmLabel: 'Send Reminder',
+        variant: 'warning'
+    })
+    if (!confirmed) return
+    reminderLoading.value = true
+    router.post(route('pos-requests.remind', props.posRequest.id), {}, {
+        preserveScroll: true,
+        onFinish: () => { reminderLoading.value = false },
+    })
+}
+
+function ticketStatusClass(status) {
+    const s = status ? status.toLowerCase() : '';
+    const map = {
+        'open': 'bg-blue-100 text-blue-700',
+        'for_schedule': 'bg-teal-100 text-teal-700',
+        'in_progress': 'bg-purple-100 text-purple-700',
+        'resolved': 'bg-green-100 text-green-700',
+        'closed': 'bg-gray-100 text-gray-600',
+        'waiting_service_provider': 'bg-orange-100 text-orange-700',
+        'waiting_client_feedback': 'bg-blue-100 text-blue-700',
+    };
+    return map[s] ?? 'bg-gray-100 text-gray-500';
+}
 
 const authUserId = computed(() => page.props.auth.user.id)
 
@@ -512,6 +543,44 @@ const formatDateTime = (dateStr) => {
                                     Finalized
                                 </span>
                             </div>
+
+                            <!-- Linked Ticket Status & SLA -->
+                            <div v-if="posRequest.ticket" class="mb-8 bg-gray-50 rounded-2xl border border-gray-100 p-5">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Linked Ticket Status</h4>
+                                    <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest" :class="ticketStatusClass(posRequest.ticket.status)">
+                                        {{ posRequest.ticket.status.replace(/_/g, ' ') }}
+                                    </span>
+                                </div>
+
+                                <div v-if="posRequest.ticket.sla_metric" class="space-y-3">
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Ticket SLA</h4>
+                                    <!-- Response Target -->
+                                    <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (posRequest.ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response Target</span>
+                                            <span v-if="posRequest.ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-else-if="posRequest.ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ posRequest.ticket.sla_metric.first_response_at ? formatDateTime(posRequest.ticket.sla_metric.first_response_at) : (posRequest.ticket.sla_metric.response_target_at ? formatDateTime(posRequest.ticket.sla_metric.response_target_at) : 'No target') }}
+                                        </div>
+                                    </div>
+                                    <!-- Resolution Target -->
+                                    <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (posRequest.ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution Target</span>
+                                            <span v-if="posRequest.ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-else-if="posRequest.ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ posRequest.ticket.sla_metric.resolved_at ? formatDateTime(posRequest.ticket.sla_metric.resolved_at) : (posRequest.ticket.sla_metric.resolution_target_at ? formatDateTime(posRequest.ticket.sla_metric.resolution_target_at) : 'No target') }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="relative px-2">
                                 <!-- Vertical Line -->
                                 <div class="absolute left-[27px] top-2 bottom-2 w-1 bg-gradient-to-b from-indigo-500 via-gray-100 to-gray-50 rounded-full"></div>
@@ -557,11 +626,24 @@ const formatDateTime = (dateStr) => {
 
                                             <!-- Pending State -->
                                             <div v-else-if="Number(lvl) === Number(posRequest.current_approval_level)" class="mt-3 p-4 bg-indigo-50/50 rounded-2xl border-2 border-dashed border-indigo-200">
-                                                <div class="flex items-center text-indigo-600">
-                                                    <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                    </svg>
-                                                    <span class="text-[10px] font-black uppercase tracking-widest">Awaiting Decision</span>
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex items-center text-indigo-600">
+                                                        <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                        </svg>
+                                                        <span class="text-[10px] font-black uppercase tracking-widest">Awaiting Decision</span>
+                                                    </div>
+                                                    <!-- Reminder Button -->
+                                                    <button
+                                                        @click="sendReminder"
+                                                        :disabled="reminderLoading"
+                                                        title="Send email reminder to approvers"
+                                                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                        :class="reminderLoading ? 'bg-gray-100 text-gray-400 cursor-wait' : 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 hover:border-amber-300'"
+                                                    >
+                                                        <svg class="w-3 h-3" :class="{ 'animate-pulse': reminderLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                                        {{ reminderLoading ? 'Sending...' : 'Remind' }}
+                                                    </button>
                                                 </div>
                                                 <div v-if="(assignedApproversByLevel[Number(lvl)] ?? []).length > 0" class="mt-3 pt-3 border-t border-indigo-100">
                                                     <p class="text-[9px] font-black uppercase tracking-widest text-indigo-500 mb-2">Assigned Approvers</p>
