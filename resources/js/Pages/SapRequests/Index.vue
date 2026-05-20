@@ -120,7 +120,7 @@ function getStageDisplay(request) {
 <template>
     <AppLayout title="SAP Requests">
         <div class="py-10 bg-gray-50 min-h-screen">
-            <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
 
                 <!-- Header -->
                 <div class="flex items-center justify-between mb-8">

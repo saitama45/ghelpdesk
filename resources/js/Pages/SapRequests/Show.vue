@@ -218,6 +218,20 @@ function statusClass(s) {
     return map[s] ?? 'bg-amber-500 text-white shadow-amber-200'
 }
 
+function ticketStatusClass(status) {
+    const s = status ? status.toLowerCase() : '';
+    const ticketColors = {
+        'open': 'bg-blue-100 text-blue-700',
+        'for_schedule': 'bg-teal-100 text-teal-700',
+        'in_progress': 'bg-purple-100 text-purple-700',
+        'resolved': 'bg-green-100 text-green-700',
+        'closed': 'bg-gray-100 text-gray-600',
+        'waiting_service_provider': 'bg-orange-100 text-orange-700',
+        'waiting_client_feedback': 'bg-blue-100 text-blue-700'
+    };
+    return ticketColors[s] ?? 'bg-gray-100 text-gray-500';
+}
+
 function fmt(d) {
     if (!d) return ''
     try { return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
@@ -431,6 +445,45 @@ const getFileUrl = (value) => {
                                 <h3 class="text-lg font-black text-gray-900">Approval Pulse</h3>
                                 <span v-if="sapRequest.status === 'Approved'" class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-widest">Finalized</span>
                                 <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest">No Approval Needed</span>
+                            </div>
+
+                            <!-- Linked Ticket Status & SLA -->
+                            <div v-if="sapRequest.ticket" class="mb-8 bg-gray-50 rounded-2xl border border-gray-100 p-5">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Linked Ticket Status</h4>
+                                    <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest" :class="ticketStatusClass(sapRequest.ticket.status)">
+                                        {{ sapRequest.ticket.status.replace(/_/g, ' ') }}
+                                    </span>
+                                </div>
+                                
+                                <div v-if="sapRequest.ticket.sla_metric" class="space-y-3">
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Ticket SLA</h4>
+                                    <!-- Response SLA -->
+                                    <div class="p-3 rounded-xl border" :class="sapRequest.ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (sapRequest.ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response Target</span>
+                                            <span v-if="sapRequest.ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-else-if="sapRequest.ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ sapRequest.ticket.sla_metric.first_response_at ? fmt(sapRequest.ticket.sla_metric.first_response_at) : (sapRequest.ticket.sla_metric.response_target_at ? fmt(sapRequest.ticket.sla_metric.response_target_at) : 'No target') }}
+                                        </div>
+                                    </div>
+
+                                    <!-- Resolution SLA -->
+                                    <div class="p-3 rounded-xl border" :class="sapRequest.ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (sapRequest.ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution Target</span>
+                                            <span v-if="sapRequest.ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-else-if="sapRequest.ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ sapRequest.ticket.sla_metric.resolved_at ? fmt(sapRequest.ticket.sla_metric.resolved_at) : (sapRequest.ticket.sla_metric.resolution_target_at ? fmt(sapRequest.ticket.sla_metric.resolution_target_at) : 'No target') }}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- No approval types -->

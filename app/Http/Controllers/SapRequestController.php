@@ -177,7 +177,7 @@ class SapRequestController extends Controller implements HasMiddleware
 
     public function show(SapRequest $sapRequest)
     {
-        $sapRequest->load(['company', 'requestType', 'user', 'items', 'approvals.user', 'ticket']);
+        $sapRequest->load(['company', 'requestType', 'user', 'items', 'approvals.user', 'ticket.slaMetric']);
 
         return Inertia::render('SapRequests/Show', [
             'sapRequest' => $sapRequest,
