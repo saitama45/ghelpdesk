@@ -28,12 +28,17 @@ export const roleLandingPageOptions = [
         options: [
             { label: 'DTR (Attendance)', value: 'attendance.index' },
             { label: 'Attendance Logs', value: 'attendance.logs' },
-            { label: 'NPC Status', value: 'npc-statuses.index' },
             { label: 'Scheduling', value: 'schedules.index' },
             { label: 'Presence', value: 'presence.index' },
             { label: 'KB Articles', value: 'kb-articles.index' },
-            { label: 'Payments & SOA', value: 'payments.index' },
             { label: 'Service Vehicle Trips', value: 'service-vehicle-trips.index' },
+        ]
+    },
+    {
+        group: 'Monitoring',
+        options: [
+            { label: 'NPC Status', value: 'npc-statuses.index' },
+            { label: 'Payments & SOA', value: 'payments.index' },
         ]
     },
     {

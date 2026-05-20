@@ -46,9 +46,10 @@ class RoleService
         }
 
         $grouped = [];
-        // Keep Services ahead of Administrative in role-related UIs.
+        // Keep permission categories aligned with sidebar and role-management groups.
         $preferredOrder = [
             'dashboard',
+            'projects',
             'tickets',
             'task board',
             'pos_requests',
@@ -56,22 +57,23 @@ class RoleService
             'stock in',
             'stock transfer',
             'receiving stock',
+            'assets',
+            'reports',
+            'npc status',
+            'payments',
             'service vehicle trips',
             'attendance',
-            'npc status',
             'schedules',
             'presence',
             'kb articles',
             'users',
             'roles',
-            'reports',
             'companies',
             'departments',
             'clusters',
             'categories',
             'subcategories',
             'items',
-            'assets',
             'request_types',
             'form_builder',
             'stores',
@@ -80,8 +82,6 @@ class RoleService
             'settings',
             'canned_messages',
             'leadership_points',
-            'projects',
-            'payments',
         ];
 
         foreach ($permissions as $permissionName) {

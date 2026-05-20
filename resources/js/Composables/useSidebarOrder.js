@@ -5,6 +5,7 @@ export const SECTION_LABELS = {
     projectTracker: 'Project Tracker',
     services: 'Services',
     inventory: 'Inventory',
+    monitoring: 'Monitoring',
     adminTask: 'Administrative',
     references: 'References',
     reports: 'Reports',
@@ -13,7 +14,7 @@ export const SECTION_LABELS = {
 }
 
 export const DEFAULT_SECTION_ORDER = [
-    'dashboard', 'projectTracker', 'services', 'inventory', 'adminTask', 'references', 'reports', 'userManagement', 'settings',
+    'dashboard', 'projectTracker', 'services', 'inventory', 'monitoring', 'adminTask', 'references', 'reports', 'userManagement', 'settings',
 ]
 
 export const DEFAULT_CHILD_ORDER = {
@@ -21,7 +22,8 @@ export const DEFAULT_CHILD_ORDER = {
     projectTracker: [],
     services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests'],
     inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
-    adminTask: ['dtr', 'attendance-logs', 'npc-status', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles', 'payments'],
+    monitoring: ['npc-status', 'payments'],
+    adminTask: ['dtr', 'attendance-logs', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles'],
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
     userManagement: ['users', 'roles'],
@@ -42,14 +44,16 @@ export const CHILD_LABELS = {
         'stock-receivings': 'Receiving Stock',
         'inventory-report': 'Inventory Report',
     },
+    monitoring: {
+        'npc-status': 'NPC Status',
+        'payments': 'Payments & SOA',
+    },
     adminTask: {
         'dtr': 'DTR',
         'attendance-logs': 'Attendance Logs',
-        'npc-status': 'NPC Status',
         'scheduling': 'Scheduling',
         'presence': 'Presence',
         'kb-articles': 'KB Articles',
-        'payments': 'Payments & SOA',
         'service-vehicle-trips': 'Service Vehicle Trips',
     },
     references: {

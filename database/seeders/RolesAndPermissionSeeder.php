@@ -154,7 +154,7 @@ class RolesAndPermissionSeeder extends Seeder
             'attendance.logs' => 'View attendance logs',
             'attendance.create' => 'Can log attendance',
 
-            // Administrative - NPC Status
+            // Monitoring - NPC Status
             'npc_status.view' => 'View NPC Status',
             'npc_status.create' => 'Create NPC Status records',
             'npc_status.edit' => 'Edit NPC Status records',
@@ -213,7 +213,7 @@ class RolesAndPermissionSeeder extends Seeder
             'projects.manage_tasks' => 'Manage project tasks',
             'projects.manage_assets' => 'Manage project assets',
 
-            // Payments & SOA Monitoring
+            // Monitoring - Payments & SOA
             'payments.view' => 'View payments & SOA records',
             'payments.create' => 'Create payment records',
             'payments.edit' => 'Edit payment records',
