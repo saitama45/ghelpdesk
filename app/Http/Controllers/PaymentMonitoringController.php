@@ -18,7 +18,17 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class PaymentMonitoringController extends Controller implements HasMiddleware
 {
@@ -26,10 +36,10 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:payments.view', only: [
-                'index', 'renewals', 'invoices', 'weeklyPlans', 'records',
+                'index', 'renewals', 'invoices', 'weeklyPlans', 'records', 'invoiceImportTemplate',
             ]),
             new Middleware('can:payments.create', only: [
-                'storeRenewal', 'storeInvoice', 'storeWeeklyPlan', 'storeOverpayment',
+                'storeRenewal', 'storeInvoice', 'storeWeeklyPlan', 'storeOverpayment', 'importInvoices',
             ]),
             new Middleware('can:payments.edit', only: [
                 'updateRenewal', 'updateInvoice', 'updateWeeklyPlan',
@@ -69,6 +79,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $shared['overpayments'] = $this->overpaymentsList($request);
         $shared['weeklyPlans'] = $this->weeklyPlansList($request);
         $shared['records'] = $this->recordsList($request);
+        $shared['cashSchedule'] = $this->cashSchedule($request);
 
         return Inertia::render('Payments/Index', $shared);
     }
@@ -407,6 +418,354 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
     {
         $invoice->delete();
         return redirect()->back()->with('success', 'Invoice deleted successfully');
+    }
+
+    public function invoiceImportTemplate()
+    {
+        $vendors = Vendor::orderBy('name')->get(['name', 'code']);
+        $users = User::orderBy('email')->get(['email']);
+
+        $spreadsheet = new Spreadsheet;
+
+        $listsSheet = $spreadsheet->createSheet(1);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $listsSheet->setCellValue('A1', 'Vendors');
+        foreach ($vendors as $index => $vendor) {
+            $label = trim(($vendor->code ? "{$vendor->code} - " : '').$vendor->name);
+            $listsSheet->setCellValue('A'.($index + 2), $label);
+        }
+
+        $listsSheet->setCellValue('B1', 'Currencies');
+        foreach (['PHP', 'USD'] as $index => $currency) {
+            $listsSheet->setCellValue('B'.($index + 2), $currency);
+        }
+
+        $listsSheet->setCellValue('C1', 'Statuses');
+        foreach (['Pending', 'Due', 'Overdue', 'Paid', 'Cancelled'] as $index => $status) {
+            $listsSheet->setCellValue('C'.($index + 2), $status);
+        }
+
+        $listsSheet->setCellValue('D1', 'Assignee Emails');
+        foreach ($users as $index => $user) {
+            $listsSheet->setCellValue('D'.($index + 2), $user->email);
+        }
+
+        $sheet = $spreadsheet->getSheet(0);
+        $sheet->setTitle('SOA Invoices');
+
+        $headers = $this->invoiceImportHeaders();
+        foreach ($headers as $index => $header) {
+            $col = Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue("{$col}1", $header);
+        }
+
+        $today = now()->toDateString();
+        $sampleVendor = $vendors->first();
+        $sheet->fromArray([[
+            $sampleVendor ? trim(($sampleVendor->code ? "{$sampleVendor->code} - " : '').$sampleVendor->name) : '',
+            'APV-001',
+            'STORE-001',
+            'PO-001',
+            'SI-001',
+            $today,
+            now()->addDays(15)->toDateString(),
+            '10000.00',
+            '',
+            'PHP',
+            'Pending',
+            'Sample unpaid invoice',
+            $users->first()?->email ?? '',
+            '',
+            '',
+            '',
+            '',
+            '',
+        ], [
+            $sampleVendor ? trim(($sampleVendor->code ? "{$sampleVendor->code} - " : '').$sampleVendor->name) : '',
+            'APV-002',
+            'STORE-002',
+            'PO-002',
+            'SI-002',
+            $today,
+            $today,
+            '10000.00',
+            '',
+            'PHP',
+            'Due',
+            'Sample partially paid invoice',
+            '',
+            '',
+            $today,
+            '2500.00',
+            'REF-001',
+            'Partial payment',
+        ]], null, 'A2');
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastColumn}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+        $sheet->getStyle('F:G')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('O:O')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('H:I')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->getStyle('P:P')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->freezePane('A2');
+
+        foreach (range(1, count($headers)) as $colIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
+        }
+
+        if ($vendors->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'A', sprintf('Lists!$A$2:$A$%d', $vendors->count() + 1), false);
+        }
+        $this->applyListValidation($sheet, 'J', 'Lists!$B$2:$B$3', true);
+        $this->applyListValidation($sheet, 'K', 'Lists!$C$2:$C$6', true);
+        if ($users->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'M', sprintf('Lists!$D$2:$D$%d', $users->count() + 1), true);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'soa-invoices-import-template.xlsx';
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    public function importInvoices(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:xlsx|max:5120']);
+
+        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $header = array_map(fn ($value) => trim((string) $value), array_shift($rows) ?? []);
+        $expectedHeaders = $this->invoiceImportHeaders();
+        $missingHeaders = array_values(array_diff($expectedHeaders, $header));
+
+        if (! empty($missingHeaders)) {
+            return response()->json([
+                'created' => 0,
+                'updated' => 0,
+                'payments_created' => 0,
+                'skipped' => 0,
+                'errors' => ['Template is missing required columns: '.implode(', ', $missingHeaders)],
+            ], 422);
+        }
+
+        $headerIndexes = array_flip($header);
+        $vendors = Vendor::query()->get(['id', 'name', 'code']);
+        $vendorsByKey = collect();
+        foreach ($vendors as $vendor) {
+            foreach (array_filter([$vendor->name, $vendor->code, trim(($vendor->code ? "{$vendor->code} - " : '').$vendor->name)]) as $key) {
+                $vendorsByKey->put(mb_strtolower(trim($key)), $vendor);
+            }
+        }
+        $usersByEmail = User::query()
+            ->whereNotNull('email')
+            ->get(['id', 'email'])
+            ->keyBy(fn (User $user) => mb_strtolower(trim($user->email)));
+
+        $created = 0;
+        $updated = 0;
+        $paymentsCreated = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowNum = 1;
+        $userId = $request->user()->id;
+
+        foreach ($rows as $line) {
+            $rowNum++;
+
+            if (empty(array_filter($line, fn ($value) => $value !== null && trim((string) $value) !== ''))) {
+                continue;
+            }
+
+            $data = [];
+            foreach ($expectedHeaders as $expectedHeader) {
+                $data[$expectedHeader] = $this->normalizeImportValue($line[$headerIndexes[$expectedHeader]] ?? null);
+            }
+
+            $vendorKey = mb_strtolower(trim($data['vendor_code_or_name']));
+            $vendor = $vendorsByKey->get($vendorKey);
+            if (! $vendor) {
+                $errors[] = "Row {$rowNum}: vendor '{$data['vendor_code_or_name']}' was not found.";
+                $skipped++;
+                continue;
+            }
+
+            $assignee = null;
+            if ($data['assignee_email'] !== '') {
+                $assignee = $usersByEmail->get(mb_strtolower($data['assignee_email']));
+                if (! $assignee) {
+                    $errors[] = "Row {$rowNum}: assignee email '{$data['assignee_email']}' was not found.";
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            $invoiceAmount = $this->normalizeImportNumber($data['invoice_amount'], null);
+            $paidAmount = $this->normalizeImportNumber($data['paid_amount'], null);
+            $hasPayment = $paidAmount !== null
+                || $data['paid_on'] !== ''
+                || $data['payment_reference_no'] !== ''
+                || strcasecmp($data['status'], 'Paid') === 0;
+            if ($hasPayment && $paidAmount === null) {
+                $paidAmount = $invoiceAmount;
+            }
+
+            $outstandingAmount = $this->normalizeImportNumber($data['outstanding_amount'], null);
+            if ($outstandingAmount === null && $invoiceAmount !== null) {
+                $outstandingAmount = $hasPayment ? max(0, (float) $invoiceAmount - (float) $paidAmount) : $invoiceAmount;
+            }
+
+            $payload = [
+                'vendor_id' => $vendor->id,
+                'apv_no' => $data['apv_no'] ?: null,
+                'store_code' => $data['store_code'] ?: null,
+                'po_number' => $data['po_number'] ?: null,
+                'si_number' => $data['si_number'] ?: null,
+                'si_date' => $this->normalizeImportDate($data['si_date']),
+                'due_date' => $this->normalizeImportDate($data['due_date']),
+                'invoice_amount' => $invoiceAmount,
+                'outstanding_amount' => $outstandingAmount,
+                'currency' => $data['currency'] ?: 'PHP',
+                'status' => $data['status'] ?: 'Pending',
+                'remarks' => $data['remarks'] ?: null,
+                'assignee_user_id' => $assignee?->id,
+                'cc_emails' => $data['cc_emails'] ?: null,
+            ];
+
+            if ($hasPayment && (float) $outstandingAmount <= 0) {
+                $payload['status'] = 'Paid';
+                $payload['outstanding_amount'] = 0;
+            }
+
+            $validator = Validator::make($payload, [
+                'vendor_id' => 'required|exists:vendors,id',
+                'apv_no' => 'nullable|string|max:100',
+                'store_code' => 'nullable|string|max:100',
+                'po_number' => 'nullable|string|max:100',
+                'si_number' => 'nullable|string|max:100',
+                'si_date' => 'nullable|date',
+                'due_date' => 'nullable|date',
+                'invoice_amount' => 'required|numeric|min:0',
+                'outstanding_amount' => 'nullable|numeric|min:0',
+                'currency' => 'nullable|string|max:8',
+                'status' => 'nullable|in:Pending,Due,Overdue,Paid,Cancelled',
+                'remarks' => 'nullable|string',
+                'assignee_user_id' => 'nullable|exists:users,id',
+                'cc_emails' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                $errors[] = "Row {$rowNum}: ".implode(', ', $validator->errors()->all());
+                $skipped++;
+                continue;
+            }
+
+            if ($hasPayment) {
+                $paymentValidator = Validator::make([
+                    'paid_on' => $this->normalizeImportDate($data['paid_on']) ?: now()->toDateString(),
+                    'paid_amount' => $paidAmount,
+                    'payment_reference_no' => $data['payment_reference_no'] ?: null,
+                    'payment_remarks' => $data['payment_remarks'] ?: null,
+                ], [
+                    'paid_on' => 'required|date',
+                    'paid_amount' => 'required|numeric|min:0.01',
+                    'payment_reference_no' => 'nullable|string|max:100',
+                    'payment_remarks' => 'nullable|string',
+                ]);
+
+                if ($paymentValidator->fails()) {
+                    $errors[] = "Row {$rowNum}: ".implode(', ', $paymentValidator->errors()->all());
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            DB::transaction(function () use (
+                $validator,
+                $data,
+                $hasPayment,
+                $paidAmount,
+                $userId,
+                &$created,
+                &$updated,
+                &$paymentsCreated
+            ) {
+                $validated = $validator->validated();
+                $invoice = $this->findMatchingInvoice($validated['vendor_id'], $validated['apv_no'] ?? null, $validated['si_number'] ?? null);
+                $wasExisting = (bool) $invoice;
+
+                if ($invoice) {
+                    $invoice->update([...$validated, 'updated_by' => $userId]);
+                } else {
+                    $invoice = PaymentInvoice::create([...$validated, 'created_by' => $userId, 'updated_by' => $userId]);
+                }
+
+                if ($hasPayment) {
+                    $paidOn = $this->normalizeImportDate($data['paid_on']) ?: now()->toDateString();
+                    $referenceNo = $data['payment_reference_no'] ?: null;
+                    $paymentExists = PaymentRecord::where('payable_type', 'invoice')
+                        ->where('payable_id', $invoice->id)
+                        ->when($referenceNo, fn ($query) => $query->where('reference_no', $referenceNo))
+                        ->when(! $referenceNo, fn ($query) => $query->whereDate('paid_on', $paidOn)->where('amount', $paidAmount))
+                        ->where('status', 'posted')
+                        ->exists();
+
+                    if (! $paymentExists) {
+                        PaymentRecord::create([
+                            'payable_type' => 'invoice',
+                            'payable_id' => $invoice->id,
+                            'vendor_id' => $invoice->vendor_id,
+                            'amount' => $paidAmount,
+                            'paid_on' => $paidOn,
+                            'reference_no' => $referenceNo,
+                            'paid_by' => $userId,
+                            'status' => 'posted',
+                            'current_approval_level' => 0,
+                            'approver_data' => ['levels' => 0, 'approvers' => []],
+                            'remarks' => $data['payment_remarks'] ?: 'Imported SOA payment',
+                            'created_by' => $userId,
+                            'updated_by' => $userId,
+                        ]);
+                        $paymentsCreated++;
+                    }
+
+                    $totalPaid = (float) PaymentRecord::where('payable_type', 'invoice')
+                        ->where('payable_id', $invoice->id)
+                        ->where('status', 'posted')
+                        ->sum('amount');
+                    $invoice->outstanding_amount = max(0, (float) $invoice->invoice_amount - $totalPaid);
+                    if ((float) $invoice->outstanding_amount <= 0) {
+                        $invoice->status = 'Paid';
+                    } elseif ($invoice->status === 'Paid') {
+                        $invoice->status = 'Pending';
+                    }
+                    $invoice->updated_by = $userId;
+                    $invoice->save();
+                }
+
+                $wasExisting ? $updated++ : $created++;
+            });
+        }
+
+        return response()->json([
+            'created' => $created,
+            'updated' => $updated,
+            'payments_created' => $paymentsCreated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ], empty($errors) ? 200 : 422);
     }
 
     /* ============ OVERPAYMENTS ============ */
@@ -757,6 +1116,235 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             ->where('payable_id', $renewal->id)
             ->where('status', 'posted')
             ->exists();
+    }
+
+    protected function cashSchedule(Request $request): array
+    {
+        $selectedMonth = $request->get('cash_month') ?: now()->format('Y-m');
+        try {
+            $monthStart = Carbon::createFromFormat('Y-m', $selectedMonth)->startOfMonth();
+        } catch (\Throwable) {
+            $monthStart = now()->startOfMonth();
+            $selectedMonth = $monthStart->format('Y-m');
+        }
+        $yearStart = $monthStart->copy()->startOfYear();
+        $yearEnd = $monthStart->copy()->endOfYear();
+        $vendorId = $request->get('cash_vendor_id');
+        $source = $request->get('cash_source');
+        $includePaid = $request->boolean('cash_include_paid');
+
+        $items = collect();
+
+        if (! $source || $source === 'invoice') {
+            PaymentInvoice::with('vendor:id,name,code')
+                ->whereBetween('due_date', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->where('status', '!=', 'Cancelled')
+                ->when($vendorId, fn ($query) => $query->where('vendor_id', $vendorId))
+                ->when(! $includePaid, fn ($query) => $query
+                    ->where('status', '!=', 'Paid')
+                    ->where('outstanding_amount', '>', 0))
+                ->get()
+                ->each(function (PaymentInvoice $invoice) use ($items) {
+                    $items->push([
+                        'source_type' => 'invoice',
+                        'source_id' => $invoice->id,
+                        'vendor_id' => $invoice->vendor_id,
+                        'vendor_name' => $invoice->vendor?->name,
+                        'label' => trim('APV '.($invoice->apv_no ?: '-').' / SI '.($invoice->si_number ?: '-')),
+                        'due_date' => optional($invoice->due_date)->toDateString(),
+                        'amount' => (float) ($invoice->outstanding_amount ?? $invoice->invoice_amount ?? 0),
+                        'status' => $invoice->status,
+                        'is_paid' => $invoice->status === 'Paid' || (float) $invoice->outstanding_amount <= 0,
+                    ]);
+                });
+        }
+
+        if (! $source || $source === 'renewal') {
+            PaymentRenewal::with('vendor:id,name,code')
+                ->whereBetween('next_due_date', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->where('status', 'active')
+                ->when($vendorId, fn ($query) => $query->where('vendor_id', $vendorId))
+                ->get()
+                ->each(function (PaymentRenewal $renewal) use ($items) {
+                    $items->push([
+                        'source_type' => 'renewal',
+                        'source_id' => $renewal->id,
+                        'vendor_id' => $renewal->vendor_id,
+                        'vendor_name' => $renewal->vendor?->name,
+                        'label' => trim($renewal->service_type.($renewal->sub_type ? ' / '.$renewal->sub_type : '')),
+                        'due_date' => optional($renewal->next_due_date)->toDateString(),
+                        'amount' => (float) ($renewal->total_amount ?? 0),
+                        'status' => $renewal->status,
+                        'is_paid' => false,
+                    ]);
+                });
+        }
+
+        if (! $source || $source === 'weekly') {
+            PaymentWeeklyPlan::with('vendor:id,name,code')
+                ->whereBetween('week_date', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->when($vendorId, fn ($query) => $query->where('vendor_id', $vendorId))
+                ->when(! $includePaid, fn ($query) => $query->where('status', '!=', 'Paid'))
+                ->get()
+                ->each(function (PaymentWeeklyPlan $plan) use ($items) {
+                    $items->push([
+                        'source_type' => 'weekly',
+                        'source_id' => $plan->id,
+                        'vendor_id' => $plan->vendor_id,
+                        'vendor_name' => $plan->vendor?->name,
+                        'label' => trim(($plan->project_label ?: 'Weekly Plan').($plan->category ? ' / '.$plan->category : '')),
+                        'due_date' => optional($plan->week_date)->toDateString(),
+                        'amount' => (float) ($plan->amount ?? 0),
+                        'status' => $plan->status,
+                        'is_paid' => $plan->status === 'Paid',
+                    ]);
+                });
+        }
+
+        $items = $items
+            ->filter(fn ($item) => ! empty($item['due_date']))
+            ->sortBy('due_date')
+            ->values();
+
+        $monthly = $items
+            ->groupBy(fn ($item) => Carbon::parse($item['due_date'])->format('Y-m'))
+            ->map(fn ($group, $month) => [
+                'month' => $month,
+                'total' => round((float) $group->sum('amount'), 2),
+                'count' => $group->count(),
+                'invoice_total' => round((float) $group->where('source_type', 'invoice')->sum('amount'), 2),
+                'renewal_total' => round((float) $group->where('source_type', 'renewal')->sum('amount'), 2),
+                'weekly_total' => round((float) $group->where('source_type', 'weekly')->sum('amount'), 2),
+            ])
+            ->values();
+
+        $weekly = $items
+            ->filter(fn ($item) => str_starts_with($item['due_date'], $selectedMonth))
+            ->groupBy(fn ($item) => Carbon::parse($item['due_date'])->format('o-\WW'))
+            ->map(function ($group, $week) {
+                $date = Carbon::parse($group->first()['due_date']);
+                return [
+                    'week' => $week,
+                    'range' => $date->copy()->startOfWeek()->format('M d').' - '.$date->copy()->endOfWeek()->format('M d'),
+                    'total' => round((float) $group->sum('amount'), 2),
+                    'count' => $group->count(),
+                    'items' => $group->values(),
+                ];
+            })
+            ->values();
+
+        $calendar = $items
+            ->filter(fn ($item) => str_starts_with($item['due_date'], $selectedMonth))
+            ->groupBy('due_date')
+            ->map(fn ($group, $date) => [
+                'date' => $date,
+                'total' => round((float) $group->sum('amount'), 2),
+                'count' => $group->count(),
+                'items' => $group->values(),
+            ])
+            ->values();
+
+        return [
+            'filters' => [
+                'month' => $selectedMonth,
+                'vendor_id' => $vendorId,
+                'source' => $source ?: 'all',
+                'include_paid' => $includePaid,
+            ],
+            'items' => $items,
+            'monthly' => $monthly,
+            'weekly' => $weekly,
+            'calendar' => $calendar,
+            'total' => round((float) $items->sum('amount'), 2),
+        ];
+    }
+
+    protected function findMatchingInvoice(int $vendorId, ?string $apvNo, ?string $siNumber): ?PaymentInvoice
+    {
+        if ($apvNo) {
+            $invoice = PaymentInvoice::where('vendor_id', $vendorId)
+                ->where('apv_no', $apvNo)
+                ->first();
+            if ($invoice) {
+                return $invoice;
+            }
+        }
+
+        if ($siNumber) {
+            return PaymentInvoice::where('vendor_id', $vendorId)
+                ->where('si_number', $siNumber)
+                ->first();
+        }
+
+        return null;
+    }
+
+    protected function invoiceImportHeaders(): array
+    {
+        return [
+            'vendor_code_or_name',
+            'apv_no',
+            'store_code',
+            'po_number',
+            'si_number',
+            'si_date',
+            'due_date',
+            'invoice_amount',
+            'outstanding_amount',
+            'currency',
+            'status',
+            'remarks',
+            'assignee_email',
+            'cc_emails',
+            'paid_on',
+            'paid_amount',
+            'payment_reference_no',
+            'payment_remarks',
+        ];
+    }
+
+    protected function applyListValidation($sheet, string $column, string $formula, bool $allowBlank): void
+    {
+        foreach (range(2, 1001) as $row) {
+            $validation = $sheet->getCell("{$column}{$row}")->getDataValidation();
+            $validation->setType(DataValidation::TYPE_LIST)
+                ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+                ->setAllowBlank($allowBlank)
+                ->setShowDropDown(true)
+                ->setShowInputMessage(true)
+                ->setFormula1($formula);
+        }
+    }
+
+    protected function normalizeImportValue($value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        return trim((string) $value);
+    }
+
+    protected function normalizeImportDate($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value) && (float) $value > 1000) {
+            return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d');
+        }
+
+        return trim((string) $value);
+    }
+
+    protected function normalizeImportNumber($value, $default = null)
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        return str_replace(',', '', trim((string) $value));
     }
 
     /* ============ SETTINGS ============ */

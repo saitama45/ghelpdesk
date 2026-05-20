@@ -197,6 +197,14 @@
                     >
                         <template #actions>
                             <div class="flex items-center gap-2 flex-nowrap">
+                                <a v-if="hasPermission('payments.view')" href="/payments/invoices/import-template"
+                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    Download Template
+                                </a>
+                                <button v-if="hasPermission('payments.create')" @click="openImportModal()"
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    Import
+                                </button>
                                 <button v-if="hasPermission('payments.create')" @click="openOverpaymentModal()"
                                         class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
                                     + Overpayment
@@ -292,6 +300,145 @@
                                 <tr v-if="!(overpayments?.data?.length)"><td colspan="6" class="py-4 text-center text-gray-400 text-xs">No overpayments yet</td></tr>
                             </tbody>
                         </table>
+                    </div>
+                </div>
+
+                <!-- CASH SCHEDULE TAB -->
+                <div v-if="currentTab === 'cash-schedule'" class="space-y-4">
+                    <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                        <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
+                            <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                                <div>
+                                    <h3 class="text-lg font-semibold text-gray-900">Cash Schedule</h3>
+                                    <p class="text-sm text-gray-600">Monthly, weekly, and calendar view of payable due dates</p>
+                                </div>
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input v-model="cashFilters.month" @change="refreshCashSchedule" type="month"
+                                           class="border-gray-300 rounded-lg text-sm">
+                                    <select v-model="cashFilters.vendor_id" @change="refreshCashSchedule"
+                                            class="border-gray-300 rounded-lg text-sm">
+                                        <option value="">All vendors</option>
+                                        <option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.name }}</option>
+                                    </select>
+                                    <select v-model="cashFilters.source" @change="refreshCashSchedule"
+                                            class="border-gray-300 rounded-lg text-sm">
+                                        <option value="all">All sources</option>
+                                        <option value="invoice">SOA Invoices</option>
+                                        <option value="renewal">Renewals</option>
+                                        <option value="weekly">Weekly Plans</option>
+                                    </select>
+                                    <label class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                        <input v-model="cashFilters.include_paid" @change="refreshCashSchedule" type="checkbox"
+                                               class="rounded border-gray-300 text-blue-600">
+                                        Include Paid
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="px-4 sm:px-6 py-4 space-y-4">
+                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                                    <button v-for="view in cashViews" :key="view.id" @click="cashView = view.id"
+                                            :class="[
+                                                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                                                cashView === view.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                            ]">
+                                        {{ view.label }}
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                                    <div class="rounded-lg border border-gray-200 px-4 py-3">
+                                        <div class="text-xs uppercase text-gray-500 font-semibold">Items</div>
+                                        <div class="text-xl font-bold text-gray-900">{{ cashSchedule.items?.length || 0 }}</div>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 px-4 py-3">
+                                        <div class="text-xs uppercase text-gray-500 font-semibold">Year Total</div>
+                                        <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(cashSchedule.total) }}</div>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 px-4 py-3 col-span-2 sm:col-span-1">
+                                        <div class="text-xs uppercase text-gray-500 font-semibold">Selected Month</div>
+                                        <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(selectedMonthTotal) }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="cashView === 'monthly'" class="overflow-x-auto border border-gray-200 rounded-lg">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left">Month</th>
+                                            <th class="px-4 py-3 text-right">SOA Invoices</th>
+                                            <th class="px-4 py-3 text-right">Renewals</th>
+                                            <th class="px-4 py-3 text-right">Weekly Plans</th>
+                                            <th class="px-4 py-3 text-right">Total</th>
+                                            <th class="px-4 py-3 text-right">Items</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200">
+                                        <tr v-for="row in cashSchedule.monthly || []" :key="row.month" class="hover:bg-gray-50">
+                                            <td class="px-4 py-3 font-medium text-gray-900">{{ formatMonthLabel(row.month) }}</td>
+                                            <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.invoice_total) }}</td>
+                                            <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.renewal_total) }}</td>
+                                            <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.weekly_total) }}</td>
+                                            <td class="px-4 py-3 text-right font-mono font-semibold">{{ formatAmount(row.total) }}</td>
+                                            <td class="px-4 py-3 text-right">{{ row.count }}</td>
+                                        </tr>
+                                        <tr v-if="!(cashSchedule.monthly || []).length">
+                                            <td colspan="6" class="px-4 py-8 text-center text-gray-400">No scheduled payable dates found.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div v-if="cashView === 'weekly'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div v-for="week in cashSchedule.weekly || []" :key="week.week" class="border border-gray-200 rounded-lg p-4">
+                                    <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
+                                        <div>
+                                            <div class="font-semibold text-gray-900">{{ week.week }}</div>
+                                            <div class="text-xs text-gray-500">{{ week.range }}</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="font-mono font-bold text-gray-900">₱{{ formatAmount(week.total) }}</div>
+                                            <div class="text-xs text-gray-500">{{ week.count }} items</div>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <div v-for="item in week.items" :key="`${item.source_type}-${item.source_id}`" class="flex items-start justify-between gap-3 text-sm">
+                                            <div>
+                                                <div class="font-medium text-gray-800">{{ item.vendor_name || '—' }}</div>
+                                                <div class="text-xs text-gray-500">{{ sourceLabel(item.source_type) }} · {{ item.label }}</div>
+                                            </div>
+                                            <div class="text-right shrink-0">
+                                                <div class="font-mono">{{ formatAmount(item.amount) }}</div>
+                                                <div class="text-xs" :class="dueDateClass(item.due_date)">{{ item.due_date }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-if="!(cashSchedule.weekly || []).length" class="lg:col-span-2 border border-dashed border-gray-300 rounded-lg py-10 text-center text-gray-400">
+                                    No weekly schedule for the selected month.
+                                </div>
+                            </div>
+
+                            <div v-if="cashView === 'calendar'" class="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
+                                <div v-for="day in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="day" class="bg-gray-50 px-2 py-2 text-xs font-semibold text-gray-500 text-center">
+                                    {{ day }}
+                                </div>
+                                <div v-for="day in calendarDays" :key="day.key"
+                                     :class="['min-h-28 bg-white p-2 text-xs', !day.inMonth ? 'bg-gray-50 text-gray-400' : '']">
+                                    <div class="font-semibold text-gray-700 mb-1">{{ day.day }}</div>
+                                    <div v-if="day.total > 0" class="font-mono font-bold text-blue-700 mb-1">₱{{ formatCompactAmount(day.total) }}</div>
+                                    <div class="space-y-1">
+                                        <div v-for="item in day.items.slice(0, 3)" :key="`${day.key}-${item.source_type}-${item.source_id}`"
+                                             class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate" :title="`${item.vendor_name} - ${item.label}`">
+                                            {{ sourceLabel(item.source_type) }} · {{ item.vendor_name || '—' }}
+                                        </div>
+                                        <div v-if="day.items.length > 3" class="text-gray-500">+{{ day.items.length - 3 }} more</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -447,6 +594,46 @@
                 </div>
             </div>
         </div>
+
+        <!-- INVOICE IMPORT MODAL -->
+        <Modal v-if="importModal.open" @close="importModal.open = false" title="Import SOA Invoices">
+            <form @submit.prevent="submitInvoiceImport" class="space-y-4">
+                <div class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                    <div class="font-semibold mb-1">Template columns</div>
+                    <p>Use the Excel template for invoice fields and optional payment columns. Fill paid_on and paid_amount for fully or partially paid invoices.</p>
+                </div>
+                <FormField label="Excel File" required>
+                    <input type="file" accept=".xlsx" required @change="onImportFileChange"
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                </FormField>
+                <div v-if="importResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div><span class="text-gray-500">Created:</span> <strong>{{ importResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Updated:</span> <strong>{{ importResult.updated || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Payments:</span> <strong>{{ importResult.payments_created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ importResult.skipped || 0 }}</strong></div>
+                    </div>
+                    <div v-if="importResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
+                        <div v-for="error in importResult.errors" :key="error">{{ error }}</div>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <a href="/payments/invoices/import-template" class="text-sm font-semibold text-blue-700 hover:text-blue-800">
+                        Download template
+                    </a>
+                    <div class="flex gap-3">
+                        <button type="button" @click="importModal.open = false"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            Close
+                        </button>
+                        <button type="submit" :disabled="importModal.loading"
+                                class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-sm disabled:opacity-60">
+                            {{ importModal.loading ? 'Importing...' : 'Import' }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </Modal>
 
         <!-- RENEWAL MODAL -->
         <Modal v-if="renewalModal.open" @close="renewalModal.open = false" :title="renewalModal.editing ? 'Edit Renewal' : 'New Renewal'">
@@ -723,6 +910,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { router } from '@inertiajs/vue3'
+import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
@@ -753,6 +941,7 @@ const props = defineProps({
     overpayments: { type: Object, default: () => ({ data: [] }) },
     weeklyPlans: { type: Object, default: () => ({ data: [] }) },
     records: { type: Object, default: () => ({ data: [] }) },
+    cashSchedule: { type: Object, default: () => ({ filters: {}, items: [], monthly: [], weekly: [], calendar: [], total: 0 }) },
 })
 
 const { showSuccess, showError } = useToast()
@@ -764,6 +953,7 @@ const tabList = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'renewals', label: 'Renewals' },
     { id: 'invoices', label: 'SOA Invoices' },
+    { id: 'cash-schedule', label: 'Cash Schedule' },
     { id: 'weekly', label: 'Weekly Plans' },
     { id: 'records', label: 'Approval Records' },
     { id: 'settings', label: 'Settings' },
@@ -782,6 +972,11 @@ const quickFilterInvoices = (status) => {
 
 const summary = computed(() => props.summary || {})
 const weeklyCategories = ['POS', 'CCTV', 'Internet', 'Speaker', 'Anti-virus', 'Router', 'Google']
+const cashViews = [
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'calendar', label: 'Calendar' },
+]
 
 /* ---- Autocomplete option lists ---- */
 const vendorOptions = computed(() => (props.vendors || []).map(v => ({ label: v.name, value: v.id })))
@@ -919,6 +1114,73 @@ const isRowFinal = (type, row) => {
     return false
 }
 
+/* ---- Cash schedule ---- */
+const cashSchedule = computed(() => props.cashSchedule || { filters: {}, items: [], monthly: [], weekly: [], calendar: [], total: 0 })
+const cashView = ref('monthly')
+const cashFilters = reactive({
+    month: props.cashSchedule?.filters?.month || todayDateString().slice(0, 7),
+    vendor_id: props.cashSchedule?.filters?.vendor_id || '',
+    source: props.cashSchedule?.filters?.source || 'all',
+    include_paid: !!props.cashSchedule?.filters?.include_paid,
+})
+watch(() => props.cashSchedule?.filters, (filters) => {
+    if (!filters) return
+    cashFilters.month = filters.month || cashFilters.month
+    cashFilters.vendor_id = filters.vendor_id || ''
+    cashFilters.source = filters.source || 'all'
+    cashFilters.include_paid = !!filters.include_paid
+}, { deep: true })
+const refreshCashSchedule = () => {
+    router.get('/payments', {
+        tab: 'cash-schedule',
+        cash_month: cashFilters.month,
+        cash_vendor_id: cashFilters.vendor_id || undefined,
+        cash_source: cashFilters.source === 'all' ? undefined : cashFilters.source,
+        cash_include_paid: cashFilters.include_paid ? 1 : undefined,
+    }, { preserveScroll: true, preserveState: true, replace: true })
+}
+const selectedMonthTotal = computed(() => {
+    const row = (cashSchedule.value.monthly || []).find(item => item.month === cashFilters.month)
+    return row?.total || 0
+})
+const formatMonthLabel = (value) => {
+    if (!value) return '—'
+    const [year, month] = String(value).split('-').map(Number)
+    return new Date(year, (month || 1) - 1, 1).toLocaleDateString('en-PH', { year: 'numeric', month: 'long' })
+}
+const formatCompactAmount = (value) => {
+    const number = Number(value || 0)
+    if (number >= 1000000) return `${(number / 1000000).toFixed(1)}M`
+    if (number >= 1000) return `${(number / 1000).toFixed(1)}K`
+    return formatAmount(number)
+}
+const sourceLabel = (source) => {
+    if (source === 'invoice') return 'SOA'
+    if (source === 'renewal') return 'Renewal'
+    if (source === 'weekly') return 'Weekly'
+    return source || 'Item'
+}
+const calendarDays = computed(() => {
+    const [year, month] = String(cashFilters.month || todayDateString().slice(0, 7)).split('-').map(Number)
+    const first = new Date(year, (month || 1) - 1, 1)
+    const start = new Date(first)
+    start.setDate(first.getDate() - first.getDay())
+    const byDate = new Map((cashSchedule.value.calendar || []).map(day => [day.date, day]))
+    return Array.from({ length: 42 }, (_, index) => {
+        const date = new Date(start)
+        date.setDate(start.getDate() + index)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        const schedule = byDate.get(key)
+        return {
+            key,
+            day: date.getDate(),
+            inMonth: date.getMonth() === first.getMonth(),
+            total: schedule?.total || 0,
+            items: schedule?.items || [],
+        }
+    })
+})
+
 /* ---- Renewal form ---- */
 const renewalModal = reactive({ open: false, editing: false, current: null })
 const renewalForm = reactive(blankRenewal())
@@ -958,6 +1220,45 @@ const submitRenewal = () => {
         onSuccess: () => { renewalModal.open = false },
         onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Save failed'),
     })
+}
+
+/* ---- Invoice import ---- */
+const importModal = reactive({ open: false, loading: false, file: null })
+const importResult = ref(null)
+const openImportModal = () => {
+    importModal.open = true
+    importModal.loading = false
+    importModal.file = null
+    importResult.value = null
+}
+const onImportFileChange = (event) => {
+    importModal.file = event.target.files?.[0] || null
+}
+const submitInvoiceImport = async () => {
+    if (!importModal.file) {
+        showError('Please choose an Excel file to import.')
+        return
+    }
+
+    importModal.loading = true
+    importResult.value = null
+
+    const formData = new FormData()
+    formData.append('file', importModal.file)
+
+    try {
+        const response = await axios.post('/payments/invoices/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data', 'Accept': 'application/json' },
+        })
+        importResult.value = response.data
+        showSuccess('SOA invoice import completed.')
+        router.reload({ only: ['invoices', 'records', 'summary', 'cashSchedule'], preserveScroll: true })
+    } catch (error) {
+        importResult.value = error.response?.data || { errors: ['Import failed.'] }
+        showError(importResult.value.errors?.[0] || 'Import failed.')
+    } finally {
+        importModal.loading = false
+    }
 }
 
 /* ---- Invoice form ---- */

@@ -282,6 +282,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('renewals/{renewal}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyRenewal'])->name('renewals.destroy');
 
         // Invoices
+        Route::get('invoices/import-template', [\App\Http\Controllers\PaymentMonitoringController::class, 'invoiceImportTemplate'])->name('invoices.import-template');
+        Route::post('invoices/import', [\App\Http\Controllers\PaymentMonitoringController::class, 'importInvoices'])->name('invoices.import');
         Route::post('invoices', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeInvoice'])->name('invoices.store');
         Route::put('invoices/{invoice}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateInvoice'])->name('invoices.update');
         Route::delete('invoices/{invoice}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyInvoice'])->name('invoices.destroy');
