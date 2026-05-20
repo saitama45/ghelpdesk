@@ -994,7 +994,7 @@ const openAddVacantModal = (parentUser = null) => {
     vacantMode.value = 'create'
     editingVacantUser.value = null
     vacantForm.reset()
-    if (parentUser) {
+    if (parentUser && parentUser.id) {
         vacantForm.department_id = parentUser.department_id ? Number(parentUser.department_id) : (selectedDepartment.value?.id || '')
         vacantForm.department_node_id = parentUser.department_node_id ? Number(parentUser.department_node_id) : ''
         vacantForm.manager_ids = [Number(parentUser.id)]
