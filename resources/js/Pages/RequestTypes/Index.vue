@@ -162,9 +162,28 @@ const getRequestForBadgeClass = (requestFor) => {
             return 'bg-blue-100 text-blue-800 border border-blue-200'
         case 'POS':
             return 'bg-purple-100 text-purple-800 border border-purple-200'
+        case 'FORM':
+            return 'bg-teal-100 text-teal-800 border border-teal-200'
         default:
             return 'bg-gray-100 text-gray-800'
     }
+}
+
+const getRequestForDotClass = (requestFor) => {
+    switch (requestFor) {
+        case 'SAP':
+            return 'bg-blue-500'
+        case 'POS':
+            return 'bg-purple-500'
+        case 'FORM':
+            return 'bg-teal-500'
+        default:
+            return 'bg-gray-500'
+    }
+}
+
+const getRequestForLabel = (requestFor) => {
+    return requestFor === 'FORM' ? 'Form Builder' : requestFor
 }
 
 const duplicateRequestType = (type) => {
@@ -295,8 +314,8 @@ const countCheckboxApprovalOverrides = (type) => {
                                               :key="system"
                                               :class="getRequestForBadgeClass(system)" 
                                               class="inline-flex items-center px-3 py-1 text-[10px] font-black rounded-full tracking-wider shadow-sm transition-transform duration-300 group-hover:scale-110">
-                                            <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="system === 'SAP' ? 'bg-blue-500' : 'bg-purple-500'"></span>
-                                            {{ system }}
+                                            <span class="w-1.5 h-1.5 rounded-full mr-1.5" :class="getRequestForDotClass(system)"></span>
+                                            {{ getRequestForLabel(system) }}
                                         </span>
                                     </div>
                                 </td>
@@ -454,7 +473,7 @@ const countCheckboxApprovalOverrides = (type) => {
 
                         <div>
                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 ml-1">System Type</label>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <button 
                                     type="button"
                                     @click="toggleSystem('SAP')"
@@ -480,6 +499,19 @@ const countCheckboxApprovalOverrides = (type) => {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     POS
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="toggleSystem('FORM')"
+                                    :class="form.request_for.includes('FORM')
+                                        ? 'bg-teal-600 text-white ring-4 ring-teal-100'
+                                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100'"
+                                    class="flex items-center justify-center p-4 rounded-2xl border border-transparent text-sm font-black transition-all duration-300"
+                                >
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 4h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                                    </svg>
+                                    Form Builder
                                 </button>
                             </div>
                         </div>
