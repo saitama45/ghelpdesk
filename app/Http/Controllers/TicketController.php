@@ -1412,6 +1412,32 @@ class TicketController extends Controller
         return response()->json($subCategories);
     }
 
+    public function requesterTickets(Request $request)
+    {
+        $reporterId = $request->query('reporter_id');
+        $email = $request->query('email');
+
+        if (!$reporterId && !$email) {
+            return response()->json([]);
+        }
+
+        $query = \App\Models\Ticket::query()->where('is_deleted', false);
+
+        if ($reporterId) {
+            $query->where('reporter_id', $reporterId);
+        } else {
+            $query->where('sender_email', $email);
+        }
+
+        $tickets = $query->with(['item:id,name', 'assignee:id,name'])
+            ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'assignee_id', 'item_id', 'priority')
+            ->orderBy('created_at', 'desc')
+            ->take(100)
+            ->get();
+
+        return response()->json($tickets);
+    }
+
     public function getItems(Request $request)
     {
         $categoryId = $request->query('category_id') ?? $request->input('category_id');

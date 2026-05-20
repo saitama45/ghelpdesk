@@ -1082,6 +1082,76 @@ const getSlaState = (ticket, type) => {
 watch(activeDashboardFilter, () => {
     selectedIds.value = [];
 });
+
+const showRequesterModal = ref(false);
+const requesterModalData = ref(null);
+const requesterTickets = ref([]);
+const isRequesterTicketsLoading = ref(false);
+const requesterActiveTab = ref('open');
+
+const openRequesterTicketsModal = async (ticket) => {
+    requesterModalData.value = {
+        name: ticket.reporter?.name || ticket.sender_name || 'Requester',
+        email: ticket.reporter?.email || ticket.sender_email || ''
+    };
+    requesterTickets.value = [];
+    requesterActiveTab.value = 'open';
+    showRequesterModal.value = true;
+    isRequesterTicketsLoading.value = true;
+
+    try {
+        const params = {};
+        if (ticket.reporter_id) {
+            params.reporter_id = ticket.reporter_id;
+        } else if (ticket.sender_email) {
+            params.email = ticket.sender_email;
+        }
+        const response = await axios.get(route('tickets.data.requester'), { params });
+        requesterTickets.value = response.data;
+    } catch (e) {
+        console.error(e);
+        showError('Failed to load tickets');
+    } finally {
+        isRequesterTicketsLoading.value = false;
+    }
+};
+
+const closeRequesterModal = () => {
+    showRequesterModal.value = false;
+};
+
+const goToTicket = (ticketId) => {
+    router.visit(route('tickets.edit', ticketId));
+};
+
+const filteredRequesterTickets = computed(() => {
+    if (requesterActiveTab.value === 'all') return requesterTickets.value;
+    return requesterTickets.value.filter(t => t.status === requesterActiveTab.value);
+});
+
+const requesterTabs = computed(() => {
+    const statuses = ['open', 'in_progress', 'pending', 'resolved', 'closed'];
+    const counts = {};
+    statuses.forEach(s => counts[s] = 0);
+    counts['all'] = requesterTickets.value.length;
+    
+    requesterTickets.value.forEach(t => {
+        if (counts[t.status] !== undefined) {
+            counts[t.status]++;
+        } else {
+            counts[t.status] = 1;
+        }
+    });
+
+    return [
+        { id: 'open', name: 'Open', count: counts['open'] || 0 },
+        { id: 'in_progress', name: 'In Progress', count: counts['in_progress'] || 0 },
+        { id: 'pending', name: 'Pending', count: counts['pending'] || 0 },
+        { id: 'resolved', name: 'Resolved', count: counts['resolved'] || 0 },
+        { id: 'closed', name: 'Closed', count: counts['closed'] || 0 },
+        { id: 'all', name: 'All', count: counts['all'] },
+    ];
+});
 </script>
 
 <template>
@@ -1474,8 +1544,11 @@ watch(activeDashboardFilter, () => {
                                     </div>
                                 </div>
 
-                                <div class="rounded-xl border border-slate-300 bg-white p-3">
-                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black">Requester</div>
+                                <div @click.stop="openRequesterTicketsModal(ticket)" class="rounded-xl border border-slate-300 bg-white p-3 cursor-pointer hover:bg-slate-50 transition-colors" title="View Requester's Tickets">
+                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black flex justify-between items-center">
+                                        <span>Requester</span>
+                                        <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                    </div>
                                     <div v-if="ticket.reporter" class="flex items-center gap-2 text-sm">
                                         <div v-if="ticket.reporter.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
                                             <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
@@ -2123,6 +2196,74 @@ watch(activeDashboardFilter, () => {
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Requester Tickets Modal -->
+        <div v-if="showRequesterModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeRequesterModal"></div>
+                <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 relative border border-gray-100 flex flex-col max-h-[90vh]">
+                    <div class="flex justify-between items-center mb-6 pb-4 border-b">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900">Tickets for {{ requesterModalData?.name }}</h3>
+                            <div class="text-sm text-gray-500">{{ requesterModalData?.email }}</div>
+                        </div>
+                        <button @click="closeRequesterModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="flex flex-col flex-1 overflow-hidden">
+                        <!-- Tabs -->
+                        <div class="flex space-x-1 overflow-x-auto border-b border-gray-200 mb-4 pb-px">
+                            <button
+                                v-for="tab in requesterTabs"
+                                :key="tab.id"
+                                @click="requesterActiveTab = tab.id"
+                                class="px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors"
+                                :class="requesterActiveTab === tab.id ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'"
+                            >
+                                {{ tab.name }} <span class="ml-1 px-1.5 py-0.5 rounded-full text-xs" :class="requesterActiveTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'">{{ tab.count }}</span>
+                            </button>
+                        </div>
+
+                        <!-- Ticket List -->
+                        <div class="flex-1 overflow-y-auto">
+                            <div v-if="isRequesterTicketsLoading" class="flex justify-center items-center py-12">
+                                <svg class="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </div>
+                            <div v-else-if="filteredRequesterTickets.length === 0" class="text-center py-12 text-gray-500">
+                                No tickets found for this status.
+                            </div>
+                            <div v-else class="space-y-3 pr-2">
+                                <div v-for="t in filteredRequesterTickets" :key="t.id" @click="goToTicket(t.id)" class="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all">
+                                    <div>
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="text-xs font-bold text-blue-600">{{ t.ticket_key }}</span>
+                                            <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold capitalize" :class="getStatusColor(t.status)">
+                                                {{ getStatusLabel(t.status) }}
+                                            </span>
+                                        </div>
+                                        <div class="font-semibold text-gray-900 group-hover:text-blue-700">{{ t.title }}</div>
+                                        <div class="text-xs text-gray-500 mt-1 flex items-center gap-3">
+                                            <span>Created: {{ formatDate(t.created_at) }}</span>
+                                            <span>Assignee: {{ t.assignee?.name || 'Unassigned' }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 sm:mt-0 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

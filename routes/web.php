@@ -172,6 +172,7 @@ Route::middleware('auth')->group(function () {
     Route::get('tickets/data/categories', [\App\Http\Controllers\TicketController::class, 'getCategories'])->name('tickets.data.categories');
     Route::get('tickets/data/subcategories', [\App\Http\Controllers\TicketController::class, 'getSubCategories'])->name('tickets.data.subcategories');
     Route::get('tickets/data/items', [\App\Http\Controllers\TicketController::class, 'getItems'])->name('tickets.data.items');
+    Route::get('tickets/data/requester', [\App\Http\Controllers\TicketController::class, 'requesterTickets'])->name('tickets.data.requester');
     Route::get('assets/template', [\App\Http\Controllers\AssetController::class, 'template'])->name('assets.template');
     Route::post('assets/import', [\App\Http\Controllers\AssetController::class, 'import'])->name('assets.import');
     Route::get('assets/generate-code', [\App\Http\Controllers\AssetController::class, 'generateCode'])->name('assets.generate-code');
