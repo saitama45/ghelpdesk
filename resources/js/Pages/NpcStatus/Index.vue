@@ -2,6 +2,31 @@
     <AppLayout title="NPC Status">
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+                <div class="mb-5 rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 shadow-sm">
+                    <div class="flex justify-center overflow-x-auto custom-scrollbar">
+                        <div class="inline-flex min-w-max items-center gap-2 rounded-xl bg-gray-100 p-1.5">
+                            <button
+                                v-for="tab in statusTabs"
+                                :key="tab.value || 'all'"
+                                type="button"
+                                @click="selectStatus(tab.value)"
+                                :class="[
+                                    'group min-w-[118px] rounded-lg px-4 py-2.5 text-center transition-all duration-200',
+                                    selectedStatus === tab.value
+                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                                        : 'bg-transparent text-gray-500 hover:bg-white hover:text-gray-900 hover:shadow-sm'
+                                ]"
+                            >
+                                <div class="text-[10px] font-black uppercase tracking-widest">{{ tab.label }}</div>
+                                <div class="mt-1 flex items-baseline justify-center gap-1">
+                                    <span class="text-xl font-black leading-none">{{ tab.stores }}</span>
+                                    <span class="text-[9px] font-black uppercase tracking-wider opacity-75">Stores</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <DataTable
                     title="NPC Status Per Entity"
                     subtitle="Track yearly NPC validity, store assignments, and DPO attachments."
@@ -265,6 +290,27 @@
                             placeholder="Search stores by name, code, area, or brand..."
                             class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         >
+                        <div class="mt-3 flex justify-center overflow-x-auto">
+                            <div class="inline-flex min-w-max gap-1 rounded-lg bg-white p-1 shadow-sm ring-1 ring-gray-200">
+                                <button
+                                    v-for="tab in storeAssignmentTabs"
+                                    :key="tab.value"
+                                    type="button"
+                                    @click="storeAssignmentTab = tab.value"
+                                    :class="[
+                                        'rounded-md px-3 py-1.5 text-xs font-black uppercase tracking-wider transition-colors',
+                                        storeAssignmentTab === tab.value
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+                                    ]"
+                                >
+                                    {{ tab.label }}
+                                    <span class="ml-1 rounded-full px-1.5 py-0.5 text-[10px]" :class="storeAssignmentTab === tab.value ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'">
+                                        {{ tab.count }}
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="flex-1 overflow-y-auto p-4">
@@ -292,6 +338,9 @@
                                     </span>
                                 </span>
                             </label>
+                        </div>
+                        <div v-if="filteredStores.length === 0" class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center">
+                            <p class="text-sm font-bold text-gray-500">No stores found for this tab.</p>
                         </div>
                     </div>
 
@@ -331,6 +380,7 @@ const props = defineProps({
     npcStatuses: Object,
     filters: Object,
     statuses: Array,
+    statusCounts: Object,
     stores: Array,
 })
 
@@ -339,7 +389,16 @@ const { hasPermission } = usePermission()
 const { showSuccess, showError } = useToast()
 
 const selectedYear = ref(props.filters?.year || new Date().getFullYear())
-const pagination = usePagination(props.npcStatuses, 'npc-statuses.index', () => ({ year: selectedYear.value }))
+const selectedStatus = ref(props.filters?.status || '')
+const pagination = usePagination(props.npcStatuses, 'npc-statuses.index', () => {
+    const params = { year: selectedYear.value }
+
+    if (selectedStatus.value) {
+        params.status = selectedStatus.value
+    }
+
+    return params
+})
 
 const showStatusModal = ref(false)
 const showStoreModal = ref(false)
@@ -348,6 +407,7 @@ const fileInputKey = ref(0)
 const isSavingStatus = ref(false)
 const isSavingStores = ref(false)
 const storeSearch = ref('')
+const storeAssignmentTab = ref('all')
 const selectedStoreIds = ref([])
 
 const statusForm = reactive({
@@ -373,6 +433,31 @@ watch(() => props.npcStatuses, (newData) => {
 watch(() => props.filters?.year, (year) => {
     if (year) selectedYear.value = year
 })
+
+watch(() => props.filters?.status, (status) => {
+    selectedStatus.value = status || ''
+})
+
+const statusTabs = computed(() => {
+    const counts = props.statusCounts || {}
+    const allStores = Object.values(counts).reduce((sum, count) => sum + Number(count?.stores || 0), 0)
+
+    return [
+        { label: 'All', value: '', stores: allStores },
+        ...(props.statuses || []).map((status) => ({
+            label: status,
+            value: status,
+            stores: Number(counts[status]?.stores || 0),
+        })),
+    ]
+})
+
+const selectStatus = (status) => {
+    if (selectedStatus.value === status) return
+    selectedStatus.value = status
+    pagination.currentPage.value = 1
+    pagination.performSearch()
+}
 
 const refreshYear = () => {
     pagination.currentPage.value = 1
@@ -474,6 +559,7 @@ const openStoreModal = (company) => {
         .filter((store) => store.assigned_npc_status_id === company.npc_status.id)
         .map((store) => store.id)
     storeSearch.value = ''
+    storeAssignmentTab.value = 'all'
     showStoreModal.value = true
 }
 
@@ -482,6 +568,7 @@ const closeStoreModal = () => {
     selectedCompany.value = null
     selectedStoreIds.value = []
     storeSearch.value = ''
+    storeAssignmentTab.value = 'all'
 }
 
 const saveStores = () => {
@@ -507,15 +594,40 @@ const filteredStores = computed(() => {
     const search = storeSearch.value.trim().toLowerCase()
     const stores = props.stores || []
 
-    if (!search) return stores
+    return stores.filter((store) => {
+        const isAssigned = selectedStoreIds.value.includes(store.id)
 
-    return stores.filter((store) => [
-        store.name,
-        store.code,
-        store.area,
-        store.brand,
-        store.assigned_company_name,
-    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(search)))
+        if (storeAssignmentTab.value === 'assigned' && !isAssigned) {
+            return false
+        }
+
+        if (storeAssignmentTab.value === 'unassigned' && isAssigned) {
+            return false
+        }
+
+        if (!search) {
+            return true
+        }
+
+        return [
+            store.name,
+            store.code,
+            store.area,
+            store.brand,
+            store.assigned_company_name,
+        ].filter(Boolean).some((value) => String(value).toLowerCase().includes(search))
+    })
+})
+
+const storeAssignmentTabs = computed(() => {
+    const stores = props.stores || []
+    const assignedCount = stores.filter((store) => selectedStoreIds.value.includes(store.id)).length
+
+    return [
+        { label: 'All', value: 'all', count: stores.length },
+        { label: 'Checked', value: 'assigned', count: assignedCount },
+        { label: 'Unchecked', value: 'unassigned', count: Math.max(0, stores.length - assignedCount) },
+    ]
 })
 
 const isStoreDisabled = (store) => {

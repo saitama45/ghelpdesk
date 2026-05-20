@@ -19,6 +19,7 @@ const props = defineProps({
     staff: Array,
     companies: Array,
     users: Array,
+    departmentReferences: Array,
     stores: Array,
     vendors: Array,
     cannedMessages: Array,
@@ -1103,13 +1104,30 @@ const debounce = (fn, delay) => {
     };
 };
 
-const departments = computed(() =>
-    [...new Set(props.users.map(u => u.department).filter(Boolean))].sort()
-);
+const departmentNodes = computed(() => {
+    const references = (props.departmentReferences || [])
+        .filter(department => department?.name)
+        .map(department => ({
+            id: department.name,
+            name: department.name,
+            code: department.code,
+        }));
 
-const departmentNodes = computed(() =>
-    departments.value.map(dept => ({ id: dept, name: dept }))
-);
+    const currentDepartment = requesterDraft.department || editForm.department || props.ticket.department || '';
+    const hasCurrentDepartment = references.some(department => department.id === currentDepartment);
+
+    if (currentDepartment && !hasCurrentDepartment) {
+        return [
+            {
+                id: currentDepartment,
+                name: `${currentDepartment} (Legacy)`,
+            },
+            ...references,
+        ];
+    }
+
+    return references;
+});
 
 const isClassificationComplete = computed(() => {
     return !!editForm.company_id && !!editForm.store_id && !!editForm.item_id && !!editForm.department;

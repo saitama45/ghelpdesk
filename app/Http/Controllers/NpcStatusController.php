@@ -34,18 +34,29 @@ class NpcStatusController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'year' => 'nullable|integer|min:2000|max:2100',
+            'status' => ['nullable', Rule::in(NpcStatus::STATUSES)],
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:5|max:100',
         ]);
 
         $year = (int) ($validated['year'] ?? now()->year);
+        $status = $validated['status'] ?? null;
         $search = trim((string) ($validated['search'] ?? ''));
 
         $query = Company::query()
-            ->with(['npcStatuses' => function ($npcQuery) use ($year) {
-                $npcQuery->where('year', $year)->withCount('stores');
+            ->with(['npcStatuses' => function ($npcQuery) use ($year, $status) {
+                $npcQuery->where('year', $year)
+                    ->when($status, fn ($query) => $query->where('status', $status))
+                    ->withCount('stores');
             }])
             ->orderBy('name');
+
+        if ($status) {
+            $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $status) {
+                $npcQuery->where('year', $year)
+                    ->where('status', $status);
+            });
+        }
 
         if ($search !== '') {
             $query->where(function ($companyQuery) use ($search, $year) {
@@ -67,10 +78,12 @@ class NpcStatusController extends Controller implements HasMiddleware
             'npcStatuses' => $companies,
             'filters' => [
                 'year' => $year,
+                'status' => $status,
                 'search' => $search,
                 'per_page' => (int) ($validated['per_page'] ?? 10),
             ],
             'statuses' => NpcStatus::STATUSES,
+            'statusCounts' => $this->statusCounts($year),
             'stores' => $this->storeOptions($year),
         ]);
     }
@@ -304,6 +317,28 @@ class NpcStatusController extends Controller implements HasMiddleware
                 ];
             })
             ->values()
+            ->all();
+    }
+
+    private function statusCounts(int $year): array
+    {
+        $counts = NpcStatus::query()
+            ->where('year', $year)
+            ->withCount('stores')
+            ->get(['id', 'status'])
+            ->groupBy('status')
+            ->map(fn ($rows) => [
+                'entities' => $rows->count(),
+                'stores' => $rows->sum('stores_count'),
+            ]);
+
+        return collect(NpcStatus::STATUSES)
+            ->mapWithKeys(fn ($status) => [
+                $status => [
+                    'entities' => (int) ($counts[$status]['entities'] ?? 0),
+                    'stores' => (int) ($counts[$status]['stores'] ?? 0),
+                ],
+            ])
             ->all();
     }
 }

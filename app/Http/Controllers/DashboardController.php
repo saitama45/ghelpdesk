@@ -181,10 +181,39 @@ class DashboardController extends Controller
             $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
         }
 
-        if ($departmentNodeIdFilter) {
-            $descendantIds = DepartmentNode::getAllDescendantIds((int) $departmentNodeIdFilter);
-            $nodeIds = array_merge([(int) $departmentNodeIdFilter], $descendantIds);
+        $selectedDepartmentNodeId = $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null;
+        $kanbanDepartmentGrouping = [];
+
+        if ($selectedDepartmentNodeId) {
+            $descendantIds = DepartmentNode::getAllDescendantIds($selectedDepartmentNodeId);
+            $nodeIds = array_merge([$selectedDepartmentNodeId], $descendantIds);
             $kanbanQuery->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
+
+            $immediateChildren = DepartmentNode::query()
+                ->where('parent_id', $selectedDepartmentNodeId)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name']);
+
+            foreach ($immediateChildren as $childNode) {
+                $kanbanDepartmentGrouping[$childNode->id] = [
+                    'key' => 'node_'.$childNode->id,
+                    'label' => $childNode->name,
+                ];
+
+                foreach (DepartmentNode::getAllDescendantIds($childNode->id) as $descendantId) {
+                    $kanbanDepartmentGrouping[$descendantId] = [
+                        'key' => 'node_'.$childNode->id,
+                        'label' => $childNode->name,
+                    ];
+                }
+            }
+
+            $selectedNode = DepartmentNode::find($selectedDepartmentNodeId);
+            $kanbanDepartmentGrouping[$selectedDepartmentNodeId] = [
+                'key' => 'node_'.$selectedDepartmentNodeId,
+                'label' => $selectedNode?->name ?? 'Selected Department',
+            ];
         }
 
         if ($userIdFilter && $userIdFilter !== 'all') {
@@ -197,7 +226,7 @@ class DashboardController extends Controller
 
         $kanbanTickets = $kanbanQuery
             ->with([
-                'assignee:id,name,org_path',
+                'assignee:id,name,org_path,department_node_id',
                 'company:id,name',
                 'store:id,code,name',
                 'item:id,priority',
@@ -206,8 +235,12 @@ class DashboardController extends Controller
             ->select('id', 'ticket_key', 'title', 'status', 'priority', 'created_at', 'updated_at', 'assignee_id', 'company_id', 'store_id', 'item_id', 'parent_id')
             ->latest('updated_at')
             ->get()
-            ->map(function ($ticket) use ($kanbanStatusToColumn) {
+            ->map(function ($ticket) use ($kanbanStatusToColumn, $kanbanDepartmentGrouping) {
                 $priority = $ticket->item?->priority ?? $ticket->priority ?? 'low';
+                $departmentNodeId = $ticket->assignee?->department_node_id;
+                $grouping = $departmentNodeId ? ($kanbanDepartmentGrouping[$departmentNodeId] ?? null) : null;
+                $departmentGroupKey = $grouping['key'] ?? ($ticket->assignee?->org_path ?: 'No Org Path');
+                $departmentGroupLabel = $grouping['label'] ?? $this->extractLastOrgPathSegment($ticket->assignee?->org_path);
 
                 return [
                     'id' => $ticket->id,
@@ -220,6 +253,8 @@ class DashboardController extends Controller
                     'assignee' => $ticket->assignee?->name ?? 'Unassigned',
                     'sub_unit' => $ticket->assignee?->org_path ?: 'No Org Path',
                     'sub_unit_short' => $this->extractLastOrgPathSegment($ticket->assignee?->org_path),
+                    'department_group_key' => $departmentGroupKey,
+                    'department_group_label' => $departmentGroupLabel ?: $departmentGroupKey,
                     'company_name' => $ticket->company?->name ?? 'N/A',
                     'store' => $ticket->store ? [
                         'id' => $ticket->store->id,
@@ -243,7 +278,7 @@ class DashboardController extends Controller
                         return $ticket['assignee_id'] ? (string) $ticket['assignee_id'] : 'unassigned';
                     }
 
-                    return $ticket['sub_unit'] ?: 'No Org Path';
+                    return $ticket['department_group_key'] ?: 'No Org Path';
                 })
                 ->map(function ($groupTickets, $groupKey) use ($mode, $emptyColumnSet) {
                     $firstTicket = $groupTickets->first();
@@ -258,7 +293,7 @@ class DashboardController extends Controller
 
                     return [
                         'key' => (string) $groupKey,
-                        'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) ($firstTicket['sub_unit_short'] ?: $groupKey),
+                        'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) ($firstTicket['department_group_label'] ?: $firstTicket['sub_unit_short'] ?: $groupKey),
                         'subtitle' => $mode === 'user' ? $firstTicket['sub_unit'] : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)', // sub_unit key now holds org_path value
                         'total' => $groupTickets->count(),
                         'columns' => $columns,

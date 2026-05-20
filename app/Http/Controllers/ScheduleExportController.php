@@ -78,7 +78,7 @@ class ScheduleExportController extends Controller
                 $tempDate->addDay();
             }
 
-            $query = User::active();
+            $query = User::active()->where('is_vacant', false);
             $this->applyDeptFilter($query, $request, onUser: true);
 
             if ($request->filled('sub_unit')) {
@@ -418,7 +418,11 @@ class ScheduleExportController extends Controller
             ? collect((array) $selectedYearsInput)->map(fn ($y) => (int) $y)->unique()->sort()->values()->toArray()
             : [now()->year - 1, now()->year, now()->year + 1];
 
-        $pivotUsersQuery = User::whereNotNull('org_path')->orderBy('org_path')->orderBy('name');
+        $pivotUsersQuery = User::active()
+            ->where('is_vacant', false)
+            ->whereNotNull('org_path')
+            ->orderBy('org_path')
+            ->orderBy('name');
         $this->applyDeptFilter($pivotUsersQuery, $request, onUser: true);
         if ($request->filled('sub_unit')) {
             $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');

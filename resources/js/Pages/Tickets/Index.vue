@@ -1390,7 +1390,7 @@ watch(activeDashboardFilter, () => {
             <DataTable
                 title="Ticket Monitoring Board"
                 :subtitle="tableSubtitle"
-                search-placeholder="Search by key, title, description, reporter, or assignee..."
+                search-placeholder="Search by key, title, reporter, or assignee..."
                 :empty-message="emptyStateMessage"
                 :search="pagination.search.value"
                 :data="displayedTickets"
@@ -1472,9 +1472,6 @@ watch(activeDashboardFilter, () => {
                                     <div class="break-words text-sm font-bold leading-5 text-black">
                                         {{ ticket.title }}
                                     </div>
-                                    <p class="whitespace-pre-wrap break-words text-xs leading-5 text-black">
-                                        {{ ticket.description || 'No description provided.' }}
-                                    </p>
                                 </div>
 
                                 <div class="rounded-xl border border-slate-300 bg-white p-3">

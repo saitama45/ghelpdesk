@@ -376,11 +376,11 @@ const exportToExcel = (type) => {
             </div>
             <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Unit</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
                     <HierarchySelector
                         v-model="filterNodeId"
                         :nodes="hierarchicalOptions"
-                        placeholder="All Departments / Sub-Units"
+                        placeholder="All Departments"
                     />
                 </div>
                 <div>
@@ -422,7 +422,7 @@ const exportToExcel = (type) => {
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h7M9 7h11M4 7h1m-1 5h1m-1 5h1" /></svg>
                         Ticket Flow Board
                     </h3>
-                    <p class="text-xs text-gray-500 mt-1">Static workload view grouped by {{ kanbanView === 'sub_unit' ? 'sub-unit' : 'user' }}.</p>
+                    <p class="text-xs text-gray-500 mt-1">Static workload view grouped by {{ kanbanView === 'sub_unit' ? 'department' : 'user' }}.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
@@ -430,7 +430,7 @@ const exportToExcel = (type) => {
                             @click="kanbanView = 'sub_unit'"
                             :class="['px-3 py-1.5 text-xs font-black rounded-md transition-all', kanbanView === 'sub_unit' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
                         >
-                            Sub-Unit View
+                            Department View
                         </button>
                         <button
                             @click="kanbanView = 'user'"
@@ -445,15 +445,15 @@ const exportToExcel = (type) => {
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto custom-scrollbar">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
                 <div class="grid min-w-[1120px]" :style="{ gridTemplateColumns: `220px repeat(${kanbanColumns.length}, minmax(220px, 1fr))` }">
-                    <div class="sticky left-0 z-20 bg-gray-50 border-r border-b border-gray-200 px-4 py-3">
-                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? 'Sub-Unit' : 'User' }}</p>
+                    <div class="sticky top-0 left-0 z-30 bg-gray-50 border-r border-b border-gray-200 px-4 py-3">
+                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? 'Department' : 'User' }}</p>
                     </div>
                     <div
                         v-for="column in kanbanColumns"
                         :key="column.key"
-                        class="border-b border-r border-gray-200 px-3 py-3"
+                        class="sticky top-0 z-20 border-b border-r border-gray-200 px-3 py-3"
                         :class="getKanbanColumnTheme(column.key).header"
                     >
                         <div class="flex items-center justify-between gap-2">

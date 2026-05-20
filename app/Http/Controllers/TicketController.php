@@ -644,6 +644,7 @@ class TicketController extends Controller
             'staff' => $staff,
             'companies' => $companies,
             'users' => $users,
+            'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'stores' => $stores,
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,

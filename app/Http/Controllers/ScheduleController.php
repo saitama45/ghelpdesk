@@ -1119,7 +1119,11 @@ class ScheduleController extends Controller implements HasMiddleware
             ? collect((array)$selectedYearsInput)->map(fn($y) => (int)$y)->unique()->sort()->values()->toArray()
             : [2024, 2025, 2026];
 
-        $pivotUsersQuery = User::whereNotNull('org_path')->orderBy('org_path')->orderBy('name');
+        $pivotUsersQuery = User::active()
+            ->where('is_vacant', false)
+            ->whereNotNull('org_path')
+            ->orderBy('org_path')
+            ->orderBy('name');
         $this->applyDeptFilter($pivotUsersQuery, $request, onUser: true);
         if ($request->filled('sub_unit')) {
             $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');
@@ -1686,7 +1690,7 @@ class ScheduleController extends Controller implements HasMiddleware
             $tempDate->addDay();
         }
 
-        $query = User::active();
+        $query = User::active()->where('is_vacant', false);
         $this->applyDeptFilter($query, $request, onUser: true);
 
         if ($request->filled('sub_unit')) {
@@ -1923,7 +1927,7 @@ class ScheduleController extends Controller implements HasMiddleware
             $tempDate->addDay();
         }
 
-        $query = User::active();
+        $query = User::active()->where('is_vacant', false);
         $this->applyDeptFilter($query, $request, onUser: true);
 
         if ($request->filled('sub_unit')) {
