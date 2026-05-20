@@ -29,8 +29,8 @@ const formatMinutes = (mins) => {
     return `${h}h ${m}m`
 }
 
-const formatDecimalHours = (mins) => {
-    return (Math.abs(mins) / 60).toFixed(2) + ' hrs'
+const formatDetailWorkHours = (mins) => {
+    return mins === null || mins === undefined ? '--' : formatMinutes(mins)
 }
 
 // Detail modal state
@@ -478,14 +478,14 @@ const stopDrag = () => {
                                     {{ formatMinutes(row.scheduled_minutes) }}
                                 </td>
                                 <td class="px-6 py-3 text-right text-sm font-bold text-gray-900">
-                                    {{ formatDecimalHours(row.actual_minutes) }}
+                                    {{ formatMinutes(row.actual_minutes) }}
                                 </td>
                                 <td class="px-6 py-3 text-right">
                                     <span
                                         :class="(row.actual_minutes - row.scheduled_minutes) >= 0 ? 'text-emerald-600' : 'text-red-600'"
                                         class="text-sm font-black"
                                     >
-                                        {{ (row.actual_minutes - row.scheduled_minutes) >= 0 ? '+' : '−' }}{{ formatDecimalHours(row.actual_minutes - row.scheduled_minutes) }}
+                                        {{ (row.actual_minutes - row.scheduled_minutes) >= 0 ? '+' : '−' }}{{ formatMinutes(row.actual_minutes - row.scheduled_minutes) }}
                                     </span>
                                 </td>
                             </tr>
@@ -496,7 +496,7 @@ const stopDrag = () => {
         </div>
 
         <!-- Work Hours Detail Modal -->
-        <Modal :show="detailModal" @close="detailModal = false" max-width="2xl">
+        <Modal :show="detailModal" @close="detailModal = false" max-width="4xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-4">
                     <div>
@@ -524,12 +524,13 @@ const stopDrag = () => {
                                 <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. End</th>
                                 <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Time In</th>
                                 <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Time Out</th>
+                                <th class="px-4 py-2 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Work Hours</th>
                                 <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Status</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-50 bg-white">
                             <tr v-if="filteredDetailRows.length === 0">
-                                <td colspan="6" class="px-4 py-8 text-center text-gray-400 text-xs">No records.</td>
+                                <td colspan="7" class="px-4 py-8 text-center text-gray-400 text-xs">No records.</td>
                             </tr>
                             <tr v-for="d in filteredDetailRows" :key="d.date" class="hover:bg-gray-50">
                                 <td class="px-4 py-2 font-bold text-gray-900">{{ d.date }}</td>
@@ -540,6 +541,9 @@ const stopDrag = () => {
                                 </td>
                                 <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_out ? 'text-blue-700' : 'text-gray-300'">
                                     {{ formatTime(d.actual_time_out) }}
+                                </td>
+                                <td class="px-4 py-2 text-right font-bold" :class="d.actual_minutes !== null && d.actual_minutes !== undefined ? 'text-gray-900' : 'text-gray-300'">
+                                    {{ formatDetailWorkHours(d.actual_minutes) }}
                                 </td>
                                 <td class="px-4 py-2 text-center">
                                     <span v-if="d.is_present" class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">Present</span>

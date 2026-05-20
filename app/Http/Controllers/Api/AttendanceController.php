@@ -560,11 +560,14 @@ class AttendanceController extends Controller
             }
 
             $actualMinutes = 0;
-            foreach ($logsByDate as $pair) {
+            $actualMinutesByDate = [];
+            foreach ($logsByDate as $date => $pair) {
                 if ($pair['time_in'] && $pair['time_out']) {
                     [$inH, $inM] = explode(':', $pair['time_in']);
                     [$outH, $outM] = explode(':', $pair['time_out']);
-                    $actualMinutes += max(0, ((int) $outH * 60 + (int) $outM) - ((int) $inH * 60 + (int) $inM) - 60);
+                    $workedMinutes = max(0, ((int) $outH * 60 + (int) $outM) - ((int) $inH * 60 + (int) $inM) - 60);
+                    $actualMinutesByDate[$date] = $workedMinutes;
+                    $actualMinutes += $workedMinutes;
                 }
             }
 
@@ -583,6 +586,7 @@ class AttendanceController extends Controller
                     'scheduled_end' => $scheduledDates[$date]['scheduled_end'] ?? null,
                     'actual_time_in' => $logsByDate[$date]['time_in'] ?? null,
                     'actual_time_out' => $logsByDate[$date]['time_out'] ?? null,
+                    'actual_minutes' => $actualMinutesByDate[$date] ?? null,
                     'is_present' => $isPresent,
                 ];
             }

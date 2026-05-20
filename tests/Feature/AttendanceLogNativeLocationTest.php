@@ -345,6 +345,7 @@ class AttendanceLogNativeLocationTest extends TestCase
 
         $this->assertSame('07:36', $summary['detail_dates'][0]['actual_time_in']);
         $this->assertSame('09:20', $summary['detail_dates'][0]['actual_time_out']);
+        $this->assertSame(44, $summary['detail_dates'][0]['actual_minutes']);
 
         $searchRequest = Request::create('/attendance/logs', 'GET', [
             'date_from' => '2026-05-20',
