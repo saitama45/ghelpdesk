@@ -62,6 +62,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Entity</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stores Assigned</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Validity</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days Before Renewal</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DPO Seal</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DPO Registration</th>
@@ -106,6 +107,21 @@
                                     </div>
                                     <div class="text-xs text-gray-500">
                                         to {{ formatDate(company.npc_status.validity_to) }}
+                                    </div>
+                                </div>
+                                <span v-else class="text-xs font-bold text-gray-400">Not set</span>
+                            </td>
+
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div v-if="company.npc_status?.validity_to" class="space-y-1">
+                                    <span
+                                        :class="renewalBadgeClass(renewalInfo(company.npc_status).state)"
+                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-black"
+                                    >
+                                        {{ renewalInfo(company.npc_status).label }}
+                                    </span>
+                                    <div class="text-[11px] font-semibold text-gray-500">
+                                        Renewal: {{ formatDate(company.npc_status.validity_to) }}
                                     </div>
                                 </div>
                                 <span v-else class="text-xs font-bold text-gray-400">Not set</span>
@@ -643,6 +659,69 @@ const formatDate = (value) => {
         month: 'short',
         day: '2-digit',
     })
+}
+
+const parseDateOnly = (value) => {
+    if (!value) return null
+
+    const [year, month, day] = String(value).split('-').map(Number)
+
+    if (!year || !month || !day) return null
+
+    return new Date(year, month - 1, day)
+}
+
+const todayDateOnly = () => {
+    const now = new Date()
+
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+const dayDifference = (fromDate, toDate) => {
+    const millisecondsPerDay = 24 * 60 * 60 * 1000
+
+    return Math.round((toDate.getTime() - fromDate.getTime()) / millisecondsPerDay)
+}
+
+const renewalInfo = (npcStatus) => {
+    const validityTo = parseDateOnly(npcStatus?.validity_to)
+
+    if (!validityTo) {
+        return {
+            label: 'Not set',
+            state: 'none',
+        }
+    }
+
+    const days = dayDifference(todayDateOnly(), validityTo)
+
+    if (days < 0) {
+        return {
+            label: `Overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`,
+            state: 'overdue',
+        }
+    }
+
+    if (days === 0) {
+        return {
+            label: 'Due today',
+            state: 'due',
+        }
+    }
+
+    return {
+        label: `${days} day${days === 1 ? '' : 's'}`,
+        state: days <= 30 ? 'soon' : 'upcoming',
+    }
+}
+
+const renewalBadgeClass = (state) => {
+    return {
+        overdue: 'bg-red-100 text-red-800',
+        due: 'bg-amber-100 text-amber-800',
+        soon: 'bg-orange-100 text-orange-800',
+        upcoming: 'bg-green-100 text-green-800',
+    }[state] || 'bg-gray-100 text-gray-600'
 }
 
 const statusBadgeClass = (status) => {

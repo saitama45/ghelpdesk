@@ -138,6 +138,8 @@
                             <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Vehicle</th>
                             <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Driver</th>
                             <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Route</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Purpose of Travel</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Passengers</th>
                             <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Time</th>
                             <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Status</th>
                             <th class="px-4 py-3 text-right text-[10px] font-bold text-gray-500 uppercase">Actions</th>
@@ -157,7 +159,16 @@
                                     <ArrowRightIcon class="w-3 h-3 text-gray-400" />
                                     <span class="font-bold text-blue-600">{{ trip.end_point }}</span>
                                 </div>
-                                <div class="text-[10px] text-gray-500 truncate max-w-xs">{{ trip.purpose_of_travel }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-xs text-gray-700">
+                                <div class="max-w-[220px] whitespace-pre-line break-words font-semibold">
+                                    {{ trip.purpose_of_travel || '—' }}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-xs text-gray-700">
+                                <div class="max-w-[220px] whitespace-pre-line break-words">
+                                    {{ trip.passengers || '—' }}
+                                </div>
                             </td>
                             <td class="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                                 {{ formatTime(trip.planned_departure_time) }} – {{ formatTime(trip.planned_arrival_time) }}
