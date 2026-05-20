@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\AttendanceController;
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
 use App\Models\ScheduleStore;
@@ -9,6 +10,7 @@ use App\Models\Store;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
@@ -274,6 +276,87 @@ class AttendanceLogNativeLocationTest extends TestCase
         $this->assertDatabaseCount('attendance_logs', 1);
     }
 
+    public function test_work_hours_summary_keeps_actual_times_isolated_per_user(): void
+    {
+        $manager = User::factory()->create(['is_manager' => true]);
+        $otherUser = User::factory()->create(['name' => 'Earlier User']);
+        $targetUser = User::factory()->create(['name' => 'Gen Magbanua']);
+
+        $store = Store::create([
+            'code' => 'STR-WORK-HOURS',
+            'name' => 'Work Hours Store',
+            'sector' => 1,
+            'area' => 'Metro',
+            'brand' => 'GHelpdesk',
+            'class' => 'Regular',
+            'latitude' => 14.5995,
+            'longitude' => 120.9842,
+            'radius_meters' => 100,
+            'is_active' => true,
+        ]);
+
+        $otherSchedule = $this->createScheduleWithStore($otherUser, $store, '2026-05-20 07:00:00', '2026-05-20 17:00:00');
+        $targetSchedule = $this->createScheduleWithStore($targetUser, $store, '2026-05-20 07:00:00', '2026-05-20 17:00:00');
+
+        AttendanceLog::create([
+            'user_id' => $otherUser->id,
+            'schedule_id' => $otherSchedule['schedule']->id,
+            'schedule_store_id' => $otherSchedule['schedule_store']->id,
+            'type' => 'time_in',
+            'latitude' => $store->latitude,
+            'longitude' => $store->longitude,
+            'photo_path' => 'attendance/test/other.png',
+            'log_time' => Carbon::parse('2026-05-20 06:56:00', 'Asia/Manila'),
+        ]);
+
+        AttendanceLog::create([
+            'user_id' => $targetUser->id,
+            'schedule_id' => $targetSchedule['schedule']->id,
+            'schedule_store_id' => $targetSchedule['schedule_store']->id,
+            'type' => 'time_in',
+            'latitude' => $store->latitude,
+            'longitude' => $store->longitude,
+            'photo_path' => 'attendance/test/target-in.png',
+            'log_time' => Carbon::parse('2026-05-20 07:36:00', 'Asia/Manila'),
+        ]);
+
+        AttendanceLog::create([
+            'user_id' => $targetUser->id,
+            'schedule_id' => $targetSchedule['schedule']->id,
+            'schedule_store_id' => $targetSchedule['schedule_store']->id,
+            'type' => 'time_out',
+            'latitude' => $store->latitude,
+            'longitude' => $store->longitude,
+            'photo_path' => 'attendance/test/target-out.png',
+            'log_time' => Carbon::parse('2026-05-20 09:20:00', 'Asia/Manila'),
+        ]);
+
+        $this->actingAs($manager);
+        $request = Request::create('/attendance/logs', 'GET', [
+            'date_from' => '2026-05-20',
+            'date_to' => '2026-05-20',
+        ]);
+        $controller = app(AttendanceController::class);
+        $method = new \ReflectionMethod($controller, 'buildWorkHoursSummary');
+        $method->setAccessible(true);
+
+        $summary = collect($method->invoke($controller, $request, '2026-05-20', '2026-05-20'))
+            ->firstWhere('user_id', $targetUser->id);
+
+        $this->assertSame('07:36', $summary['detail_dates'][0]['actual_time_in']);
+        $this->assertSame('09:20', $summary['detail_dates'][0]['actual_time_out']);
+
+        $searchRequest = Request::create('/attendance/logs', 'GET', [
+            'date_from' => '2026-05-20',
+            'date_to' => '2026-05-20',
+            'search' => 'Gen',
+        ]);
+        $searchedSummary = collect($method->invoke($controller, $searchRequest, '2026-05-20', '2026-05-20'));
+
+        $this->assertCount(1, $searchedSummary);
+        $this->assertSame($targetUser->id, $searchedSummary->first()['user_id']);
+    }
+
     private function createGeofencedAttendanceContext(): array
     {
         $user = User::factory()->create();
@@ -311,6 +394,28 @@ class AttendanceLogNativeLocationTest extends TestCase
         ]);
 
         return [$user, $store, $schedule, $scheduleStore];
+    }
+
+    private function createScheduleWithStore(User $user, Store $store, string $start, string $end): array
+    {
+        $schedule = Schedule::create([
+            'user_id' => $user->id,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+            'status' => 'On-site',
+            'start_time' => Carbon::parse($start, 'Asia/Manila'),
+            'end_time' => Carbon::parse($end, 'Asia/Manila'),
+        ]);
+
+        $scheduleStore = ScheduleStore::create([
+            'schedule_id' => $schedule->id,
+            'store_id' => $store->id,
+            'start_time' => Carbon::parse($start, 'Asia/Manila'),
+            'end_time' => Carbon::parse($end, 'Asia/Manila'),
+            'grace_period_minutes' => 30,
+        ]);
+
+        return ['schedule' => $schedule, 'schedule_store' => $scheduleStore];
     }
 
     private function payload(array $overrides = []): array

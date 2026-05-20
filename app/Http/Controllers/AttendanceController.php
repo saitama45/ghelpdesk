@@ -436,6 +436,10 @@ class AttendanceController extends Controller implements HasMiddleware
             $scheduleQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
         }
 
+        if ($request->filled('search')) {
+            $scheduleQuery->whereHas('user', fn ($q) => $q->where('name', 'like', '%'.$request->search.'%'));
+        }
+
         $schedules = $scheduleQuery->get();
 
         $scheduledByUser = [];
@@ -494,6 +498,10 @@ class AttendanceController extends Controller implements HasMiddleware
             $logQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
         }
 
+        if ($request->filled('search')) {
+            $logQuery->whereHas('user', fn ($q) => $q->where('name', 'like', '%'.$request->search.'%'));
+        }
+
         if ($request->filled('store_id')) {
             $logQuery->whereHas('scheduleStore', fn ($q) => $q->where('store_id', $request->store_id));
         }
@@ -513,11 +521,10 @@ class AttendanceController extends Controller implements HasMiddleware
                 $actualByUser[$uid]['segments'][$segKey] = ['date' => $date, 'time_in' => null, 'time_out' => null];
             }
 
-            $seg = &$actualByUser[$uid]['segments'][$segKey];
-            if ($log->type === 'time_in' && $seg['time_in'] === null) {
-                $seg['time_in'] = $log->log_time->format('H:i');
+            if ($log->type === 'time_in' && $actualByUser[$uid]['segments'][$segKey]['time_in'] === null) {
+                $actualByUser[$uid]['segments'][$segKey]['time_in'] = $log->log_time->format('H:i');
             } elseif ($log->type === 'time_out') {
-                $seg['time_out'] = $log->log_time->format('H:i');
+                $actualByUser[$uid]['segments'][$segKey]['time_out'] = $log->log_time->format('H:i');
             }
 
             if ($log->type === 'time_in') {

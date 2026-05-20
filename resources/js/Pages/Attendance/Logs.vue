@@ -317,6 +317,23 @@ const stopDrag = () => {
                 </button>
             </div>
 
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
+                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Search Name</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input
+                        v-model="search"
+                        type="search"
+                        placeholder="Search employee name in Logs and Work Hours"
+                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px] pl-10 pr-4"
+                    >
+                </div>
+            </div>
+
             <DataTable
                 v-if="activeTab === 'logs'"
                 title="Logs"
@@ -328,6 +345,7 @@ const stopDrag = () => {
                 :perPage="logs.per_page"
                 :showingText="`Showing ${logs.from} to ${logs.to} of ${logs.total} results`"
                 :isLoading="isLoading"
+                :showSearch="false"
                 @goToPage="goToPage"
                 @changePerPage="changePerPage"
             >

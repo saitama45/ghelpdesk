@@ -444,6 +444,10 @@ class AttendanceController extends Controller
             $scheduleQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
         }
 
+        if ($request->filled('search')) {
+            $scheduleQuery->whereHas('user', fn ($q) => $q->where('name', 'like', '%'.$request->search.'%'));
+        }
+
         $schedules = $scheduleQuery->get();
 
         $scheduledByUser = [];
@@ -499,6 +503,10 @@ class AttendanceController extends Controller
             $logQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
         }
 
+        if ($request->filled('search')) {
+            $logQuery->whereHas('user', fn ($q) => $q->where('name', 'like', '%'.$request->search.'%'));
+        }
+
         if ($request->filled('store_id')) {
             $logQuery->whereHas('scheduleStore', fn ($q) => $q->where('store_id', $request->store_id));
         }
@@ -507,7 +515,7 @@ class AttendanceController extends Controller
         foreach ($logQuery->get() as $log) {
             $uid = $log->user_id;
             $date = $log->log_time->toDateString();
-            $segKey = $log->schedule_store_id ? 'ss_'.$log->schedule_store_id : 's_'.$log->schedule_id;
+            $segKey = ($log->schedule_store_id ? 'ss_'.$log->schedule_store_id : 's_'.$log->schedule_id).'_'.$date;
 
             if (! isset($actualByUser[$uid])) {
                 $actualByUser[$uid] = ['segments' => [], 'days_present' => []];
@@ -517,11 +525,10 @@ class AttendanceController extends Controller
                 $actualByUser[$uid]['segments'][$segKey] = ['date' => $date, 'time_in' => null, 'time_out' => null];
             }
 
-            $seg = &$actualByUser[$uid]['segments'][$segKey];
-            if ($log->type === 'time_in' && $seg['time_in'] === null) {
-                $seg['time_in'] = $log->log_time->format('H:i');
+            if ($log->type === 'time_in' && $actualByUser[$uid]['segments'][$segKey]['time_in'] === null) {
+                $actualByUser[$uid]['segments'][$segKey]['time_in'] = $log->log_time->format('H:i');
             } elseif ($log->type === 'time_out') {
-                $seg['time_out'] = $log->log_time->format('H:i');
+                $actualByUser[$uid]['segments'][$segKey]['time_out'] = $log->log_time->format('H:i');
             }
 
             if ($log->type === 'time_in') {
