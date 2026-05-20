@@ -81,10 +81,12 @@
                         <div
                             v-for="cell in calendarCells"
                             :key="cell.key"
-                            class="min-h-[100px] rounded-lg border p-1.5 flex flex-col gap-1"
+                            @click="hasPermission('service_vehicle_trips.create') ? openBookModal(cell.key) : null"
+                            class="min-h-[100px] rounded-lg border p-1.5 flex flex-col gap-1 transition-colors"
                             :class="[
                                 cell.inCurrentMonth ? 'bg-white border-gray-100' : 'bg-gray-50/60 border-gray-50',
                                 cell.isToday ? 'ring-2 ring-blue-300' : '',
+                                hasPermission('service_vehicle_trips.create') ? 'cursor-pointer hover:bg-gray-50' : '',
                             ]"
                         >
                             <div class="flex items-center justify-between">
@@ -95,7 +97,7 @@
                                 v-for="trip in cell.trips"
                                 :key="trip.id"
                                 type="button"
-                                @click="openViewModal(trip)"
+                                @click.stop="openViewModal(trip)"
                                 class="text-left px-1.5 py-1 rounded text-[10px] leading-tight truncate transition-opacity hover:opacity-80"
                                 :class="chipClass(trip.status)"
                                 :title="`${trip.vehicle?.plate_no || ''} · ${trip.driver?.name || ''} · ${formatTime(trip.planned_departure_time)}–${formatTime(trip.planned_arrival_time)}`"
@@ -264,12 +266,24 @@
                             <input type="text" v-model="bookForm.purpose_of_travel" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Start Point <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Origin (Start) <span class="text-red-500">*</span></label>
                             <input type="text" v-model="bookForm.start_point" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">End Point <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Final Destination (End) <span class="text-red-500">*</span></label>
                             <input type="text" v-model="bookForm.end_point" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="md:col-span-2 space-y-2">
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Waypoints (Stopovers)</label>
+                            <div v-for="(wp, index) in bookForm.waypoints" :key="index" class="flex items-center gap-2">
+                                <input type="text" v-model="bookForm.waypoints[index]" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Enter waypoint...">
+                                <button type="button" @click="bookForm.waypoints.splice(index, 1)" class="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Remove Waypoint">
+                                    <TrashIcon class="w-4 h-4" />
+                                </button>
+                            </div>
+                            <button type="button" @click="bookForm.waypoints.push('')" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                <PlusIcon class="w-3 h-3" /> Add Waypoint
+                            </button>
                         </div>
                         <div class="md:col-span-2">
                             <label class="block text-xs font-bold text-gray-600 mb-1">Passengers (please enumerate)</label>
@@ -299,8 +313,14 @@
                             <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Vehicle</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.vehicle ? `${tripModal.trip.vehicle.name} (${tripModal.trip.vehicle.plate_no})` : '—' }}</p></div>
                             <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Driver</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.driver?.name || '—' }}</p></div>
                             <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Purpose of Travel</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.purpose_of_travel || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Start Point</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.start_point || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">End Point</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.end_point || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Origin (Start)</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.start_point || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Final Destination (End)</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.end_point || '—' }}</p></div>
+                            <div v-if="tripModal.trip.waypoints && tripModal.trip.waypoints.length > 0" class="md:col-span-2">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Waypoints</p>
+                                <ul class="list-disc list-inside text-sm font-bold text-gray-900 mt-1">
+                                    <li v-for="(wp, idx) in tripModal.trip.waypoints" :key="idx">{{ wp }}</li>
+                                </ul>
+                            </div>
                             <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Planned Departure</p><p class="text-sm font-bold text-gray-900">{{ formatTime(tripModal.trip.planned_departure_time) || '—' }}</p></div>
                             <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Planned Arrival</p><p class="text-sm font-bold text-gray-900">{{ formatTime(tripModal.trip.planned_arrival_time) || '—' }}</p></div>
                         </div>
@@ -661,6 +681,7 @@ const bookForm = reactive({
     passengers: '',
     start_point: '',
     end_point: '',
+    waypoints: [],
     planned_departure_time: '',
     planned_arrival_time: '',
     remarks: '',
@@ -688,6 +709,7 @@ const resetBookForm = () => {
         passengers: '',
         start_point: '',
         end_point: '',
+        waypoints: [],
         planned_departure_time: '',
         planned_arrival_time: '',
         remarks: '',
@@ -695,8 +717,11 @@ const resetBookForm = () => {
     conflict.value = null
 }
 
-const openBookModal = () => {
+const openBookModal = (date = null) => {
     resetBookForm()
+    if (typeof date === 'string') {
+        bookForm.date_used = date
+    }
     tripModal.trip = null
     tripModal.mode = 'book'
     tripModal.show = true
@@ -724,6 +749,7 @@ const switchToEdit = () => {
         passengers: t.passengers || '',
         start_point: t.start_point,
         end_point: t.end_point,
+        waypoints: t.waypoints || [],
         planned_departure_time: (t.planned_departure_time || '').slice(0, 5),
         planned_arrival_time: (t.planned_arrival_time || '').slice(0, 5),
         remarks: t.remarks || '',

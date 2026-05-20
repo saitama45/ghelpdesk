@@ -295,6 +295,8 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
             'passengers'             => 'nullable|string',
             'start_point'            => 'required|string|max:255',
             'end_point'              => 'required|string|max:255',
+            'waypoints'              => 'nullable|array',
+            'waypoints.*'            => 'required|string|max:255',
             'planned_departure_time' => 'required',
             'planned_arrival_time'   => 'required',
             'remarks'                => 'nullable|string',

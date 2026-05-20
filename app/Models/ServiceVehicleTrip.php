@@ -17,6 +17,7 @@ class ServiceVehicleTrip extends Model
         'passengers',
         'start_point',
         'end_point',
+        'waypoints',
         'planned_departure_time',
         'planned_arrival_time',
         'actual_departure_time',
@@ -46,6 +47,7 @@ class ServiceVehicleTrip extends Model
         'acknowledged_at' => 'datetime',
         'created_by' => 'integer',
         'updated_by' => 'integer',
+        'waypoints' => 'array',
     ];
 
     public function vehicle()
