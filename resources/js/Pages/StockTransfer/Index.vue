@@ -407,6 +407,9 @@
                                         </template>
                                         <template v-else>
                                             <span v-if="sel.isLoadingUnits" class="text-xs text-gray-400 italic">Loading...</span>
+                                            <span v-else-if="readOnlyMode" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                                {{ sel.entries.length }} unit(s)
+                                            </span>
                                             <span v-else class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold"
                                                 :class="sel.availableUnits.length > 0 ? (sel.entries.length > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600') : 'bg-red-50 text-red-500'">
                                                 {{ sel.availableUnits.length > 0 ? `${sel.entries.length}/${sel.availableUnits.filter(u => !u.is_reserved).length} units selected` : `No available units at ${form.origin_location}` }}
@@ -425,11 +428,11 @@
                                         </button>
                                     </div>
                                     <!-- Fixed asset unit picker — always expanded -->
-                                    <div v-if="sel.asset.type === 'Fixed' && sel.availableUnits.length > 0" class="border-t border-blue-50">
+                                    <div v-if="sel.asset.type === 'Fixed' && (sel.availableUnits.length > 0 || sel.entries.length > 0)" class="border-t border-blue-50">
                                         <table class="min-w-full divide-y divide-gray-100">
                                             <thead class="bg-gray-50">
                                                 <tr>
-                                                    <th class="px-4 py-2 text-left">
+                                                    <th v-if="!readOnlyMode" class="px-4 py-2 text-left">
                                                         <label class="inline-flex items-center gap-2 cursor-pointer select-none">
                                                             <input type="checkbox"
                                                                 :checked="isAllUnitsSelected(sel)"
@@ -445,30 +448,43 @@
                                                 </tr>
                                             </thead>
                                             <tbody class="bg-white divide-y divide-gray-100">
-                                                <tr v-for="unit in sel.availableUnits" :key="unit.id"
-                                                    class="transition-colors"
-                                                    :class="[
-                                                        unit.is_reserved ? 'bg-amber-50/50 opacity-70 cursor-not-allowed' : 'hover:bg-blue-50/50 cursor-pointer',
-                                                        isUnitSelected(sel, unit) ? 'bg-blue-50/70' : ''
-                                                    ]"
-                                                    @click="!readOnlyMode && !unit.is_reserved && toggleUnit(sel, unit)"
-                                                >
-                                                    <td class="px-4 py-2" @click.stop>
-                                                        <input type="checkbox"
-                                                            :checked="isUnitSelected(sel, unit)"
-                                                            @change="toggleUnit(sel, unit)"
-                                                            :disabled="unit.is_reserved || readOnlyMode"
-                                                            class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed">
-                                                    </td>
-                                                    <td class="px-4 py-2">
-                                                        <p class="text-sm font-bold text-gray-900">{{ unit.serial_no || 'NO SERIAL' }}</p>
-                                                        <p class="text-[10px] font-mono text-gray-500">{{ unit.barcode }}</p>
-                                                        <p v-if="unit.is_reserved" class="text-[10px] font-semibold text-amber-600 mt-0.5">
-                                                            Reserved · {{ unit.reserved_in || 'Pending Transfer' }}
-                                                        </p>
-                                                    </td>
-                                                    <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ Number(unit.cost).toLocaleString() }}</td>
-                                                </tr>
+                                                <!-- View mode: show entries directly (works even when SOH = 0) -->
+                                                <template v-if="readOnlyMode">
+                                                    <tr v-for="(entry, ei) in sel.entries" :key="ei" class="hover:bg-blue-50/50">
+                                                        <td class="px-4 py-2">
+                                                            <p class="text-sm font-bold text-gray-900">{{ entry.serial_no || 'NO SERIAL' }}</p>
+                                                            <p class="text-[10px] font-mono text-gray-500">{{ entry.barcode }}</p>
+                                                        </td>
+                                                        <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ Number(entry.cost).toLocaleString() }}</td>
+                                                    </tr>
+                                                </template>
+                                                <!-- Edit mode: show available units with checkboxes -->
+                                                <template v-else>
+                                                    <tr v-for="unit in sel.availableUnits" :key="unit.id"
+                                                        class="transition-colors"
+                                                        :class="[
+                                                            unit.is_reserved ? 'bg-amber-50/50 opacity-70 cursor-not-allowed' : 'hover:bg-blue-50/50 cursor-pointer',
+                                                            isUnitSelected(sel, unit) ? 'bg-blue-50/70' : ''
+                                                        ]"
+                                                        @click="!unit.is_reserved && toggleUnit(sel, unit)"
+                                                    >
+                                                        <td class="px-4 py-2" @click.stop>
+                                                            <input type="checkbox"
+                                                                :checked="isUnitSelected(sel, unit)"
+                                                                @change="toggleUnit(sel, unit)"
+                                                                :disabled="unit.is_reserved"
+                                                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                                                        </td>
+                                                        <td class="px-4 py-2">
+                                                            <p class="text-sm font-bold text-gray-900">{{ unit.serial_no || 'NO SERIAL' }}</p>
+                                                            <p class="text-[10px] font-mono text-gray-500">{{ unit.barcode }}</p>
+                                                            <p v-if="unit.is_reserved" class="text-[10px] font-semibold text-amber-600 mt-0.5">
+                                                                Reserved · {{ unit.reserved_in || 'Pending Transfer' }}
+                                                            </p>
+                                                        </td>
+                                                        <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ Number(unit.cost).toLocaleString() }}</td>
+                                                    </tr>
+                                                </template>
                                             </tbody>
                                         </table>
                                     </div>
@@ -482,13 +498,14 @@
                         </div>
                     </div>
 
+                    </fieldset>
+
                     <div class="flex justify-end space-x-3 mt-6">
                         <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">{{ readOnlyMode ? 'Close' : 'Cancel' }}</button>
                         <button v-if="!readOnlyMode" type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700" :disabled="form.processing || assetSelections.length === 0">
                             {{ isEditing ? 'Update Transfer' : 'Save Transfer' }}
                         </button>
                     </div>
-                    </fieldset>
                 </form>
             </div>
         </Modal>

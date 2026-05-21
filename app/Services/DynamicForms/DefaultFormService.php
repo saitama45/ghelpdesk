@@ -6,10 +6,14 @@ use App\Models\FormDefinition;
 use App\Models\FormRecord;
 use App\Models\FormRecordApproval;
 use App\Models\RequestType;
+use App\Models\User;
+use App\Mail\DynamicFormApprovalReminder;
 use App\Services\DynamicForms\Contracts\FormServiceContract;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class DefaultFormService implements FormServiceContract
@@ -34,7 +38,9 @@ class DefaultFormService implements FormServiceContract
             'items' => $data['items'] ?? []
         ]);
 
-        $approvalLevels = $requestType ? $requestType->approval_levels : $formDefinition->approval_levels;
+        $approvalLevels = $requestType
+            ? $this->getEffectiveApprovalLevels($requestType, $data['form_data'] ?? [])
+            : (int) $formDefinition->approval_levels;
 
         if ($formDefinition->workflow_type === 'checklist') {
             $formSchema = $formDefinition->form_schema ?? [];
@@ -87,7 +93,9 @@ class DefaultFormService implements FormServiceContract
             $isChecklist = $formDefinition->workflow_type === 'checklist';
             $levelToApprove = $request->force_level ?? $record->current_approval_level;
             
-            $totalLevels = $record->requestType ? $record->requestType->approval_levels : $formDefinition->approval_levels;
+            $totalLevels = $record->requestType
+                ? $this->getEffectiveApprovalLevels($record->requestType, $record->data ?? [])
+                : (int) $formDefinition->approval_levels;
 
             FormRecordApproval::create([
                 'form_record_id' => $record->id,
@@ -120,6 +128,9 @@ class DefaultFormService implements FormServiceContract
                 }
             }
         });
+
+        $record->refresh();
+        $this->notifyCurrentApprovers($formDefinition, $record);
     }
 
     public function reject(Request $request, FormDefinition $formDefinition, FormRecord $record): void
@@ -209,47 +220,190 @@ class DefaultFormService implements FormServiceContract
         return $data;
     }
 
-    public function notifyCurrentApprovers(FormDefinition $formDefinition, FormRecord $record): void
+    public function notifyCurrentApprovers(FormDefinition $formDefinition, FormRecord $record, ?int $level = null): void
     {
-        $currentLevel = $record->current_approval_level;
-        if ($currentLevel <= 0 || $record->status === 'Approved' || $record->status === 'Rejected') {
+        $targetLevel = $level ?: (int) $record->current_approval_level;
+        if ($targetLevel <= 0 || $record->status === 'Approved' || $record->status === 'Rejected') {
             return;
         }
 
-        $approverEmails = [];
+        $approverIds = collect();
 
         if ($formDefinition->workflow_type === 'checklist') {
             $tasks = $record->data['_checklist_tasks'] ?? [];
             foreach ($tasks as $task) {
-                if ($task['level'] == $currentLevel) {
+                if ((int) ($task['level'] ?? 0) === (int) $targetLevel) {
                     $assignees = $task['assignees'] ?? [];
-                    if (is_array($assignees) && count($assignees) > 0) {
-                        $users = \App\Models\User::whereIn('id', $assignees)->get();
-                        $approverEmails = array_merge($approverEmails, $users->pluck('email')->toArray());
-                    }
+                    $approverIds = $approverIds->merge($assignees);
                 }
+            }
+
+            if ($approverIds->isEmpty()) {
+                $matrix = $record->requestType
+                    ? $this->resolveEffectiveApproverMatrix($record->requestType, $record->data ?? [])
+                    : $this->normalizeApproverMatrix($formDefinition->approver_matrix ?? [], (int) $formDefinition->approval_levels);
+                $levelData = collect($matrix)->firstWhere('level', (int) $targetLevel);
+                $approverIds = $approverIds->merge($levelData['user_ids'] ?? []);
             }
         } else {
-            $matrix = $record->requestType ? $record->requestType->approver_matrix : $formDefinition->approver_matrix;
-            $levelData = null;
-            foreach ($matrix ?? [] as $levelObj) {
-                if (($levelObj['level'] ?? 0) == $currentLevel) {
-                    $levelData = $levelObj;
-                    break;
+            $matrix = $record->requestType
+                ? $this->resolveEffectiveApproverMatrix($record->requestType, $record->data ?? [])
+                : $this->normalizeApproverMatrix($formDefinition->approver_matrix ?? [], (int) $formDefinition->approval_levels);
+            $levelData = collect($matrix)->firstWhere('level', (int) $targetLevel);
+            $approverIds = $approverIds->merge($levelData['user_ids'] ?? []);
+        }
+
+        $approvers = User::active()
+            ->whereIn('id', $approverIds->map(fn ($id) => (int) $id)->filter()->unique()->values())
+            ->get(['id', 'name', 'email'])
+            ->filter(fn (User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
+            ->unique(fn (User $user) => strtolower($user->email));
+
+        foreach ($approvers as $approver) {
+            try {
+                Mail::to($approver->email)->send(new DynamicFormApprovalReminder($formDefinition, $record, $approver->name));
+            } catch (\Throwable $e) {
+                Log::error('Failed to send dynamic form approver notification: ' . $e->getMessage(), [
+                    'form_id' => $formDefinition->id,
+                    'record_id' => $record->id,
+                    'approver_id' => $approver->id,
+                    'level' => $targetLevel,
+                ]);
+            }
+        }
+    }
+
+    private function getEffectiveApprovalLevels(RequestType $requestType, array $formData): int
+    {
+        return count($this->resolveEffectiveApproverMatrix($requestType, $formData));
+    }
+
+    private function resolveEffectiveApproverMatrix(RequestType $requestType, array $formData): array
+    {
+        $baseMatrix = $this->normalizeApproverMatrix(
+            $requestType->approver_matrix ?? [],
+            (int) ($requestType->approval_levels ?? 0)
+        );
+        $dynamicMatrix = $this->getDynamicCheckboxApproverMatrix($requestType, $formData);
+        $dynamicLevels = collect($dynamicMatrix)->pluck('level')->map(fn ($level) => (int) $level)->filter()->max() ?? 0;
+        $totalLevels = max(count($baseMatrix), $dynamicLevels);
+
+        if ($totalLevels <= 0) {
+            return [];
+        }
+
+        return collect(range(1, $totalLevels))
+            ->map(function (int $level) use ($baseMatrix, $dynamicMatrix) {
+                $baseEntry = collect($baseMatrix)->firstWhere('level', $level);
+                $dynamicEntry = collect($dynamicMatrix)->firstWhere('level', $level);
+                $dynamicUserIds = collect($dynamicEntry['user_ids'] ?? [])
+                    ->map(fn ($id) => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return [
+                    'level' => $level,
+                    'user_ids' => !empty($dynamicUserIds)
+                        ? $dynamicUserIds
+                        : ($baseEntry['user_ids'] ?? []),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function getDynamicCheckboxApproverMatrix(RequestType $requestType, array $formData): array
+    {
+        $levelMap = collect($requestType->form_schema['fields'] ?? [])
+            ->filter(function (array $field) {
+                return ($field['type'] ?? null) === 'checkbox_group'
+                    && !empty($field['has_option_approvers'])
+                    && !empty($field['key']);
+            })
+            ->flatMap(function (array $field) use ($formData) {
+                $selectedValues = $formData[$field['key']] ?? [];
+                if (!is_array($selectedValues) || empty($selectedValues)) {
+                    return [];
                 }
-            }
-            if ($levelData && !empty($levelData['user_ids'])) {
-                $users = \App\Models\User::whereIn('id', $levelData['user_ids'])->get();
-                $approverEmails = array_merge($approverEmails, $users->pluck('email')->toArray());
-            }
+
+                return collect($field['options'] ?? [])
+                    ->filter(fn (array $option) => in_array($option['value'] ?? null, $selectedValues, true))
+                    ->map(function (array $option) {
+                        $legacyApprovers = collect($option['approver_user_ids'] ?? [])
+                            ->map(fn ($id) => (int) $id)
+                            ->filter()
+                            ->unique()
+                            ->values()
+                            ->all();
+
+                        if (!empty($option['approval_matrix']) && is_array($option['approval_matrix'])) {
+                            return $this->normalizeApproverMatrix(
+                                $option['approval_matrix'],
+                                (int) ($option['approval_levels'] ?? count($option['approval_matrix']))
+                            );
+                        }
+
+                        if (!empty($legacyApprovers)) {
+                            return [[
+                                'level' => 1,
+                                'user_ids' => $legacyApprovers,
+                            ]];
+                        }
+
+                        return [];
+                    });
+            })
+            ->flatten(1)
+            ->reduce(function (array $carry, array $entry) {
+                $level = (int) ($entry['level'] ?? 0);
+                if ($level <= 0) {
+                    return $carry;
+                }
+
+                $carry[$level] = array_values(array_unique(array_merge(
+                    $carry[$level] ?? [],
+                    collect($entry['user_ids'] ?? [])
+                        ->map(fn ($id) => (int) $id)
+                        ->filter()
+                        ->values()
+                        ->all()
+                )));
+
+                return $carry;
+            }, []);
+
+        return collect($levelMap)
+            ->map(fn (array $userIds, int $level) => [
+                'level' => (int) $level,
+                'user_ids' => array_values(array_unique(array_map('intval', $userIds))),
+            ])
+            ->sortBy('level')
+            ->values()
+            ->all();
+    }
+
+    private function normalizeApproverMatrix(array $matrix, int $levels): array
+    {
+        if ($levels <= 0) {
+            return [];
         }
 
-        $approverEmails = array_filter(array_unique($approverEmails));
+        return collect(range(1, $levels))
+            ->map(function (int $level) use ($matrix) {
+                $match = collect($matrix)->firstWhere('level', $level);
 
-        foreach ($approverEmails as $email) {
-            $user = \App\Models\User::where('email', $email)->first();
-            $name = $user ? $user->name : $email;
-            \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\DynamicFormApprovalReminder($formDefinition, $record, $name));
-        }
+                return [
+                    'level' => $level,
+                    'user_ids' => collect($match['user_ids'] ?? [])
+                        ->map(fn ($id) => (int) $id)
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->all();
     }
 }

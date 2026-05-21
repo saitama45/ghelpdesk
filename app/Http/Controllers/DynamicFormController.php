@@ -135,7 +135,8 @@ class DynamicFormController extends Controller
 
         $service = $this->serviceFactory->make($slug);
         if (method_exists($service, 'notifyCurrentApprovers')) {
-            $service->notifyCurrentApprovers($formDefinition, $record);
+            $level = $request->filled('level') ? (int) $request->input('level') : null;
+            $service->notifyCurrentApprovers($formDefinition, $record, $level);
         }
 
         return redirect()->back()->with('success', 'Reminder sent successfully.');

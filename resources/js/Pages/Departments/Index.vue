@@ -400,7 +400,7 @@ const stopDrag = () => {
     isDragging.value = false
 }
 
-const selectedDepartmentId = ref(props.authUserDepartmentId || props.departments?.[0]?.id || '')
+const selectedDepartmentId = ref('')
 const chartContent = ref(null)
 const userCardRefs = new Map()
 const chartLinks = ref([])
@@ -669,10 +669,16 @@ watch(() => props.departments, (departments) => {
         return
     }
 
-    if (!departments.some(department => Number(department.id) === Number(selectedDepartmentId.value))) {
-        selectedDepartmentId.value = departments[0].id
+    const currentIsValid = selectedDepartmentId.value &&
+        departments.some(d => Number(d.id) === Number(selectedDepartmentId.value))
+
+    if (!currentIsValid) {
+        // Try auth user's department first, fall back to first in list
+        const authId = props.authUserDepartmentId
+        const match = authId && departments.find(d => Number(d.id) === Number(authId))
+        selectedDepartmentId.value = match ? match.id : departments[0].id
     }
-}, { deep: true })
+}, { deep: true, immediate: true })
 
 const centerChart = async () => {
     await nextTick()

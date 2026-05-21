@@ -28,16 +28,19 @@ const approvalForm = useForm({
 
 const reminderLoading = ref(false)
 
-async function sendReminder() {
+async function sendReminder(level = null) {
+    const reminderLevel = level || props.record.current_approval_level
     const confirmed = await confirm({
         title: 'Send Approval Reminder',
-        message: `Send an email reminder to the Stage ${props.record.current_approval_level} approver(s) for this request?`,
+        message: `Send an email reminder to the Stage ${reminderLevel} approver(s) for this request?`,
         confirmLabel: 'Send Reminder',
         variant: 'warning'
     })
     if (!confirmed) return
     reminderLoading.value = true
-    router.post(route('dynamic-form.remind', { slug: props.form.slug, id: props.record.id }), {}, {
+    router.post(route('dynamic-form.remind', { slug: props.form.slug, id: props.record.id }), {
+        level: reminderLevel,
+    }, {
         preserveScroll: true,
         onFinish: () => { reminderLoading.value = false },
     })
@@ -492,7 +495,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                     </div>
                                                     <div v-if="hasPermission('form_builder.edit') && record.status !== 'Rejected' && record.status !== 'Cancelled'" class="mt-3">
                                                         <button 
-                                                            @click.stop="sendReminder"
+                                                            @click.stop="sendReminder(lvl)"
                                                             :disabled="reminderLoading"
                                                             class="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-1.5">
                                                             <svg v-if="reminderLoading" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -581,7 +584,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                 </div>
                                                 <div v-if="hasPermission('form_builder.edit') && record.status !== 'Rejected' && record.status !== 'Cancelled'" class="mt-4 pt-3 border-t border-indigo-100 flex justify-end">
                                                     <button 
-                                                        @click="sendReminder"
+                                                        @click="sendReminder(lvl)"
                                                         :disabled="reminderLoading"
                                                         class="px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-2">
                                                         <svg v-if="reminderLoading" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>

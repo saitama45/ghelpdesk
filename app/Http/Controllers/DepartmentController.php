@@ -55,7 +55,8 @@ class DepartmentController extends Controller implements HasMiddleware
             'departments' => $this->organizationReferences->tree(),
             'activeDepartments' => $this->organizationReferences->tree(activeOnly: true),
             'users' => $users,
-            'authUserDepartmentId' => auth()->user()->department_id,
+            'authUserDepartmentId' => auth()->user()->department_id
+                ?? optional(auth()->user()->load('departmentNode')->departmentNode)->department_id,
         ]);
     }
 

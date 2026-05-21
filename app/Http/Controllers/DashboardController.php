@@ -41,6 +41,15 @@ class DashboardController extends Controller
         $hierarchicalDepartments = $this->organizationReferenceService->tree(true);
         $selectedSubUnitLabel = 'all';
 
+        if (
+            !$request->boolean('skip_default_department')
+            && !$request->has('department_id')
+            && !$request->has('department_node_id')
+        ) {
+            $departmentIdFilter = $user->department_id
+                ?? optional($user->loadMissing('departmentNode')->departmentNode)->department_id;
+        }
+
         if ($departmentNodeIdFilter) {
             $selectedSubUnitLabel = $this->organizationReferenceService->payloadFromNodeId((int) $departmentNodeIdFilter)['org_path'] ?? 'all';
         }
@@ -609,7 +618,12 @@ class DashboardController extends Controller
         $activities = $histories->concat($comments)->sortByDesc('timestamp')->take(10)->values();
 
         // Leadership Leaderboard (top 3 agents this month by points)
-        $leaderboard = $this->buildLeaderboard();
+        $leaderboard = $this->buildLeaderboard(
+            $year ? (int) $year : null,
+            $month ? (int) $month : null,
+            $departmentIdFilter,
+            $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null
+        );
 
         // Dropdown Data
         $currentYear = date('Y');
@@ -656,22 +670,34 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function buildLeaderboard(): array
+    private function buildLeaderboard(?int $year = null, ?int $month = null, ?string $departmentIdFilter = null, ?int $departmentNodeIdFilter = null): array
     {
         $now = \Carbon\Carbon::now();
+        $filterYear  = $year  ?? $now->year;
+        $filterMonth = $month ?? $now->month;
 
         // Top 3 active assignable techs by configured leadership points this month.
         $monthlyPointRows = \App\Models\AgentPointTransaction::query()
-            ->whereYear('awarded_at', $now->year)
-            ->whereMonth('awarded_at', $now->month)
+            ->whereYear('awarded_at', $filterYear)
+            ->whereMonth('awarded_at', $filterMonth)
             ->selectRaw('agent_id, SUM(points) as total_points, COUNT(DISTINCT ticket_id) as ticket_count')
             ->groupBy('agent_id')
             ->get()
             ->keyBy('agent_id');
 
-        $top = \App\Models\User::active()
-            ->whereHas('roles', fn ($q) => $q->where('is_assignable', true))
-            ->get(['id', 'name', 'profile_photo'])
+        $userQuery = \App\Models\User::active()
+            ->whereHas('roles', fn ($q) => $q->where('is_assignable', true));
+
+        if ($departmentIdFilter) {
+            $userQuery->where('department_id', $departmentIdFilter);
+        }
+
+        if ($departmentNodeIdFilter) {
+            $nodeIds = array_merge([$departmentNodeIdFilter], DepartmentNode::getAllDescendantIds($departmentNodeIdFilter));
+            $userQuery->whereIn('department_node_id', $nodeIds);
+        }
+
+        $top = $userQuery->get(['id', 'name', 'profile_photo'])
             ->map(function ($tech) use ($monthlyPointRows) {
                 $row = $monthlyPointRows[$tech->id] ?? null;
 
@@ -696,8 +722,8 @@ class DashboardController extends Controller
         // Avg closing time (minutes) per agent this month
         $avgClosingTimes = \Illuminate\Support\Facades\DB::table('ticket_sla_metrics as sm')
             ->join('tickets as t', 't.id', '=', 'sm.ticket_id')
-            ->whereYear('sm.resolved_at', $now->year)
-            ->whereMonth('sm.resolved_at', $now->month)
+            ->whereYear('sm.resolved_at', $filterYear)
+            ->whereMonth('sm.resolved_at', $filterMonth)
             ->whereIn('t.assignee_id', $agentIds)
             ->whereNotNull('sm.resolved_at')
             ->selectRaw('t.assignee_id, AVG(DATEDIFF(MINUTE, t.created_at, sm.resolved_at)) as avg_minutes')
@@ -705,7 +731,7 @@ class DashboardController extends Controller
             ->pluck('avg_minutes', 'assignee_id');
 
         // Monthly trophies (top agent per category)
-        $trophies = $this->buildTrophies($now);
+        $trophies = $this->buildTrophies(\Carbon\Carbon::create($filterYear, $filterMonth, 1), $departmentIdFilter, $departmentNodeIdFilter);
 
         return [
             'top3' => $top->map(function ($row, $index) use ($avgClosingTimes) {
@@ -725,14 +751,37 @@ class DashboardController extends Controller
         ];
     }
 
-    private function buildTrophies(\Carbon\Carbon $now): array
+    private function buildTrophies(\Carbon\Carbon $now, ?string $departmentIdFilter = null, ?int $departmentNodeIdFilter = null): array
     {
-        $byType = function (array $types) use ($now) {
-            $row = \App\Models\AgentPointTransaction::query()
+        $allowedAgentIds = null;
+
+        if ($departmentIdFilter || $departmentNodeIdFilter) {
+            $userQuery = \App\Models\User::active()
+                ->whereHas('roles', fn ($q) => $q->where('is_assignable', true));
+
+            if ($departmentIdFilter) {
+                $userQuery->where('department_id', $departmentIdFilter);
+            }
+
+            if ($departmentNodeIdFilter) {
+                $nodeIds = array_merge([$departmentNodeIdFilter], DepartmentNode::getAllDescendantIds($departmentNodeIdFilter));
+                $userQuery->whereIn('department_node_id', $nodeIds);
+            }
+
+            $allowedAgentIds = $userQuery->pluck('id')->toArray();
+        }
+
+        $byType = function (array $types) use ($now, $allowedAgentIds) {
+            $query = \App\Models\AgentPointTransaction::query()
                 ->whereYear('awarded_at', $now->year)
                 ->whereMonth('awarded_at', $now->month)
-                ->whereIn('type', $types)
-                ->selectRaw('agent_id, SUM(points) as total')
+                ->whereIn('type', $types);
+
+            if ($allowedAgentIds !== null) {
+                $query->whereIn('agent_id', $allowedAgentIds);
+            }
+
+            $row = $query->selectRaw('agent_id, SUM(points) as total')
                 ->groupBy('agent_id')
                 ->orderByDesc('total')
                 ->first();

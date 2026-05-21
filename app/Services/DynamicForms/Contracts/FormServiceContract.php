@@ -31,5 +31,5 @@ interface FormServiceContract
     /**
      * Send email reminder to current approvers.
      */
-    public function notifyCurrentApprovers(FormDefinition $formDefinition, FormRecord $record): void;
+    public function notifyCurrentApprovers(FormDefinition $formDefinition, FormRecord $record, ?int $level = null): void;
 }

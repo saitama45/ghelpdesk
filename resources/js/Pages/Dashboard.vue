@@ -46,6 +46,7 @@ onMounted(() => {
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const kanbanView = ref('sub_unit');
+const skipDefaultDepartment = ref(false);
 const filterNodeId = ref(
     props.filters?.department_node_id
         ? props.filters.department_node_id
@@ -114,11 +115,14 @@ const applyFilters = () => {
         user_id: filterForm.user_id,
         store_id: filterForm.store_id,
         ...deptFilterParams.value,
+        ...(skipDefaultDepartment.value ? { skip_default_department: 1 } : {}),
     }, {
         preserveState: true,
         preserveScroll: true,
         replace: true
     });
+
+    skipDefaultDepartment.value = false;
 };
 
 const clearFilters = () => {
@@ -127,6 +131,7 @@ const clearFilters = () => {
     filterForm.user_id = 'all';
     filterForm.store_id = 'all';
     filterNodeId.value = '';
+    skipDefaultDepartment.value = true;
     applyFilters();
 };
 
@@ -267,6 +272,13 @@ const concernTypeBars = computed(() => {
         closed: chartNumber(row.closed),
         total: chartNumber(row.total) || chartNumber(row.open) + chartNumber(row.closed),
     }));
+});
+
+const leaderboardPeriodLabel = computed(() => {
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const y = filterForm.year || new Date().getFullYear();
+    const m = filterForm.month ? monthNames[Number(filterForm.month) - 1] : 'This Month';
+    return `${m} ${y}`;
 });
 
 const topTechCards = computed(() => {
@@ -570,7 +582,7 @@ const exportToExcel = (type) => {
                 <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
                     <span class="text-xs font-black uppercase tracking-widest text-blue-600">Top</span>
                     <span class="text-xl">ðŸ…</span>
-                    <h3 class="text-xl font-black text-gray-900">Top 3 Techs This Month</h3>
+                    <h3 class="text-xl font-black text-gray-900">Top 3 Techs <span class="text-blue-600">{{ leaderboardPeriodLabel }}</span></h3>
                 </div>
                 <div v-if="leaderboard.top3?.length" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div v-for="card in topTechCards" :key="card.rank"
