@@ -1273,7 +1273,7 @@ const requesterTabs = computed(() => {
                 </div>
             </section>
 
-            <div class="space-y-2 sm:space-y-4 mb-6 relative z-50">
+            <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
                         <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">

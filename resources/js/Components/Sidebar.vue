@@ -183,7 +183,7 @@ const canSeeSettings = computed(() => {
     <aside
         :class="[
             'bg-gray-900 text-white transition-all duration-300 ease-in-out flex flex-col h-full shrink-0',
-            isCollapsed ? 'w-20' : 'w-72'
+            isCollapsed ? 'w-20 z-[80]' : 'w-72'
         ]"
     >
         <!-- Sidebar Header -->

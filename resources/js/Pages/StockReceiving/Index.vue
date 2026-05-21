@@ -131,7 +131,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{{ item.receiving_no || '—' }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                                      :class="item.status === 'Received' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                                      :class="getStatusBadgeClass(item.status)">
                                     {{ item.status }}
                                 </span>
                             </td>
@@ -158,7 +158,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
                                     <button
-                                        v-if="hasPermission('stock_receivings.post') && item.status !== 'Received'"
+                                        v-if="hasPermission('stock_receivings.post') && item.status === 'For Receiving'"
                                         @click="postReceiving(item)"
                                         class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
                                         title="Post Receiving"
@@ -168,7 +168,17 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('stock_receivings.edit') && item.status !== 'Received'"
+                                        v-if="hasPermission('stock_receivings.post') && item.status === 'For Receiving'"
+                                        @click="openDeclineModal(item)"
+                                        class="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-full transition-colors"
+                                        title="Decline Receiving"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h11m0 0l-4-4m4 4l-4 4m8-9v14" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="hasPermission('stock_receivings.edit') && item.status === 'For Receiving'"
                                         @click="editReceiving(item)"
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit"
@@ -178,7 +188,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-else-if="item.status === 'Received'"
+                                        v-else-if="['Received', 'Declined'].includes(item.status)"
                                         @click="viewReceiving(item)"
                                         class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-full transition-colors"
                                         title="View"
@@ -189,7 +199,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('stock_receivings.delete') && item.status !== 'Received'"
+                                        v-if="hasPermission('stock_receivings.delete') && item.status === 'For Receiving'"
                                         @click="deleteReceiving(item)"
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                         title="Delete"
@@ -215,7 +225,7 @@
                         <span class="text-blue-600">{{ headerInfo.receiving_no }}</span>
                     </h3>
                     <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                          :class="headerInfo.status === 'Received' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                          :class="getStatusBadgeClass(headerInfo.status)">
                         {{ headerInfo.status }}
                     </span>
                 </div>
@@ -364,6 +374,51 @@
                 </form>
             </div>
         </Modal>
+
+        <Modal :show="showDeclineModal" @close="closeDeclineModal" max-width="lg">
+            <div class="bg-white p-6">
+                <div class="mb-5">
+                    <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight">Decline Receiving</h3>
+                    <p class="mt-1 text-sm text-gray-500">
+                        This will return the transferred inventory to the origin location and close the receiving as declined.
+                    </p>
+                </div>
+
+                <div v-if="declineTarget" class="mb-5 rounded-xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm">
+                    <div class="font-bold text-orange-900">{{ declineTarget.receiving_no || 'Pending Receiving' }}</div>
+                    <div class="mt-1 text-orange-700">
+                        {{ declineTarget.origin_location }} -> {{ declineTarget.destination_location }}
+                        <span class="font-bold">({{ declineTarget.transferred_quantity }} qty)</span>
+                    </div>
+                </div>
+
+                <label class="block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Reason</label>
+                <textarea
+                    v-model="declineReason"
+                    rows="4"
+                    class="mt-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                    placeholder="Explain why this receiving is being declined..."
+                ></textarea>
+
+                <div class="mt-6 flex justify-end gap-3">
+                    <button
+                        type="button"
+                        @click="closeDeclineModal"
+                        class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        @click="submitDecline"
+                        :disabled="declineProcessing || !declineReason.trim()"
+                        class="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        Decline Receiving
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>
 
@@ -397,6 +452,7 @@ const statusFilter = ref([])
 const statusOptions = [
     { value: 'For Receiving', label: 'For Receiving' },
     { value: 'Received', label: 'Received' },
+    { value: 'Declined', label: 'Declined' },
 ]
 
 const filterForm = reactive({
@@ -424,9 +480,13 @@ const resetFilters = () => {
 
 // Modal state
 const showModal = ref(false)
+const showDeclineModal = ref(false)
 const readOnly = ref(false)
 const processing = ref(false)
+const declineProcessing = ref(false)
 const currentId = ref(null)
+const declineTarget = ref(null)
+const declineReason = ref('')
 const headerInfo = reactive({
     receiving_no: '',
     receiving_date: '',
@@ -438,6 +498,12 @@ const form = reactive({
     remarks: '',
 })
 const itemRows = ref([]) // flat list of receiving rows
+
+const getStatusBadgeClass = (status) => {
+    if (status === 'Received') return 'bg-emerald-100 text-emerald-800'
+    if (status === 'Declined') return 'bg-orange-100 text-orange-800'
+    return 'bg-amber-100 text-amber-800'
+}
 
 // Barcode scanner state
 const verifiedIds   = ref(new Set())
@@ -577,6 +643,32 @@ const postReceiving = async (item) => {
     if (confirmed) {
         router.post(route('stock-receivings.post', item.id), {})
     }
+}
+
+const openDeclineModal = (item) => {
+    declineTarget.value = item
+    declineReason.value = ''
+    showDeclineModal.value = true
+}
+
+const closeDeclineModal = () => {
+    showDeclineModal.value = false
+    declineTarget.value = null
+    declineReason.value = ''
+    declineProcessing.value = false
+}
+
+const submitDecline = () => {
+    if (!declineTarget.value || !declineReason.value.trim() || declineProcessing.value) return
+
+    declineProcessing.value = true
+    router.post(route('stock-receivings.decline', declineTarget.value.id), {
+        reason: declineReason.value.trim(),
+    }, {
+        onSuccess: () => closeDeclineModal(),
+        onError: (errors) => showError(Object.values(errors)[0] || 'Failed to decline receiving.'),
+        onFinish: () => { declineProcessing.value = false },
+    })
 }
 
 const deleteReceiving = async (item) => {

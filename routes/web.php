@@ -120,6 +120,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('stock-transfers', \App\Http\Controllers\StockTransferController::class);
 
     Route::post('stock-receivings/{stock_receiving}/post', [\App\Http\Controllers\StockReceivingController::class, 'post'])->name('stock-receivings.post');
+    Route::post('stock-receivings/{stock_receiving}/decline', [\App\Http\Controllers\StockReceivingController::class, 'decline'])->name('stock-receivings.decline');
     Route::resource('stock-receivings', \App\Http\Controllers\StockReceivingController::class)->except(['create', 'edit', 'store']);
 
     Route::post('task-boards/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-boards.restore');

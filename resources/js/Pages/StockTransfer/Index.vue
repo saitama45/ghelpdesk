@@ -145,7 +145,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{{ item.transfer_no || '—' }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-                                      :class="item.status === 'Posted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                                      :class="getStatusBadgeClass(item.status)">
                                     {{ item.status }}
                                 </span>
                             </td>
@@ -545,6 +545,8 @@ const statusFilter = ref([])
 const statusOptions = [
     { value: 'For Posting', label: 'For Posting' },
     { value: 'Posted', label: 'Posted' },
+    { value: 'Received', label: 'Received' },
+    { value: 'Declined', label: 'Declined' },
 ]
 
 const filterForm = reactive({
@@ -576,6 +578,12 @@ const readOnlyMode = ref(false)
 const currentId = ref(null)
 
 const canPostTransfer = (status) => String(status || '').trim().toLowerCase() === 'for posting'
+const getStatusBadgeClass = (status) => {
+    if (status === 'Posted') return 'bg-emerald-100 text-emerald-800'
+    if (status === 'Received') return 'bg-blue-100 text-blue-800'
+    if (status === 'Declined') return 'bg-orange-100 text-orange-800'
+    return 'bg-amber-100 text-amber-800'
+}
 
 const viewTransfer = async (item) => {
     await editTransfer(item)

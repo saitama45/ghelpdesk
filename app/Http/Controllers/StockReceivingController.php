@@ -202,6 +202,68 @@ class StockReceivingController extends Controller
         return redirect()->back()->with('success', 'Receiving Stock posted. Destination inventory credited.');
     }
 
+    public function decline(Request $request, StockReceiving $stockReceiving)
+    {
+        abort_unless($request->user()->can('stock_receivings.post'), 403);
+        abort_unless($stockReceiving->status === 'For Receiving', 422, 'Only pending receiving records can be declined.');
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $affectedRows = $this->groupedReceivingRows($stockReceiving)->get();
+        $now          = now();
+        $userId       = $request->user()->id;
+        $reason       = trim($validated['reason']);
+
+        if ($reason === '') {
+            return redirect()->back()->withErrors(['reason' => 'The decline reason field is required.']);
+        }
+
+        DB::transaction(function () use ($affectedRows, $now, $userId, $reason) {
+            $transferIds = [];
+
+            foreach ($affectedRows as $row) {
+                InventoryTransaction::create([
+                    'asset_id'         => $row->asset_id,
+                    'reference_type'   => StockReceiving::class,
+                    'reference_id'     => $row->id,
+                    'location'         => $row->origin_location,
+                    'transaction_type' => 'Receiving Declined',
+                    'quantity'         => $row->transferred_quantity,
+                    'created_by'       => $userId,
+                    'updated_by'       => $userId,
+                ]);
+
+                $row->update([
+                    'status'            => 'Declined',
+                    'received_quantity' => 0,
+                    'remarks'           => $reason,
+                    'received_by'       => null,
+                    'received_at'       => null,
+                    'updated_by'        => $userId,
+                    'updated_at'        => $now,
+                ]);
+
+                if ($row->stock_transfer_id) {
+                    $transferIds[$row->stock_transfer_id] = true;
+                }
+            }
+
+            if (! empty($transferIds)) {
+                StockTransfer::whereIn('id', array_keys($transferIds))->update([
+                    'status'      => 'Declined',
+                    'received_by' => null,
+                    'received_at' => null,
+                    'updated_by'  => $userId,
+                    'updated_at'  => $now,
+                ]);
+            }
+        });
+
+        return redirect()->back()->with('success', 'Receiving declined. Inventory has been returned to the origin location.');
+    }
+
     protected function groupedReceivingRows(StockReceiving $stockReceiving)
     {
         $query = StockReceiving::with(['asset', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn', 'stockTransfer']);

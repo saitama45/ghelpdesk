@@ -445,6 +445,9 @@
                                                     </template>
                                                 </span>
                                                 <span v-if="formatMovement(tx)" class="text-[10px] text-gray-500 font-semibold mt-0.5">{{ formatMovement(tx) }}</span>
+                                                <span v-if="tx.remarks" class="text-[10px] text-orange-600 font-semibold mt-0.5">
+                                                    Reason: {{ tx.remarks }}
+                                                </span>
                                                 <span v-if="tx.source_count > 1" class="text-[10px] text-gray-400 font-semibold mt-0.5">
                                                     {{ tx.source_count }} rows grouped
                                                 </span>
@@ -627,6 +630,7 @@ const groupedHistory = computed(() => {
             tx.dr_no || 'No DR',
             tx.origin_location || 'No Origin',
             tx.destination_location || 'No Destination',
+            tx.remarks || 'No Remarks',
         ].join('|')
 
         if (!groups.has(date)) {
@@ -654,6 +658,7 @@ const groupedHistory = computed(() => {
                 dr_links: [],
                 origin_locations: [],
                 destination_locations: [],
+                remarks: tx.remarks || '',
             })
         }
 
@@ -674,6 +679,9 @@ const groupedHistory = computed(() => {
 
         pushUnique(child.origin_locations, tx.origin_location)
         pushUnique(child.destination_locations, tx.destination_location)
+        if (tx.remarks && !child.remarks) {
+            child.remarks = tx.remarks
+        }
 
         if (toTimestamp(tx.latest_tx_at) > toTimestamp(child.latest_tx_at)) {
             child.latest_tx_at = tx.latest_tx_at
@@ -728,6 +736,8 @@ const getTransactionTypeClass = (type) => {
         case 'Stock Out':
         case 'Transfer Out':
             return 'bg-red-100 text-red-800 border border-red-200'
+        case 'Receiving Declined':
+            return 'bg-orange-100 text-orange-800 border border-orange-200'
         default:
             return 'bg-gray-100 text-gray-800 border border-gray-200'
     }
@@ -785,7 +795,10 @@ const formatPlainQuantity = (value) => {
     return new Intl.NumberFormat('en-US').format(Number(value || 0))
 }
 
-const isTransferTransaction = (tx) => (tx.transaction_type || '').toLowerCase().includes('transfer')
+const isTransferTransaction = (tx) => {
+    const type = (tx.transaction_type || '').toLowerCase()
+    return type.includes('transfer') || type === 'receiving declined'
+}
 
 const stockInTransactionHref = (referenceId) => route('stock-ins.index', { open_stock_in: referenceId })
 
