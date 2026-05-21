@@ -324,6 +324,42 @@ class DashboardController extends Controller
             ],
         ];
 
+        // Projects Board Data
+        $projectStatuses = ['Pending', 'In Progress', 'Delayed', 'Completed'];
+        $allProjects = \App\Models\Project::with(['store', 'tasks'])
+            ->orderBy('target_go_live', 'asc')
+            ->get()
+            ->map(function ($project) {
+                $totalTasks = $project->tasks->count();
+                $completionPct = $totalTasks > 0
+                    ? round($project->tasks->sum('progress') / $totalTasks)
+                    : 0;
+                return [
+                    'id'              => $project->id,
+                    'name'            => $project->name,
+                    'status'          => $project->status ?? 'Pending',
+                    'store'           => $project->store ? $project->store->name : null,
+                    'target_go_live'  => $project->target_go_live?->format('M d, Y'),
+                    'turn_over_date'  => $project->turn_over_date?->format('M d, Y'),
+                    'completion_pct'  => $completionPct,
+                    'total_tasks'     => $totalTasks,
+                ];
+            });
+
+        $projectColumns = collect($projectStatuses)->map(fn ($s) => ['key' => $s, 'label' => $s])->all();
+        $projectGroups  = collect($projectStatuses)->mapWithKeys(fn ($s) => [
+            $s => $allProjects->where('status', $s)->values()->all(),
+        ])->all();
+        $projectTotals  = collect($projectStatuses)->mapWithKeys(fn ($s) => [
+            $s => $allProjects->where('status', $s)->count(),
+        ])->merge(['all' => $allProjects->count()])->all();
+
+        $kanbanProjects = [
+            'columns' => $projectColumns,
+            'groups'  => $projectGroups,
+            'totals'  => $projectTotals,
+        ];
+
         // Modal Lists (limited to 100 to prevent performance issues)
         $listWithDetails = function($q) {
             return $q->with(['assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
@@ -482,6 +518,7 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard', [
             'storeHealth' => $storeHealth,
             'kanbanReport' => $kanbanReport,
+            'kanbanProjects' => $kanbanProjects,
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'myTickets' => $myTickets,

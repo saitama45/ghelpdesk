@@ -22,7 +22,7 @@ class StoreReportService
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
 
         // Query active tickets that have an assignee
-        $ticketsQuery = Ticket::whereIn('status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
+        $ticketsQuery = Ticket::whereNotIn('status', ['resolved', 'closed'])
             ->whereNotNull('assignee_id');
 
         if ($asOfDate) {
@@ -90,27 +90,34 @@ class StoreReportService
 
         $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
 
+        $northArea = DepartmentNode::where('name', 'North Area')->first();
+        $southArea = DepartmentNode::where('name', 'South Area')->first();
+        $northNodes = $northArea ? DepartmentNode::where('parent_id', $northArea->id)->with('users')->get() : collect();
+        $southNodes = $southArea ? DepartmentNode::where('parent_id', $southArea->id)->with('users')->get() : collect();
+
         for ($i = 1; $i <= 8; $i++) {
             $sectorStores = $allStores->where('sector', $i);
             $maxTickets = 0;
-            $sectorUserNames = [];
 
             foreach ($sectorStores as $store) {
                 $storeTickets = $summaryTickets->where('store_id', $store->id);
                 $count = $storeTickets->count();
                 $maxTickets = max($maxTickets, $count);
-                
-                if ($count > 0) {
-                    $assigneeNames = $storeTickets->pluck('assignee.name')->filter()->unique()->toArray();
-                    foreach ($assigneeNames as $name) {
-                        $sectorUserNames[] = $name;
-                    }
-                }
             }
+
+            $nodeName = "Sector $i";
+            if ($i <= 4) {
+                $node = $northNodes->where('name', $nodeName)->first();
+            } else {
+                $node = $southNodes->where('name', $nodeName)->first();
+            }
+
+            $assignedUsers = $node ? $node->users->pluck('name')->toArray() : [];
+            $assignedUserDisplay = empty($assignedUsers) ? 'Unassigned' : implode(', ', $assignedUsers);
 
             $sectorData = [
                 'sector' => $i,
-                'user' => empty($sectorUserNames) ? 'Unassigned' : implode(', ', array_unique($sectorUserNames)),
+                'user' => $assignedUserDisplay,
                 'max_tickets' => $maxTickets
             ];
 

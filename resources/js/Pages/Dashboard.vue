@@ -12,6 +12,7 @@ import { usePermission } from '@/Composables/usePermission.js';
 const props = defineProps({
     storeHealth: Object,
     kanbanReport: Object,
+    kanbanProjects: Object,
     stats: Object,
     recentActivity: Array,
     myTickets: Array,
@@ -223,6 +224,20 @@ const activeTicketFilterParams = computed(() => {
 const kanbanColumns = computed(() => props.kanbanReport?.columns || []);
 const kanbanGroups = computed(() => props.kanbanReport?.groups?.[kanbanView.value] || []);
 const kanbanTotals = computed(() => props.kanbanReport?.totals || {});
+
+// Project board helpers
+const projectColumns = computed(() => props.kanbanProjects?.columns || []);
+const projectGroups  = computed(() => props.kanbanProjects?.groups  || {});
+const projectTotals  = computed(() => props.kanbanProjects?.totals  || {});
+
+const projectStatusTheme = (status) => {
+    switch (status) {
+        case 'Completed': return { header: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-500' };
+        case 'In Progress': return { header: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' };
+        case 'Delayed': return { header: 'bg-red-50', badge: 'bg-red-100 text-red-700', bar: 'bg-red-500' };
+        default: return { header: 'bg-gray-50', badge: 'bg-gray-100 text-gray-600', bar: 'bg-gray-400' };
+    }
+};
 const kanbanPrioritySummary = computed(() => {
     const summary = Object.fromEntries(
         kanbanColumns.value.map(column => [
@@ -481,7 +496,10 @@ const exportToExcel = (type) => {
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h7M9 7h11M4 7h1m-1 5h1m-1 5h1" /></svg>
                         Ticket Flow Board
                     </h3>
-                    <p class="text-xs text-gray-500 mt-1">Static workload view grouped by {{ kanbanView === 'sub_unit' ? 'department' : 'user' }}.</p>
+                    <p class="text-xs text-gray-500 mt-1">
+                        <template v-if="kanbanView === 'project'">Projects grouped by status with task completion.</template>
+                        <template v-else>Static workload view grouped by {{ kanbanView === 'sub_unit' ? 'department' : 'user' }}.</template>
+                    </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
@@ -497,14 +515,24 @@ const exportToExcel = (type) => {
                         >
                             User View
                         </button>
+                        <button
+                            @click="kanbanView = 'project'"
+                            :class="['px-3 py-1.5 text-xs font-black rounded-md transition-all', kanbanView === 'project' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
+                        >
+                            Projects
+                        </button>
                     </div>
-                    <span class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
+                    <span v-if="kanbanView !== 'project'" class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
                         {{ kanbanTotals.all || 0 }} Tickets
+                    </span>
+                    <span v-else class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
+                        {{ projectTotals.all || 0 }} Projects
                     </span>
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
+            <!-- Ticket Board (Department / User views) -->
+            <div v-if="kanbanView !== 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
                 <div class="grid min-w-[1120px]" :style="{ gridTemplateColumns: `220px repeat(${kanbanColumns.length}, minmax(220px, 1fr))` }">
                     <div class="sticky top-0 left-0 z-30 bg-gray-50 border-r border-b border-gray-200 px-4 py-3">
                         <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? 'Department' : 'User' }}</p>
@@ -603,6 +631,68 @@ const exportToExcel = (type) => {
 
                     <div v-else class="col-span-5 px-6 py-12 text-center">
                         <p class="text-sm font-bold text-gray-500">No tickets match the selected management filters.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects Board (Project View) -->
+            <div v-else-if="kanbanView === 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
+                <div class="grid min-w-[900px]" :style="{ gridTemplateColumns: `repeat(${projectColumns.length}, minmax(220px, 1fr))` }">
+                    <div
+                        v-for="col in projectColumns"
+                        :key="col.key"
+                        class="sticky top-0 z-20 border-b border-r border-gray-200 px-3 py-3"
+                        :class="projectStatusTheme(col.key).header"
+                    >
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[11px] font-black uppercase tracking-widest text-gray-700">{{ col.label }}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="projectStatusTheme(col.key).badge">
+                                {{ projectTotals[col.key] || 0 }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <template v-if="Object.values(projectGroups).some(g => g.length > 0)">
+                        <div
+                            v-for="col in projectColumns"
+                            :key="`proj-col-${col.key}`"
+                            class="border-r border-b border-gray-200 bg-gray-50/40 p-2"
+                        >
+                            <div class="min-h-[92px] max-h-[500px] overflow-y-auto pr-1 custom-scrollbar space-y-2 pl-2 border-l-2"
+                                :class="col.key === 'Completed' ? 'border-emerald-300' : col.key === 'In Progress' ? 'border-blue-300' : col.key === 'Delayed' ? 'border-red-300' : 'border-gray-200'">
+                                <Link
+                                    v-for="project in (projectGroups[col.key] || [])"
+                                    :key="project.id"
+                                    :href="route('projects.show', project.id)"
+                                    class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-indigo-200 hover:shadow-md transition-all"
+                                >
+                                    <p class="text-xs font-black text-indigo-700 truncate">{{ project.name }}</p>
+                                    <p v-if="project.store" class="text-[10px] text-gray-500 mt-0.5 truncate">🏪 {{ project.store }}</p>
+                                    <div class="mt-2">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Completion</span>
+                                            <span class="text-[10px] font-black text-gray-700">{{ project.completion_pct }}%</span>
+                                        </div>
+                                        <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                            <div class="h-full rounded-full transition-all duration-500"
+                                                :class="projectStatusTheme(col.key).bar"
+                                                :style="{ width: project.completion_pct + '%' }"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 space-y-0.5 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                                        <p v-if="project.target_go_live">🎯 Go-Live: <span class="text-gray-600 normal-case font-semibold">{{ project.target_go_live }}</span></p>
+                                        <p v-if="project.turn_over_date">📦 Turn-over: <span class="text-gray-600 normal-case font-semibold">{{ project.turn_over_date }}</span></p>
+                                        <p>Tasks: <span class="text-gray-600">{{ project.total_tasks }}</span></p>
+                                    </div>
+                                </Link>
+                                <div v-if="(projectGroups[col.key] || []).length === 0" class="h-20 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white/60">
+                                    <span class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No projects</span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <div v-else class="col-span-4 px-6 py-12 text-center">
+                        <p class="text-sm font-bold text-gray-500">No projects found.</p>
                     </div>
                 </div>
             </div>
