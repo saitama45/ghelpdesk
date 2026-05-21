@@ -85,6 +85,7 @@ class RoleService
             'stores',
             'vendors',
             'activity_templates',
+            'project type & store class',
             'settings',
             'canned_messages',
             'leadership_points',
@@ -116,6 +117,8 @@ class RoleService
                 $categoryDisplay = 'Payments & SOA';
             } elseif ($category === 'leadership_points') {
                 $categoryDisplay = 'Leadership Points';
+            } elseif ($category === 'reference_options') {
+                $categoryDisplay = 'Project Type & Store Class';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 

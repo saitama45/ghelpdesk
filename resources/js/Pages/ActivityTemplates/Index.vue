@@ -20,38 +20,16 @@
                 >
                     <template #actions>
                         <div class="flex items-center space-x-4">
-                            <nav class="flex p-1 bg-gray-100 rounded-lg">
-                                <button 
-                                    @click="filterByClass('Regular')"
-                                    :class="[selectedClass === 'Regular' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
-                                >
-                                    Regular
-                                </button>
-                                <button 
-                                    @click="filterByClass('Kitchen')"
-                                    :class="[selectedClass === 'Kitchen' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
-                                >
-                                    Kitchen
-                                </button>
+                            <nav class="flex flex-wrap p-1 bg-gray-100 rounded-lg gap-0.5">
                                 <button
-                                    @click="filterByClass('Both')"
-                                    :class="[selectedClass === 'Both' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
+                                    v-for="cls in localStoreClasses"
+                                    :key="cls.value"
+                                    @click="filterByClass(cls.value)"
+                                    :class="[selectedClass === cls.value ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap']"
                                 >
-                                    Both
+                                    {{ cls.label }}
                                 </button>
-                                <button
-                                    @click="filterByClass('Office')"
-                                    :class="[selectedClass === 'Office' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
-                                >
-                                    Office
-                                </button>
-                                <button
-                                    @click="filterByClass('Department Store (DS)')"
-                                    :class="[selectedClass === 'Department Store (DS)' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-4 py-1.5 rounded-md text-xs font-bold transition-all']"
-                                >
-                                    DS
-                                </button>
-                                </nav>
+                            </nav>
                             <button 
                                 v-if="hasPermission('activity_templates.create')"
                                 @click="openCreateModal" 
@@ -168,33 +146,35 @@
 
                         <div>
                             <InputLabel for="project_type" value="Project Type" />
-                            <select 
-                                v-model="form.project_type" 
+                            <ManageableAutocomplete
                                 id="project_type"
-                                class="w-full mt-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                required
-                            >
-                                <option value="NSO">NSO (New Store Opening)</option>
-                                <option value="Store Closure">Store Closure</option>
-                                <option value="Store Renovation">Store Renovation</option>
-                            </select>
+                                v-model="form.project_type"
+                                :options="localProjectTypes"
+                                option-type="project_type"
+                                placeholder="Select project type..."
+                                class="mt-1"
+                                :can-create="hasPermission('reference_options.create')"
+                                :can-edit="hasPermission('reference_options.edit')"
+                                :can-delete="hasPermission('reference_options.delete')"
+                                @options-changed="localProjectTypes = $event"
+                            />
                             <InputError :message="form.errors.project_type" class="mt-1" />
                         </div>
 
                         <div>
                             <InputLabel for="store_class" value="Store Class" />
-                            <select 
-                                v-model="form.store_class" 
+                            <ManageableAutocomplete
                                 id="store_class"
-                                class="w-full mt-1 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                required
-                            >
-                                <option value="Regular">Regular Store</option>
-                                <option value="Kitchen">Kitchen Only</option>
-                                <option value="Both">Both (Regular & Kitchen)</option>
-                                <option value="Office">Office Store</option>
-                                <option value="Department Store (DS)">Department Store (DS)</option>
-                            </select>
+                                v-model="form.store_class"
+                                :options="localStoreClasses"
+                                option-type="store_class"
+                                placeholder="Select store class..."
+                                class="mt-1"
+                                :can-create="hasPermission('reference_options.create')"
+                                :can-edit="hasPermission('reference_options.edit')"
+                                :can-delete="hasPermission('reference_options.delete')"
+                                @options-changed="localStoreClasses = $event"
+                            />
                             <InputError :message="form.errors.store_class" class="mt-1" />
                         </div>
                     </div>
@@ -214,7 +194,7 @@
                         </div>
 
                         <div class="space-y-4">
-                            <div v-for="(activities, milestone) in milestoneGroups" :key="milestone" class="overflow-hidden border rounded-xl shadow-sm bg-white">
+                            <div v-for="(activities, milestone, milestoneIndex) in milestoneGroups" :key="milestoneIndex" class="overflow-hidden border rounded-xl shadow-sm bg-white">
                                 <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-50 border-b px-4 py-3">
                                     <div class="flex items-center gap-3 min-w-0 flex-1">
                                         <input
@@ -393,6 +373,7 @@ import TextInput from '@/Components/TextInput.vue'
 import InputLabel from '@/Components/InputLabel.vue'
 import InputError from '@/Components/InputError.vue'
 import PrimaryButton from '@/Components/PrimaryButton.vue'
+import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
@@ -413,8 +394,13 @@ const props = defineProps({
     templates: Object,
     subUnits: Array,
     departmentOptions: Array,
+    projectTypes: Array,
+    storeClasses: Array,
     filters: Object
 })
+
+const localProjectTypes = ref([...(props.projectTypes || [])])
+const localStoreClasses = ref([...(props.storeClasses || [])])
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
@@ -573,7 +559,13 @@ const milestoneGroups = computed(() => {
         groups[milestone].push(activity)
     })
 
-    return groups
+    const sorted = Object.entries(groups).sort(([, a], [, b]) => {
+        const aMin = Math.min(...a.map(act => Number(act.order) || 0))
+        const bMin = Math.min(...b.map(act => Number(act.order) || 0))
+        return aMin - bMin
+    })
+
+    return Object.fromEntries(sorted)
 })
 
 const templateSubTaskCount = (template) => {

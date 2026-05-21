@@ -193,6 +193,11 @@ class RolesAndPermissionSeeder extends Seeder
             'activity_templates.edit' => 'Edit activity templates',
             'activity_templates.delete' => 'Delete activity templates',
 
+            // Reference Options (Project Type & Store Class lookup values)
+            'reference_options.create' => 'Add project type / store class options',
+            'reference_options.edit' => 'Edit project type / store class options',
+            'reference_options.delete' => 'Delete project type / store class options',
+
             // Settings
             'settings.view' => 'View system settings',
             'settings.edit' => 'Edit system settings',

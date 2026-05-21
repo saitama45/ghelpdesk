@@ -1,14 +1,35 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
+import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { 
-    PlusIcon, 
-    CalendarIcon, 
+import {
+    PlusIcon,
+    CalendarIcon,
     BuildingStorefrontIcon,
     ChevronRightIcon,
-    MagnifyingGlassIcon
+    MagnifyingGlassIcon,
+    DocumentDuplicateIcon
 } from '@heroicons/vue/24/outline';
 import { ref, computed } from 'vue';
+import { useConfirm } from '@/Composables/useConfirm';
+
+const { confirm } = useConfirm()
+const duplicating = ref(null)
+
+const duplicateProject = async (project) => {
+    const ok = await confirm({
+        title: 'Duplicate Project',
+        message: `Create a copy of "${project.name}" with all its tasks and assets?`,
+        confirmLabel: 'Duplicate',
+        cancelLabel: 'Cancel',
+        variant: 'info',
+    })
+    if (!ok) return
+    duplicating.value = project.id
+    router.post(route('projects.duplicate', project.id), {}, {
+        onFinish: () => { duplicating.value = null }
+    })
+}
 
 const props = defineProps({
     projects: Object
@@ -101,13 +122,25 @@ const formatDate = (dateString) => {
                                 <span class="text-xs text-gray-400 uppercase font-semibold">Turn-over</span>
                                 <span class="text-sm font-medium text-gray-700">{{ formatDate(project.turn_over_date) }}</span>
                             </div>
-                            <Link 
-                                :href="route('projects.show', project.id)"
-                                class="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
-                            >
-                                View Details
-                                <ChevronRightIcon class="ml-1 h-4 w-4" />
-                            </Link>
+                            <div class="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    @click.prevent="duplicateProject(project)"
+                                    :disabled="duplicating === project.id"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                                    title="Duplicate project"
+                                >
+                                    <DocumentDuplicateIcon class="h-4 w-4" />
+                                    <span>{{ duplicating === project.id ? 'Copying...' : 'Duplicate' }}</span>
+                                </button>
+                                <Link
+                                    :href="route('projects.show', project.id)"
+                                    class="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500"
+                                >
+                                    View Details
+                                    <ChevronRightIcon class="ml-1 h-4 w-4" />
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </div>

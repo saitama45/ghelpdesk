@@ -160,6 +160,9 @@ Route::middleware('auth')->group(function () {
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
     Route::resource('activity-templates', \App\Http\Controllers\ActivityTemplateController::class)->except(['show', 'create', 'edit']);
+    Route::post('reference-options', [\App\Http\Controllers\ReferenceOptionController::class, 'store'])->name('reference-options.store');
+    Route::put('reference-options/{referenceOption}', [\App\Http\Controllers\ReferenceOptionController::class, 'update'])->name('reference-options.update');
+    Route::delete('reference-options/{referenceOption}', [\App\Http\Controllers\ReferenceOptionController::class, 'destroy'])->name('reference-options.destroy');
     Route::get('schedules/template', [\App\Http\Controllers\ScheduleController::class, 'template'])->name('schedules.template');
     Route::post('schedules/import', [\App\Http\Controllers\ScheduleController::class, 'import'])->name('schedules.import');
     Route::get('schedules/report-data', [\App\Http\Controllers\ScheduleController::class, 'reportData'])->name('schedules.report-data');
@@ -266,6 +269,7 @@ Route::middleware('auth')->group(function () {
 
     // NSO Project Tracker
     Route::post('projects/{project}/task-board', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-board');
+    Route::post('projects/{project}/duplicate', [\App\Http\Controllers\ProjectController::class, 'duplicate'])->name('projects.duplicate');
     Route::resource('projects', \App\Http\Controllers\ProjectController::class);
     Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->name('projects.apply-templates');
     Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->name('projects.tasks.gantt-update');

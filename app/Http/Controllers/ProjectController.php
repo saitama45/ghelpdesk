@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Project;
+use App\Models\ProjectAsset;
+use App\Models\ProjectTask;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\ProjectTemplate;
 use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ProjectController extends Controller
@@ -111,6 +114,46 @@ class ProjectController extends Controller
         }
 
         return redirect()->back()->with('success', 'Project updated successfully.');
+    }
+
+    public function duplicate(Project $project)
+    {
+        DB::transaction(function () use ($project) {
+            $newProject = $project->replicate(['id', 'created_at', 'updated_at']);
+            $newProject->name = 'Copy of ' . $project->name;
+            $newProject->status = 'Planning';
+            $newProject->save();
+
+            // Load tasks with their sub-tasks
+            $tasks = $project->tasks()->with('subTasks')->whereNull('parent_task_id')->get();
+
+            foreach ($tasks as $parentTask) {
+                $newParent = $parentTask->replicate(['id', 'project_id', 'parent_task_id', 'created_at', 'updated_at']);
+                $newParent->project_id = $newProject->id;
+                $newParent->status = 'Pending';
+                $newParent->progress = 0;
+                $newParent->assigned_to = null;
+                $newParent->save();
+
+                foreach ($parentTask->subTasks as $subTask) {
+                    $newSub = $subTask->replicate(['id', 'project_id', 'parent_task_id', 'created_at', 'updated_at']);
+                    $newSub->project_id = $newProject->id;
+                    $newSub->parent_task_id = $newParent->id;
+                    $newSub->status = 'Pending';
+                    $newSub->progress = 0;
+                    $newSub->assigned_to = null;
+                    $newSub->save();
+                }
+            }
+
+            foreach ($project->assets as $asset) {
+                $newAsset = $asset->replicate(['id', 'project_id', 'created_at', 'updated_at']);
+                $newAsset->project_id = $newProject->id;
+                $newAsset->save();
+            }
+        });
+
+        return redirect()->back()->with('success', 'Project duplicated successfully.');
     }
 
     public function destroy(Project $project)

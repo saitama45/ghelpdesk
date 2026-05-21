@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityTemplate;
 use App\Models\ProjectTemplate;
+use App\Models\ReferenceOption;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -51,6 +52,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'templates' => $templates,
             'subUnits' => $subUnits,
             'departmentOptions' => $this->departmentOptions(),
+            'projectTypes' => ReferenceOption::ofType('project_type'),
+            'storeClasses' => ReferenceOption::ofType('store_class'),
             'filters' => $request->only(['search', 'store_class']),
         ]);
     }
@@ -59,8 +62,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'project_type' => 'required|string|in:NSO,Store Closure,Store Renovation',
-            'store_class' => 'required|in:Regular,Kitchen,Both,Office,Department Store (DS)',
+            'project_type' => 'required|string|max:100',
+            'store_class' => 'required|string|max:100',
             'activities' => 'required|array|min:1',
             'activities.*.id' => 'nullable|exists:activity_templates,id',
             'activities.*.client_key' => 'nullable|string|max:255',
@@ -98,8 +101,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'project_type' => 'required|string|in:NSO,Store Closure,Store Renovation',
-            'store_class' => 'required|in:Regular,Kitchen,Both,Office,Department Store (DS)',
+            'project_type' => 'required|string|max:100',
+            'store_class' => 'required|string|max:100',
             'activities' => 'required|array|min:1',
             'activities.*.id' => 'nullable|exists:activity_templates,id',
             'activities.*.client_key' => 'nullable|string|max:255',
