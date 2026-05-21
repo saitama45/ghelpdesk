@@ -21,7 +21,7 @@ const props = defineProps({
     quests: Object,
 })
 
-const { showSuccess, showError } = useToast()
+const { showError } = useToast()
 const { confirm } = useConfirm()
 const { put, post, destroy } = useErrorHandler()
 const pagination = usePagination(props.quests, 'leadership-points.index', {}, { dataKey: 'quests' })
@@ -34,7 +34,6 @@ const pointsForm = reactive({ ...props.settings })
 
 const savePoints = () => {
     put(route('leadership-points.update'), pointsForm, {
-        onSuccess: () => showSuccess('Settings saved.'),
         onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'An error occurred'),
     })
 }

@@ -7,6 +7,7 @@ use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class LeadershipPointsController extends Controller implements HasMiddleware
@@ -62,23 +63,25 @@ class LeadershipPointsController extends Controller implements HasMiddleware
 
     public function update(Request $request)
     {
-        $request->validate([
-            'leadership.fast_points'              => 'required|integer',
-            'leadership.ontime_points'            => 'required|integer',
-            'leadership.late_points'              => 'required|integer',
-            'leadership.fcr_bonus'                => 'required|integer',
-            'leadership.happy_customer_bonus'     => 'required|integer',
-            'leadership.unhappy_customer_penalty' => 'required|integer',
-            'leadership.level_beginner'           => 'required|integer|min:0',
-            'leadership.level_intermediate'       => 'required|integer|min:0',
-            'leadership.level_professional'       => 'required|integer|min:0',
-            'leadership.level_expert'             => 'required|integer|min:0',
-            'leadership.level_master'             => 'required|integer|min:0',
-            'leadership.level_guru'               => 'required|integer|min:0',
-        ]);
+        $payload = $request->all();
+
+        Validator::make($payload, [
+            'leadership\.fast_points'              => 'required|integer',
+            'leadership\.ontime_points'            => 'required|integer',
+            'leadership\.late_points'              => 'required|integer',
+            'leadership\.fcr_bonus'                => 'required|integer',
+            'leadership\.happy_customer_bonus'     => 'required|integer',
+            'leadership\.unhappy_customer_penalty' => 'required|integer',
+            'leadership\.level_beginner'           => 'required|integer|min:0',
+            'leadership\.level_intermediate'       => 'required|integer|min:0',
+            'leadership\.level_professional'       => 'required|integer|min:0',
+            'leadership\.level_expert'             => 'required|integer|min:0',
+            'leadership\.level_master'             => 'required|integer|min:0',
+            'leadership\.level_guru'               => 'required|integer|min:0',
+        ])->validate();
 
         foreach (self::DEFAULTS as $key => $default) {
-            $value = $request->input($key, $default);
+            $value = $payload[$key] ?? $default;
             Setting::set($key, $value, 'leadership');
         }
 

@@ -1011,7 +1011,7 @@ const activeFilterBadges = computed(() => {
                 }
                 return filterNodeId.value
               })(props.hierarchicalDepartments || [])
-        badges.push(`Sub-Unit: ${nodeLabel}`)
+        badges.push(`Department: ${nodeLabel}`)
     }
     if (filterAssignee.value.length) {
         badges.push(`Assignee: ${formatFilterBadgeValues(filterAssignee.value, getAssigneeFilterLabel)}`);
@@ -1258,7 +1258,7 @@ const requesterTabs = computed(() => {
                 </div>
             </section>
 
-            <div class="space-y-2 sm:space-y-4 mb-6 relative z-10">
+            <div class="space-y-2 sm:space-y-4 mb-6 relative z-50">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
                         <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -1276,7 +1276,7 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div v-if="hierarchicalOptions.length > 0" class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Sub-Unit</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Department</label>
                                 <HierarchySelector
                                     v-model="filterNodeId"
                                     :nodes="hierarchicalOptions"
@@ -1496,23 +1496,24 @@ const requesterTabs = computed(() => {
                 </Transition>
             </div>
 
-            <DataTable
-                title="Ticket Monitoring Board"
-                :subtitle="tableSubtitle"
-                freeze-header
-                search-placeholder="Search by key, title, reporter, or assignee..."
-                :empty-message="emptyStateMessage"
-                :search="pagination.search.value"
-                :data="displayedTickets"
-                :current-page="pagination.currentPage.value"
-                :last-page="pagination.lastPage.value"
-                :per-page="pagination.perPage.value"
-                :showing-text="pagination.showingText.value"
-                :is-loading="pagination.isLoading.value"
-                @update:search="pagination.search.value = $event"
-                @go-to-page="pagination.goToPage"
-                @change-per-page="pagination.changePerPage"
-            >
+            <div class="relative z-0">
+                <DataTable
+                    title="Ticket Monitoring Board"
+                    :subtitle="tableSubtitle"
+                    freeze-header
+                    search-placeholder="Search by key, title, reporter, or assignee..."
+                    :empty-message="emptyStateMessage"
+                    :search="pagination.search.value"
+                    :data="displayedTickets"
+                    :current-page="pagination.currentPage.value"
+                    :last-page="pagination.lastPage.value"
+                    :per-page="pagination.perPage.value"
+                    :showing-text="pagination.showingText.value"
+                    :is-loading="pagination.isLoading.value"
+                    @update:search="pagination.search.value = $event"
+                    @go-to-page="pagination.goToPage"
+                    @change-per-page="pagination.changePerPage"
+                >
                 <template #actions>
                     <!-- Columns Dropdown -->
                     <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
@@ -1756,7 +1757,8 @@ const requesterTabs = computed(() => {
                         </td>
                     </tr>
                 </template>
-            </DataTable>
+                </DataTable>
+            </div>
         </div>
         <!-- Create Ticket Modal -->
         <div v-if="showCreateModal" class="fixed inset-0 z-50 overflow-y-auto">

@@ -400,7 +400,7 @@
         </Modal>
 
         <!-- Modal -->
-        <Modal :show="showModal" @close="closeModal" max-width="4xl">
+        <Modal :show="showModal" @close="closeModal" max-width="4xl" :closeable="false">
             <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-900 mb-4">{{ readOnlyMode ? 'View Stock In' : (isEditing ? 'Edit Stock In' : 'Add Stock In') }}</h3>
                 <form @submit.prevent="submitForm()" class="space-y-4">

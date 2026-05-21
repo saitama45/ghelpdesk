@@ -217,7 +217,7 @@
         </div>
 
         <!-- Modal -->
-        <Modal :show="showModal" @close="closeModal" max-width="6xl">
+        <Modal :show="showModal" @close="closeModal" max-width="6xl" :closeable="false">
             <div class="p-6">
                 <h3 class="text-lg font-bold text-gray-900 mb-4">{{ readOnlyMode ? 'View Stock Transfer' : (isEditing ? 'Edit Stock Transfer' : 'New Stock Transfer') }}</h3>
                 <form @submit.prevent="submitForm" class="space-y-4">

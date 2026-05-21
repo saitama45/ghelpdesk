@@ -28,6 +28,7 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.create' => 'Create tickets',
             'tickets.edit' => 'Edit tickets',
             'tickets.assign' => 'Assign tickets',
+            'tickets.resolve' => 'Resolve tickets',
             'tickets.close' => 'Close tickets',
             'tickets.delete' => 'Archive and purge tickets',
             'tickets.canned_messages' => 'Use canned messages',
@@ -247,7 +248,7 @@ class RolesAndPermissionSeeder extends Seeder
         
         $techSupport->givePermissionTo([
             'dashboard.view',
-            'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
+            'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.resolve', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
             'task_boards.view', 'task_boards.create', 'task_boards.edit', 'task_boards.manage_members',
             'attendance.view', 'attendance.logs', 'attendance.create',
             'users.view',

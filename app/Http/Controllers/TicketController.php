@@ -672,12 +672,26 @@ class TicketController extends Controller
             return [];
         }
 
+        $slaRows = DB::table('tickets as t')
+            ->leftJoin('ticket_sla_metrics as sm', 'sm.ticket_id', '=', 't.id')
+            ->where('t.item_id', $itemId)
+            ->whereIn('t.assignee_id', $pointRows->keys())
+            ->selectRaw('
+                t.assignee_id,
+                MIN(CASE WHEN sm.first_response_at IS NOT NULL THEN DATEDIFF(MINUTE, t.created_at, sm.first_response_at) END) as fastest_response_min,
+                MIN(CASE WHEN sm.resolved_at IS NOT NULL THEN DATEDIFF(MINUTE, t.created_at, sm.resolved_at) END) as fastest_close_min
+            ')
+            ->groupBy('t.assignee_id')
+            ->get()
+            ->keyBy('assignee_id');
+
         return User::active()
             ->whereHas('roles', fn ($q) => $q->where('is_assignable', true))
             ->whereIn('id', $pointRows->keys())
             ->get(['id', 'name', 'profile_photo'])
-            ->map(function ($tech) use ($pointRows) {
+            ->map(function ($tech) use ($pointRows, $slaRows) {
                 $row = $pointRows[$tech->id];
+                $slaRow = $slaRows[$tech->id] ?? null;
 
                 return [
                     'agent_id' => $tech->id,
@@ -685,6 +699,8 @@ class TicketController extends Controller
                     'profile_photo' => $tech->profile_photo,
                     'total_points' => (int) $row->total_points,
                     'ticket_count' => (int) $row->ticket_count,
+                    'fastest_response_min' => $slaRow?->fastest_response_min !== null ? (int) $slaRow->fastest_response_min : null,
+                    'fastest_close_min' => $slaRow?->fastest_close_min !== null ? (int) $slaRow->fastest_close_min : null,
                 ];
             })
             ->sortBy([
@@ -707,6 +723,8 @@ class TicketController extends Controller
     public function update(UpdateTicketRequest $request, Ticket $ticket)
     {
         $validated = $request->validated();
+
+        $this->authorizeTicketStatusChange($validated['status'] ?? null, $ticket->status);
         
         // Handle requester options
         if ($request->has('is_self_requester')) {
@@ -868,6 +886,23 @@ class TicketController extends Controller
         } else {
             // If any child is updated to an active status, parent reflects it
             $parent->update(['status' => $triggeredStatus]);
+        }
+    }
+
+    private function authorizeTicketStatusChange(?string $newStatus, ?string $oldStatus): void
+    {
+        if (!$newStatus || $newStatus === $oldStatus) {
+            return;
+        }
+
+        $requiredPermission = match ($newStatus) {
+            'resolved' => 'tickets.resolve',
+            'closed' => 'tickets.close',
+            default => null,
+        };
+
+        if ($requiredPermission) {
+            abort_unless(auth()->user()->can($requiredPermission), 403);
         }
     }
 
@@ -1347,6 +1382,8 @@ class TicketController extends Controller
         $isTerminalStatusChange = in_array($request->input('status'), ['resolved', 'closed'], true);
         $requiresRcaOnResolve = (bool) $ticket->item?->requires_rca_on_resolve;
         $hasAttachments = count($request->file('attachments', []) ?: []) > 0;
+
+        $this->authorizeTicketStatusChange($request->input('status'), $ticket->status);
 
         $request->validate([
             'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange && !$hasAttachments), 'nullable', 'string'],

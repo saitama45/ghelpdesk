@@ -449,7 +449,7 @@ const ccUserOptions = computed(() => {
     const term = ccUserSearch.value.trim().toLowerCase();
     if (!term) return [];
     const existing = new Set(ccForm.ccs.map(c => c.email.toLowerCase()));
-    return (props.staff || [])
+    return (props.users || [])
         .filter(u => u.email && !existing.has(u.email.toLowerCase()))
         .filter(u => (u.name || '').toLowerCase().includes(term) || (u.email || '').toLowerCase().includes(term))
         .slice(0, 8);
@@ -677,11 +677,42 @@ const itemLeaderRows = computed(() => props.itemLeaders || []);
 const canResolveTicket = computed(() => availableStatuses.value.includes('resolved'));
 const requiresRcaOnResolve = computed(() => !!selectedItem.value?.requires_rca_on_resolve);
 const requiresResolutionDetails = (targetStatus) => ['resolved', 'closed'].includes(targetStatus);
+const terminalStatusPermissions = {
+    resolved: 'tickets.resolve',
+    closed: 'tickets.close',
+};
+
+const canChangeTicketStatus = (status) => {
+    if (status === props.ticket.status) return true;
+    if (terminalStatusPermissions[status]) {
+        return hasPermission(terminalStatusPermissions[status]);
+    }
+
+    return hasPermission('tickets.edit');
+};
+
+const canUpdateTicket = () => {
+    return hasPermission('tickets.edit')
+        || hasPermission('tickets.assign')
+        || hasPermission('tickets.resolve')
+        || hasPermission('tickets.close');
+};
 
 const hasValidResolutionDetails = () => {
     if (!commentForm.action_taken.trim()) return false;
     if (requiresRcaOnResolve.value && !commentForm.root_cause_analysis.trim()) return false;
     return true;
+};
+
+const hasSelectedItemForResolution = () => !!editForm.item_id;
+
+const validateResolutionItem = (contextLabel = 'continue') => {
+    if (hasSelectedItemForResolution()) {
+        return true;
+    }
+
+    showError(`Item is required before ${contextLabel}.`);
+    return false;
 };
 
 const validateResolutionDetails = (contextLabel = 'continue') => {
@@ -701,6 +732,10 @@ const validateResolutionDetails = (contextLabel = 'continue') => {
 const validateResolutionBeforeSubmit = (newStatus) => {
     if (!requiresResolutionDetails(newStatus)) return true;
 
+    if (!validateResolutionItem(`setting the ticket to ${getStatusLabel(newStatus)}`)) {
+        return false;
+    }
+
     return validateResolutionDetails(`setting the ticket to ${getStatusLabel(newStatus)}`);
 };
 
@@ -717,6 +752,17 @@ const canSubmitCurrentComment = () => {
 };
 
 const submitWithStatus = (newStatus) => {
+    if (newStatus && !canChangeTicketStatus(newStatus)) {
+        showError(`You do not have permission to set this ticket to ${getStatusLabel(newStatus)}.`);
+        showStatusDropdown.value = false;
+        return;
+    }
+
+    if (requiresResolutionDetails(newStatus) && !validateResolutionItem(`setting the ticket to ${getStatusLabel(newStatus)}`)) {
+        showStatusDropdown.value = false;
+        return;
+    }
+
     if (requiresResolutionDetails(newStatus) && !hasValidResolutionDetails()) {
         commentForm.status = newStatus;
         showResolutionModal.value = true;
@@ -832,6 +878,11 @@ const formatDurationCompact = (milliseconds) => {
     if (hours === 0) return `${totalMinutes} min`;
     if (minutes === 0) return `${hours} hr${hours === 1 ? '' : 's'}`;
     return `${hours} hr${hours === 1 ? '' : 's'} ${minutes} min`;
+};
+
+const formatMinutesCompact = (minutes) => {
+    if (minutes === null || minutes === undefined) return 'N/A';
+    return formatDurationCompact(Number(minutes) * 60000);
 };
 
 const slaRuntime = computed(() => {
@@ -980,11 +1031,7 @@ const resolutionSLA = computed(() => {
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
     return statuses.filter(status => {
-        if (status === 'closed' || status === 'resolved') {
-            // Allow 'closed' or 'resolved' if user has permission OR if ticket is already in that status
-            return hasPermission('tickets.close') || props.ticket.status === status;
-        }
-        return true;
+        return canChangeTicketStatus(status);
     });
 });
 
@@ -1218,7 +1265,7 @@ const buildTicketPayload = (source = editForm.data()) => {
 };
 
 const updateTicket = (options = {}) => {
-    if (!hasPermission('tickets.edit') && !hasPermission('tickets.assign') && !hasPermission('tickets.close')) {
+    if (!canUpdateTicket()) {
         showError('You do not have permission to update tickets.');
         return;
     }
@@ -1317,7 +1364,26 @@ watch(() => [
 watch(() => editForm.status, (newStatus, oldStatus) => {
     if (syncingTicketState.value || oldStatus === undefined || newStatus === oldStatus) return;
 
+    if (!canChangeTicketStatus(newStatus)) {
+        showError(`You do not have permission to set this ticket to ${getStatusLabel(newStatus)}.`);
+        syncingTicketState.value = true;
+        editForm.status = oldStatus;
+        nextTick(() => {
+            syncingTicketState.value = false;
+        });
+        return;
+    }
+
     if (requiresResolutionDetails(newStatus)) {
+        if (!validateResolutionItem(`setting the ticket to ${getStatusLabel(newStatus)}`)) {
+            syncingTicketState.value = true;
+            editForm.status = oldStatus;
+            nextTick(() => {
+                syncingTicketState.value = false;
+            });
+            return;
+        }
+
         if (!hasValidResolutionDetails()) {
             syncingTicketState.value = true;
             editForm.status = oldStatus;
@@ -1735,6 +1801,16 @@ const linkify = (text) => {
                                             <div class="text-[11px] font-semibold text-gray-500">
                                                 {{ leader.ticket_count }} ticket{{ leader.ticket_count !== 1 ? 's' : '' }}
                                             </div>
+                                            <div class="mt-2 grid grid-cols-2 gap-2">
+                                                <div class="rounded-md bg-indigo-50 px-2 py-1">
+                                                    <div class="text-[8px] font-black uppercase tracking-widest text-indigo-400">Response</div>
+                                                    <div class="text-[11px] font-black text-indigo-800">{{ formatMinutesCompact(leader.fastest_response_min) }}</div>
+                                                </div>
+                                                <div class="rounded-md bg-emerald-50 px-2 py-1">
+                                                    <div class="text-[8px] font-black uppercase tracking-widest text-emerald-500">Closed</div>
+                                                    <div class="text-[11px] font-black text-emerald-800">{{ formatMinutesCompact(leader.fastest_close_min) }}</div>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div class="text-right shrink-0">
                                             <div class="text-sm font-black text-indigo-700">{{ Number(leader.total_points || 0).toLocaleString() }}</div>
@@ -1975,7 +2051,7 @@ const linkify = (text) => {
                                         v-model="editForm.status"
                                         :options="availableStatuses"
                                         placeholder="Select Status"
-                                        :disabled="!hasPermission('tickets.edit') && !hasPermission('tickets.close')"
+                                        :disabled="!hasPermission('tickets.edit') && !hasPermission('tickets.resolve') && !hasPermission('tickets.close')"
                                     >
                                         <template #option="{ option }">
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black capitalize border" :class="getStatusColor(option)">

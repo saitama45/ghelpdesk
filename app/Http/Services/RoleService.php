@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class RoleService
 {
-    protected const ACTION_ORDER = ['view', 'show', 'create', 'edit', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
+    protected const ACTION_ORDER = ['view', 'show', 'create', 'edit', 'assign', 'resolve', 'close', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
 
     /**
      * Get all roles with their permissions
@@ -33,6 +33,12 @@ class RoleService
     public static function getPermissionsByCategory()
     {
         $permissions = Permission::all()->pluck('name')->toArray();
+
+        foreach (['tickets.resolve'] as $permissionName) {
+            if (!in_array($permissionName, $permissions, true)) {
+                $permissions[] = $permissionName;
+            }
+        }
 
         // Add dynamic form permissions if they don't exist in DB yet
         $dynamicForms = \App\Models\FormDefinition::all();
