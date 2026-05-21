@@ -127,6 +127,9 @@ const checklistTitleInputs = ref({});
 const isUpdatingChecklist = ref(false);
 const bulkPasteTarget = ref('');
 const newSubTaskTitle = ref('');
+const showSubTaskInput = ref(false);
+const showChecklistItemInputs = reactive({});
+const showSubtaskItemInputs = reactive({});
 const newChecklistItems = reactive({});
 const newCardTitles = reactive(Object.fromEntries((props.statuses || []).map((status) => [status, ''])));
 
@@ -236,7 +239,10 @@ const userAvatar = (user, size = 'h-8 w-8') => {
 
 const toDateTimeInput = (value) => {
     if (!value) return '';
-    return String(value).replace(' ', 'T').slice(0, 16);
+    const date = new Date(String(value).replace(' ', 'T'));
+    if (isNaN(date.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
 const detailsPayloadFromDraft = () => ({
@@ -294,6 +300,7 @@ watch(selectedCard, (card, previousCard) => {
     projectDraft.assigned_to = card.project_task?.assigned_to || '';
     projectDraft.support_by = card.project_task?.support_by || '';
     newSubTaskTitle.value = '';
+    showSubTaskInput.value = false;
 }, { immediate: true });
 
 const assetUrl = (path) => {
@@ -594,6 +601,7 @@ const createSubTask = async () => {
         const card = response.data.card;
         replaceCard(card);
         newSubTaskTitle.value = '';
+        showSubTaskInput.value = false;
         selectedCardId.value = card.id;
     } catch (error) {
         handleApiError(error, 'Unable to create sub-task');
@@ -1065,6 +1073,11 @@ const addChecklistItem = async (checklist, parentItem = null) => {
         });
         replaceCard(response.data.card);
         newChecklistItems[key] = '';
+        if (parentItem) {
+            showSubtaskItemInputs[parentItem.id] = false;
+        } else {
+            showChecklistItemInputs[checklist.id] = false;
+        }
     } catch (error) {
         handleApiError(error, 'Unable to add item');
     }
@@ -1543,6 +1556,8 @@ onUnmounted(() => {
                                     <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                                         <span v-if="card.due_at" class="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-bold" :class="dueBadgeClass(card)">
                                             <CalendarDaysIcon class="h-3.5 w-3.5" />
+                                            <span class="text-[9px] uppercase tracking-wider opacity-75">Due</span>
+                                            <span>·</span>
                                             {{ formatDate(card.due_at) }}
                                         </span>
                                         <span v-if="card.checklist_totals?.total" class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 font-bold text-gray-700">
@@ -1731,12 +1746,21 @@ onUnmounted(() => {
                             <p v-if="selectedCard.project_task.parent_task" class="mt-3 text-xs font-semibold text-gray-500">
                                 Parent activity: {{ selectedCard.project_task.parent_task.name }}
                             </p>
-                            <form v-if="canEditBoard && !selectedCard.project_task.parent_task_id" class="mt-4 flex gap-2 border-t border-blue-50 pt-4" @submit.prevent="createSubTask">
-                                <input v-model="newSubTaskTitle" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add a sub-task under this activity">
-                                <button type="submit" :disabled="isCreatingSubTask || !newSubTaskTitle.trim()" class="rounded-lg bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50">
-                                    {{ isCreatingSubTask ? 'Adding...' : 'Add Sub-task' }}
+                            <div v-if="canEditBoard && !selectedCard.project_task.parent_task_id" class="mt-4 border-t border-blue-50 pt-4">
+                                <form v-if="showSubTaskInput" class="flex gap-2" @submit.prevent="createSubTask">
+                                    <input v-model="newSubTaskTitle" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add a sub-task under this activity">
+                                    <button type="submit" :disabled="isCreatingSubTask || !newSubTaskTitle.trim()" class="rounded-lg bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50">
+                                        {{ isCreatingSubTask ? 'Adding...' : 'Add' }}
+                                    </button>
+                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-gray-600" @click="showSubTaskInput = false; newSubTaskTitle = ''">
+                                        <XMarkIcon class="h-5 w-5" />
+                                    </button>
+                                </form>
+                                <button v-else type="button" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50" @click="showSubTaskInput = true">
+                                    <PlusIcon class="h-4 w-4" />
+                                    Add Sub-task
                                 </button>
-                            </form>
+                            </div>
                         </section>
 
                         <section ref="detailsSectionRef" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -1875,16 +1899,34 @@ onUnmounted(() => {
                                                 </div>
                                             </div>
 
-                                            <form v-if="canEditBoard" class="ml-5 flex gap-2 border-l border-gray-200 pl-3" @submit.prevent="addChecklistItem(checklist, item)">
-                                                <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" :disabled="isBulkPastingChecklistTarget(checklist, item)" type="text" maxlength="255" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add a subtask..." @paste="pasteChecklistItems($event, checklist, item)">
-                                                <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist, item)" class="rounded-lg bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist, item) ? 'Adding...' : 'Add' }}</button>
-                                            </form>
+                                            <div v-if="canEditBoard" class="ml-5 border-l border-gray-200 pl-3">
+                                                <form v-if="showSubtaskItemInputs[item.id]" class="flex gap-2" @submit.prevent="addChecklistItem(checklist, item)">
+                                                    <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" :disabled="isBulkPastingChecklistTarget(checklist, item)" type="text" maxlength="255" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add a subtask..." @paste="pasteChecklistItems($event, checklist, item)">
+                                                    <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist, item)" class="rounded-lg bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist, item) ? 'Adding...' : 'Add' }}</button>
+                                                    <button type="button" class="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" @click="showSubtaskItemInputs[item.id] = false; newChecklistItems[checklistInputKey(checklist, item)] = ''">
+                                                        <XMarkIcon class="h-4 w-4" />
+                                                    </button>
+                                                </form>
+                                                <button v-else type="button" class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-50" @click="showSubtaskItemInputs[item.id] = true">
+                                                    <PlusIcon class="h-3.5 w-3.5" />
+                                                    Add subtask
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <form v-if="canEditBoard && isChecklistOpen(checklist.id)" class="mt-2 flex gap-2" @submit.prevent="addChecklistItem(checklist)">
-                                        <input v-model="newChecklistItems[checklistInputKey(checklist)]" :disabled="isBulkPastingChecklistTarget(checklist)" type="text" maxlength="255" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add an item..." @paste="pasteChecklistItems($event, checklist)">
-                                        <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist)" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist) ? 'Adding...' : 'Add' }}</button>
-                                    </form>
+                                    <div v-if="canEditBoard && isChecklistOpen(checklist.id)" class="mt-2">
+                                        <form v-if="showChecklistItemInputs[checklist.id]" class="flex gap-2" @submit.prevent="addChecklistItem(checklist)">
+                                            <input v-model="newChecklistItems[checklistInputKey(checklist)]" :disabled="isBulkPastingChecklistTarget(checklist)" type="text" maxlength="255" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add an item..." @paste="pasteChecklistItems($event, checklist)">
+                                            <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist)" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist) ? 'Adding...' : 'Add' }}</button>
+                                            <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600" @click="showChecklistItemInputs[checklist.id] = false; newChecklistItems[checklistInputKey(checklist)] = ''">
+                                                <XMarkIcon class="h-4 w-4" />
+                                            </button>
+                                        </form>
+                                        <button v-else type="button" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800" @click="showChecklistItemInputs[checklist.id] = true">
+                                            <PlusIcon class="h-4 w-4" />
+                                            Add an item
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </section>

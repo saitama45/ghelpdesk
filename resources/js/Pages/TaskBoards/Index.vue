@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import Autocomplete from '@/Components/Autocomplete.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
 import Modal from '@/Components/Modal.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import { useToast } from '@/Composables/useToast';
@@ -21,6 +21,7 @@ const props = defineProps({
     boards: Array,
     users: Array,
     monthlyDepartments: Array,
+    hierarchicalDepartments: Array,
     filters: Object,
 });
 
@@ -35,6 +36,12 @@ const search = ref('');
 const showClosed = ref(!!props.filters?.closed);
 const now = new Date();
 const currentYear = now.getFullYear();
+
+const filterNodeId = ref(
+    props.filters?.department_node_id
+        ? props.filters.department_node_id
+        : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
+);
 
 const form = reactive({
     title: '',
@@ -51,10 +58,8 @@ const monthlyForm = reactive({
 });
 
 const boardFilters = reactive({
-    department: '',
-    subUnit: '',
     month: '',
-    year: currentYear,
+    year: '',
 });
 
 const backgroundOptions = [
@@ -92,41 +97,36 @@ const uniqueSorted = (values) => {
         .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
 };
 
-const departmentFilterOptions = computed(() => {
-    const fromBoards = (props.boards || []).map((board) => board.department);
-    const fromDepartmentSetup = (props.monthlyDepartments || []).map((department) => department.name);
+const hierarchicalOptions = computed(() =>
+    (props.hierarchicalDepartments || []).map((dept) => ({
+        ...dept,
+        id: `dept-${dept.id}`,
+        children: dept.nodes || [],
+    }))
+);
 
-    return uniqueSorted([...fromBoards, ...fromDepartmentSetup]);
+const deptFilterParams = computed(() => {
+    const nodeId = filterNodeId.value;
+    if (!nodeId) return {};
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        return { department_id: nodeId.replace('dept-', '') };
+    }
+    return { department_node_id: nodeId };
 });
 
-const subUnitFilterOptions = computed(() => {
-    const selectedDepartment = normalizeValue(boardFilters.department).toLowerCase();
-    const fromBoards = (props.boards || [])
-        .filter((board) => !selectedDepartment || normalizeValue(board.department).toLowerCase() === selectedDepartment)
-        .map((board) => board.sub_unit);
+const applyDepartmentFilter = () => {
+    router.get(route('task-boards.index'), {
+        closed: showClosed.value ? 1 : 0,
+        ...deptFilterParams.value,
+        ...(filterNodeId.value === '' ? { skip_default_department: 1 } : {}),
+    }, {
+        preserveScroll: true,
+        preserveState: true,
+        replace: true,
+    });
+};
 
-    const fromDepartmentSetup = (props.monthlyDepartments || [])
-        .filter((department) => !selectedDepartment || normalizeValue(department.name).toLowerCase() === selectedDepartment)
-        .flatMap((department) => (department.sub_units || []).map((subUnit) => subUnit.name));
-
-    return uniqueSorted([...fromBoards, ...fromDepartmentSetup]);
-});
-
-const departmentAutocompleteOptions = computed(() => [
-    { id: '', name: 'All departments' },
-    ...departmentFilterOptions.value.map((department) => ({
-        id: department,
-        name: department,
-    })),
-]);
-
-const subUnitAutocompleteOptions = computed(() => [
-    { id: '', name: 'All sub-units' },
-    ...subUnitFilterOptions.value.map((subUnit) => ({
-        id: subUnit,
-        name: subUnit,
-    })),
-]);
+watch(filterNodeId, applyDepartmentFilter);
 
 const monthFilterOptions = computed(() => {
     const boardMonths = uniqueSorted((props.boards || []).map((board) => board.board_month))
@@ -147,15 +147,13 @@ const yearFilterOptions = computed(() => {
 });
 
 const hasBoardFilters = computed(() => {
-    return !!(search.value.trim() || boardFilters.department || boardFilters.subUnit || boardFilters.month || boardFilters.year);
+    return !!(search.value.trim() || filterNodeId.value || boardFilters.month || boardFilters.year);
 });
 
 const totalBoardCount = computed(() => (props.boards || []).length);
 
 const filteredBoards = computed(() => {
     const term = search.value.trim().toLowerCase();
-    const department = normalizeValue(boardFilters.department).toLowerCase();
-    const subUnit = normalizeValue(boardFilters.subUnit).toLowerCase();
     const month = Number(boardFilters.month) || null;
     const year = Number(boardFilters.year) || null;
 
@@ -166,12 +164,10 @@ const filteredBoards = computed(() => {
             board.department?.toLowerCase().includes(term) ||
             board.sub_unit?.toLowerCase().includes(term);
 
-        const matchesDepartment = !department || normalizeValue(board.department).toLowerCase() === department;
-        const matchesSubUnit = !subUnit || normalizeValue(board.sub_unit).toLowerCase() === subUnit;
         const matchesMonth = !month || Number(board.board_month) === month;
         const matchesYear = !year || Number(board.board_year) === year;
 
-        return matchesSearch && matchesDepartment && matchesSubUnit && matchesMonth && matchesYear;
+        return matchesSearch && matchesMonth && matchesYear;
     });
 });
 
@@ -206,18 +202,11 @@ const monthlyBoardPreview = computed(() => {
     }));
 });
 
-watch(() => boardFilters.department, () => {
-    if (boardFilters.subUnit && !subUnitFilterOptions.value.includes(boardFilters.subUnit)) {
-        boardFilters.subUnit = '';
-    }
-});
-
 const clearBoardFilters = () => {
     search.value = '';
-    boardFilters.department = '';
-    boardFilters.subUnit = '';
     boardFilters.month = '';
     boardFilters.year = '';
+    filterNodeId.value = '';  // triggers watch → router.get with skip_default_department
 };
 
 const openCreateModal = () => {
@@ -244,6 +233,9 @@ const submitBoard = () => {
     isSubmitting.value = true;
 
     router.post(route('task-boards.store'), form, {
+        onSuccess: () => {
+            showCreateModal.value = false;
+        },
         onError: (errors) => {
             showError(Object.values(errors).flat().join(', ') || 'Unable to create board');
         },
@@ -279,7 +271,11 @@ const submitMonthlyBoards = () => {
 
 const toggleClosed = () => {
     showClosed.value = !showClosed.value;
-    router.get(route('task-boards.index'), { closed: showClosed.value ? 1 : 0 }, {
+    router.get(route('task-boards.index'), {
+        closed: showClosed.value ? 1 : 0,
+        ...deptFilterParams.value,
+        ...(filterNodeId.value === '' ? { skip_default_department: 1 } : {}),
+    }, {
         preserveScroll: true,
         preserveState: true,
     });
@@ -352,7 +348,7 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
             </div>
 
             <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] xl:items-end">
+                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] xl:items-end">
                     <div>
                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Search</label>
                         <input
@@ -364,24 +360,10 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                     </div>
                     <div>
                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
-                        <Autocomplete
-                            v-model="boardFilters.department"
-                            :options="departmentAutocompleteOptions"
-                            label-key="name"
-                            value-key="id"
-                            placeholder="All departments"
-                            class="modern-autocomplete"
-                        />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Sub-Unit</label>
-                        <Autocomplete
-                            v-model="boardFilters.subUnit"
-                            :options="subUnitAutocompleteOptions"
-                            label-key="name"
-                            value-key="id"
-                            placeholder="All sub-units"
-                            class="modern-autocomplete"
+                        <HierarchySelector
+                            v-model="filterNodeId"
+                            :nodes="hierarchicalOptions"
+                            placeholder="All Departments"
                         />
                     </div>
                     <div>

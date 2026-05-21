@@ -9,6 +9,7 @@ use App\Models\TaskCardActivity;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\User;
+use App\Services\OrganizationReferenceService;
 use App\Services\ProjectTaskBoardSyncService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -20,8 +21,10 @@ use Inertia\Inertia;
 
 class TaskBoardController extends Controller implements HasMiddleware
 {
-    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
-    {
+    public function __construct(
+        private ProjectTaskBoardSyncService $projectTaskBoards,
+        private OrganizationReferenceService $orgReference,
+    ) {
     }
 
     public static function middleware(): array
@@ -40,6 +43,45 @@ class TaskBoardController extends Controller implements HasMiddleware
         $user = $request->user();
         $showClosed = $request->boolean('closed');
 
+        // Resolve department filter — same default-to-user's-dept logic as Dashboard
+        $departmentIdFilter = $request->input('department_id');
+        $departmentNodeIdFilter = $request->input('department_node_id');
+
+        if (
+            ! $request->boolean('skip_default_department')
+            && ! $request->has('department_id')
+            && ! $request->has('department_node_id')
+        ) {
+            $departmentIdFilter = $user->department_id
+                ?? optional($user->loadMissing('departmentNode')->departmentNode)->department_id;
+        }
+
+        // Resolve the department name string to match board.department
+        $departmentNameFilter = null;
+        $legacyDepartmentFilter = null;
+        $orgPathFilter = null;
+        $nodeName = null;
+        $legacySubUnitFilter = null;
+        
+        if ($departmentIdFilter) {
+            $dept = \App\Models\Department::find($departmentIdFilter);
+            $departmentNameFilter = $dept?->name;
+            $legacyDepartmentFilter = $dept?->code;
+        } elseif ($departmentNodeIdFilter) {
+            $payload = $this->orgReference->payloadFromNodeId((int) $departmentNodeIdFilter);
+            $departmentNameFilter = $payload['department'] ?? null;
+            $legacyDepartmentFilter = $payload['department_code'] ?? null;
+            $orgPathFilter = $payload['org_path'] ?? null;
+            $nodeName = $payload['node_name'] ?? null;
+            
+            if (!empty($payload['node_code'])) {
+                $parts = explode('-', $payload['node_code']);
+                $legacySubUnitFilter = end($parts);
+            }
+        }
+
+        $isExplicitFilter = $request->has('department_id') || $request->has('department_node_id');
+
         $boards = TaskBoard::query()
             ->with([
                 'creator:id,name',
@@ -47,10 +89,45 @@ class TaskBoardController extends Controller implements HasMiddleware
                 'project.store:id,name',
                 'cards.projectTask:id,project_id,parent_task_id,name,category,status,progress',
             ])
-            ->when(!$this->canSeeAllBoards($user), function ($query) use ($user) {
-                $query->whereHas('memberRecords', fn ($memberQuery) => $memberQuery->where('user_id', $user->id));
+            ->when(! $this->canSeeAllBoards($user), function ($query) use ($user) {
+                $query->whereHas('memberRecords', fn ($q) => $q->where('user_id', $user->id));
             })
-            ->when(!$showClosed, fn ($query) => $query->whereNull('closed_at'))
+            ->when(! $showClosed, fn ($query) => $query->whereNull('closed_at'))
+            ->when($departmentNameFilter, function ($query) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter, $user, $isExplicitFilter) {
+                if ($isExplicitFilter) {
+                    $query->where(function ($q) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter) {
+                        $q->where(function ($deptQuery) use ($departmentNameFilter, $legacyDepartmentFilter) {
+                            $deptQuery->where('department', $departmentNameFilter);
+                            if ($legacyDepartmentFilter) {
+                                $deptQuery->orWhere('department', $legacyDepartmentFilter);
+                            }
+                        });
+
+                        if ($orgPathFilter) {
+                            $q->where(function ($subQuery) use ($orgPathFilter, $nodeName, $legacySubUnitFilter) {
+                                $subQuery->where('sub_unit', 'like', $orgPathFilter . '%');
+                                if ($nodeName) {
+                                    $subQuery->orWhere('sub_unit', 'like', $nodeName . '%');
+                                }
+                                if ($legacySubUnitFilter) {
+                                    $subQuery->orWhere('sub_unit', $legacySubUnitFilter);
+                                }
+                            });
+                        }
+                    });
+                } else {
+                    $query->where(function ($q) use ($departmentNameFilter, $legacyDepartmentFilter, $user) {
+                        $q->where('department', $departmentNameFilter);
+                        if ($legacyDepartmentFilter) {
+                            $q->orWhere('department', $legacyDepartmentFilter);
+                        }
+                        $q->orWhereNull('department')
+                          ->orWhere('department', '')
+                          ->orWhere('created_by', $user->id)
+                          ->orWhereHas('memberRecords', fn ($m) => $m->where('user_id', $user->id));
+                    });
+                }
+            })
             ->latest('updated_at')
             ->get()
             ->map(fn (TaskBoard $board) => $this->boardSummary($board, $user));
@@ -59,8 +136,11 @@ class TaskBoardController extends Controller implements HasMiddleware
             'boards' => $boards,
             'users' => $this->activeUsers(),
             'monthlyDepartments' => $this->monthlyDepartmentOptions(),
+            'hierarchicalDepartments' => $this->orgReference->tree(true),
             'filters' => [
                 'closed' => $showClosed,
+                'department_id' => $departmentIdFilter,
+                'department_node_id' => $departmentNodeIdFilter,
             ],
         ]);
     }
