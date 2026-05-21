@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import axios from 'axios';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -168,6 +169,38 @@ const filteredUsers = computed(() => {
     return matchingUsers;
 });
 
+const usersWithLabel = computed(() => {
+    const list = filteredUsers.value.map(u => ({
+        ...u,
+        display_name: `${u.name}${u.sub_unit ? ' - ' + u.sub_unit : ''}`
+    }));
+    return [{ id: 'all', display_name: 'All Users' }, ...list];
+});
+
+const storesWithLabel = computed(() => {
+    const list = (props.stores || []).map(s => ({
+        ...s,
+        display_name: `[${s.code}] ${s.name}`
+    }));
+    return [{ id: 'all', display_name: 'All Stores' }, ...list];
+});
+
+const yearsWithLabel = computed(() => {
+    const list = (props.years || []).map(y => ({
+        id: y,
+        display_name: y.toString()
+    }));
+    return [{ id: '', display_name: 'All Years' }, ...list];
+});
+
+const monthsWithLabel = computed(() => {
+    const list = (props.months || []).map(m => ({
+        id: m.id,
+        display_name: m.name
+    }));
+    return [{ id: '', display_name: 'All Months' }, ...list];
+});
+
 const activeTicketCount = computed(() => (Number(props.stats?.open || 0) + Number(props.stats?.in_progress || 0)));
 
 const activeTicketFilterParams = computed(() => {
@@ -314,6 +347,20 @@ const showTotalModal = ref(false);
 const showOpenModal = ref(false);
 const showNewModal = ref(false);
 const showClosedModal = ref(false);
+const showSurveyModal = ref(false);
+const selectedSurveyTicket = ref(null);
+
+const openSurveyModal = (ticket) => {
+    selectedSurveyTicket.value = ticket;
+    showSurveyModal.value = true;
+};
+
+const closeSurveyModal = () => {
+    showSurveyModal.value = false;
+    setTimeout(() => {
+        selectedSurveyTicket.value = null;
+    }, 200);
+};
 
 const exportToExcel = (type) => {
     const params = new URLSearchParams({
@@ -385,31 +432,43 @@ const exportToExcel = (type) => {
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">User</label>
-                    <select v-model="filterForm.user_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                        <option value="all">All Users</option>
-                        <option v-for="u in filteredUsers" :key="u.id" :value="u.id">{{ u.name }}{{ u.sub_unit ? ' - ' + u.sub_unit : '' }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterForm.user_id"
+                        :options="usersWithLabel"
+                        label-key="display_name"
+                        value-key="id"
+                        placeholder="All Users"
+                    />
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
-                    <select v-model="filterForm.store_id" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                        <option value="all">All Stores</option>
-                        <option v-for="s in stores" :key="s.id" :value="s.id">[{{ s.code }}] {{ s.name }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterForm.store_id"
+                        :options="storesWithLabel"
+                        label-key="display_name"
+                        value-key="id"
+                        placeholder="All Stores"
+                    />
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Year</label>
-                    <select v-model="filterForm.year" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                        <option value="">All Years</option>
-                        <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterForm.year"
+                        :options="yearsWithLabel"
+                        label-key="display_name"
+                        value-key="id"
+                        placeholder="All Years"
+                    />
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Month</label>
-                    <select v-model="filterForm.month" class="w-full border-gray-200 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm py-1.5 font-medium">
-                        <option value="">All Months</option>
-                        <option v-for="m in months" :key="m.id" :value="m.id">{{ m.name }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterForm.month"
+                        :options="monthsWithLabel"
+                        label-key="display_name"
+                        value-key="id"
+                        placeholder="All Months"
+                    />
                 </div>
             </div>
         </div>
@@ -525,6 +584,12 @@ const exportToExcel = (type) => {
                                         <div class="mt-2 flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-gray-400">
                                             <span>Age {{ ticket.age || '-' }}</span>
                                             <span>{{ ticket.updated_at }}</span>
+                                        </div>
+                                        <div v-if="ticket.status === 'closed' && ticket.survey" class="mt-2 border-t border-gray-100 pt-2">
+                                            <button @click.prevent="openSurveyModal(ticket)" class="w-full py-1 px-2 flex items-center justify-center gap-1 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded-md text-[10px] font-bold transition-colors">
+                                                <span>⭐ {{ ticket.survey.rating }}/4 Rating</span>
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                            </button>
                                         </div>
                                     </Link>
 
@@ -1256,6 +1321,33 @@ const exportToExcel = (type) => {
             </div>
         </Modal>
     </AppLayout>
+
+    <!-- Survey Modal -->
+    <Modal :show="showSurveyModal" @close="closeSurveyModal">
+        <div class="p-6">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">Ticket Feedback</h3>
+            <div v-if="selectedSurveyTicket" class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-gray-700">Rating:</span>
+                    <div class="flex gap-1">
+                        <span v-for="i in 4" :key="i" class="text-xl" :class="i <= selectedSurveyTicket.survey.rating ? 'text-yellow-400' : 'text-gray-200'">⭐</span>
+                    </div>
+                    <span class="text-xs font-black text-gray-500 ml-2">({{ selectedSurveyTicket.survey.rating }}/4)</span>
+                </div>
+                <div>
+                    <span class="text-sm font-bold text-gray-700 block mb-1">Feedback:</span>
+                    <div class="p-3 bg-gray-50 rounded-lg text-sm text-gray-600 italic whitespace-pre-wrap">
+                        {{ selectedSurveyTicket.survey.feedback || 'No written feedback provided.' }}
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button @click="closeSurveyModal" class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
+    </Modal>
 </template>
 
 <style scoped>

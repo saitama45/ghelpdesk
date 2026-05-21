@@ -48,7 +48,8 @@ class TicketController extends Controller
             'item:id,name,priority,category_id,sub_category_id',
             'item.category:id,name',
             'item.subCategory:id,name',
-            'slaMetric', 
+            'slaMetric',
+            'survey:ticket_id,rating,feedback',
             'children' => function($q) {
                 $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'status')
                   ->with('assignee:id,name,profile_photo');

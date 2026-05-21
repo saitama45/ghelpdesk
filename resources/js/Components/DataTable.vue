@@ -1,5 +1,5 @@
 <template>
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 relative">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 relative w-full min-w-fit">
         <!-- Loading Overlay -->
         <div v-if="isLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
             <div class="flex flex-col items-center space-y-3">
@@ -52,9 +52,9 @@
         </div>
 
         <!-- Table Content -->
-        <div class="overflow-x-auto -mx-0">
+        <div class="-mx-0" :class="{ 'overflow-x-auto': !freezeHeader }">
             <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+                <thead class="bg-gray-50" :class="{ 'sticky top-0 z-20 shadow-sm': freezeHeader }">
                     <slot name="header"></slot>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
@@ -174,6 +174,10 @@ const props = defineProps({
     showSearch: {
         type: Boolean,
         default: true
+    },
+    freezeHeader: {
+        type: Boolean,
+        default: false
     }
 })
 

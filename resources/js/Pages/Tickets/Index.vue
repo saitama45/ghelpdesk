@@ -4,6 +4,7 @@ import { ref, reactive, onMounted, watch, computed } from 'vue';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
+import Dropdown from '@/Components/Dropdown.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
@@ -43,7 +44,46 @@ const { formatDate } = useDateFormatter();
 const currentTime = ref(new Date());
 let timer;
 
+// Column configuration
+const tableColumns = ref([
+    { key: 'ticket', label: 'Ticket', visible: true, locked: true },
+    { key: 'assignee', label: 'Assignee', visible: true, locked: false },
+    { key: 'queue_detail', label: 'Queue Detail', visible: true, locked: false },
+    { key: 'sla_health', label: 'SLA Health', visible: true, locked: false },
+    { key: 'created', label: 'Created', visible: true, locked: false },
+    { key: 'sla_timer', label: 'SLA Timer', visible: false, locked: false },
+    { key: 'responded_time', label: 'Responded Time', visible: false, locked: false },
+    { key: 'resolved_date', label: 'Resolved Date', visible: false, locked: false },
+    { key: 'feedback', label: 'Feedback Received', visible: false, locked: false },
+    { key: 'rating', label: 'Feedback Rating', visible: false, locked: false },
+]);
+
+const toggleColumn = (col) => {
+    if (col.locked) return;
+    col.visible = !col.visible;
+    const settings = {};
+    tableColumns.value.forEach(c => settings[c.key] = c.visible);
+    localStorage.setItem('ghelpdesk_ticket_columns', JSON.stringify(settings));
+};
+
+const isColumnVisible = (key) => {
+    const col = tableColumns.value.find(c => c.key === key);
+    return col ? col.visible : true;
+};
+
 onMounted(() => {
+    const savedCols = localStorage.getItem('ghelpdesk_ticket_columns');
+    if (savedCols) {
+        try {
+            const parsed = JSON.parse(savedCols);
+            tableColumns.value.forEach(col => {
+                if (!col.locked && parsed[col.key] !== undefined) {
+                    col.visible = parsed[col.key];
+                }
+            });
+        } catch(e) {}
+    }
+
     pagination.updateData(props.tickets);
     timer = setInterval(() => {
         currentTime.value = new Date();
@@ -1155,14 +1195,13 @@ const requesterTabs = computed(() => {
 </script>
 
 <template>
-    <Head title="Tickets - Help Desk" />
-
-    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+    <Head title="Ticket Monitoring Board" />
+    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6 min-w-fit" main-class="overflow-auto">
         <template #header>
             Tickets
         </template>
 
-        <div class="space-y-6">
+        <div class="space-y-6 min-w-fit">
             <section class="hidden sm:block relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-5 py-6 text-white shadow-xl sm:px-6">
                 <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
                 <div class="relative flex flex-col gap-6">
@@ -1219,7 +1258,7 @@ const requesterTabs = computed(() => {
                 </div>
             </section>
 
-            <div class="sticky top-4 z-20 space-y-2 sm:space-y-4">
+            <div class="space-y-2 sm:space-y-4 mb-6 relative z-10">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
                         <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -1460,6 +1499,7 @@ const requesterTabs = computed(() => {
             <DataTable
                 title="Ticket Monitoring Board"
                 :subtitle="tableSubtitle"
+                freeze-header
                 search-placeholder="Search by key, title, reporter, or assignee..."
                 :empty-message="emptyStateMessage"
                 :search="pagination.search.value"
@@ -1474,6 +1514,44 @@ const requesterTabs = computed(() => {
                 @change-per-page="pagination.changePerPage"
             >
                 <template #actions>
+                    <!-- Columns Dropdown -->
+                    <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
+                        <template #trigger>
+                            <button
+                                class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                                title="Customize Columns"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                                </svg>
+                                <span>Columns</span>
+                            </button>
+                        </template>
+                        <template #content>
+                            <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                                Visible Columns
+                            </div>
+                            <div class="p-2 space-y-1">
+                                <label
+                                    v-for="col in tableColumns"
+                                    :key="col.key"
+                                    class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                                    :class="col.locked ? 'opacity-50 cursor-not-allowed' : ''"
+                                    @click.stop
+                                >
+                                    <input
+                                        type="checkbox"
+                                        :checked="col.visible"
+                                        :disabled="col.locked"
+                                        @change="toggleColumn(col)"
+                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
+                                    >
+                                    <span class="text-sm font-semibold text-gray-700">{{ col.label }}</span>
+                                </label>
+                            </div>
+                        </template>
+                    </Dropdown>
+
                     <button
                         @click="exportToExcel"
                         class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
@@ -1496,11 +1574,16 @@ const requesterTabs = computed(() => {
                                 class="cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             >
                         </th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Queue Detail</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Health</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</th>
+                        <th v-if="isColumnVisible('ticket')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
+                        <th v-if="isColumnVisible('assignee')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
+                        <th v-if="isColumnVisible('queue_detail')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Queue Detail</th>
+                        <th v-if="isColumnVisible('sla_health')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Health</th>
+                        <th v-if="isColumnVisible('created')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</th>
+                        <th v-if="isColumnVisible('sla_timer')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Timer</th>
+                        <th v-if="isColumnVisible('responded_time')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Responded Time</th>
+                        <th v-if="isColumnVisible('resolved_date')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Resolved Date</th>
+                        <th v-if="isColumnVisible('feedback')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Feedback</th>
+                        <th v-if="isColumnVisible('rating')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Rating</th>
                     </tr>
                 </template>
 
@@ -1524,7 +1607,7 @@ const requesterTabs = computed(() => {
                                 class="mt-1 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             >
                         </td>
-                        <td class="px-4 py-5 align-top">
+                        <td v-if="isColumnVisible('ticket')" class="px-4 py-5 align-top">
                             <div class="min-w-[240px] max-w-[360px] space-y-3">
                                 <div class="flex flex-wrap items-start gap-2">
                                     <span class="inline-flex rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black tracking-wide text-black shadow-sm">
@@ -1578,7 +1661,7 @@ const requesterTabs = computed(() => {
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-5 align-top">
+                        <td v-if="isColumnVisible('assignee')" class="px-4 py-5 align-top">
                             <div class="min-w-[160px] max-w-[220px] space-y-2">
                                 <div v-if="ticket.assignee" class="flex items-center gap-2">
                                     <div v-if="ticket.assignee.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
@@ -1605,7 +1688,7 @@ const requesterTabs = computed(() => {
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-5 align-top">
+                        <td v-if="isColumnVisible('queue_detail')" class="px-4 py-5 align-top">
                             <div class="min-w-[180px] max-w-[240px] space-y-3 text-sm">
                                 <div>
                                     <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Store</div>
@@ -1617,7 +1700,7 @@ const requesterTabs = computed(() => {
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-5 align-top">
+                        <td v-if="isColumnVisible('sla_health')" class="px-4 py-5 align-top">
                             <div v-if="ticket.sla_metric" class="min-w-[160px] max-w-[220px] space-y-2">
                                 <div
                                     v-for="sla in [getSlaState(ticket, 'response'), getSlaState(ticket, 'resolution')]"
@@ -1638,10 +1721,38 @@ const requesterTabs = computed(() => {
                                 No SLA target
                             </div>
                         </td>
-                        <td class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('created')" class="px-4 py-5 align-top text-sm text-black">
                             <div class="min-w-[132px]">
                                 <div class="font-medium text-black">{{ formatDate(ticket.created_at) }}</div>
                             </div>
+                        </td>
+                        <td v-if="isColumnVisible('sla_timer')" class="px-4 py-5 align-top text-sm text-black">
+                            <div v-if="ticket.sla_metric" class="space-y-1 min-w-[140px]">
+                                <div v-if="ticket.sla_metric.response_target_at" class="whitespace-nowrap"><span class="font-bold text-gray-500 text-xs mr-1">Res:</span>{{ formatDate(ticket.sla_metric.response_target_at) }}</div>
+                                <div v-if="ticket.sla_metric.resolution_target_at" class="whitespace-nowrap"><span class="font-bold text-gray-500 text-xs mr-1">Sol:</span>{{ formatDate(ticket.sla_metric.resolution_target_at) }}</div>
+                            </div>
+                            <span v-else class="text-gray-400 italic">No Target</span>
+                        </td>
+                        <td v-if="isColumnVisible('responded_time')" class="px-4 py-5 align-top text-sm text-black">
+                            <span v-if="ticket.sla_metric?.first_response_at" class="whitespace-nowrap">{{ formatDate(ticket.sla_metric.first_response_at) }}</span>
+                            <span v-else class="text-gray-400 italic">Not Responded</span>
+                        </td>
+                        <td v-if="isColumnVisible('resolved_date')" class="px-4 py-5 align-top text-sm text-black">
+                            <span v-if="ticket.sla_metric?.resolved_at" class="whitespace-nowrap">{{ formatDate(ticket.sla_metric.resolved_at) }}</span>
+                            <span v-else-if="ticket.status === 'closed'" class="whitespace-nowrap">{{ formatDate(ticket.updated_at) }}</span>
+                            <span v-else class="text-gray-400 italic">Not Resolved</span>
+                        </td>
+                        <td v-if="isColumnVisible('feedback')" class="px-4 py-5 align-top text-sm text-black">
+                            <div v-if="ticket.survey?.feedback" class="min-w-[200px] max-w-[400px] whitespace-normal break-words">
+                                {{ ticket.survey.feedback }}
+                            </div>
+                            <span v-else class="text-gray-400 italic">None</span>
+                        </td>
+                        <td v-if="isColumnVisible('rating')" class="px-4 py-5 align-top text-sm text-black">
+                            <div v-if="ticket.survey?.rating" class="flex gap-1">
+                                <span v-for="i in 4" :key="i" class="text-[10px]" :class="i <= ticket.survey.rating ? 'text-yellow-400' : 'text-gray-200'">⭐</span>
+                            </div>
+                            <span v-else class="text-gray-400 italic">None</span>
                         </td>
                     </tr>
                 </template>

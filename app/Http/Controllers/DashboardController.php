@@ -231,6 +231,7 @@ class DashboardController extends Controller
                 'store:id,code,name',
                 'item:id,priority',
                 'parent:id,ticket_key',
+                'survey:ticket_id,rating,feedback',
             ])
             ->select('id', 'ticket_key', 'title', 'status', 'priority', 'created_at', 'updated_at', 'assignee_id', 'company_id', 'store_id', 'item_id', 'parent_id')
             ->latest('updated_at')
@@ -264,6 +265,10 @@ class DashboardController extends Controller
                     'created_at' => $ticket->created_at?->format('Y-m-d H:i:s'),
                     'updated_at' => $ticket->updated_at?->diffForHumans(),
                     'age' => $ticket->created_at?->diffForHumans(null, true),
+                    'survey' => $ticket->survey ? [
+                        'rating' => $ticket->survey->rating,
+                        'feedback' => $ticket->survey->feedback,
+                    ] : null,
                 ];
             });
 

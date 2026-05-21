@@ -19,6 +19,10 @@ defineProps({
         type: String,
         default: 'max-w-7xl mx-auto px-2 sm:px-6 lg:px-8',
     },
+    mainClass: {
+        type: String,
+        default: 'overflow-x-hidden overflow-y-auto',
+    },
 });
 const sidebarOpen = ref(false);
 const isSidebarCollapsed = ref(false);
@@ -214,7 +218,7 @@ const isCurrentRoute = (routeName) => {
             </div>
 
             <!-- Page Content -->
-            <main scroll-region class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
+            <main scroll-region class="flex-1 bg-gray-50" :class="mainClass">
                 <div class="py-4 sm:py-6">
                     <div :class="contentClass">
                         <slot />

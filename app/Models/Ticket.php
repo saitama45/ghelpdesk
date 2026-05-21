@@ -70,6 +70,11 @@ class Ticket extends Model
         return $this->hasOne(TicketSlaMetric::class);
     }
 
+    public function survey()
+    {
+        return $this->hasOne(TicketSurvey::class);
+    }
+
     public function category()
     {
         return $this->belongsTo(Category::class);
