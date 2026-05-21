@@ -494,7 +494,22 @@ const openMergeModal = () => {
     showMergeModal.value = true;
 };
 
-const submitMerge = () => {
+const submitMerge = async () => {
+    if (mergeForm.processing) return;
+
+    const selectedTickets = getSelectedTickets.value;
+    const parentTicket = selectedTickets.find(ticket => ticket.id === mergeForm.parent_id);
+    const childCount = Math.max(selectedIds.value.length - 1, 0);
+    const confirmed = await confirm({
+        title: 'Confirm Ticket Merge',
+        message: `Merge ${selectedIds.value.length} selected ticket(s) with ${parentTicket?.ticket_key || 'the selected parent'} as the parent? ${childCount} ticket(s) will become merged child tickets.`,
+        confirmLabel: `Merge ${selectedIds.value.length} Tickets`,
+        cancelLabel: 'Cancel',
+        variant: 'warning'
+    });
+
+    if (!confirmed) return;
+
     mergeForm.post(route('tickets.merge'), {
         onSuccess: () => {
             showMergeModal.value = false;

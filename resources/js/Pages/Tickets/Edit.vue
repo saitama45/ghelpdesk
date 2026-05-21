@@ -12,7 +12,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon, AdjustmentsHorizontalIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon, AdjustmentsHorizontalIcon, PaperClipIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     ticket: Object,
@@ -1124,11 +1124,18 @@ const activities = computed(() => {
 
     const children = (props.ticket.children || []).map(child => {
         const scheduleContext = buildScheduleContext(child);
+        const mergeComment = (child.comments || []).find(comment =>
+            comment.is_internal && String(comment.comment_text || '').startsWith('Ticket merged into #')
+        );
+
         return {
             ...child,
             activity_type: 'child_ticket',
-            date: parseDate(child.created_at),
-            user: child.reporter,
+            child_event_type: mergeComment ? 'merged' : 'created',
+            date: parseDate(mergeComment?.created_at || child.created_at),
+            original_created_at: child.created_at,
+            user: mergeComment?.user || child.reporter,
+            merge_comment: mergeComment,
             schedule: scheduleContext.schedule,
             store: scheduleContext.store,
             scheduleContext,
@@ -1250,6 +1257,17 @@ const visibleStoresForLine = (stores, key) => {
 const hiddenStoreCountForLine = (stores, key) => {
     if (isStoreListExpanded(key)) return 0;
     return Math.max(stores.length - STORE_LIST_DISPLAY_LIMIT, 0);
+};
+
+const childRequesterName = (child) => child.reporter?.name || child.sender_name || 'External User';
+const childRequesterEmail = (child) => child.reporter?.email || child.sender_email || '';
+const childItemName = (child) => child.item?.name || child.category?.name || child.sub_category?.name || 'No item selected';
+const childLocationName = (child) => {
+    const company = child.company?.name || '';
+    const store = child.store?.name || '';
+
+    if (company && store) return `${company} / ${store}`;
+    return company || store || 'No location';
 };
 
 const buildTicketPayload = (source = editForm.data()) => {
@@ -2235,17 +2253,63 @@ const linkify = (text) => {
                     <div v-if="ticket.children && ticket.children.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
                         <h3 class="text-sm font-black text-gray-900 uppercase tracking-widest">Child Tickets</h3>
                         <div class="space-y-3">
-                            <div v-for="child in ticket.children" :key="child.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 gap-3">
-                                <div class="flex flex-col min-w-0 flex-1">
-                                    <Link :href="route('tickets.edit', child.id)" class="text-sm font-black text-blue-600 hover:underline truncate">
-                                        {{ child.ticket_key }}
-                                    </Link>
-                                    <span class="text-[10px] text-gray-600 truncate">{{ child.title }}</span>
+                            <div v-for="child in ticket.children" :key="child.id" class="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0 flex-1">
+                                        <Link :href="route('tickets.edit', child.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                            {{ child.ticket_key }}
+                                        </Link>
+                                        <div class="mt-0.5 text-xs font-bold text-gray-900 break-words">{{ child.title }}</div>
+                                        <div class="mt-1 text-[10px] text-gray-500">
+                                            {{ childRequesterName(child) }}<span v-if="childRequesterEmail(child)"> - {{ childRequesterEmail(child) }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-col items-end gap-1 shrink-0">
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter" :class="getStatusColor(child.status)">
+                                            {{ getStatusLabel(child.status) }}
+                                        </span>
+                                        <span v-if="child.priority" class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase" :class="getPriorityColor(child.priority)">
+                                            {{ getPriorityLabel(child.priority) }}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="flex flex-col items-end gap-1 shrink-0">
-                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter" :class="getStatusColor(child.status)">
-                                        {{ child.status }}
-                                    </span>
+
+                                <div class="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Location</div>
+                                        <div class="mt-0.5 font-bold text-gray-700">{{ childLocationName(child) }}</div>
+                                    </div>
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Item</div>
+                                        <div class="mt-0.5 font-bold text-gray-700">{{ childItemName(child) }}</div>
+                                    </div>
+                                    <div v-if="child.assignee" class="rounded-lg border border-white bg-white px-3 py-2">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Assignee</div>
+                                        <div class="mt-0.5 font-bold text-gray-700">{{ child.assignee.name }}</div>
+                                    </div>
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Created</div>
+                                        <div class="mt-0.5 font-bold text-gray-700">{{ formatDate(parseDate(child.created_at)) }}</div>
+                                    </div>
+                                </div>
+
+                                <div v-if="child.description" class="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                                    <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Description</div>
+                                    <div class="text-xs leading-relaxed text-gray-700 whitespace-pre-wrap" v-html="linkify(child.description)"></div>
+                                </div>
+
+                                <div v-if="child.attachments?.length" class="flex flex-wrap gap-2">
+                                    <a
+                                        v-for="attachment in child.attachments"
+                                        :key="attachment.id"
+                                        :href="getAttachmentDownloadUrl(attachment)"
+                                        class="inline-flex items-center rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <PaperClipIcon class="mr-1 h-3 w-3" />
+                                        {{ attachment.file_name }}
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -2597,13 +2661,58 @@ const linkify = (text) => {
 
                                     <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
                                         <span class="font-bold text-gray-900 text-sm">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium">created child ticket <Link :href="route('tickets.edit', activity.id)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link> on {{ formatDate(activity.date) }}</span>
+                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium">
+                                            {{ activity.child_event_type === 'merged' ? 'merged ticket' : 'created child ticket' }}
+                                            <Link :href="route('tickets.edit', activity.id)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
+                                            {{ activity.child_event_type === 'merged' ? 'into this parent' : '' }}
+                                            on {{ formatDate(activity.date) }}
+                                        </span>
                                     </div>
 
                                     <div class="text-xs bg-purple-50 border border-purple-100 rounded-lg p-3 space-y-1.5">
+                                        <div class="flex items-start justify-between gap-3 border-b border-purple-100 pb-2">
+                                            <div class="min-w-0">
+                                                <Link :href="route('tickets.edit', activity.id)" class="text-sm font-black text-blue-700 hover:underline break-words">{{ activity.ticket_key }}</Link>
+                                                <div class="mt-0.5 text-sm font-bold text-gray-900 break-words">{{ activity.title }}</div>
+                                            </div>
+                                            <div class="flex shrink-0 flex-col items-end gap-1">
+                                                <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter" :class="getStatusColor(activity.status)">
+                                                    {{ getStatusLabel(activity.status) }}
+                                                </span>
+                                                <span v-if="activity.priority" class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase" :class="getPriorityColor(activity.priority)">
+                                                    {{ getPriorityLabel(activity.priority) }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Requester</span>
+                                                <span class="font-semibold text-gray-800 truncate">{{ childRequesterName(activity) }}</span>
+                                            </div>
+                                            <div v-if="childRequesterEmail(activity)" class="flex items-center gap-2">
+                                                <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Email</span>
+                                                <span class="font-semibold text-gray-800 truncate">{{ childRequesterEmail(activity) }}</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Location</span>
+                                                <span class="font-semibold text-gray-800 truncate">{{ childLocationName(activity) }}</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Item</span>
+                                                <span class="font-semibold text-gray-800 truncate">{{ childItemName(activity) }}</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Created</span>
+                                                <span class="font-semibold text-gray-800">{{ formatDate(parseDate(activity.original_created_at)) }}</span>
+                                            </div>
+                                        </div>
                                         <div v-if="activity.assignee" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Assigned To</span>
                                             <span class="font-semibold text-gray-800">{{ activity.assignee.name }}</span>
+                                        </div>
+                                        <div v-if="activity.description" class="flex items-start gap-2 border-t border-purple-100 pt-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Details</span>
+                                            <span class="text-gray-700 whitespace-pre-wrap" v-html="linkify(activity.description)"></span>
                                         </div>
                                         <div v-if="activity.scheduleContext?.schedule?.status" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Schedule</span>
@@ -2632,6 +2741,22 @@ const linkify = (text) => {
                                         <div v-if="activity.scheduleContext?.remarks" class="flex items-start gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Remarks</span>
                                             <span class="text-gray-700 whitespace-pre-wrap">{{ activity.scheduleContext.remarks }}</span>
+                                        </div>
+                                        <div v-if="activity.attachments?.length" class="flex items-start gap-2 border-t border-purple-100 pt-2">
+                                            <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-1">Files</span>
+                                            <div class="flex flex-wrap gap-2">
+                                                <a
+                                                    v-for="attachment in activity.attachments"
+                                                    :key="attachment.id"
+                                                    :href="getAttachmentDownloadUrl(attachment)"
+                                                    class="inline-flex items-center rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    <PaperClipIcon class="mr-1 h-3 w-3" />
+                                                    {{ attachment.file_name }}
+                                                </a>
+                                            </div>
                                         </div>
                                     </div>
                                 </template>

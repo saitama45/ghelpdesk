@@ -583,6 +583,26 @@ class TicketController extends Controller
      */
     public function edit(Ticket $ticket)
     {
+        $childTicketRelations = [
+            'scheduleStore.schedule',
+            'scheduleStore.store',
+            'schedule',
+            'reporter:id,name,email,profile_photo',
+            'assignee:id,name,email,profile_photo',
+            'company:id,name',
+            'store:id,name,code',
+            'category:id,name',
+            'subCategory:id,name',
+            'item:id,name,priority,category_id,sub_category_id',
+            'attachments',
+            'comments' => function ($commentQuery) {
+                $commentQuery->with('user:id,name,profile_photo')
+                    ->where('is_internal', true)
+                    ->where('comment_text', 'like', 'Ticket merged into #%')
+                    ->orderByDesc('created_at');
+            },
+        ];
+
         $ticket->load([
             'comments' => function($query) {
                 $query->with(['user:id,name,profile_photo', 'attachments']);
@@ -604,8 +624,8 @@ class TicketController extends Controller
             'scheduleStore.schedule',
             'scheduleStore.store',
             'slaMetric',
-            'children' => function($query) {
-                $query->with(['scheduleStore.schedule', 'scheduleStore.store', 'schedule', 'store', 'reporter', 'assignee'])->orderBy('created_at', 'asc');
+            'children' => function($query) use ($childTicketRelations) {
+                $query->with($childTicketRelations)->orderBy('created_at', 'asc');
             },
             'ccs' => function($query) {
                 $query->with('user:id,name,email')->orderBy('email');
@@ -614,6 +634,27 @@ class TicketController extends Controller
                 $query->with('user:id,name,email')->orderBy('email');
             },
         ]);
+
+        $recoveredMergedChildren = Ticket::query()
+            ->where('id', '<>', $ticket->id)
+            ->whereHas('comments', function ($query) use ($ticket) {
+                $query->where('is_internal', true)
+                    ->where('comment_text', "Ticket merged into #{$ticket->ticket_key}.");
+            })
+            ->with($childTicketRelations)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        if ($recoveredMergedChildren->isNotEmpty()) {
+            $ticket->setRelation(
+                'children',
+                $ticket->children
+                    ->concat($recoveredMergedChildren)
+                    ->unique('id')
+                    ->sortBy('created_at')
+                    ->values()
+            );
+        }
 
         if (!$ticket->slaMetric) {
             $ticket->slaMetric()->create([
@@ -1836,10 +1877,13 @@ class TicketController extends Controller
 
             // 1. Update children
             foreach ($children as $child) {
-                $child->update([
-                    'status' => 'closed',
-                    'parent_id' => $parent->id,
-                ]);
+                if ($child->status !== 'closed') {
+                    $child->update(['status' => 'closed']);
+                }
+
+                if ((string) $child->parent_id !== (string) $parent->id) {
+                    $child->update(['parent_id' => $parent->id]);
+                }
 
                 TicketComment::create([
                     'ticket_id' => $child->id,
