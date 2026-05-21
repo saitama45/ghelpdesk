@@ -2,9 +2,9 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\ThreadsTicketMail;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 class ClosedTicketReplyNotification extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, ThreadsTicketMail;
 
     public $ticket;
     public $recipientName;
@@ -31,23 +31,12 @@ class ClosedTicketReplyNotification extends Mailable
      */
     public function envelope(): Envelope
     {
-        $subject = $this->ticket->title;
-        if (!str_starts_with(strtolower($subject), 're:')) {
-            $subject = 'Re: ' . $subject;
-        }
-
         $envelope = new Envelope(
-            subject: $subject,
+            subject: $this->ticketThreadSubject($this->ticket),
         );
 
         $envelope->using(function ($message) {
-            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
-            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
-            
-            if ($this->ticket->message_id) {
-                $message->getHeaders()->addTextHeader('In-Reply-To', $this->ticket->message_id);
-                $message->getHeaders()->addTextHeader('References', $this->ticket->message_id);
-            }
+            $this->addTicketThreadHeaders($message, $this->ticket);
         });
 
         return $envelope;

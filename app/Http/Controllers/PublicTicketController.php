@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ticket;
+use App\Models\TicketAttachment;
 use App\Models\TicketSurvey;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -45,6 +47,22 @@ class PublicTicketController extends Controller
 
         // Redirect directly to survey — no survey email needed
         return redirect()->route('public.survey', $ticket->survey_token);
+    }
+
+    /**
+     * Download a ticket attachment from a signed email link.
+     */
+    public function downloadAttachment(Request $request, TicketAttachment $attachment)
+    {
+        if (! $request->hasValidSignature()) {
+            abort(403, 'Invalid or expired attachment link.');
+        }
+
+        if (! Storage::disk('public')->exists($attachment->file_storage_path)) {
+            abort(404, 'File not found.');
+        }
+
+        return Storage::disk('public')->download($attachment->file_storage_path, $attachment->file_name);
     }
 
     /**

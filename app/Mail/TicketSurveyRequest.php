@@ -2,9 +2,9 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\ThreadsTicketMail;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 class TicketSurveyRequest extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, ThreadsTicketMail;
 
     /**
      * Create a new message instance.
@@ -28,12 +28,11 @@ class TicketSurveyRequest extends Mailable
     public function envelope(): Envelope
     {
         $envelope = new Envelope(
-            subject: "[{$this->ticket->ticket_key}] Your feedback matters! Rate your support experience",
+            subject: $this->ticketThreadSubject($this->ticket),
         );
 
         $envelope->using(function ($message) {
-            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
-            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
+            $this->addTicketThreadHeaders($message, $this->ticket);
         });
 
         return $envelope;

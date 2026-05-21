@@ -177,6 +177,7 @@ const saveInternalNote = () => {
         attachments: attachmentsToUpload
     })).post(route('tickets.comments.store', props.ticket.id), {
         preserveScroll: true,
+        forceFormData: true,
         onSuccess: () => {
             noteForm.attachments.forEach(a => {
                 if (a.preview) URL.revokeObjectURL(a.preview);
@@ -1579,6 +1580,7 @@ const addComment = () => {
         root_cause_analysis: commentForm.root_cause_analysis,
         attachments: attachmentsToUpload
     }, {
+        forceFormData: true,
         onSuccess: () => {
             commentForm.attachments.forEach(a => {
                 if (a.preview) URL.revokeObjectURL(a.preview);
@@ -2217,7 +2219,7 @@ const linkify = (text) => {
 
                         <div class="pt-6 border-t space-y-3">
                             <button
-                                v-if="hasPermission('tickets.edit') && (ticket.status === 'open' || ticket.status === 'in_progress')"
+                                v-if="hasPermission('tickets.edit') && ['open', 'in_progress', 'for_schedule'].includes(ticket.status)"
                                 type="button" 
                                 @click="openChildModal" 
                                 class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-black text-blue-600 bg-white hover:bg-blue-50 transition-colors uppercase tracking-widest"

@@ -324,6 +324,7 @@ Route::post('/public/pos-requests', [App\Http\Controllers\PublicPosRequestContro
 Route::get('/public/sap-requests/create', [App\Http\Controllers\PublicSapRequestController::class, 'create'])->name('public.sap-requests.create');
 Route::post('/public/sap-requests', [App\Http\Controllers\PublicSapRequestController::class, 'store'])->name('public.sap-requests.store');
 Route::get('/public/tickets/{ticket}/close', [App\Http\Controllers\PublicTicketController::class, 'close'])->name('public.tickets.close');
+Route::get('/public/ticket-attachments/{attachment}/download', [App\Http\Controllers\PublicTicketController::class, 'downloadAttachment'])->name('public.tickets.attachments.download');
 Route::get('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'showSurvey'])->name('public.survey');
 Route::post('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'submitSurvey'])->name('public.survey.submit');
 Route::get('/public/survey-thank-you', function () {

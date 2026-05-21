@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\ThreadsTicketMail;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -11,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 class TicketStatusChanged extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, ThreadsTicketMail;
 
     public function __construct(
         public Ticket $ticket,
@@ -22,14 +23,12 @@ class TicketStatusChanged extends Mailable
 
     public function envelope(): Envelope
     {
-        $status = strtoupper(str_replace('_', ' ', $this->newStatus));
         $envelope = new Envelope(
-            subject: "[{$this->ticket->ticket_key}] [{$status}] Status Changed: {$this->ticket->title}",
+            subject: $this->ticketThreadSubject($this->ticket),
         );
 
         $envelope->using(function ($message) {
-            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
-            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
+            $this->addTicketThreadHeaders($message, $this->ticket);
         });
 
         return $envelope;

@@ -1007,9 +1007,9 @@ class TicketController extends Controller
      */
     public function storeChild(Request $request, Ticket $ticket)
     {
-        // Allow creating multiple child tickets as long as the parent is Open or In Progress
-        if (!in_array($ticket->status, ['open', 'in_progress'])) {
-            return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open or In Progress tickets.']);
+        // Allow additional child tickets after the parent moves to For Schedule.
+        if (!in_array($ticket->status, ['open', 'in_progress', 'for_schedule'], true)) {
+            return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open, In Progress, or For Schedule tickets.']);
         }
 
         $validated = $request->validate([
@@ -1500,8 +1500,9 @@ class TicketController extends Controller
             return redirect()->back()->with('success', 'Internal note added.');
         }
 
-        $this->notifyTicketCommentRecipients($ticket, $comment);
-        $this->storeCommentAttachments($request, $ticket, $comment);
+        $attachments = $this->storeCommentAttachments($request, $ticket, $comment);
+        $comment->setRelation('attachments', $attachments);
+        $this->notifyTicketCommentRecipients($ticket, $comment, $attachments);
 
         return redirect()->back()->with('success', $this->commentSuccessMessage($kbGenerationStatus));
     }
@@ -1691,17 +1692,19 @@ class TicketController extends Controller
 
                 $comment->load('user');
                 $this->updateFirstResponseMetric($ticket, $comment);
-                $this->storeCommentAttachments($request, $ticket, $comment);
+                $attachments = $this->storeCommentAttachments($request, $ticket, $comment);
+                $comment->setRelation('attachments', $attachments);
 
                 return [
                     'ticket' => $ticket,
                     'comment' => $comment,
+                    'attachments' => $attachments,
                 ];
             });
         });
 
         foreach ($comments as $entry) {
-            $this->notifyTicketCommentRecipients($entry['ticket'], $entry['comment']);
+            $this->notifyTicketCommentRecipients($entry['ticket'], $entry['comment'], $entry['attachments']);
         }
 
         return redirect()->back()->with('success', "{$comments->count()} ticket response(s) added successfully.");
@@ -1928,29 +1931,33 @@ class TicketController extends Controller
         }
     }
 
-    private function storeCommentAttachments(Request $request, Ticket $ticket, TicketComment $comment): void
+    private function storeCommentAttachments(Request $request, Ticket $ticket, TicketComment $comment): \Illuminate\Support\Collection
     {
+        $attachments = collect();
+
         if (!$request->hasFile('attachments')) {
-            return;
+            return $attachments;
         }
 
         foreach ($request->file('attachments') as $file) {
             $fileName = now('Asia/Manila')->format('YmdHis') . '_' . Str::uuid() . '_' . $file->getClientOriginalName();
             $filePath = str_replace('\\', '/', $file->storeAs('ticket-attachments', $fileName, 'public'));
 
-            TicketAttachment::create([
+            $attachments->push(TicketAttachment::create([
                 'ticket_id' => $ticket->id,
                 'comment_id' => $comment->id,
                 'file_name' => $file->getClientOriginalName(),
                 'file_storage_path' => $filePath,
                 'file_size_bytes' => $file->getSize(),
-            ]);
+            ]));
         }
+
+        return $attachments;
     }
 
-    private function notifyTicketCommentRecipients(Ticket $ticket, TicketComment $comment): void
+    private function notifyTicketCommentRecipients(Ticket $ticket, TicketComment $comment, $attachments = null): void
     {
-        $ticket->loadMissing(['reporter', 'assignee']);
+        $ticket->load(['reporter:id,name,email', 'assignee:id,name,email']);
         $comment->loadMissing('user');
         $commenterId = auth()->id();
         $recipients = collect();
@@ -1960,6 +1967,7 @@ class TicketController extends Controller
                 'email' => strtolower($ticket->assignee->email),
                 'name' => $ticket->assignee->name,
                 'id' => $ticket->assignee->id,
+                'role' => 'assignee',
             ]);
         }
 
@@ -1968,6 +1976,7 @@ class TicketController extends Controller
                 'email' => strtolower($ticket->reporter->email),
                 'name' => $ticket->reporter->name,
                 'id' => $ticket->reporter->id,
+                'role' => 'requester',
             ]);
         }
 
@@ -1976,11 +1985,33 @@ class TicketController extends Controller
                 'email' => strtolower($ticket->sender_email),
                 'name' => $ticket->sender_name ?? 'External User',
                 'id' => null,
+                'role' => 'requester',
+            ]);
+        }
+
+        foreach ($ticket->effectiveCcs() as $cc) {
+            if (!$cc->email) {
+                continue;
+            }
+
+            $recipients->push([
+                'email' => strtolower($cc->email),
+                'name' => $cc->name ?: $cc->email,
+                'id' => $cc->user_id,
+                'role' => 'cc',
             ]);
         }
 
         $recipients = $recipients->filter(function ($recipient) use ($commenterId) {
-            return ($recipient['id'] != $commenterId) && !empty($recipient['email']);
+            if (empty($recipient['email'])) {
+                return false;
+            }
+
+            if (($recipient['role'] ?? null) === 'assignee' && $recipient['id'] == $commenterId) {
+                return false;
+            }
+
+            return true;
         })->unique('email');
 
         $supportEmail = \App\Models\Setting::get('imap_username');
@@ -1988,23 +2019,15 @@ class TicketController extends Controller
         \Illuminate\Support\Facades\Log::info("Notifying recipients for comment on ticket {$ticket->ticket_key}: " . $recipients->pluck('email')->implode(', '));
 
         $recipientList = $recipients->values()->all();
-        $primaryEmails = array_column($recipientList, 'email');
 
-        foreach ($recipientList as $index => $recipient) {
-            $mail = new TicketCommentAdded($ticket, $comment, $recipient['name']);
+        foreach ($recipientList as $recipient) {
+            $mail = new TicketCommentAdded($ticket, $comment, $recipient['name'], $attachments);
 
             if ($supportEmail) {
                 $mail->replyTo($supportEmail);
             }
 
             $pending = Mail::to($recipient['email']);
-
-            // Only attach the CC list to the first email to avoid CCs
-            // receiving duplicate copies for each primary recipient.
-            if ($index === 0) {
-                $this->attachTicketCcs($pending, $ticket, $primaryEmails);
-            }
-
             $pending->send($mail);
         }
     }

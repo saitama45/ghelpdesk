@@ -2,9 +2,9 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\ThreadsTicketMail;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
 
 class TicketMergedNotification extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, ThreadsTicketMail;
 
     /**
      * Create a new message instance.
@@ -28,9 +28,15 @@ class TicketMergedNotification extends Mailable
      */
     public function envelope(): Envelope
     {
-        return new Envelope(
-            subject: "Ticket Merged: #{$this->parentTicket->ticket_key}",
+        $envelope = new Envelope(
+            subject: $this->ticketThreadSubject($this->parentTicket),
         );
+
+        $envelope->using(function ($message) {
+            $this->addTicketThreadHeaders($message, $this->parentTicket);
+        });
+
+        return $envelope;
     }
 
     /**

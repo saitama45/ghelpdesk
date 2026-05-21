@@ -41,6 +41,10 @@
         .comment-box { background-color: #ffffff; border-left: 4px solid #2563eb; padding: 16px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .comment-author { font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
         .comment-text { font-size: 16px; color: #111827; white-space: pre-wrap; }
+        .attachment-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 24px; }
+        .attachment-title { font-size: 12px; color: #475569; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+        .attachment-item { font-size: 14px; color: #1f2937; margin: 4px 0; }
+        .attachment-link { color: #1d4ed8; font-weight: 700; text-decoration: none; }
         
         /* Button */
         .action-button { display: inline-block; background-color: #1e40af; color: #ffffff !important; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: 700; text-align: center; margin-top: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); transition: background-color 0.2s; }
@@ -82,6 +86,19 @@
                 <div class="comment-author">{{ $comment->user ? $comment->user->name : ($ticket->sender_name ?? 'Support') }} commented:</div>
                 <div class="comment-text">{{ $comment->comment_text }}</div>
             </div>
+
+            @if($comment->attachments->isNotEmpty())
+            <div class="attachment-box">
+                <div class="attachment-title">Attachments</div>
+                @foreach($comment->attachments as $attachment)
+                    <div class="attachment-item">
+                        <a class="attachment-link" href="{{ URL::signedRoute('public.tickets.attachments.download', $attachment) }}">
+                            Download {{ $attachment->file_name }}
+                        </a>
+                    </div>
+                @endforeach
+            </div>
+            @endif
             
             <div class="ticket-card">
                 <span class="ticket-key">{{ $ticket->ticket_key }}</span>

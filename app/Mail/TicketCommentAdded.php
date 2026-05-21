@@ -2,18 +2,23 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\ThreadsTicketMail;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 
 class TicketCommentAdded extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, ThreadsTicketMail;
+
+    public Collection $commentAttachments;
 
     /**
      * Create a new message instance.
@@ -21,38 +26,27 @@ class TicketCommentAdded extends Mailable
     public function __construct(
         public Ticket $ticket,
         public TicketComment $comment,
-        public string $recipientName
-    ) {}
+        public string $recipientName,
+        $commentAttachments = null
+    ) {
+        $this->commentAttachments = collect($commentAttachments);
+
+        if ($this->commentAttachments->isNotEmpty()) {
+            $this->comment->setRelation('attachments', $this->commentAttachments);
+        }
+    }
 
     /**
      * Get the message envelope.
      */
     public function envelope(): Envelope
     {
-        $subject = $this->ticket->title;
-        
-        // To maintain threading in Yahoo/Gmail/Outlook, we must keep the original subject 
-        // and only prepend "Re: " if it's not already there.
-        if (!str_starts_with(strtolower($subject), 're:')) {
-            $subject = 'Re: ' . $subject;
-        }
-
         $envelope = new Envelope(
-            subject: $subject,
+            subject: $this->ticketThreadSubject($this->ticket),
         );
 
-        // Set headers to improve deliverability and threading
         $envelope->using(function ($message) {
-            // Auto-Submitted header helps bypass some automated spam filters 
-            // without breaking the conversation thread.
-            $message->getHeaders()->addTextHeader('Auto-Submitted', 'auto-generated');
-            $message->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
-            
-            // This is the critical part for "Email Threading"
-            if ($this->ticket->message_id) {
-                $message->getHeaders()->addTextHeader('In-Reply-To', $this->ticket->message_id);
-                $message->getHeaders()->addTextHeader('References', $this->ticket->message_id);
-            }
+            $this->addTicketThreadHeaders($message, $this->ticket);
         });
 
         return $envelope;
@@ -63,6 +57,8 @@ class TicketCommentAdded extends Mailable
      */
     public function content(): Content
     {
+        $this->syncCommentAttachments();
+
         return new Content(
             view: 'emails.tickets.commented',
         );
@@ -75,6 +71,25 @@ class TicketCommentAdded extends Mailable
      */
     public function attachments(): array
     {
-        return [];
+        $attachments = $this->syncCommentAttachments();
+
+        return $attachments
+            ->filter(fn ($attachment) => Storage::disk('public')->exists($attachment->file_storage_path))
+            ->map(fn ($attachment) => Attachment::fromPath(Storage::disk('public')->path($attachment->file_storage_path))
+                ->as($attachment->file_name))
+            ->values()
+            ->all();
+    }
+
+    private function syncCommentAttachments(): Collection
+    {
+        if ($this->commentAttachments->isEmpty()) {
+            $this->comment->loadMissing('attachments');
+            $this->commentAttachments = $this->comment->attachments;
+        }
+
+        $this->comment->setRelation('attachments', $this->commentAttachments);
+
+        return $this->commentAttachments;
     }
 }
