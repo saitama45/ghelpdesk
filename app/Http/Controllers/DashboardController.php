@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\DepartmentNode;
+use App\Models\Company;
+use App\Models\Item;
 use App\Services\StoreReportService;
 use App\Services\OrganizationReferenceService;
 use App\Models\Ticket;
@@ -95,6 +97,112 @@ class DashboardController extends Controller
         if ($month) {
             $filteredQuery->whereMonth('created_at', $month);
         }
+
+        $applyDashboardChartFilters = function ($chartQuery) use ($departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter) {
+            if ($departmentIdFilter) {
+                $chartQuery->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
+            }
+
+            if ($departmentNodeIdFilter) {
+                $nodeIds = array_merge([(int) $departmentNodeIdFilter], DepartmentNode::getAllDescendantIds((int) $departmentNodeIdFilter));
+                $chartQuery->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
+            }
+
+            if ($userIdFilter && $userIdFilter !== 'all') {
+                $chartQuery->where('assignee_id', $userIdFilter);
+            }
+
+            if ($storeIdFilter && $storeIdFilter !== 'all') {
+                $chartQuery->where('store_id', $storeIdFilter);
+            }
+
+            return $chartQuery;
+        };
+
+        $chartQuery = $applyDashboardChartFilters(clone $filteredQuery);
+        $terminalStatuses = ['resolved', 'closed'];
+
+        $overallChartRow = (clone $chartQuery)
+            ->selectRaw(
+                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+            )
+            ->first();
+
+        $brandCounts = (clone $chartQuery)
+            ->selectRaw(
+                "company_id, " .
+                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+            )
+            ->whereNotNull('company_id')
+            ->groupBy('company_id')
+            ->get();
+
+        $companiesById = Company::query()
+            ->whereIn('id', $brandCounts->pluck('company_id')->filter()->values())
+            ->get(['id', 'name', 'code'])
+            ->keyBy('id');
+
+        $brandChartRows = $brandCounts
+            ->map(function ($row) use ($companiesById) {
+                $company = $companiesById[(int) $row->company_id] ?? null;
+
+                return [
+                    'id' => (int) $row->company_id,
+                    'name' => $company?->name ?? 'Unknown Brand',
+                    'code' => $company?->code,
+                    'open' => (int) $row->open_count,
+                    'closed' => (int) $row->closed_count,
+                ];
+            })
+            ->sortBy('name')
+            ->values();
+
+        $ticketCountsByItem = (clone $chartQuery)
+            ->whereNotNull('item_id')
+            ->selectRaw(
+                "item_id, " .
+                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+            )
+            ->groupBy('item_id')
+            ->get()
+            ->keyBy('item_id');
+
+        $concernCounts = Item::query()
+            ->whereIn('id', $ticketCountsByItem->keys())
+            ->whereIn('concern_type', ['Incident', 'Service Request'])
+            ->get(['id', 'concern_type'])
+            ->reduce(function ($counts, $item) use ($ticketCountsByItem) {
+                $itemCounts = $ticketCountsByItem[$item->id] ?? null;
+
+                if (!isset($counts[$item->concern_type])) {
+                    $counts[$item->concern_type] = ['open' => 0, 'closed' => 0];
+                }
+
+                $counts[$item->concern_type]['open'] += (int) ($itemCounts->open_count ?? 0);
+                $counts[$item->concern_type]['closed'] += (int) ($itemCounts->closed_count ?? 0);
+
+                return $counts;
+            }, []);
+
+        $ticketCharts = [
+            'overall' => [
+                'open' => (int) ($overallChartRow->open_count ?? 0),
+                'closed' => (int) ($overallChartRow->closed_count ?? 0),
+            ],
+            'perBrand' => $brandChartRows,
+            'concernTypes' => collect(['Incident', 'Service Request'])
+                ->map(fn ($type) => [
+                    'key' => $type,
+                    'label' => $type,
+                    'open' => (int) ($concernCounts[$type]['open'] ?? 0),
+                    'closed' => (int) ($concernCounts[$type]['closed'] ?? 0),
+                    'total' => (int) (($concernCounts[$type]['open'] ?? 0) + ($concernCounts[$type]['closed'] ?? 0)),
+                ])
+                ->values(),
+        ];
 
         // Waiting Aging Alarm Logic
         $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
@@ -519,6 +627,7 @@ class DashboardController extends Controller
             'storeHealth' => $storeHealth,
             'kanbanReport' => $kanbanReport,
             'kanbanProjects' => $kanbanProjects,
+            'ticketCharts' => $ticketCharts,
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'myTickets' => $myTickets,
@@ -551,20 +660,38 @@ class DashboardController extends Controller
     {
         $now = \Carbon\Carbon::now();
 
-        // Top 3 agents by total points this month
-        $top = \App\Models\AgentPointTransaction::query()
+        // Top 3 active assignable techs by configured leadership points this month.
+        $monthlyPointRows = \App\Models\AgentPointTransaction::query()
             ->whereYear('awarded_at', $now->year)
             ->whereMonth('awarded_at', $now->month)
             ->selectRaw('agent_id, SUM(points) as total_points, COUNT(DISTINCT ticket_id) as ticket_count')
             ->groupBy('agent_id')
-            ->orderByDesc('total_points')
-            ->limit(3)
-            ->get();
+            ->get()
+            ->keyBy('agent_id');
+
+        $top = \App\Models\User::active()
+            ->whereHas('roles', fn ($q) => $q->where('is_assignable', true))
+            ->get(['id', 'name', 'profile_photo'])
+            ->map(function ($tech) use ($monthlyPointRows) {
+                $row = $monthlyPointRows[$tech->id] ?? null;
+
+                return [
+                    'agent_id' => $tech->id,
+                    'name' => $tech->name,
+                    'profile_photo' => $tech->profile_photo,
+                    'total_points' => (int) ($row->total_points ?? 0),
+                    'ticket_count' => (int) ($row->ticket_count ?? 0),
+                ];
+            })
+            ->sortBy([
+                ['total_points', 'desc'],
+                ['ticket_count', 'desc'],
+                ['name', 'asc'],
+            ])
+            ->take(3)
+            ->values();
 
         $agentIds = $top->pluck('agent_id')->toArray();
-
-        // Load agent names separately (avoids eager-loading conflict with selectRaw+groupBy)
-        $agents = \App\Models\User::whereIn('id', $agentIds)->get(['id', 'name'])->keyBy('id');
 
         // Avg closing time (minutes) per agent this month
         $avgClosingTimes = \Illuminate\Support\Facades\DB::table('ticket_sla_metrics as sm')
@@ -581,15 +708,16 @@ class DashboardController extends Controller
         $trophies = $this->buildTrophies($now);
 
         return [
-            'top3' => $top->map(function ($row, $index) use ($agents, $avgClosingTimes) {
+            'top3' => $top->map(function ($row, $index) use ($avgClosingTimes) {
                 return [
                     'rank'          => $index + 1,
-                    'agent_id'      => $row->agent_id,
-                    'name'          => $agents[$row->agent_id]?->name ?? 'Unknown',
-                    'total_points'  => (int) $row->total_points,
-                    'ticket_count'  => (int) $row->ticket_count,
-                    'avg_close_min' => isset($avgClosingTimes[$row->agent_id])
-                        ? (int) round($avgClosingTimes[$row->agent_id])
+                    'agent_id'      => $row['agent_id'],
+                    'name'          => $row['name'],
+                    'profile_photo' => $row['profile_photo'],
+                    'total_points'  => $row['total_points'],
+                    'ticket_count'  => $row['ticket_count'],
+                    'avg_close_min' => isset($avgClosingTimes[$row['agent_id']])
+                        ? (int) round($avgClosingTimes[$row['agent_id']])
                         : null,
                 ];
             })->values()->toArray(),

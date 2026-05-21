@@ -16,6 +16,10 @@ import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDo
 
 const props = defineProps({
     ticket: Object,
+    itemLeaders: {
+        type: Array,
+        default: () => [],
+    },
     staff: Array,
     companies: Array,
     users: Array,
@@ -668,6 +672,8 @@ const selectedItem = computed(() => {
         || null;
 });
 
+const itemLeaderRows = computed(() => props.itemLeaders || []);
+
 const canResolveTicket = computed(() => availableStatuses.value.includes('resolved'));
 const requiresRcaOnResolve = computed(() => !!selectedItem.value?.requires_rca_on_resolve);
 const requiresResolutionDetails = (targetStatus) => ['resolved', 'closed'].includes(targetStatus);
@@ -1246,7 +1252,7 @@ const updateTicket = (options = {}) => {
     put(route('tickets.update', props.ticket.id), payload, {
         preserveScroll: true,
         preserveState: true,
-        only: ['ticket', 'flash'], // Only refresh ticket data, ignore static lists
+        only: ['ticket', 'itemLeaders', 'flash'], // Only refresh ticket data, item leaderboard, and flash
         onSuccess: () => {
             editForm.defaults(editForm.data()); // Update defaults to new state
             // Restore immediately after Vue re-renders, then again after any late Inertia scroll resets
@@ -1395,7 +1401,7 @@ const updateRequesterDetails = () => {
     put(route('tickets.update', props.ticket.id), payload, {
         preserveScroll: true,
         preserveState: true,
-        only: ['ticket', 'flash'],
+        only: ['ticket', 'itemLeaders', 'flash'],
         onSuccess: () => {
             editForm.sender_name = requesterDraft.sender_name;
             editForm.sender_email = requesterDraft.sender_email;
@@ -1689,6 +1695,58 @@ const linkify = (text) => {
                 <div class="lg:col-span-1 space-y-6 order-1 lg:order-2">
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-6 lg:sticky lg:top-6">
                         <div class="space-y-4 sm:space-y-6">
+                            <div class="rounded-lg border border-indigo-100 bg-indigo-50 p-4 space-y-3">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <h3 class="text-xs font-black text-indigo-700 uppercase tracking-widest">Top 3 Leaders For This Item</h3>
+                                        <p class="text-[11px] font-semibold text-indigo-900/70 truncate">
+                                            {{ selectedItem?.name || 'No item selected' }}
+                                        </p>
+                                    </div>
+                                    <div class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-indigo-700 border border-indigo-100 shrink-0">
+                                        Overall
+                                    </div>
+                                </div>
+
+                                <div v-if="itemLeaderRows.length" class="space-y-2">
+                                    <div v-for="leader in itemLeaderRows" :key="leader.agent_id"
+                                        class="flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm"
+                                        :class="{
+                                            'border-yellow-200': leader.rank === 1,
+                                            'border-slate-200': leader.rank === 2,
+                                            'border-orange-200': leader.rank === 3,
+                                        }">
+                                        <div class="flex h-8 w-8 items-center justify-center rounded-full text-xs font-black shrink-0"
+                                            :class="{
+                                                'bg-yellow-400 text-yellow-950': leader.rank === 1,
+                                                'bg-slate-200 text-slate-700': leader.rank === 2,
+                                                'bg-orange-200 text-orange-800': leader.rank === 3,
+                                            }">
+                                            #{{ leader.rank }}
+                                        </div>
+                                        <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100 ring-2 ring-white shrink-0">
+                                            <img v-if="leader.profile_photo" :src="'/serve-storage/' + leader.profile_photo" class="h-full w-full object-cover" :alt="leader.name">
+                                            <div v-else class="flex h-full w-full items-center justify-center bg-indigo-100 text-sm font-black text-indigo-700">
+                                                {{ String(leader.name || '').charAt(0).toUpperCase() || '?' }}
+                                            </div>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="truncate text-sm font-black text-gray-900">{{ leader.name }}</div>
+                                            <div class="text-[11px] font-semibold text-gray-500">
+                                                {{ leader.ticket_count }} ticket{{ leader.ticket_count !== 1 ? 's' : '' }}
+                                            </div>
+                                        </div>
+                                        <div class="text-right shrink-0">
+                                            <div class="text-sm font-black text-indigo-700">{{ Number(leader.total_points || 0).toLocaleString() }}</div>
+                                            <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">pts</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div v-else class="rounded-lg border border-dashed border-indigo-200 bg-white/70 px-3 py-4 text-center text-xs font-semibold text-indigo-900/50">
+                                    No leadership points for this item yet.
+                                </div>
+                            </div>
+
                             <div v-if="slaRuntime" class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex items-center gap-3 min-w-0">

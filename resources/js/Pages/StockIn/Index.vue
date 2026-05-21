@@ -434,7 +434,7 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Vendor</label>
                                 <Autocomplete
@@ -448,12 +448,22 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Origin Location</label>
+                                <div class="mt-1 flex items-center h-[38px] px-3 rounded-md border border-gray-200 bg-gray-50 gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                                    <span class="text-sm font-semibold text-gray-700">Supplier</span>
+                                    <span v-if="form.vendor" class="text-xs text-gray-400 truncate">({{ form.vendor }})</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">
+                                    Destination Location <span class="text-red-500">*</span>
+                                </label>
                                 <Autocomplete
-                                    v-model="form.origin_location"
+                                    v-model="headerDestinationLocation"
                                     :options="storeOptions"
                                     label-key="name"
                                     value-key="value"
-                                    placeholder="Select Origin Store"
+                                    placeholder="Select Destination Store"
                                     :disabled="readOnlyMode"
                                 />
                             </div>
@@ -471,298 +481,299 @@
                         </div>
 
                         <!-- Asset Selection Table -->
+                        <!-- SOH Panel at Destination (informational, create mode only) -->
+                        <div v-if="!isEditing && headerDestinationLocation" class="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <div>
+                                    <h4 class="text-xs font-black uppercase tracking-widest text-indigo-700">Current Stock at {{ headerDestinationLocation }}</h4>
+                                    <p class="text-[10px] text-indigo-500 mt-0.5">Informational — existing posted stock at this destination.</p>
+                                </div>
+                                <span v-if="isLoadingDestinationStock" class="text-[10px] text-indigo-400 animate-pulse">Loading...</span>
+                                <span v-else class="text-[10px] font-bold text-indigo-600">{{ destinationStockItems.length }} item type(s)</span>
+                            </div>
+                            <div v-if="!isLoadingDestinationStock && destinationStockItems.length > 0" class="overflow-hidden rounded-lg border border-indigo-200 bg-white max-h-44 overflow-y-auto">
+                                <table class="min-w-full divide-y divide-indigo-50">
+                                    <thead class="bg-indigo-50/60 sticky top-0">
+                                        <tr>
+                                            <th class="px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-wider text-indigo-400">Item Code</th>
+                                            <th class="px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-wider text-indigo-400">Asset</th>
+                                            <th class="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-wider text-indigo-400">SOH</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-indigo-50">
+                                        <tr v-for="item in destinationStockItems" :key="item.id" class="hover:bg-indigo-50/30">
+                                            <td class="px-3 py-1.5 text-xs font-mono font-semibold text-gray-800">{{ item.item_code }}</td>
+                                            <td class="px-3 py-1.5">
+                                                <p class="text-xs font-semibold text-gray-800">{{ item.brand }} {{ item.model }}</p>
+                                                <p class="text-[10px] text-gray-400 truncate max-w-xs">{{ item.description }}</p>
+                                            </td>
+                                            <td class="px-3 py-1.5 text-right text-xs font-black text-indigo-700">{{ item.soh }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div v-else-if="!isLoadingDestinationStock" class="text-center py-3 text-[10px] text-indigo-400 font-semibold">
+                                No posted stock at this destination yet.
+                            </div>
+                        </div>
+
+                        <!-- Asset Items Section (Create Mode Only) -->
                         <div v-if="!isEditing" class="space-y-4">
                             <div class="flex items-center justify-between">
                                 <div>
-                                    <h4 class="text-sm font-semibold text-gray-900">Select Assets to Add</h4>
-                                    <p v-if="isTransferMode" class="text-xs text-gray-500">Showing posted stock currently available at {{ normalizedOriginLocation }}.</p>
+                                    <h4 class="text-sm font-semibold text-gray-900">Asset Items</h4>
+                                    <p class="text-xs text-gray-500">{{ createModalAssets.length }} asset type(s), {{ form.entries.length }} unit(s) added to this stock-in transaction.</p>
                                 </div>
-                                <div class="relative w-64">
+                                <button
+                                    type="button"
+                                    @click="showAssetPicker = !showAssetPicker"
+                                    class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                                >
+                                    <PlusIcon class="h-3.5 w-3.5" />
+                                    Add Asset Item
+                                </button>
+                            </div>
+
+                            <!-- Asset Picker Panel -->
+                            <div v-if="showAssetPicker" class="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+                                <div class="relative">
                                     <input
                                         type="text"
                                         v-model="assetSearch"
-                                        placeholder="Search asset code, brand..."
-                                        class="w-full pl-3 pr-10 py-1.5 border-gray-300 rounded-lg text-xs focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="Search by item code, brand, model or description..."
+                                        class="w-full pl-9 pr-10 py-2 border-blue-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
                                     >
-                                    <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                         </svg>
+                                    </div>
+                                    <button type="button" @click="showAssetPicker = false; assetSearch = ''" class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                                <div v-if="assetSearch && filteredAssets.length > 0" class="overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm">
+                                    <table class="min-w-full divide-y divide-gray-100">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Item Code</th>
+                                                <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Asset</th>
+                                                <th class="px-4 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-gray-500">Type</th>
+                                                <th class="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-50">
+                                            <tr v-for="asset in filteredAssets" :key="asset.id" class="hover:bg-blue-50/50">
+                                                <td class="px-4 py-2.5 text-xs font-mono font-semibold text-gray-900">{{ asset.item_code }}</td>
+                                                <td class="px-4 py-2.5">
+                                                    <p class="text-xs font-bold text-gray-900">{{ asset.brand }} {{ asset.model }}</p>
+                                                    <p class="text-[10px] text-gray-400 truncate max-w-xs">{{ asset.description }}</p>
+                                                </td>
+                                                <td class="px-4 py-2.5 text-center">
+                                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase"
+                                                          :class="asset.type === 'Consumables' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'">
+                                                        {{ asset.type }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-4 py-2.5 text-right">
+                                                    <button
+                                                        type="button"
+                                                        @click="pickAsset(asset)"
+                                                        class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-black text-white uppercase tracking-wider hover:bg-blue-700 transition-colors"
+                                                    >
+                                                        <PlusIcon class="w-3 h-3" />
+                                                        Add
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else-if="assetSearch && filteredAssets.length === 0" class="text-center py-3 text-xs text-gray-400 font-semibold">
+                                    No assets found matching "{{ assetSearch }}".
+                                </div>
+                                <div v-else class="text-center py-2 text-[10px] text-blue-400">
+                                    Start typing to search assets...
+                                </div>
+                            </div>
+
+                            <!-- Entry Cards — Grouped by Asset -->
+                            <div v-if="createModalAssets.length > 0" class="space-y-3">
+                                <div
+                                    v-for="asset in createModalAssets"
+                                    :key="asset.id"
+                                    class="relative rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden"
+                                >
+                                    <!-- Asset Header Bar -->
+                                    <div class="flex items-center justify-between bg-gradient-to-r from-gray-50 to-white px-4 py-2.5 border-b border-gray-100">
+                                        <div class="flex items-center gap-2.5 min-w-0">
+                                            <span class="text-xs font-black font-mono text-gray-900 flex-shrink-0">{{ asset.item_code }}</span>
+                                            <span class="text-xs text-gray-600 truncate">{{ asset.brand }} {{ asset.model }}</span>
+                                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase flex-shrink-0"
+                                                  :class="asset.type === 'Consumables' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'">
+                                                {{ asset.type }}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            @click="removeAssetGroup(asset.id)"
+                                            class="p-1 text-gray-300 hover:text-red-500 transition-colors rounded-full hover:bg-red-50"
+                                            title="Remove this asset group"
+                                        >
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+
+                                    <div v-if="groupSharedFields[asset.id]" class="p-4 space-y-4">
+                                        <!-- Shared Fields: Type, Allocation, Cost, Price -->
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Type</label>
+                                                <select
+                                                    v-model="groupSharedFields[asset.id].asset_type"
+                                                    @change="syncSharedField(asset.id, 'asset_type')"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white"
+                                                >
+                                                    <option value="New">New</option>
+                                                    <option value="Used">Used</option>
+                                                    <option value="For Disposal">For Disposal</option>
+                                                    <option value="For Repair">For Repair</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Allocation</label>
+                                                <div class="mt-1 flex items-center h-[34px]">
+                                                    <label class="relative inline-flex items-center cursor-pointer">
+                                                        <input type="checkbox" v-model="groupSharedFields[asset.id].is_allocation" @change="syncSharedField(asset.id, 'is_allocation')" class="sr-only peer">
+                                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                                                        <span class="ml-2 text-xs font-bold text-gray-900">{{ groupSharedFields[asset.id].is_allocation ? 'Yes' : 'No' }}</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Cost</label>
+                                                <input type="number" step="0.01" v-model.number="groupSharedFields[asset.id].cost" @change="syncSharedField(asset.id, 'cost')" required min="0"
+                                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                            </div>
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Price</label>
+                                                <input type="number" step="0.01" v-model.number="groupSharedFields[asset.id].price" @change="syncSharedField(asset.id, 'price')" required min="0"
+                                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                            </div>
+                                        </div>
+
+                                        <!-- Qty + Warranty + EOL -->
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 items-start">
+                                            <div>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                                                    Qty <span class="text-red-500">*</span>
+                                                </label>
+                                                <div class="flex items-center gap-1">
+                                                    <button
+                                                        type="button"
+                                                        @click="setAssetQty(asset.id, getEntriesForAsset(asset.id).length - 1)"
+                                                        class="flex-shrink-0 w-7 h-7 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold flex items-center justify-center"
+                                                    >−</button>
+                                                    <input
+                                                        type="number"
+                                                        :value="getEntriesForAsset(asset.id).length"
+                                                        @change="setAssetQty(asset.id, $event.target.value)"
+                                                        min="1"
+                                                        class="w-14 text-center rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs font-bold"
+                                                    >
+                                                    <button
+                                                        type="button"
+                                                        @click="setAssetQty(asset.id, getEntriesForAsset(asset.id).length + 1)"
+                                                        class="flex-shrink-0 w-7 h-7 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold flex items-center justify-center"
+                                                    >+</button>
+                                                </div>
+                                            </div>
+                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
+                                                <input type="number" v-model.number="groupSharedFields[asset.id].warranty_months" @change="syncSharedField(asset.id, 'warranty_months')" required min="0"
+                                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(groupSharedFields[asset.id]) }}</p>
+                                            </div>
+                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
+                                                <input type="number" v-model.number="groupSharedFields[asset.id].eol_months" @change="syncSharedField(asset.id, 'eol_months')" required min="0"
+                                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(groupSharedFields[asset.id]) }}</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Units List -->
+                                        <div class="space-y-1.5">
+                                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Units ({{ getEntriesForAsset(asset.id).length }})</p>
+                                            <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                                                <div
+                                                    v-for="(entry, unitIdx) in getEntriesForAsset(asset.id)"
+                                                    :key="entry.uid"
+                                                    class="flex items-center gap-2.5 px-3 py-2 bg-white hover:bg-gray-50/50"
+                                                >
+                                                    <!-- Unit # badge -->
+                                                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-black flex items-center justify-center">{{ unitIdx + 1 }}</span>
+
+                                                    <!-- Serial No (Fixed only) -->
+                                                    <div class="flex-1 min-w-0">
+                                                        <input
+                                                            v-if="asset.type !== 'Consumables'"
+                                                            type="text"
+                                                            v-model="entry.serial_no"
+                                                            @change="regenUnitCodes(form.entries.indexOf(entry))"
+                                                            placeholder="Serial No (optional)"
+                                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                                        >
+                                                        <span v-else class="text-[10px] text-gray-300 italic">No serial required</span>
+                                                    </div>
+
+                                                    <!-- Barcode thumbnail -->
+                                                    <div
+                                                        class="flex-shrink-0 cursor-pointer"
+                                                        :title="entry.barcode"
+                                                        @click="entry.barcodeDataUrl && (barcodePreview = { show: true, src: entry.barcodeDataUrl, text: entry.barcode })"
+                                                    >
+                                                        <img v-if="entry.barcodeDataUrl" :src="entry.barcodeDataUrl" class="h-6 max-w-[80px]" :alt="entry.barcode">
+                                                        <div v-else class="h-6 w-20 flex items-center justify-center bg-gray-100 rounded text-[9px] text-gray-300 animate-pulse">barcode…</div>
+                                                    </div>
+
+                                                    <!-- QR thumbnail -->
+                                                    <div
+                                                        class="flex-shrink-0 cursor-pointer"
+                                                        title="QR Code"
+                                                        @click="entry.qrcodeDataUrl && (barcodePreview = { show: true, src: entry.qrcodeDataUrl, text: entry.barcode, isQr: true })"
+                                                    >
+                                                        <img v-if="entry.qrcodeDataUrl" :src="entry.qrcodeDataUrl" class="h-6 w-6" alt="QR">
+                                                        <div v-else class="h-6 w-6 flex items-center justify-center bg-gray-100 rounded text-[9px] text-gray-300 animate-pulse">QR</div>
+                                                    </div>
+
+                                                    <!-- Regen button -->
+                                                    <button
+                                                        type="button"
+                                                        @click="regenUnitCodes(form.entries.indexOf(entry))"
+                                                        class="flex-shrink-0 text-[9px] font-black text-blue-400 hover:text-blue-700 uppercase tracking-widest transition-colors"
+                                                        title="Regenerate barcode & QR"
+                                                    >↻</button>
+
+                                                    <!-- Validation flags -->
+                                                    <span v-if="entryNeedsBarcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!BC</span>
+                                                    <span v-if="entryNeedsQrcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!QR</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div v-if="isLoadingOriginAssets" class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-6 text-center text-xs font-bold text-blue-700">
-                                Loading available stock from {{ normalizedOriginLocation }}...
-                            </div>
-
-                            <div v-else-if="isTransferMode && filteredAssets.length === 0" class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-6 text-center text-xs font-bold text-amber-700">
-                                No posted stock is available at this origin location.
-                            </div>
-
-                            <div v-else-if="filteredAssets.length > 0" class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Item Code</th>
-                                            <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Asset</th>
-                                            <th v-if="isTransferMode" class="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">SOH</th>
-                                            <th class="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-100">
-                                        <template v-for="asset in filteredAssets" :key="asset.id">
-                                            <tr class="hover:bg-blue-50/50">
-                                                <td class="px-4 py-2 text-xs font-mono font-semibold text-gray-900">{{ asset.item_code }}</td>
-                                                <td class="px-4 py-2">
-                                                    <p class="text-xs font-bold text-gray-900">{{ asset.brand }} {{ asset.model }}</p>
-                                                    <p class="text-[10px] text-gray-500 truncate max-w-xs">{{ asset.description }}</p>
-                                                </td>
-                                                <td v-if="isTransferMode" class="px-4 py-2 text-right text-xs font-black text-blue-700">{{ asset.soh }}</td>
-                                                <td class="px-4 py-2 text-right">
-                                                    <button
-                                                        type="button"
-                                                        @click="addEntryForAsset(asset)"
-                                                        class="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
-                                                    >
-                                                        <PlusIcon class="w-4 h-4" />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                            <tr v-if="isAssetDetailExpanded(asset.id) || getEntriesForAsset(asset.id).length > 0" class="bg-slate-50/80">
-                                                <td :colspan="isTransferMode ? 4 : 3" class="px-4 py-4">
-                                                    <div class="space-y-4 border-l-2 border-blue-200 pl-4">
-                                                        <div class="flex items-center justify-between">
-                                                            <p class="text-[10px] font-black uppercase tracking-widest text-blue-600">
-                                                                {{ getEntriesForAsset(asset.id).length }} stock detail row<span v-if="getEntriesForAsset(asset.id).length !== 1">s</span>
-                                                            </p>
-                                                            <button
-                                                                v-if="!isEditing"
-                                                                type="button"
-                                                                @click="addEntryForAsset(asset)"
-                                                                class="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800"
-                                                            >
-                                                                + Add Unit
-                                                            </button>
-                                                        </div>
-
-                                                        <div
-                                                            v-if="isTransferMode && asset.type === 'Fixed'"
-                                                            class="inline-flex rounded-lg border border-gray-200 bg-white p-1"
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                @click="setAssetDetailTab(asset.id, 'existing')"
-                                                                class="rounded-md px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors"
-                                                                :class="getAssetDetailTab(asset.id) === 'existing' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'"
-                                                            >
-                                                                Existing Sub Items
-                                                                <span class="ml-1">({{ availableStockMap[asset.id]?.units?.length || 0 }})</span>
-                                                            </button>
-                                                            <button
-                                                                v-if="!isEditing"
-                                                                type="button"
-                                                                @click="setAssetDetailTab(asset.id, 'new')"
-                                                                class="rounded-md px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors"
-                                                                :class="getAssetDetailTab(asset.id) === 'new' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'"
-                                                            >
-                                                                New/Add Unit
-                                                                <span class="ml-1">({{ getEntriesForAsset(asset.id).length }})</span>
-                                                            </button>
-                                                        </div>
-
-                                                        <div
-                                                            v-if="isTransferMode && asset.type === 'Fixed' && getAssetDetailTab(asset.id) === 'existing'"
-                                                            class="rounded-xl border border-gray-200 bg-white shadow-sm"
-                                                        >
-                                                            <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-                                                                <div>
-                                                                    <p class="text-xs font-black uppercase tracking-widest text-gray-700">Existing Sub Items</p>
-                                                                    <p class="text-[10px] text-gray-500">Select an existing source unit from {{ normalizedOriginLocation }} to add it as a transfer row.</p>
-                                                                </div>
-                                                                <span class="text-[10px] font-black uppercase tracking-widest text-blue-600">SOH: {{ availableStockMap[asset.id]?.soh || 0 }}</span>
-                                                            </div>
-                                                            <div v-if="availableStockMap[asset.id]?.loading" class="px-4 py-6 text-center text-xs font-bold text-gray-500">
-                                                                Loading existing sub items...
-                                                            </div>
-                                                            <div v-else-if="availableStockMap[asset.id]?.error" class="px-4 py-6 text-center text-xs font-bold text-red-600">
-                                                                {{ availableStockMap[asset.id].error }}
-                                                            </div>
-                                                            <div v-else-if="!(availableStockMap[asset.id]?.units || []).length" class="px-4 py-6 text-center text-xs font-bold text-gray-500">
-                                                                No existing sub items are available at this origin.
-                                                            </div>
-                                                            <div v-else class="max-h-64 overflow-y-auto">
-                                                                <table class="min-w-full divide-y divide-gray-100">
-                                                                    <thead class="bg-gray-50">
-                                                                        <tr>
-                                                                            <th class="px-4 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-400">Serial / Barcode</th>
-                                                                            <th class="px-4 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-gray-400">QR Code</th>
-                                                                            <th class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Cost</th>
-                                                                            <th v-if="isEditing" class="px-4 py-2 text-right text-[9px] font-bold uppercase tracking-wider text-gray-400">Action</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody class="divide-y divide-gray-50">
-                                                                        <tr
-                                                                            v-for="unit in availableStockMap[asset.id]?.units"
-                                                                            :key="unit.id"
-                                                                            class="hover:bg-blue-50/60"
-                                                                            :class="isSourceUnitSelected(unit.id) ? 'bg-blue-50' : ''"
-                                                                        >
-                                                                            <td class="px-4 py-2">
-                                                                                <p class="text-[11px] font-semibold text-gray-900">{{ unit.serial_no || 'No Serial' }}</p>
-                                                                                <p class="text-[9px] font-mono text-gray-500">{{ unit.barcode }}</p>
-                                                                            </td>
-                                                                            <td class="px-4 py-2 text-[10px] text-gray-500 truncate max-w-xs">{{ unit.qrcode || '-' }}</td>
-                                                                            <td class="px-4 py-2 text-right text-[11px] font-mono text-gray-900">{{ unit.cost }}</td>
-                                                                            <td v-if="isEditing" class="px-4 py-2 text-right">
-                                                                                <button
-                                                                                    type="button"
-                                                                                    @click="addEntryFromSourceUnit(asset, unit)"
-                                                                                    class="rounded-md px-2 py-1 text-[10px] font-black uppercase transition-colors"
-                                                                                    :class="isSourceUnitSelected(unit.id) ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'"
-                                                                                    :disabled="isSourceUnitSelected(unit.id)"
-                                                                                >
-                                                                                    {{ isSourceUnitSelected(unit.id) ? 'Added' : 'Add' }}
-                                                                                </button>
-                                                                            </td>
-                                                                        </tr>
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </div>
-
-                                                        <div v-if="getAssetDetailTab(asset.id) === 'new'" class="space-y-4">
-                                                        <div
-                                                            v-for="entry in getEntriesForAsset(asset.id)"
-                                                            :key="entry.uid"
-                                                            class="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
-                                                        >
-                                                            <button
-                                                                type="button"
-                                                                @click="removeEntry(form.entries.indexOf(entry))"
-                                                                class="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                                            >
-                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                                                </svg>
-                                                            </button>
-
-                                                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                                                <div>
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Type</label>
-                                                                    <select v-model="entry.asset_type" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
-                                                                        <option value="New">New</option>
-                                                                        <option value="Used">Used</option>
-                                                                        <option value="For Disposal">For Disposal</option>
-                                                                        <option value="For Repair">For Repair</option>
-                                                                    </select>
-                                                                </div>
-                                                                <div>
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Allocation</label>
-                                                                    <div class="mt-1 flex items-center h-[34px]">
-                                                                        <label class="relative inline-flex items-center cursor-pointer">
-                                                                            <input type="checkbox" v-model="entry.is_allocation" class="sr-only peer">
-                                                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-                                                                            <span class="ml-2 text-xs font-bold text-gray-900">{{ entry.is_allocation ? 'Yes' : 'No' }}</span>
-                                                                        </label>
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Serial No</label>
-                                                                    <input type="text" v-model="entry.serial_no" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                                </div>
-                                                                <div>
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Destination</label>
-                                                                    <Autocomplete
-                                                                        v-model="entry.destination_location"
-                                                                        :options="storeOptions"
-                                                                        label-key="name"
-                                                                        value-key="value"
-                                                                        placeholder="Select Store"
-                                                                        size="sm"
-                                                                    />
-                                                                </div>
-                                                            </div>
-
-                                                            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
-                                                                <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                                                                        Barcode <span class="text-red-500">*</span>
-                                                                    </label>
-                                                                    <div class="flex rounded-md shadow-sm">
-                                                                        <input
-                                                                            type="text"
-                                                                            v-model="entry.barcode"
-                                                                            @input="entry.qrcode = ''"
-                                                                            class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
-                                                                            :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-                                                                        >
-                                                                        <button type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
-                                                                    </div>
-                                                                    <div v-if="entry.barcodeDataUrl" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.barcodeDataUrl, text: entry.barcode }">
-                                                                        <img :src="entry.barcodeDataUrl" class="max-h-10" :alt="entry.barcode">
-                                                                    </div>
-                                                                    <p v-if="entry.barcodeDataUrl" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
-                                                                </div>
-
-                                                                <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                                                                        QR Code <span class="text-red-500">*</span>
-                                                                    </label>
-                                                                    <div class="flex rounded-md shadow-sm">
-                                                                        <input
-                                                                            type="text"
-                                                                            v-model="entry.qrcode"
-                                                                            class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
-                                                                            :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-                                                                            placeholder="Generate summary..."
-                                                                        >
-                                                                        <button type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
-                                                                    </div>
-                                                                    <div v-if="entry.qrcodeDataUrl" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.qrcodeDataUrl, text: entry.barcode, isQr: true }">
-                                                                        <img :src="entry.qrcodeDataUrl" class="max-h-20 max-w-20" alt="QR Code">
-                                                                    </div>
-                                                                    <p v-if="entry.qrcodeDataUrl" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
-                                                                </div>
-                                                            </div>
-
-                                                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
-                                                                <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
-                                                                    <input type="number" v-model.number="entry.warranty_months" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                                    <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(entry) }}</p>
-                                                                </div>
-                                                                <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                                                    <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
-                                                                    <input type="number" v-model.number="entry.eol_months" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                                    <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(entry) }}</p>
-                                                                </div>
-                                                                <div>
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Cost</label>
-                                                                    <input type="number" step="0.01" v-model.number="entry.cost" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                                </div>
-                                                                <div>
-                                                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Price</label>
-                                                                    <input type="number" step="0.01" v-model.number="entry.price" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                                </div>
-                                                            </div>
-                                                            <div class="mt-4 flex justify-end">
-                                                                <button
-                                                                    type="button"
-                                                                    @click="async () => { const ok = await confirm({ title: 'Save Unit(s)', message: 'Are you sure you want to save these unit entries?' }); if (ok) submitForm() }"
-                                                                    class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 transition-colors"
-                                                                >
-                                                                    Save Unit(s)
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </template>
-                                    </tbody>
-                                </table>
+                            <!-- Empty State -->
+                            <div v-if="createModalAssets.length === 0" class="rounded-xl border-2 border-dashed border-gray-200 py-10 text-center">
+                                <svg class="mx-auto h-10 w-10 text-gray-200 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                </svg>
+                                <p class="text-sm font-semibold text-gray-300">No items added yet</p>
+                                <p class="text-xs text-gray-200 mt-1">Click "Add Asset Item" to get started.</p>
                             </div>
                         </div>
                     </div>
@@ -794,13 +805,86 @@
                                     </button>
                                 </div>
                                 <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} unit(s)</span>
+                                <button
+                                    v-if="!readOnlyMode"
+                                    type="button"
+                                    @click="showAssetPicker = !showAssetPicker"
+                                    class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+                                >
+                                    <PlusIcon class="h-3.5 w-3.5" />
+                                    Add Asset Item
+                                </button>
                             </div>
                         </div>
 
                         <fieldset :disabled="readOnlyMode" class="disabled:opacity-90">
                         <div class="max-h-[55vh] overflow-y-auto p-4 space-y-6">
+
+                            <!-- Asset Picker Panel (edit mode) -->
+                            <div v-if="showAssetPicker && !readOnlyMode" class="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3">
+                                <div class="relative">
+                                    <input
+                                        type="text"
+                                        v-model="assetSearch"
+                                        placeholder="Search by item code, brand, model or description..."
+                                        class="w-full pl-9 pr-10 py-2 border-blue-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                                    >
+                                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </div>
+                                    <button type="button" @click="showAssetPicker = false; assetSearch = ''" class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                                <div v-if="assetSearch && filteredAssets.length > 0" class="overflow-hidden rounded-lg border border-blue-200 bg-white shadow-sm">
+                                    <table class="min-w-full divide-y divide-gray-100">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Item Code</th>
+                                                <th class="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">Asset</th>
+                                                <th class="px-4 py-2 text-center text-[10px] font-bold uppercase tracking-wider text-gray-500">Type</th>
+                                                <th class="px-4 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-gray-500">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-50">
+                                            <tr v-for="asset in filteredAssets" :key="asset.id" class="hover:bg-blue-50/50">
+                                                <td class="px-4 py-2.5 text-xs font-mono font-semibold text-gray-900">{{ asset.item_code }}</td>
+                                                <td class="px-4 py-2.5">
+                                                    <p class="text-xs font-bold text-gray-900">{{ asset.brand }} {{ asset.model }}</p>
+                                                    <p class="text-[10px] text-gray-400 truncate max-w-xs">{{ asset.description }}</p>
+                                                </td>
+                                                <td class="px-4 py-2.5 text-center">
+                                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase"
+                                                          :class="asset.type === 'Consumables' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'">
+                                                        {{ asset.type }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-4 py-2.5 text-right">
+                                                    <button
+                                                        type="button"
+                                                        @click="pickAsset(asset)"
+                                                        class="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-black text-white uppercase tracking-wider hover:bg-blue-700 transition-colors"
+                                                    >
+                                                        <PlusIcon class="w-3 h-3" />
+                                                        Add
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else-if="assetSearch && filteredAssets.length === 0" class="text-center py-3 text-xs text-gray-400 font-semibold">
+                                    No assets found matching "{{ assetSearch }}".
+                                </div>
+                                <div v-else class="text-center py-2 text-[10px] text-blue-400">
+                                    Start typing to search assets...
+                                </div>
+                            </div>
+
                             <div v-if="form.entries.length === 0" class="text-center py-12">
-                                <p class="text-sm text-gray-500 italic">No assets selected. Search and add assets from the table above.</p>
+                                <p class="text-sm text-gray-500 italic">No assets added yet. Use "Add Asset Item" to get started.</p>
                             </div>
 
                             <div v-for="asset in selectedAssets" :key="asset.id" class="space-y-3">
@@ -829,64 +913,19 @@
                                     </div>
                                 </div>
 
-                                <!-- Entries for this Asset -->
-                                <div class="space-y-4 pl-4 border-l-2 border-gray-200">
-                                    <div
-                                        v-for="(entry, eIdx) in form.entries"
-                                        :key="entry.uid"
-                                        v-show="Number(entry.asset_id) === Number(asset.id)"
-                                        class="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
-                                    >
-                                        <button
-                                            v-if="!isEditing"
-                                            type="button"
-                                            @click="removeEntry(form.entries.indexOf(entry))"
-                                            class="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-
-                                        <!-- Transfer Mode: Source Unit Pick -->
-                                        <div v-if="isTransferMode && asset.type === 'Fixed'" class="mb-4">
-                                            <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Pick Source Unit</label>
-                                            <div class="max-h-40 overflow-y-auto rounded-lg border border-gray-100">
-                                                <table class="min-w-full divide-y divide-gray-100">
-                                                    <thead class="bg-gray-50">
-                                                        <tr>
-                                                            <th class="w-8 px-2 py-1"></th>
-                                                            <th class="px-2 py-1 text-left text-[9px] font-bold text-gray-400 uppercase">Serial / Barcode</th>
-                                                            <th class="px-2 py-1 text-right text-[9px] font-bold text-gray-400 uppercase">Cost</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody class="divide-y divide-gray-50">
-                                                        <tr 
-                                                            v-for="unit in availableStockMap[asset.id]?.units" 
-                                                            :key="unit.id"
-                                                            @click="toggleSourceUnit(unit, entry)"
-                                                            class="hover:bg-blue-50"
-                                                            :class="[readOnlyMode ? 'cursor-not-allowed opacity-70' : 'cursor-pointer', entry.source_stock_in_id === unit.id ? 'bg-blue-50' : '']"
-                                                        >
-                                                            <td class="px-2 py-1">
-                                                                <input type="radio" :checked="entry.source_stock_in_id === unit.id" :disabled="readOnlyMode" class="h-3 w-3 text-blue-600 border-gray-300">
-                                                            </td>
-                                                            <td class="px-2 py-1">
-                                                                <p class="text-[11px] font-semibold text-gray-900">{{ unit.serial_no || 'No Serial' }}</p>
-                                                                <p class="text-[9px] font-mono text-gray-500">{{ unit.barcode }}</p>
-                                                            </td>
-                                                            <td class="px-2 py-1 text-right text-[11px] font-mono text-gray-900">{{ unit.cost }}</td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-
-                                        <!-- Detail Fields -->
-                                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <!-- Grouped: Shared Fields + Units List -->
+                                <div v-if="groupSharedFields[asset.id]" class="pl-4 border-l-2 border-gray-200 space-y-4">
+                                    <!-- Shared Fields Row -->
+                                    <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             <div>
                                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Type</label>
-                                                <select v-model="entry.asset_type" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white">
+                                                <select
+                                                    v-model="groupSharedFields[asset.id].asset_type"
+                                                    :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                    @change="syncSharedField(asset.id, 'asset_type')"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs bg-white"
+                                                >
                                                     <option value="New">New</option>
                                                     <option value="Used">Used</option>
                                                     <option value="For Disposal">For Disposal</option>
@@ -897,92 +936,124 @@
                                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Allocation</label>
                                                 <div class="mt-1 flex items-center h-[34px]">
                                                     <label class="relative inline-flex items-center cursor-pointer">
-                                                        <input type="checkbox" v-model="entry.is_allocation" class="sr-only peer">
+                                                        <input type="checkbox" v-model="groupSharedFields[asset.id].is_allocation" @change="syncSharedField(asset.id, 'is_allocation')" class="sr-only peer">
                                                         <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-                                                        <span class="ml-2 text-xs font-bold text-gray-900">{{ entry.is_allocation ? 'Yes' : 'No' }}</span>
+                                                        <span class="ml-2 text-xs font-bold text-gray-900">{{ groupSharedFields[asset.id].is_allocation ? 'Yes' : 'No' }}</span>
                                                     </label>
                                                 </div>
                                             </div>
                                             <div>
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Serial No</label>
-                                                <input type="text" v-model="entry.serial_no" :disabled="isTransferMode && asset.type === 'Fixed'" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                            </div>
-                                            <div>
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Destination</label>
-                                                <Autocomplete
-                                                    v-model="entry.destination_location"
-                                                    :options="storeOptions"
-                                                    label-key="name"
-                                                    value-key="value"
-                                                    placeholder="Select Store"
-                                                    size="sm"
-                                                    :disabled="readOnlyMode"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
-                                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                                                    Barcode <span class="text-red-500">*</span>
-                                                </label>
-                                                <div class="flex rounded-md shadow-sm">
-                                                    <input
-                                                        type="text"
-                                                        v-model="entry.barcode"
-                                                        @input="entry.qrcode = ''"
-                                                        :disabled="isTransferMode && asset.type === 'Fixed'"
-                                                        class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
-                                                        :class="entryNeedsBarcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-                                                    >
-                                                    <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateBarcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
-                                                </div>
-                                                <div v-if="entry.barcode" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.barcodeDataUrl || makeBarcodeDataUrl(entry.barcode), text: entry.barcode }">
-                                                    <img :src="entry.barcodeDataUrl || makeBarcodeDataUrl(entry.barcode)" class="max-h-10" :alt="entry.barcode">
-                                                </div>
-                                                <p v-if="entry.barcode" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
-                                            </div>
-
-                                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                                                    QR Code <span class="text-red-500">*</span>
-                                                </label>
-                                                <div class="flex rounded-md shadow-sm">
-                                                    <input
-                                                        type="text"
-                                                        v-model="entry.qrcode"
-                                                        :disabled="isTransferMode && asset.type === 'Fixed'"
-                                                        class="block w-full rounded-none rounded-l-md focus:ring-blue-500 focus:border-blue-500 text-xs"
-                                                        :class="entryNeedsQrcode(entry) ? 'border-red-300 bg-red-50' : 'border-gray-300'"
-                                                        placeholder="Generate summary..."
-                                                    >
-                                                    <button v-if="!(isTransferMode && asset.type === 'Fixed')" type="button" @click="generateQrcode(form.entries.indexOf(entry))" class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-white text-blue-600 text-[10px] font-black hover:bg-gray-50 uppercase tracking-widest transition-colors">Gen</button>
-                                                </div>
-                                                <div v-if="entry.qrcodeDataUrl" class="mt-2 flex justify-center p-2 bg-white border border-gray-100 rounded-lg shadow-sm cursor-pointer hover:border-blue-300 transition-colors" @click="barcodePreview = { show: true, src: entry.qrcodeDataUrl, text: entry.barcode, isQr: true }">
-                                                    <img :src="entry.qrcodeDataUrl" class="max-h-20 max-w-20" alt="QR Code">
-                                                </div>
-                                                <p v-if="entry.qrcodeDataUrl" class="mt-1 text-center text-[9px] text-blue-500 font-semibold">Click to preview</p>
-                                            </div>
-                                        </div>
-
-                                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
-                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
-                                                <input type="number" v-model.number="entry.warranty_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(entry) }}</p>
-                                            </div>
-                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
-                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
-                                                <input type="number" v-model.number="entry.eol_months" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(entry) }}</p>
-                                            </div>
-                                            <div>
                                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Cost</label>
-                                                <input type="number" step="0.01" v-model.number="entry.cost" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <input type="number" step="0.01" v-model.number="groupSharedFields[asset.id].cost" :disabled="isTransferMode && asset.type === 'Fixed'" @change="syncSharedField(asset.id, 'cost')" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
                                             </div>
                                             <div>
                                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Price</label>
-                                                <input type="number" step="0.01" v-model.number="entry.price" :disabled="isTransferMode && asset.type === 'Fixed'" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <input type="number" step="0.01" v-model.number="groupSharedFields[asset.id].price" :disabled="isTransferMode && asset.type === 'Fixed'" @change="syncSharedField(asset.id, 'price')" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                            </div>
+                                        </div>
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">Warranty (Mos)</label>
+                                                <input type="number" v-model.number="groupSharedFields[asset.id].warranty_months" :disabled="isTransferMode && asset.type === 'Fixed'" @change="syncSharedField(asset.id, 'warranty_months')" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">Expires: {{ computedWarrantyDate(groupSharedFields[asset.id]) }}</p>
+                                            </div>
+                                            <div class="p-2 bg-gray-50 rounded-lg border border-gray-100">
+                                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1">EOL (Mos)</label>
+                                                <input type="number" v-model.number="groupSharedFields[asset.id].eol_months" :disabled="isTransferMode && asset.type === 'Fixed'" @change="syncSharedField(asset.id, 'eol_months')" required min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                <p class="mt-1 text-[8px] text-blue-600 font-bold">End: {{ computedEolDate(groupSharedFields[asset.id]) }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Units List -->
+                                    <div class="space-y-1.5">
+                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Units ({{ getEntriesForAsset(asset.id).length }})</p>
+                                        <div class="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm">
+                                            <div
+                                                v-for="(entry, unitIdx) in getEntriesForAsset(asset.id)"
+                                                :key="entry.uid"
+                                                class="p-3 space-y-2"
+                                            >
+                                                <!-- Transfer Mode: Source Unit Pick (per unit) -->
+                                                <div v-if="isTransferMode && asset.type === 'Fixed'" class="">
+                                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Unit {{ unitIdx + 1 }} — Pick Source</label>
+                                                    <div class="max-h-32 overflow-y-auto rounded-lg border border-gray-100">
+                                                        <table class="min-w-full divide-y divide-gray-100">
+                                                            <thead class="bg-gray-50">
+                                                                <tr>
+                                                                    <th class="w-8 px-2 py-1"></th>
+                                                                    <th class="px-2 py-1 text-left text-[9px] font-bold text-gray-400 uppercase">Serial / Barcode</th>
+                                                                    <th class="px-2 py-1 text-right text-[9px] font-bold text-gray-400 uppercase">Cost</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody class="divide-y divide-gray-50">
+                                                                <tr
+                                                                    v-for="unit in availableStockMap[asset.id]?.units"
+                                                                    :key="unit.id"
+                                                                    @click="toggleSourceUnit(unit, entry)"
+                                                                    class="hover:bg-blue-50"
+                                                                    :class="[readOnlyMode ? 'cursor-not-allowed opacity-70' : 'cursor-pointer', entry.source_stock_in_id === unit.id ? 'bg-blue-50' : '']"
+                                                                >
+                                                                    <td class="px-2 py-1">
+                                                                        <input type="radio" :checked="entry.source_stock_in_id === unit.id" :disabled="readOnlyMode" class="h-3 w-3 text-blue-600 border-gray-300">
+                                                                    </td>
+                                                                    <td class="px-2 py-1">
+                                                                        <p class="text-[11px] font-semibold text-gray-900">{{ unit.serial_no || 'No Serial' }}</p>
+                                                                        <p class="text-[9px] font-mono text-gray-500">{{ unit.barcode }}</p>
+                                                                    </td>
+                                                                    <td class="px-2 py-1 text-right text-[11px] font-mono text-gray-900">{{ unit.cost }}</td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Compact unit row: #, serial, barcode, QR, regen -->
+                                                <div class="flex items-center gap-2.5">
+                                                    <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-black flex items-center justify-center">{{ unitIdx + 1 }}</span>
+
+                                                    <div class="flex-1 min-w-0">
+                                                        <input
+                                                            v-if="asset.type !== 'Consumables'"
+                                                            type="text"
+                                                            v-model="entry.serial_no"
+                                                            :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                            @change="regenUnitCodes(form.entries.indexOf(entry))"
+                                                            placeholder="Serial No"
+                                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                                        >
+                                                        <span v-else class="text-[10px] text-gray-300 italic">No serial required</span>
+                                                    </div>
+
+                                                    <div
+                                                        class="flex-shrink-0 cursor-pointer"
+                                                        :title="entry.barcode"
+                                                        @click="entry.barcode && (barcodePreview = { show: true, src: entry.barcodeDataUrl || makeBarcodeDataUrl(entry.barcode), text: entry.barcode })"
+                                                    >
+                                                        <img v-if="entry.barcode" :src="entry.barcodeDataUrl || makeBarcodeDataUrl(entry.barcode)" class="h-6 max-w-[80px]" :alt="entry.barcode">
+                                                        <div v-else class="h-6 w-20 flex items-center justify-center bg-gray-100 rounded text-[9px] text-gray-300">no BC</div>
+                                                    </div>
+
+                                                    <div
+                                                        class="flex-shrink-0 cursor-pointer"
+                                                        title="QR Code"
+                                                        @click="entry.qrcodeDataUrl && (barcodePreview = { show: true, src: entry.qrcodeDataUrl, text: entry.barcode, isQr: true })"
+                                                    >
+                                                        <img v-if="entry.qrcodeDataUrl" :src="entry.qrcodeDataUrl" class="h-6 w-6" alt="QR">
+                                                        <div v-else class="h-6 w-6 flex items-center justify-center bg-gray-100 rounded text-[9px] text-gray-300">QR</div>
+                                                    </div>
+
+                                                    <button
+                                                        v-if="!(isTransferMode && asset.type === 'Fixed') && !readOnlyMode"
+                                                        type="button"
+                                                        @click="regenUnitCodes(form.entries.indexOf(entry))"
+                                                        class="flex-shrink-0 text-[9px] font-black text-blue-400 hover:text-blue-700 uppercase tracking-widest transition-colors"
+                                                        title="Regenerate barcode & QR"
+                                                    >↻</button>
+
+                                                    <span v-if="entryNeedsBarcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!BC</span>
+                                                    <span v-if="entryNeedsQrcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!QR</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1359,6 +1430,11 @@ const availableStockMap = ref({}) // asset_id -> { soh, units, loading, error }
 const assetDetailTabs = ref({})
 const expandedAssetDetails = ref({})
 const bulkDestinationLocation = ref('')
+const headerDestinationLocation = ref('')
+const destinationStockItems = ref([])
+const isLoadingDestinationStock = ref(false)
+const showAssetPicker = ref(false)
+const groupSharedFields = reactive({}) // { [asset_id]: { asset_type, is_allocation, cost, price, warranty_months, eol_months } }
 let availableStockRequestId = 0
 let availableOriginAssetsRequestId = 0
 let suppressOriginLocationWatch = false
@@ -1376,7 +1452,7 @@ const createEntry = (overrides = {}) => ({
     eol_months: 60,
     cost: 0,
     price: 0,
-    destination_location: '',
+    destination_location: headerDestinationLocation.value || '',
     stock_in_id: null,
     ...overrides
 })
@@ -1416,14 +1492,18 @@ const sourceUnitEntryDefaults = (unit) => ({
 })
 
 const addEntryForAsset = async (asset, unit = null) => {
+    if (!asset) return
     const aid = Number(asset.id)
+    const shared = groupSharedFields[aid]
 
     const defaults = {
         asset_id: aid,
-        cost: asset.cost || 0,
-        price: 0,
-        warranty_months: 12,
-        eol_months: 60,
+        cost: shared ? shared.cost : (asset.cost || 0),
+        price: shared ? shared.price : 0,
+        warranty_months: shared ? shared.warranty_months : 12,
+        eol_months: shared ? shared.eol_months : 60,
+        asset_type: shared ? shared.asset_type : 'New',
+        is_allocation: shared ? shared.is_allocation : false,
         ...(unit ? sourceUnitEntryDefaults(unit) : {}),
     }
     const entry = createEntry(defaults)
@@ -1431,6 +1511,13 @@ const addEntryForAsset = async (asset, unit = null) => {
     form.quantity = form.entries.length
     setAssetDetailTab(aid, 'new')
     expandAssetDetail(aid)
+
+    // Auto-generate barcode and QR code if not coming from an existing source unit
+    if (!unit || !unit.barcode) {
+        const newEntryIndex = form.entries.length - 1
+        generateBarcode(newEntryIndex)
+        generateQrcode(newEntryIndex)
+    }
 
     if (isTransferMode.value) {
         await fetchAvailableStockForAsset(aid, normalizedOriginLocation.value, availableStockRequestId)
@@ -1441,6 +1528,52 @@ const addEntryForAsset = async (asset, unit = null) => {
             const firstFree = units.find(u => !isSourceUnitSelected(Number(u.id)))
             if (firstFree) Object.assign(entry, sourceUnitEntryDefaults(firstFree))
         }
+    }
+}
+
+/**
+ * Pick an asset from the inline search picker. Creates a new group if first time,
+ * or adds another unit to an existing group.
+ */
+const pickAsset = async (asset) => {
+    initGroupSharedFields(asset)
+    await addEntryForAsset(asset)
+    assetSearch.value = ''
+    showAssetPicker.value = false
+}
+
+/**
+ * Re-generate the QR code for a specific entry index (called when serial_no changes).
+ */
+const regenerateQrForEntry = (entryIndex) => {
+    if (entryIndex < 0 || entryIndex >= form.entries.length) return
+    generateQrcode(entryIndex)
+}
+
+/**
+ * Load the current stock at the selected destination location for the SOH info panel.
+ */
+const loadDestinationStockSummary = async (location) => {
+    if (!location) {
+        destinationStockItems.value = []
+        return
+    }
+    isLoadingDestinationStock.value = true
+    try {
+        const response = await axios.get(route('stock-ins.assets-with-stock'), {
+            params: { location }
+        })
+        destinationStockItems.value = (response.data || []).map(asset => ({
+            ...asset,
+            id: Number(asset.id),
+            brand: asset.brand || 'Unbranded',
+            model: asset.model || 'Unspecified Model',
+            soh: Number(asset.soh || 0),
+        }))
+    } catch {
+        destinationStockItems.value = []
+    } finally {
+        isLoadingDestinationStock.value = false
     }
 }
 
@@ -1469,10 +1602,88 @@ const selectedAssets = computed(() => {
     return normalizedAssets.value.filter(a => ids.includes(a.id))
 })
 
+// Assets ordered by first-added position (for create modal grouped view)
+const createModalAssets = computed(() => {
+    const seen = new Set()
+    const result = []
+    for (const entry of form.entries) {
+        const aid = Number(entry.asset_id)
+        if (aid && !seen.has(aid)) {
+            seen.add(aid)
+            const asset = normalizedAssets.value.find(a => a.id === aid)
+            if (asset) result.push(asset)
+        }
+    }
+    return result
+})
+
 const hasGeneratedCode = (value) => String(value || '').trim().length > 0
 
 const entryNeedsBarcode = (entry) => codeValidationAttempted.value && !hasGeneratedCode(entry?.barcode)
 const entryNeedsQrcode = (entry) => codeValidationAttempted.value && !hasGeneratedCode(entry?.qrcode)
+
+const initGroupSharedFields = (asset) => {
+    const aid = Number(asset.id)
+    if (!groupSharedFields[aid]) {
+        groupSharedFields[aid] = {
+            asset_type: 'New',
+            is_allocation: false,
+            cost: Number(asset.cost || 0),
+            price: 0,
+            warranty_months: 12,
+            eol_months: 60,
+        }
+    }
+}
+
+const syncSharedField = (assetId, field) => {
+    const aid = Number(assetId)
+    const shared = groupSharedFields[aid]
+    if (!shared) return
+    form.entries.forEach(entry => {
+        if (Number(entry.asset_id) === aid) {
+            entry[field] = shared[field]
+        }
+    })
+}
+
+const setAssetQty = async (assetId, rawQty) => {
+    const aid = Number(assetId)
+    const asset = normalizedAssets.value.find(a => a.id === aid)
+    if (!asset) return
+    const newQty = Math.max(1, parseInt(rawQty) || 1)
+    const currentEntries = getEntriesForAsset(aid)
+
+    if (newQty > currentEntries.length) {
+        for (let i = currentEntries.length; i < newQty; i++) {
+            await addEntryForAsset(asset)
+        }
+    } else if (newQty < currentEntries.length) {
+        const toRemove = getEntriesForAsset(aid).slice(newQty)
+        for (let i = form.entries.length - 1; i >= 0; i--) {
+            if (toRemove.includes(form.entries[i])) {
+                form.entries.splice(i, 1)
+            }
+        }
+        form.quantity = form.entries.length
+    }
+}
+
+const removeAssetGroup = (assetId) => {
+    const aid = Number(assetId)
+    for (let i = form.entries.length - 1; i >= 0; i--) {
+        if (Number(form.entries[i].asset_id) === aid) {
+            form.entries.splice(i, 1)
+        }
+    }
+    form.quantity = form.entries.length
+    delete groupSharedFields[aid]
+}
+
+const regenUnitCodes = (entryIndex) => {
+    generateBarcode(entryIndex)
+    generateQrcode(entryIndex)
+}
 
 const missingGeneratedCodeRows = () => form.entries
     .map((entry, index) => {
@@ -1818,6 +2029,11 @@ const resetForm = () => {
     expandedAssetDetails.value = {}
     availableOriginAssets.value = []
     isLoadingOriginAssets.value = false
+    headerDestinationLocation.value = ''
+    destinationStockItems.value = []
+    isLoadingDestinationStock.value = false
+    showAssetPicker.value = false
+    Object.keys(groupSharedFields).forEach(k => delete groupSharedFields[k])
     Object.assign(form, {
         receive_date: getToday(),
         dr_no: '',
@@ -1838,6 +2054,8 @@ const openCreateModal = () => {
     currentId.value = null
     editingStockIn.value = null
     resetForm()
+    // Origin is always SUPPLIER for Stock-In
+    form.origin_location = supplierLocationCode
     showModal.value = true
 }
 
@@ -1887,7 +2105,7 @@ const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = 
         dr_no: item.dr_no || '',
         dr_date: toDateKey(item.dr_date),
         vendor: item.vendor || '',
-        origin_location: normalizeLocationValue(item.origin_location),
+        origin_location: supplierLocationCode,
         received_by: item.received_by || authUserName.value,
         memo_remarks: item.memo_remarks || '',
         status: item.status || 'For Posting',
@@ -1908,11 +2126,38 @@ const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = 
             destination_location: normalizeLocationValue(row.destination_location || row.location),
         }))
     })
+    // Populate header-level destination from the first entry (all entries share same destination)
+    const firstDest = relatedRows.length > 0
+        ? normalizeLocationValue(relatedRows[0].destination_location || relatedRows[0].location || '')
+        : ''
+    headerDestinationLocation.value = firstDest
+    // Init shared fields per asset group (first row per asset wins)
+    Object.keys(groupSharedFields).forEach(k => delete groupSharedFields[k])
+    relatedRows.forEach(row => {
+        const aid = Number(row.asset_id)
+        if (!groupSharedFields[aid]) {
+            groupSharedFields[aid] = {
+                asset_type: row.asset_type || 'New',
+                is_allocation: !!row.is_allocation,
+                cost: Number(row.cost || 0),
+                price: Number(row.price || 0),
+                warranty_months: Number(row.warranty_months ?? 12),
+                eol_months: Number(row.eol_months ?? 60),
+            }
+        }
+    })
     showModal.value = true
     await nextTick()
     suppressOriginLocationWatch = false
+    // Render barcode images and QR data URLs for loaded entries
+    form.entries.forEach(entry => {
+        if (entry.barcode) entry.barcodeDataUrl = makeBarcodeDataUrl(entry.barcode)
+        if (entry.qrcode) makeQrcodeDataUrl(entry.qrcode).then(url => { entry.qrcodeDataUrl = url })
+    })
     void loadAssetsForOrigin()
     refreshAvailableStockForSelectedAssets()
+    // Load SOH for the destination (informational)
+    if (firstDest) void loadDestinationStockSummary(firstDest)
 }
 
 const toDateKey = (value) => {
@@ -1933,6 +2178,7 @@ const closeModal = () => {
     showModal.value = false
     codeValidationAttempted.value = false
     readOnlyMode.value = false
+    showAssetPicker.value = false
 }
 
 const openImportModal = () => {
@@ -2038,6 +2284,14 @@ const postHeaderItem = async (item) => {
 const submitForm = async (statusOverride = form.status || 'For Posting') => {
     if (!validateTransferStock()) return
     if (!validateGeneratedCodes()) return
+
+    const unitCount = form.entries.length
+    const assetCount = [...new Set(form.entries.map(e => e.asset_id).filter(Boolean))].length
+    const confirmed = await confirm({
+        title: isEditing.value ? 'Confirm Update' : 'Confirm Save',
+        message: `${isEditing.value ? 'Update' : 'Save'} this stock-in with ${assetCount} asset type(s) and ${unitCount} unit(s)?`,
+    })
+    if (!confirmed) return
 
     const url = isEditing.value ? route('stock-ins.update', currentId.value) : route('stock-ins.store')
     const method = isEditing.value ? 'put' : 'post'
@@ -2156,5 +2410,15 @@ watch(() => form.origin_location, (newVal) => {
     }
 
     refreshAvailableStockForSelectedAssets(loc)
+})
+
+watch(headerDestinationLocation, (newVal) => {
+    if (!showModal.value || readOnlyMode.value) return
+    // Load SOH panel at new destination (informational)
+    void loadDestinationStockSummary(newVal)
+    // Sync all entries to the new destination
+    form.entries.forEach(entry => {
+        entry.destination_location = newVal
+    })
 })
 </script>

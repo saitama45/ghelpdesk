@@ -30,13 +30,18 @@
             font-size: 8pt;
         }
 
+        /* Container clears floats */
+        .labels-container {
+            overflow: hidden;
+        }
+
+        /* 3 per row: (190mm usable - 2 gaps × 2mm) / 3 ≈ 62mm each */
         .label {
-            display: inline-block;
-            vertical-align: top;
-            width: 59mm;
-            height: 70mm;
-            margin: 0 2mm 4mm 0;
-            padding: 4mm;
+            float: left;
+            width: 61mm;
+            height: 68mm;
+            margin: 0 2mm 3mm 0;
+            padding: 2mm;          /* reduced from 4mm → border hugs content */
             border: 1px solid #d1d5db;
             box-sizing: border-box;
             page-break-inside: avoid;
@@ -47,18 +52,17 @@
             font-size: 8pt;
             font-weight: bold;
             color: #374151;
-            margin-bottom: 2mm;
+            margin-bottom: 1.5mm;
             text-transform: uppercase;
         }
 
         .qr-wrap {
-            height: 34mm;
-            margin-bottom: 2mm;
+            margin-bottom: 1.5mm;
         }
 
         .qr-code {
-            width: 32mm;
-            height: 32mm;
+            width: 46mm;
+            height: 46mm;
         }
 
         .code {
@@ -89,31 +93,33 @@
         </div>
     </div>
 
-    @foreach($items as $label)
-        @php($item = $label['item'])
-        <div class="label">
-            <div class="item-code">
-                {{ $item->asset?->item_code ?: 'No Item Code' }}
-            </div>
+    <div class="labels-container">
+        @foreach($items as $label)
+            @php($item = $label['item'])
+            <div class="label">
+                <div class="item-code">
+                    {{ $item->asset?->item_code ?: 'No Item Code' }}
+                </div>
 
-            <div class="qr-wrap">
-                @if($label['image'])
-                    <img class="qr-code" src="data:image/png;base64,{{ $label['image'] }}" alt="QR Code">
-                @else
-                    <div class="empty-image">QR image unavailable</div>
-                @endif
-            </div>
+                <div class="qr-wrap">
+                    @if($label['image'])
+                        <img class="qr-code" src="data:image/png;base64,{{ $label['image'] }}" alt="QR Code">
+                    @else
+                        <div class="empty-image">QR image unavailable</div>
+                    @endif
+                </div>
 
-            <div class="code">
-                {{ $item->serial_no ?: $item->barcode ?: 'No serial/barcode' }}
+                <div class="code">
+                    {{ $item->serial_no ?: $item->barcode ?: 'No serial/barcode' }}
+                </div>
+                <div class="details">
+                    {{ $item->asset?->description ?: $item->asset?->model ?: '-' }}
+                </div>
+                <div class="details">
+                    {{ $item->receive_date?->format('M d, Y') ?: '-' }}
+                </div>
             </div>
-            <div class="details">
-                {{ $item->asset?->description ?: $item->asset?->model ?: '-' }}
-            </div>
-            <div class="details">
-                {{ $item->receive_date?->format('M d, Y') ?: '-' }}
-            </div>
-        </div>
-    @endforeach
+        @endforeach
+    </div>
 </body>
 </html>

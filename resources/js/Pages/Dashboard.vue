@@ -13,6 +13,7 @@ const props = defineProps({
     storeHealth: Object,
     kanbanReport: Object,
     kanbanProjects: Object,
+    ticketCharts: Object,
     stats: Object,
     recentActivity: Array,
     myTickets: Array,
@@ -203,6 +204,80 @@ const monthsWithLabel = computed(() => {
 });
 
 const activeTicketCount = computed(() => (Number(props.stats?.open || 0) + Number(props.stats?.in_progress || 0)));
+const selectedBrandId = ref('all');
+
+const chartNumber = (value) => Number(value || 0);
+
+const overallChartData = computed(() => ({
+    open: chartNumber(props.ticketCharts?.overall?.open),
+    closed: chartNumber(props.ticketCharts?.overall?.closed),
+}));
+
+const brandChartRows = computed(() => props.ticketCharts?.perBrand || []);
+
+watch(brandChartRows, (brands) => {
+    if (!brands.length) {
+        selectedBrandId.value = 'all';
+        return;
+    }
+
+    if (selectedBrandId.value !== 'all' && !brands.some(brand => String(brand.id) === String(selectedBrandId.value))) {
+        selectedBrandId.value = 'all';
+    }
+}, { immediate: true });
+
+const selectedBrandChart = computed(() => {
+    if (selectedBrandId.value === 'all') {
+        return null;
+    }
+
+    return brandChartRows.value.find(brand => String(brand.id) === String(selectedBrandId.value)) || null;
+});
+
+const selectedBrandPieData = computed(() => ({
+    open: chartNumber(selectedBrandChart.value?.open),
+    closed: chartNumber(selectedBrandChart.value?.closed),
+}));
+
+const brandPieData = (brand) => ({
+    open: chartNumber(brand?.open),
+    closed: chartNumber(brand?.closed),
+});
+
+const totalChartCount = (data) => chartNumber(data?.open) + chartNumber(data?.closed);
+const chartPercent = (value, total) => total > 0 ? Math.round((chartNumber(value) / total) * 100) : 0;
+const pieChartStyle = (data) => {
+    const total = totalChartCount(data);
+    if (total === 0) {
+        return { background: '#e5e7eb' };
+    }
+
+    const openPercent = (chartNumber(data.open) / total) * 100;
+    return {
+        background: `conic-gradient(#2563eb 0 ${openPercent}%, #16a34a ${openPercent}% 100%)`,
+    };
+};
+
+const concernTypeBars = computed(() => {
+    const rows = props.ticketCharts?.concernTypes || [];
+
+    return rows.map(row => ({
+        ...row,
+        open: chartNumber(row.open),
+        closed: chartNumber(row.closed),
+        total: chartNumber(row.total) || chartNumber(row.open) + chartNumber(row.closed),
+    }));
+});
+
+const topTechCards = computed(() => {
+    const agents = props.leaderboard?.top3 || [];
+    const byRank = new Map(agents.map(agent => [Number(agent.rank), agent]));
+
+    return [3, 1, 2].map(rank => ({
+        rank,
+        agent: byRank.get(rank) || null,
+    }));
+});
 
 const activeTicketFilterParams = computed(() => {
     const params = {
@@ -488,6 +563,127 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        <!-- Leadership Leaderboard -->
+        <div v-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)" class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-8">
+            <!-- Top 3 Agents -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 xl:col-span-2">
+                <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
+                    <span class="text-xs font-black uppercase tracking-widest text-blue-600">Top</span>
+                    <span class="text-xl">ðŸ…</span>
+                    <h3 class="text-xl font-black text-gray-900">Top 3 Techs This Month</h3>
+                </div>
+                <div v-if="leaderboard.top3?.length" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div v-for="card in topTechCards" :key="card.rank"
+                        class="relative overflow-hidden rounded-xl border p-4 min-h-[180px] flex flex-col justify-between"
+                        :class="{
+                            'md:order-1 bg-gradient-to-br from-amber-50 via-orange-50 to-white border-amber-200 shadow-sm': card.rank === 3,
+                            'md:order-2 bg-gradient-to-br from-blue-50 via-cyan-50 to-yellow-50 border-blue-300 shadow-lg min-h-[224px]': card.rank === 1,
+                            'md:order-3 bg-gradient-to-br from-violet-50 via-fuchsia-50 to-white border-violet-200 shadow-sm': card.rank === 2,
+                        }">
+                        <template v-if="card.agent">
+                            <div v-if="card.rank === 1" class="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-yellow-400 p-2 text-yellow-950 shadow-sm">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M4.2 18.5h15.6l1-10.3-5.1 4.1L12 4.5l-3.7 7.8-5.1-4.1 1 10.3Zm.4 2.5h14.8v-1.5H4.6V21Z" />
+                                </svg>
+                            </div>
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="text-xs font-black uppercase tracking-widest"
+                                    :class="{
+                                        'text-blue-700': card.rank === 1,
+                                        'text-gray-500': card.rank === 2,
+                                        'text-amber-700': card.rank === 3,
+                                    }">
+                                    Top {{ card.rank }}
+                                </div>
+                                <div class="rounded-full px-3 py-1 text-xs font-black"
+                                    :class="{
+                                        'bg-blue-600 text-white': card.rank === 1,
+                                        'bg-gray-200 text-gray-700': card.rank === 2,
+                                        'bg-amber-100 text-amber-800': card.rank === 3,
+                                    }">
+                                    #{{ card.rank }}
+                                </div>
+                            </div>
+                            <div class="py-5 text-center" :class="card.rank === 1 ? 'pt-8' : ''">
+                                <div class="mx-auto mb-3 flex items-center justify-center rounded-full font-black overflow-hidden ring-4 ring-white shadow-md"
+                                    :class="{
+                                        'h-16 w-16 text-2xl bg-blue-600 text-white': card.rank === 1,
+                                        'h-12 w-12 text-lg bg-gray-200 text-gray-700': card.rank === 2,
+                                        'h-12 w-12 text-lg bg-amber-100 text-amber-800': card.rank === 3,
+                                    }">
+                                    <img v-if="card.agent.total_points > 0 && card.agent.profile_photo" :src="'/serve-storage/' + card.agent.profile_photo" class="h-full w-full object-cover" :alt="card.agent.name">
+                                    <span v-else>{{ card.agent.total_points === 0 ? '?' : (String(card.agent.name || '').charAt(0).toUpperCase() || '?') }}</span>
+                                </div>
+                                <div class="font-black text-gray-900 truncate"
+                                    :class="card.rank === 1 ? 'text-xl' : 'text-base'">
+                                    {{ card.agent.total_points === 0 ? 'No points yet' : card.agent.name }}
+                                </div>
+                                <div class="mt-1 text-xs font-semibold text-gray-500">
+                                    {{ card.agent.ticket_count }} ticket{{ card.agent.ticket_count !== 1 ? 's' : '' }}
+                                    <span v-if="card.agent.avg_close_min !== null"> - avg {{ card.agent.avg_close_min }}m</span>
+                                </div>
+                            </div>
+                            <div class="rounded-lg bg-white/85 border border-white px-3 py-2 text-center shadow-sm">
+                                <div class="text-2xl font-black text-blue-700">{{ card.agent.total_points.toLocaleString() }}</div>
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">pts</div>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <div class="text-xs font-black uppercase tracking-widest text-gray-400">Top {{ card.rank }}</div>
+                            <div class="py-8 text-center text-sm font-semibold text-gray-400">No tech available</div>
+                            <div class="rounded-lg bg-white/80 border border-white px-3 py-2 text-center">
+                                <div class="text-2xl font-black text-gray-300">0</div>
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-300">pts</div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div v-if="false" class="space-y-3">
+                    <div v-for="agent in leaderboard.top3" :key="agent.agent_id"
+                        class="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
+                        <span class="text-sm font-black" :class="['text-yellow-500','text-gray-400','text-amber-600'][agent.rank-1]">#{{ agent.rank }}</span>
+                        <span class="hidden text-lg font-black" :class="['text-yellow-500','text-gray-400','text-amber-600'][agent.rank-1]">
+                            {{ ['ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰'][agent.rank-1] }}
+                        </span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-semibold text-gray-800 truncate">
+                                {{ agent.total_points === 0 ? 'No points yet' : agent.name }}
+                            </div>
+                            <div class="flex gap-3 text-xs text-gray-500 mt-0.5">
+                                <span>{{ agent.ticket_count }} ticket{{ agent.ticket_count !== 1 ? 's' : '' }}</span>
+                                <span v-if="agent.avg_close_min !== null">avg {{ agent.avg_close_min }}m close</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-bold text-blue-600">{{ agent.total_points.toLocaleString() }}</div>
+                            <div class="text-xs text-gray-400">pts</div>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="!leaderboard.top3?.length" class="text-sm text-gray-400 text-center py-4">No points awarded yet this month.</div>
+            </div>
+
+            <!-- Monthly Trophies -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
+                    <span class="text-xs font-black uppercase tracking-widest text-amber-600">Awards</span>
+                    <span class="text-xl">ðŸ†</span>
+                    <h3 class="text-base font-bold text-gray-900">Monthly Trophies</h3>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div v-for="trophy in leaderboard.trophies" :key="trophy.label"
+                        class="p-3 rounded-lg bg-gray-50 flex items-start gap-2">
+                        <span class="text-xl leading-none mt-0.5">{{ trophy.icon }}</span>
+                        <div class="min-w-0">
+                            <div class="text-xs font-semibold text-gray-700 leading-tight">{{ trophy.label }}</div>
+                            <div v-if="trophy.winner" class="text-xs text-gray-500 mt-1 truncate">{{ trophy.winner.name }}</div>
+                            <div v-else class="text-xs text-gray-400 mt-1 italic">No winner yet</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Static Kanban Report -->
         <div class="mb-8">
             <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-4">
@@ -698,6 +894,197 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        <!-- Ticket Charts -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                <div class="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">Overall Open vs Closed</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1">Filtered by the current dashboard controls.</p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600">
+                        {{ totalChartCount(overallChartData) }}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
+                    <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(overallChartData)">
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
+                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(overallChartData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="h-3 w-3 rounded-full bg-blue-600"></span>
+                                <span class="text-sm font-bold text-blue-900">Open</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-black text-blue-900">{{ overallChartData.open }}</div>
+                                <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(overallChartData.open, totalChartCount(overallChartData)) }}%</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="h-3 w-3 rounded-full bg-green-600"></span>
+                                <span class="text-sm font-bold text-green-900">Closed</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-black text-green-900">{{ overallChartData.closed }}</div>
+                                <div class="text-[10px] font-bold text-green-600">{{ chartPercent(overallChartData.closed, totalChartCount(overallChartData)) }}%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 border-t border-gray-100 pt-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-widest">Concern Type Open vs Closed</h4>
+                        <span class="text-xs font-bold text-gray-400">
+                            {{ concernTypeBars.reduce((sum, row) => sum + row.total, 0) }} Tickets
+                        </span>
+                    </div>
+                    <div class="space-y-5">
+                        <div v-for="row in concernTypeBars" :key="row.key">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-sm font-bold text-gray-700">{{ row.label }}</span>
+                                <span class="text-sm font-black text-gray-900">{{ row.total }}</span>
+                            </div>
+                            <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden">
+                                <div
+                                    v-if="row.open > 0"
+                                    class="h-full bg-blue-600 transition-all"
+                                    :style="{ width: `${chartPercent(row.open, row.total)}%` }"
+                                ></div>
+                                <div
+                                    v-if="row.closed > 0"
+                                    class="h-full bg-green-600 transition-all"
+                                    :style="{ width: `${chartPercent(row.closed, row.total)}%` }"
+                                ></div>
+                            </div>
+                            <div class="mt-2 grid grid-cols-2 gap-2">
+                                <div class="rounded-lg bg-blue-50 px-3 py-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-blue-900">Open</span>
+                                        <span class="text-xs font-black text-blue-900">{{ row.open }}</span>
+                                    </div>
+                                    <p class="mt-0.5 text-[10px] font-bold text-blue-600">{{ chartPercent(row.open, row.total) }}%</p>
+                                </div>
+                                <div class="rounded-lg bg-green-50 px-3 py-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-green-900">Closed</span>
+                                        <span class="text-xs font-black text-green-900">{{ row.closed }}</span>
+                                    </div>
+                                    <p class="mt-0.5 text-[10px] font-bold text-green-600">{{ chartPercent(row.closed, row.total) }}%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">Per Brand</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1">Open vs Closed by selected company.</p>
+                    </div>
+                    <select
+                        v-model="selectedBrandId"
+                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold"
+                        :disabled="brandChartRows.length === 0"
+                    >
+                        <option value="all">All</option>
+                        <option v-for="brand in brandChartRows" :key="brand.id" :value="brand.id">
+                            {{ brand.code ? `[${brand.code}] ` : '' }}{{ brand.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div v-if="selectedBrandId === 'all' && brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                    <div
+                        v-for="brand in brandChartRows"
+                        :key="brand.id"
+                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4"
+                    >
+                        <div class="flex items-start justify-between gap-3 mb-4">
+                            <div class="min-w-0">
+                                <p class="text-sm font-black text-gray-900 truncate">{{ brand.name }}</p>
+                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate">{{ brand.code }}</p>
+                            </div>
+                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100">
+                                {{ totalChartCount(brandPieData(brand)) }}
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
+                            <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(brand))">
+                                <div class="absolute inset-5 rounded-full bg-white shadow-inner"></div>
+                            </div>
+                            <div class="space-y-2 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
+                                        <span class="text-xs font-bold text-gray-600 truncate">Open</span>
+                                    </div>
+                                    <span class="text-xs font-black text-gray-900">{{ brand.open }}</span>
+                                </div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
+                                        <span class="text-xs font-bold text-gray-600 truncate">Closed</span>
+                                    </div>
+                                    <span class="text-xs font-black text-gray-900">{{ brand.closed }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else-if="selectedBrandChart" class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
+                    <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(selectedBrandPieData)">
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
+                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(selectedBrandPieData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest">Brand</p>
+                            <p class="text-lg font-black text-gray-900 mt-0.5">{{ selectedBrandChart.name }}</p>
+                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500">{{ selectedBrandChart.code }}</p>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-3 w-3 rounded-full bg-blue-600"></span>
+                                    <span class="text-sm font-bold text-blue-900">Open</span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm font-black text-blue-900">{{ selectedBrandPieData.open }}</div>
+                                    <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(selectedBrandPieData.open, totalChartCount(selectedBrandPieData)) }}%</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-3 w-3 rounded-full bg-green-600"></span>
+                                    <span class="text-sm font-bold text-green-900">Closed</span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm font-black text-green-900">{{ selectedBrandPieData.closed }}</div>
+                                    <div class="text-[10px] font-bold text-green-600">{{ chartPercent(selectedBrandPieData.closed, totalChartCount(selectedBrandPieData)) }}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400">
+                    No brand data available.
+                </div>
+            </div>
+        </div>
+
         <!-- Store Health Section -->
         <div v-if="hasPermission('reports.store_health')" class="mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -820,6 +1207,197 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        <!-- Ticket Charts -->
+        <div v-if="false" class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                <div class="flex items-start justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">Overall Open vs Closed</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1">Filtered by the current dashboard controls.</p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600">
+                        {{ totalChartCount(overallChartData) }}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
+                    <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(overallChartData)">
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
+                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(overallChartData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        </div>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="h-3 w-3 rounded-full bg-blue-600"></span>
+                                <span class="text-sm font-bold text-blue-900">Open</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-black text-blue-900">{{ overallChartData.open }}</div>
+                                <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(overallChartData.open, totalChartCount(overallChartData)) }}%</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <span class="h-3 w-3 rounded-full bg-green-600"></span>
+                                <span class="text-sm font-bold text-green-900">Closed</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-black text-green-900">{{ overallChartData.closed }}</div>
+                                <div class="text-[10px] font-bold text-green-600">{{ chartPercent(overallChartData.closed, totalChartCount(overallChartData)) }}%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 border-t border-gray-100 pt-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-widest">Concern Type Open vs Closed</h4>
+                        <span class="text-xs font-bold text-gray-400">
+                            {{ concernTypeBars.reduce((sum, row) => sum + row.total, 0) }} Tickets
+                        </span>
+                    </div>
+                    <div class="space-y-5">
+                        <div v-for="row in concernTypeBars" :key="row.key">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-sm font-bold text-gray-700">{{ row.label }}</span>
+                                <span class="text-sm font-black text-gray-900">{{ row.total }}</span>
+                            </div>
+                            <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden">
+                                <div
+                                    v-if="row.open > 0"
+                                    class="h-full bg-blue-600 transition-all"
+                                    :style="{ width: `${chartPercent(row.open, row.total)}%` }"
+                                ></div>
+                                <div
+                                    v-if="row.closed > 0"
+                                    class="h-full bg-green-600 transition-all"
+                                    :style="{ width: `${chartPercent(row.closed, row.total)}%` }"
+                                ></div>
+                            </div>
+                            <div class="mt-2 grid grid-cols-2 gap-2">
+                                <div class="rounded-lg bg-blue-50 px-3 py-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-blue-900">Open</span>
+                                        <span class="text-xs font-black text-blue-900">{{ row.open }}</span>
+                                    </div>
+                                    <p class="mt-0.5 text-[10px] font-bold text-blue-600">{{ chartPercent(row.open, row.total) }}%</p>
+                                </div>
+                                <div class="rounded-lg bg-green-50 px-3 py-2">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-green-900">Closed</span>
+                                        <span class="text-xs font-black text-green-900">{{ row.closed }}</span>
+                                    </div>
+                                    <p class="mt-0.5 text-[10px] font-bold text-green-600">{{ chartPercent(row.closed, row.total) }}%</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">Per Brand</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1">Open vs Closed by selected company.</p>
+                    </div>
+                    <select
+                        v-model="selectedBrandId"
+                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold"
+                        :disabled="brandChartRows.length === 0"
+                    >
+                        <option value="all">All</option>
+                        <option v-for="brand in brandChartRows" :key="brand.id" :value="brand.id">
+                            {{ brand.code ? `[${brand.code}] ` : '' }}{{ brand.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div v-if="selectedBrandId === 'all' && brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                    <div
+                        v-for="brand in brandChartRows"
+                        :key="brand.id"
+                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4"
+                    >
+                        <div class="flex items-start justify-between gap-3 mb-4">
+                            <div class="min-w-0">
+                                <p class="text-sm font-black text-gray-900 truncate">{{ brand.name }}</p>
+                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate">{{ brand.code }}</p>
+                            </div>
+                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100">
+                                {{ totalChartCount(brandPieData(brand)) }}
+                            </span>
+                        </div>
+
+                        <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
+                            <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(brand))">
+                                <div class="absolute inset-5 rounded-full bg-white shadow-inner"></div>
+                            </div>
+                            <div class="space-y-2 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
+                                        <span class="text-xs font-bold text-gray-600 truncate">Open</span>
+                                    </div>
+                                    <span class="text-xs font-black text-gray-900">{{ brand.open }}</span>
+                                </div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
+                                        <span class="text-xs font-bold text-gray-600 truncate">Closed</span>
+                                    </div>
+                                    <span class="text-xs font-black text-gray-900">{{ brand.closed }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else-if="selectedBrandChart" class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
+                    <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(selectedBrandPieData)">
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
+                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(selectedBrandPieData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest">Brand</p>
+                            <p class="text-lg font-black text-gray-900 mt-0.5">{{ selectedBrandChart.name }}</p>
+                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500">{{ selectedBrandChart.code }}</p>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-3 w-3 rounded-full bg-blue-600"></span>
+                                    <span class="text-sm font-bold text-blue-900">Open</span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm font-black text-blue-900">{{ selectedBrandPieData.open }}</div>
+                                    <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(selectedBrandPieData.open, totalChartCount(selectedBrandPieData)) }}%</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-3 w-3 rounded-full bg-green-600"></span>
+                                    <span class="text-sm font-bold text-green-900">Closed</span>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm font-black text-green-900">{{ selectedBrandPieData.closed }}</div>
+                                    <div class="text-[10px] font-bold text-green-600">{{ chartPercent(selectedBrandPieData.closed, totalChartCount(selectedBrandPieData)) }}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400">
+                    No brand data available.
+                </div>
+            </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-2 space-y-8">
                 <!-- My Assigned Tickets -->
@@ -867,56 +1445,6 @@ const exportToExcel = (type) => {
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
-                </div>
-
-                <!-- Leadership Leaderboard -->
-                <div v-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <!-- Top 3 Agents -->
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <div class="flex items-center gap-2 mb-4">
-                            <span class="text-xl">🏅</span>
-                            <h3 class="text-base font-bold text-gray-900">Top Agents This Month</h3>
-                        </div>
-                        <div v-if="leaderboard.top3?.length" class="space-y-3">
-                            <div v-for="agent in leaderboard.top3" :key="agent.agent_id"
-                                class="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
-                                <span class="text-lg font-black" :class="['text-yellow-500','text-gray-400','text-amber-600'][agent.rank-1]">
-                                    {{ ['🥇','🥈','🥉'][agent.rank-1] }}
-                                </span>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-semibold text-gray-800 truncate">{{ agent.name }}</div>
-                                    <div class="flex gap-3 text-xs text-gray-500 mt-0.5">
-                                        <span>{{ agent.ticket_count }} ticket{{ agent.ticket_count !== 1 ? 's' : '' }}</span>
-                                        <span v-if="agent.avg_close_min !== null">avg {{ agent.avg_close_min }}m close</span>
-                                    </div>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-sm font-bold text-blue-600">{{ agent.total_points.toLocaleString() }}</div>
-                                    <div class="text-xs text-gray-400">pts</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div v-else class="text-sm text-gray-400 text-center py-4">No points awarded yet this month.</div>
-                    </div>
-
-                    <!-- Monthly Trophies -->
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <div class="flex items-center gap-2 mb-4">
-                            <span class="text-xl">🏆</span>
-                            <h3 class="text-base font-bold text-gray-900">Monthly Trophies</h3>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div v-for="trophy in leaderboard.trophies" :key="trophy.label"
-                                class="p-3 rounded-lg bg-gray-50 flex items-start gap-2">
-                                <span class="text-xl leading-none mt-0.5">{{ trophy.icon }}</span>
-                                <div class="min-w-0">
-                                    <div class="text-xs font-semibold text-gray-700 leading-tight">{{ trophy.label }}</div>
-                                    <div v-if="trophy.winner" class="text-xs text-gray-500 mt-1 truncate">{{ trophy.winner.name }}</div>
-                                    <div v-else class="text-xs text-gray-400 mt-1 italic">No winner yet</div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
 

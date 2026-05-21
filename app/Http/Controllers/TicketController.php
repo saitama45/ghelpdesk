@@ -642,6 +642,7 @@ class TicketController extends Controller
 
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
+            'itemLeaders' => $this->buildItemLeaders($ticket->item_id),
             'staff' => $staff,
             'companies' => $companies,
             'users' => $users,
@@ -651,6 +652,53 @@ class TicketController extends Controller
             'cannedMessages' => $cannedMessages,
             'businessHours' => $businessHours,
         ]);
+    }
+
+    private function buildItemLeaders($itemId): array
+    {
+        if (!$itemId) {
+            return [];
+        }
+
+        $pointRows = \App\Models\AgentPointTransaction::query()
+            ->join('tickets', 'agent_point_transactions.ticket_id', '=', 'tickets.id')
+            ->where('tickets.item_id', $itemId)
+            ->selectRaw('agent_point_transactions.agent_id, SUM(agent_point_transactions.points) as total_points, COUNT(DISTINCT agent_point_transactions.ticket_id) as ticket_count')
+            ->groupBy('agent_point_transactions.agent_id')
+            ->get()
+            ->keyBy('agent_id');
+
+        if ($pointRows->isEmpty()) {
+            return [];
+        }
+
+        return User::active()
+            ->whereHas('roles', fn ($q) => $q->where('is_assignable', true))
+            ->whereIn('id', $pointRows->keys())
+            ->get(['id', 'name', 'profile_photo'])
+            ->map(function ($tech) use ($pointRows) {
+                $row = $pointRows[$tech->id];
+
+                return [
+                    'agent_id' => $tech->id,
+                    'name' => $tech->name,
+                    'profile_photo' => $tech->profile_photo,
+                    'total_points' => (int) $row->total_points,
+                    'ticket_count' => (int) $row->ticket_count,
+                ];
+            })
+            ->sortBy([
+                ['total_points', 'desc'],
+                ['ticket_count', 'desc'],
+                ['name', 'asc'],
+            ])
+            ->take(3)
+            ->values()
+            ->map(fn ($row, $index) => [
+                ...$row,
+                'rank' => $index + 1,
+            ])
+            ->toArray();
     }
 
     /**
