@@ -84,9 +84,13 @@ class DynamicFormController extends Controller
     public function store(Request $request, $slug)
     {
         $formDefinition = FormDefinition::where('slug', $slug)->firstOrFail();
-        
+
         $service = $this->serviceFactory->make($slug);
-        $service->store($request, $formDefinition);
+        $record = $service->store($request, $formDefinition);
+
+        if (method_exists($service, 'notifyCurrentApprovers')) {
+            $service->notifyCurrentApprovers($formDefinition, $record);
+        }
 
         return redirect()->back()->with('success', 'Record created successfully');
     }
