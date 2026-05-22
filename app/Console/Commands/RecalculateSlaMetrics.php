@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\AgentPointTransaction;
+use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\SlaService;
@@ -11,7 +13,8 @@ class RecalculateSlaMetrics extends Command
 {
     protected $signature = 'sla:recalculate
                             {--ticket= : Filter to a single ticket by ticket_key (e.g. GH-42) or DB id}
-                            {--dry-run : Preview changes without saving}';
+                            {--dry-run : Preview changes without saving}
+                            {--fix-points : Also correct leadership point transactions whose type no longer matches the updated breach status}';
 
     protected $description = 'Recalculate SLA response/resolution targets and breach flags for all tickets based on their current item priority and SLA settings.';
 
@@ -122,6 +125,61 @@ class RecalculateSlaMetrics extends Command
             $noItem,
         ));
 
+        if ($this->option('fix-points')) {
+            $this->newLine();
+            $this->fixLeadershipPoints($dryRun);
+        }
+
         return self::SUCCESS;
+    }
+
+    private function fixLeadershipPoints(bool $dryRun): void
+    {
+        $this->info(($dryRun ? '[DRY RUN] ' : '') . 'Correcting leadership point transactions...');
+
+        $ontimePoints = (int) (Setting::where('key', 'leadership.ontime_points')->value('value') ?? 5);
+        $latePoints   = (int) (Setting::where('key', 'leadership.late_points')->value('value') ?? -5);
+
+        $corrected = 0;
+
+        AgentPointTransaction::with(['ticket.slaMetric'])
+            ->whereIn('type', ['ontime_resolution', 'late_resolution'])
+            ->chunk(200, function ($transactions) use ($dryRun, $ontimePoints, $latePoints, &$corrected) {
+                foreach ($transactions as $tx) {
+                    $metric = $tx->ticket?->slaMetric;
+                    if (!$metric) {
+                        continue;
+                    }
+
+                    $breached = (bool) $metric->is_resolution_breached;
+                    $shouldBe = $breached ? 'late_resolution' : 'ontime_resolution';
+
+                    if ($tx->type === $shouldBe) {
+                        continue;
+                    }
+
+                    $newPoints = $breached ? $latePoints : $ontimePoints;
+
+                    $this->line(sprintf(
+                        '  %s | agent=%s | %s(%d) → %s(%d)',
+                        $tx->ticket?->ticket_key ?? $tx->ticket_id,
+                        $tx->agent_id,
+                        $tx->type, $tx->points,
+                        $shouldBe, $newPoints,
+                    ));
+
+                    if (!$dryRun) {
+                        $tx->update(['type' => $shouldBe, 'points' => $newPoints]);
+                    }
+
+                    $corrected++;
+                }
+            });
+
+        $this->info(sprintf(
+            '%sCorrected %d leadership point transaction(s).',
+            $dryRun ? '[DRY RUN] ' : '',
+            $corrected,
+        ));
     }
 }
