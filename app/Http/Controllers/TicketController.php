@@ -373,6 +373,24 @@ class TicketController extends Controller
             });
         }
 
+        if ($request->filled('item_id')) {
+            $query->where('item_id', (int) $request->item_id);
+        }
+
+        if ($request->filled('requester')) {
+            $requester = $request->requester;
+            $query->whereHas('reporter', fn ($q) => $q->where('name', 'like', "%{$requester}%"));
+        }
+
+        $priorityFilters = $normalizeFilterValues($request->input('priority'));
+        if ($priorityFilters->isNotEmpty()) {
+            $query->whereIn('priority', $priorityFilters->all());
+        }
+
+        if ($request->filled('concern_type')) {
+            $query->whereHas('item', fn ($q) => $q->where('concern_type', $request->concern_type));
+        }
+
         $tickets = $query
             ->with([
                 'reporter:id,name',

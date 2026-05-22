@@ -31,6 +31,24 @@ const props = defineProps({
 const page = usePage();
 const showCreateModal = ref(false);
 const showAcceptModal = ref(false);
+const showExportModal = ref(false);
+const exportItems = ref([]);
+const exportFilterItemId = ref('');
+const exportFilterRequester = ref('');
+const exportFilterPriority = ref([]);
+const exportFilterConcernType = ref('');
+
+const openExportModal = async () => {
+    showExportModal.value = true;
+    if (!exportItems.value.length) {
+        try {
+            const res = await axios.get(route('tickets.data.items', undefined, false));
+            exportItems.value = res.data;
+        } catch (e) {
+            console.error('Failed to load items for export filter', e);
+        }
+    }
+};
 const acceptingTicket = ref(null);
 const fileInput = ref(null);
 const isSubmitting = ref(false);
@@ -267,7 +285,20 @@ const exportToExcel = () => {
         else if (v !== null && v !== undefined && v !== '') params.set(k, v)
     })
     if (pagination.search.value) params.set('search', pagination.search.value)
+    if (exportFilterItemId.value) params.set('item_id', exportFilterItemId.value)
+    if (exportFilterRequester.value) params.set('requester', exportFilterRequester.value)
+    exportFilterPriority.value.forEach(p => params.append('priority[]', p))
+    if (exportFilterConcernType.value) params.set('concern_type', exportFilterConcernType.value)
     window.location.href = route('tickets.export') + '?' + params.toString()
+    showExportModal.value = false
+}
+
+const closeExportModal = () => {
+    showExportModal.value = false
+    exportFilterItemId.value = ''
+    exportFilterRequester.value = ''
+    exportFilterPriority.value = []
+    exportFilterConcernType.value = ''
 }
 
 const clearFilters = () => {
@@ -1569,7 +1600,7 @@ const requesterTabs = computed(() => {
                     </Dropdown>
 
                     <button
-                        @click="exportToExcel"
+                        @click="openExportModal"
                         class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                         title="Export current view to Excel"
                     >
@@ -2395,6 +2426,106 @@ const requesterTabs = computed(() => {
                 </div>
             </div>
         </div>
+
+    <!-- Export Options Modal -->
+    <div v-if="showExportModal" class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 py-6">
+            <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeExportModal"></div>
+            <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100">
+                <div class="flex justify-between items-center mb-5">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900">Export Options</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">Apply additional filters before exporting to Excel</p>
+                    </div>
+                    <button @click="closeExportModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Item -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Item / Concern</label>
+                            <button v-if="exportFilterItemId" type="button" @click="exportFilterItemId = ''"
+                                    class="text-xs font-semibold text-red-500 hover:text-red-700">Clear</button>
+                        </div>
+                        <Autocomplete
+                            v-model="exportFilterItemId"
+                            :options="exportItems"
+                            label-key="display_name"
+                            value-key="id"
+                            placeholder="All Items"
+                        />
+                    </div>
+
+                    <!-- Requester -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Requester</label>
+                            <button v-if="exportFilterRequester" type="button" @click="exportFilterRequester = ''"
+                                    class="text-xs font-semibold text-red-500 hover:text-red-700">Clear</button>
+                        </div>
+                        <Autocomplete
+                            v-model="exportFilterRequester"
+                            :options="staff || []"
+                            label-key="name"
+                            value-key="name"
+                            placeholder="Type or search requester name..."
+                            :allow-custom="true"
+                        />
+                    </div>
+
+                    <!-- Priority -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Priority Level</label>
+                        <div class="flex flex-wrap gap-2">
+                            <label v-for="p in ['Low','Medium','High','Urgent']" :key="p"
+                                   class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs font-semibold transition-colors"
+                                   :class="exportFilterPriority.includes(p)
+                                       ? (p === 'Low' ? 'bg-green-100 border-green-400 text-green-800' : p === 'Medium' ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : p === 'High' ? 'bg-orange-100 border-orange-400 text-orange-800' : 'bg-red-100 border-red-400 text-red-800')
+                                       : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'">
+                                <input type="checkbox" :value="p" v-model="exportFilterPriority" class="hidden">
+                                {{ p }}
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Concern Type -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Concern Type</label>
+                            <button v-if="exportFilterConcernType" type="button" @click="exportFilterConcernType = ''"
+                                    class="text-xs font-semibold text-red-500 hover:text-red-700">Clear</button>
+                        </div>
+                        <Autocomplete
+                            v-model="exportFilterConcernType"
+                            :options="[{value:'Incident',label:'Incident'},{value:'Service Request',label:'Service Request'}]"
+                            label-key="label"
+                            value-key="value"
+                            placeholder="All Types"
+                        />
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-5 mt-5 border-t border-gray-100">
+                    <button type="button" @click="closeExportModal"
+                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                        Cancel
+                    </button>
+                    <button type="button" @click="exportToExcel"
+                            class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-md transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Export Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     </AppLayout>
 </template>
