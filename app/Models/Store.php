@@ -24,6 +24,12 @@ class Store extends Model
         'longitude',
         'radius_meters',
         'is_active',
+        'cctv_seal_notice_path',
+        'cctv_seal_notice_name',
+        'cctv_seal_notice_mime_type',
+        'cctv_seal_notice_size',
+        'cctv_seal_notice_uploaded_at',
+        'cctv_seal_notice_uploaded_by',
     ];
 
     protected $casts = [
@@ -32,6 +38,9 @@ class Store extends Model
         'latitude' => 'float',
         'longitude' => 'float',
         'radius_meters' => 'integer',
+        'cctv_seal_notice_size' => 'integer',
+        'cctv_seal_notice_uploaded_at' => 'datetime',
+        'cctv_seal_notice_uploaded_by' => 'integer',
     ];
 
     public function users()

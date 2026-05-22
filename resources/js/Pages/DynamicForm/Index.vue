@@ -148,13 +148,21 @@ const closeModal = () => {
     dynamicForm.clearErrors()
 }
 
+const isFieldVisible = (field, formData) => {
+    if (!field.show_when) return true
+    const { field: depKey, value: depVal } = field.show_when
+    const current = formData[depKey]
+    if (Array.isArray(current)) return current.includes(depVal)
+    return String(current ?? '') === String(depVal)
+}
+
 const validateForm = () => {
     let isValid = true
     const errors = {}
     
     if (effectiveSchema.value?.fields) {
         effectiveSchema.value.fields.forEach(field => {
-            if (field.required) {
+            if (field.required && isFieldVisible(field, dynamicForm.form_data)) {
                 const val = dynamicForm.form_data[field.key]
                 if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
                     errors[`form_data.${field.key}`] = `${field.label || field.key} is required`

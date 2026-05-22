@@ -46,7 +46,13 @@ Route::middleware('auth')->group(function () {
     Route::get('npc-statuses/{npcStatus}/attachments/{type}', [NpcStatusController::class, 'downloadAttachment'])
         ->whereIn('type', ['seal', 'registration'])
         ->name('npc-statuses.attachments.download');
+    Route::post('npc-statuses/{npcStatus}/attachments', [NpcStatusController::class, 'storeAttachment'])->name('npc-statuses.attachments.store');
+    Route::get('npc-status-attachments/{attachment}/download', [NpcStatusController::class, 'downloadStatusAttachment'])->name('npc-status-attachments.download');
+    Route::delete('npc-status-attachments/{attachment}', [NpcStatusController::class, 'destroyAttachment'])->name('npc-status-attachments.destroy');
+    Route::put('npc-statuses/{npcStatus}/workflow', [NpcStatusController::class, 'updateWorkflow'])->name('npc-statuses.workflow.update');
     Route::put('npc-statuses/{npcStatus}/stores', [NpcStatusController::class, 'syncStores'])->name('npc-statuses.stores.update');
+    Route::post('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'storeCctvSealNotice'])->name('stores.cctv-seal-notice.store');
+    Route::get('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'downloadCctvSealNotice'])->name('stores.cctv-seal-notice.download');
     Route::resource('npc-statuses', NpcStatusController::class)
         ->parameters(['npc-statuses' => 'npcStatus'])
         ->except(['show', 'create', 'edit']);

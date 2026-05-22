@@ -5,15 +5,26 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class NpcStatus extends Model
 {
     public const STATUSES = [
+        'No Record',
         'Active',
-        'Inactive',
-        'Approved',
-        'Pending',
-        'For Payment',
+        'Renewal Window',
+        'Critical Renewal',
+        'Due Today',
+        'Overdue',
+    ];
+
+    public const WORKFLOW_STEPS = [
+        ['key' => 'form_completion', 'label' => 'Form Completion', 'sort_order' => 1],
+        ['key' => 'documents_uploading', 'label' => 'Documents Uploading', 'sort_order' => 2],
+        ['key' => 'application_signing', 'label' => 'Application Signing', 'sort_order' => 3],
+        ['key' => 'npc_approval', 'label' => 'NPC Approval', 'sort_order' => 4],
+        ['key' => 'payment_processing', 'label' => 'Payment Processing', 'sort_order' => 5],
+        ['key' => 'store_distribution', 'label' => 'For Store Distribution', 'sort_order' => 6],
     ];
 
     protected $fillable = [
@@ -54,6 +65,16 @@ class NpcStatus extends Model
         return $this->belongsToMany(Store::class, 'npc_status_store')
             ->withPivot('year')
             ->withTimestamps();
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(NpcStatusAttachment::class);
+    }
+
+    public function workflowSteps(): HasMany
+    {
+        return $this->hasMany(NpcStatusWorkflowStep::class)->orderBy('sort_order');
     }
 
     public function creator(): BelongsTo

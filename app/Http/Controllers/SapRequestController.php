@@ -167,7 +167,7 @@ class SapRequestController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'company_id'      => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
-            'form_data'       => 'required|array',
+            'form_data'       => 'nullable|array',
             'items'           => 'nullable|array',
         ]);
 
@@ -212,7 +212,7 @@ class SapRequestController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'company_id'      => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
-            'form_data'       => 'required|array',
+            'form_data'       => 'nullable|array',
             'items'           => 'nullable|array',
         ]);
 

@@ -35,7 +35,7 @@ class PublicSapRequestController extends Controller
             'requester_email' => 'required|email|max:255',
             'company_id'      => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
-            'form_data'       => 'required|array',
+            'form_data'       => 'nullable|array',
             'items'           => 'nullable|array',
         ]);
 

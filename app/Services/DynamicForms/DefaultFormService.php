@@ -22,7 +22,7 @@ class DefaultFormService implements FormServiceContract
     {
         $request->validate([
             'request_type_id' => 'nullable|exists:request_types,id',
-            'form_data' => 'required|array',
+            'form_data' => 'nullable|array',
             'items' => 'nullable|array',
         ]);
 
@@ -261,7 +261,9 @@ class DefaultFormService implements FormServiceContract
 
         foreach ($approvers as $approver) {
             try {
-                Mail::to($approver->email)->send(new DynamicFormApprovalReminder($formDefinition, $record, $approver->name));
+                $path = route('dynamic-form.show', ['slug' => $formDefinition->slug, 'id' => $record->id], false);
+                $viewUrl = request()->getSchemeAndHttpHost() . $path;
+                Mail::to($approver->email)->send(new DynamicFormApprovalReminder($formDefinition, $record, $approver->name, $viewUrl));
             } catch (\Throwable $e) {
                 Log::error('Failed to send dynamic form approver notification: ' . $e->getMessage(), [
                     'form_id' => $formDefinition->id,

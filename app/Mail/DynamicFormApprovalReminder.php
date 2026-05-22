@@ -18,15 +18,17 @@ class DynamicFormApprovalReminder extends Mailable
     public $formDefinition;
     public $record;
     public $approverName;
+    public string $viewUrl;
 
     /**
      * Create a new message instance.
      */
-    public function __construct(FormDefinition $formDefinition, FormRecord $record, $approverName = null)
+    public function __construct(FormDefinition $formDefinition, FormRecord $record, $approverName = null, string $viewUrl = '')
     {
         $this->formDefinition = $formDefinition;
         $this->record = $record;
         $this->approverName = $approverName;
+        $this->viewUrl = $viewUrl;
     }
 
     /**
