@@ -3,8 +3,6 @@
 namespace App\Services;
 
 use App\Models\DepartmentNode;
-use App\Models\Store;
-use App\Models\User;
 use App\Models\Setting;
 use App\Models\Ticket;
 use Carbon\Carbon;
@@ -21,16 +19,19 @@ class StoreReportService
         $departmentNodeId = $filters['department_node_id'] ?? null;
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
 
-        // Query active tickets
-        $ticketsQuery = Ticket::whereNotIn('status', ['resolved', 'closed']);
+        // Query active tickets. Sector summaries intentionally stay based on
+        // the ticket's configured store sector, not the assignee hierarchy.
+        $baseTicketsQuery = Ticket::whereNotIn('tickets.status', ['resolved', 'closed']);
 
         if ($asOfDate) {
-            $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
+            $baseTicketsQuery->whereDate('tickets.created_at', '<=', $asOfDate);
         }
 
         if ($storeId && $storeId !== 'all') {
-            $ticketsQuery->where('store_id', $storeId);
+            $baseTicketsQuery->where('tickets.store_id', $storeId);
         }
+
+        $ticketsQuery = clone $baseTicketsQuery;
 
         if ($departmentId) {
             $ticketsQuery->whereHas('assignee', function($q) use ($departmentId) {
@@ -81,13 +82,18 @@ class StoreReportService
         })->values();
 
         // Summary logic
-        $allStores = Store::where('is_active', true)->orderBy('name')->get();
         $summary = [
             'north' => [],
             'south' => []
         ];
 
-        $summaryTickets = $ticketsQuery->with(['assignee', 'store'])->get();
+        $summaryCounts = (clone $baseTicketsQuery)
+            ->join('stores', 'tickets.store_id', '=', 'stores.id')
+            ->where('stores.is_active', true)
+            ->whereNotNull('stores.sector')
+            ->select('stores.sector', DB::raw('COUNT(*) as total_tickets'))
+            ->groupBy('stores.sector')
+            ->pluck('total_tickets', 'sector');
 
         $northArea = DepartmentNode::where('name', 'North Area')->first();
         $southArea = DepartmentNode::where('name', 'South Area')->first();
@@ -95,14 +101,7 @@ class StoreReportService
         $southNodes = $southArea ? DepartmentNode::where('parent_id', $southArea->id)->with('users')->get() : collect();
 
         for ($i = 1; $i <= 8; $i++) {
-            $sectorStores = $allStores->where('sector', $i);
-            $totalTickets = 0;
-
-            foreach ($sectorStores as $store) {
-                $storeTickets = $summaryTickets->where('store_id', $store->id);
-                $count = $storeTickets->count();
-                $totalTickets += $count;
-            }
+            $totalTickets = (int) ($summaryCounts[$i] ?? 0);
 
             $nodeName = "Sector $i";
             if ($i <= 4) {

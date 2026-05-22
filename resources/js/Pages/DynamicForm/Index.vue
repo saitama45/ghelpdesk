@@ -406,6 +406,7 @@ const getStageDisplay = (record) => {
                 >
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">ID#</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Request Type</th>
                             <th v-for="col in tableColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">
                                 {{ col.label }}
@@ -421,6 +422,9 @@ const getStageDisplay = (record) => {
                         <tr v-for="record in data" :key="record.id" 
                             class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
                         >
+                            <td class="px-6 py-5 whitespace-nowrap">
+                                <span class="text-xs font-black text-gray-500">#{{ record.id }}</span>
+                            </td>
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <span v-if="record.request_type" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tight">
                                     {{ record.request_type.name }}

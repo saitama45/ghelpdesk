@@ -292,20 +292,16 @@ class DashboardController extends Controller
             ->all();
         $kanbanStatuses = array_keys($kanbanStatusToColumn);
 
-        $kanbanQuery = (clone $filteredQuery)->whereIn('status', $kanbanStatuses);
-
-        if ($departmentIdFilter) {
-            $kanbanQuery->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
-        }
+        $kanbanBaseQuery = (clone $filteredQuery)->whereIn('status', $kanbanStatuses);
 
         $selectedDepartmentNodeId = $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null;
+        $kanbanSectorContext = $this->resolveKanbanSectorContext(
+            $departmentIdFilter ? (int) $departmentIdFilter : null,
+            $selectedDepartmentNodeId
+        );
         $kanbanDepartmentGrouping = [];
 
         if ($selectedDepartmentNodeId) {
-            $descendantIds = DepartmentNode::getAllDescendantIds($selectedDepartmentNodeId);
-            $nodeIds = array_merge([$selectedDepartmentNodeId], $descendantIds);
-            $kanbanQuery->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
-
             $immediateChildren = DepartmentNode::query()
                 ->where('parent_id', $selectedDepartmentNodeId)
                 ->orderBy('sort_order')
@@ -333,19 +329,47 @@ class DashboardController extends Controller
             ];
         }
 
-        if ($userIdFilter && $userIdFilter !== 'all') {
-            $kanbanQuery->where('assignee_id', $userIdFilter);
+        $applyAssigneeKanbanFilters = function ($query) use ($departmentIdFilter, $selectedDepartmentNodeId, $userIdFilter, $storeIdFilter) {
+            if ($departmentIdFilter) {
+                $query->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
+            }
+
+            if ($selectedDepartmentNodeId) {
+                $nodeIds = array_merge([$selectedDepartmentNodeId], DepartmentNode::getAllDescendantIds($selectedDepartmentNodeId));
+                $query->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
+            }
+
+            if ($userIdFilter && $userIdFilter !== 'all') {
+                $query->where('assignee_id', $userIdFilter);
+            }
+
+            if ($storeIdFilter && $storeIdFilter !== 'all') {
+                $query->where('store_id', $storeIdFilter);
+            }
+
+            return $query;
+        };
+
+        $departmentKanbanQuery = clone $kanbanBaseQuery;
+
+        if ($kanbanSectorContext['active']) {
+            // Sector mode: filter by store.sector at the DB level — no assignee filtering, regardless of who is assigned
+            $departmentKanbanQuery->whereHas('store', fn ($q) => $q->whereIn('sector', $kanbanSectorContext['sectors']));
+            if ($storeIdFilter && $storeIdFilter !== 'all') {
+                $departmentKanbanQuery->where('store_id', $storeIdFilter);
+            }
+        } else {
+            $departmentKanbanQuery = $applyAssigneeKanbanFilters($departmentKanbanQuery);
         }
 
-        if ($storeIdFilter && $storeIdFilter !== 'all') {
-            $kanbanQuery->where('store_id', $storeIdFilter);
-        }
+        $userKanbanQuery = $applyAssigneeKanbanFilters(clone $kanbanBaseQuery);
 
-        $kanbanTickets = $kanbanQuery
+        $mapKanbanTickets = function ($query, bool $useSectorGrouping = false) use ($kanbanStatusToColumn, $kanbanDepartmentGrouping, $kanbanSectorContext) {
+            return $query
             ->with([
                 'assignee:id,name,org_path,department_node_id',
                 'company:id,name',
-                'store:id,code,name',
+                'store:id,code,name,sector',
                 'item:id,priority',
                 'parent:id,ticket_key',
                 'survey:ticket_id,rating,feedback',
@@ -353,12 +377,34 @@ class DashboardController extends Controller
             ->select('id', 'ticket_key', 'title', 'status', 'priority', 'created_at', 'updated_at', 'assignee_id', 'company_id', 'store_id', 'item_id', 'parent_id')
             ->latest('updated_at')
             ->get()
-            ->map(function ($ticket) use ($kanbanStatusToColumn, $kanbanDepartmentGrouping) {
+            ->filter(function ($ticket) use ($useSectorGrouping, $kanbanSectorContext) {
+                if (!$useSectorGrouping) {
+                    return true;
+                }
+
+                $sector = $ticket->store?->sector ? (int) $ticket->store->sector : null;
+
+                return $sector !== null && in_array($sector, $kanbanSectorContext['sectors'], true);
+            })
+            ->map(function ($ticket) use ($kanbanStatusToColumn, $kanbanDepartmentGrouping, $useSectorGrouping) {
                 $priority = $ticket->item?->priority ?? $ticket->priority ?? 'low';
                 $departmentNodeId = $ticket->assignee?->department_node_id;
                 $grouping = $departmentNodeId ? ($kanbanDepartmentGrouping[$departmentNodeId] ?? null) : null;
                 $departmentGroupKey = $grouping['key'] ?? ($ticket->assignee?->org_path ?: 'No Org Path');
                 $departmentGroupLabel = $grouping['label'] ?? $this->extractLastOrgPathSegment($ticket->assignee?->org_path);
+                $departmentGroupSort = null;
+                $storeSector = $ticket->store?->sector ? (int) $ticket->store->sector : null;
+
+                // store.sector always takes priority over assignee org_path for dept-view grouping
+                if ($storeSector) {
+                    $departmentGroupKey = 'sector_'.$storeSector;
+                    $departmentGroupLabel = 'Sector '.$storeSector;
+                    $departmentGroupSort = $storeSector;
+                } elseif ($useSectorGrouping) {
+                    $departmentGroupKey = 'no_store_sector';
+                    $departmentGroupLabel = 'No Store Sector';
+                    $departmentGroupSort = 999;
+                }
 
                 return [
                     'id' => $ticket->id,
@@ -373,10 +419,12 @@ class DashboardController extends Controller
                     'sub_unit_short' => $this->extractLastOrgPathSegment($ticket->assignee?->org_path),
                     'department_group_key' => $departmentGroupKey,
                     'department_group_label' => $departmentGroupLabel ?: $departmentGroupKey,
+                    'department_group_sort' => $departmentGroupSort,
                     'company_name' => $ticket->company?->name ?? 'N/A',
                     'store' => $ticket->store ? [
                         'id' => $ticket->store->id,
                         'label' => trim(($ticket->store->code ? "[{$ticket->store->code}] " : '') . $ticket->store->name),
+                        'sector' => $ticket->store->sector,
                     ] : null,
                     'parent_key' => $ticket->parent?->ticket_key,
                     'created_at' => $ticket->created_at?->format('Y-m-d H:i:s'),
@@ -388,13 +436,17 @@ class DashboardController extends Controller
                     ] : null,
                 ];
             });
+        };
+
+        $departmentKanbanTickets = $mapKanbanTickets($departmentKanbanQuery, $kanbanSectorContext['active']);
+        $userKanbanTickets = $mapKanbanTickets($userKanbanQuery);
 
         $emptyColumnSet = fn () => collect($kanbanColumns)
             ->mapWithKeys(fn ($column) => [$column['key'] => ['count' => 0, 'tickets' => []]])
             ->all();
 
-        $buildKanbanGroups = function ($tickets, string $mode) use ($kanbanColumns, $emptyColumnSet) {
-            return $tickets
+        $buildKanbanGroups = function ($tickets, string $mode, bool $useSectorGrouping = false) use ($kanbanColumns, $emptyColumnSet, $kanbanSectorContext) {
+            $groups = $tickets
                 ->groupBy(function ($ticket) use ($mode) {
                     if ($mode === 'user') {
                         return $ticket['assignee_id'] ? (string) $ticket['assignee_id'] : 'unassigned';
@@ -402,7 +454,7 @@ class DashboardController extends Controller
 
                     return $ticket['department_group_key'] ?: 'No Org Path';
                 })
-                ->map(function ($groupTickets, $groupKey) use ($mode, $emptyColumnSet) {
+                ->map(function ($groupTickets, $groupKey) use ($mode, $emptyColumnSet, $useSectorGrouping) {
                     $firstTicket = $groupTickets->first();
                     $columns = $emptyColumnSet();
 
@@ -416,28 +468,63 @@ class DashboardController extends Controller
                     return [
                         'key' => (string) $groupKey,
                         'label' => $mode === 'user' ? $firstTicket['assignee'] : (string) ($firstTicket['department_group_label'] ?: $firstTicket['sub_unit_short'] ?: $groupKey),
-                        'subtitle' => $mode === 'user' ? $firstTicket['sub_unit'] : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)', // sub_unit key now holds org_path value
+                        'subtitle' => $mode === 'user'
+                            ? $firstTicket['sub_unit']
+                            : ($useSectorGrouping
+                                ? $groupTickets->pluck('store.id')->filter()->unique()->count() . ' store(s)'
+                                : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)'), // sub_unit key now holds org_path value
                         'total' => $groupTickets->count(),
+                        'sort' => $firstTicket['department_group_sort'],
                         'columns' => $columns,
                     ];
-                })
-                ->sortBy([
-                    ['total', 'desc'],
-                    ['label', 'asc'],
-                ])
+                });
+
+            if ($useSectorGrouping) {
+                foreach ($kanbanSectorContext['sectors'] as $sector) {
+                    $key = 'sector_'.$sector;
+
+                    if (!$groups->has($key)) {
+                        $groups->put($key, [
+                            'key' => $key,
+                            'label' => 'Sector '.$sector,
+                            'subtitle' => '0 store(s)',
+                            'total' => 0,
+                            'sort' => $sector,
+                            'columns' => $emptyColumnSet(),
+                        ]);
+                    }
+                }
+            }
+
+            $groups = $useSectorGrouping
+                ? $groups->sortBy([['sort', 'asc'], ['label', 'asc']])
+                : $groups->sortBy([['total', 'desc'], ['label', 'asc']]);
+
+            return $groups
                 ->values()
                 ->all();
         };
 
+        $kanbanTotalsFor = fn ($tickets) => collect($kanbanColumns)
+            ->mapWithKeys(fn ($column) => [$column['key'] => $tickets->where('column', $column['key'])->count()])
+            ->merge(['all' => $tickets->count()])
+            ->all();
+
+        $departmentKanbanTotals = $kanbanTotalsFor($departmentKanbanTickets);
+        $userKanbanTotals = $kanbanTotalsFor($userKanbanTickets);
+
         $kanbanReport = [
             'columns' => $kanbanColumns,
-            'totals' => collect($kanbanColumns)
-                ->mapWithKeys(fn ($column) => [$column['key'] => $kanbanTickets->where('column', $column['key'])->count()])
-                ->merge(['all' => $kanbanTickets->count()])
-                ->all(),
+            'totals' => [
+                ...$departmentKanbanTotals,
+                'sub_unit' => $departmentKanbanTotals,
+                'user' => $userKanbanTotals,
+            ],
+            'department_view_mode' => $kanbanSectorContext['active'] ? 'sector' : 'department',
+            'department_view_label' => $kanbanSectorContext['active'] ? 'Sector' : 'Department',
             'groups' => [
-                'sub_unit' => $buildKanbanGroups($kanbanTickets, 'sub_unit'),
-                'user' => $buildKanbanGroups($kanbanTickets, 'user'),
+                'sub_unit' => $buildKanbanGroups($departmentKanbanTickets, 'sub_unit', $kanbanSectorContext['active']),
+                'user' => $buildKanbanGroups($userKanbanTickets, 'user'),
             ],
         ];
 
@@ -670,6 +757,51 @@ class DashboardController extends Controller
             'months' => $months,
             'leaderboard' => $leaderboard,
         ]);
+    }
+
+    private function resolveKanbanSectorContext(?int $departmentId, ?int $selectedDepartmentNodeId): array
+    {
+        $sectorNumbers = collect();
+
+        if ($selectedDepartmentNodeId) {
+            $selectedNode = DepartmentNode::find($selectedDepartmentNodeId, ['id', 'name']);
+            $selectedSector = $this->sectorNumberFromNodeName($selectedNode?->name);
+
+            if ($selectedSector) {
+                $sectorNumbers->push($selectedSector);
+            } else {
+                $descendantIds = DepartmentNode::getAllDescendantIds($selectedDepartmentNodeId);
+                $sectorNumbers = DepartmentNode::query()
+                    ->whereIn('id', $descendantIds)
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->pluck('name')
+                    ->map(fn ($name) => $this->sectorNumberFromNodeName($name))
+                    ->filter();
+            }
+        }
+        // Dept-level selection (no specific node) stays in normal dept-grouping mode — no sector activation.
+
+        $sectors = $sectorNumbers
+            ->map(fn ($sector) => (int) $sector)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        return [
+            'active' => count($sectors) > 0,
+            'sectors' => $sectors,
+        ];
+    }
+
+    private function sectorNumberFromNodeName(?string $name): ?int
+    {
+        if (!preg_match('/^sector\s*([1-8])$/i', trim((string) $name), $matches)) {
+            return null;
+        }
+
+        return (int) $matches[1];
     }
 
     private function buildLeaderboard(

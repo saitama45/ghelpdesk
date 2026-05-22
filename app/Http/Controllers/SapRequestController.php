@@ -139,7 +139,8 @@ class SapRequestController extends Controller implements HasMiddleware
 
         $sapRequests = $query->orderBy('sap_requests.created_at', 'desc')
                             ->paginate($request->get('per_page', 10))
-                            ->withQueryString();
+                            ->withQueryString()
+                            ->appends(['status' => (string) $status]);
 
         return Inertia::render('SapRequests/Index', [
             'sapRequests' => $sapRequests,

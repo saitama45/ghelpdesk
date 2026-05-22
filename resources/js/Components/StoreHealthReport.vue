@@ -81,11 +81,7 @@ const fetchSectorTickets = async (sector) => {
         const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), {
             params: { 
                 as_of_date: filterForm.value.as_of_date,
-                user_id: filterForm.value.user_id,
-                store_id: filterForm.value.store_id,
-                sub_unit: filterForm.value.sub_unit,
-                department_id: props.filters?.department_id,
-                department_node_id: props.filters?.department_node_id
+                store_id: filterForm.value.store_id
             }
         });
         selectedStoreTickets.value = response.data.tickets;

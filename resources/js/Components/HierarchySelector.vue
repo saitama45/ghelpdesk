@@ -104,7 +104,7 @@ const TreeItem = {
     render() {
         const hasChildren = this.node.children && this.node.children.length > 0;
         const isExpanded = !!this.expandedStates[this.node.id];
-        const isSelected = Number(this.selectedId) === Number(this.node.id);
+        const isSelected = String(this.selectedId) === String(this.node.id);
         const level = this.level || 0;
 
         return h('div', { class: 'flex flex-col' }, [

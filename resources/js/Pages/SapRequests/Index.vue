@@ -16,7 +16,7 @@ const props = defineProps({
 const { hasPermission } = usePermission()
 const { confirm } = useConfirm()
 const search = ref(props.filters?.search ?? '')
-const status = ref(props.filters?.status ?? (props.isApprover ? 'for_my_approval' : ''))
+const status = ref(props.filters?.status || '')
 const showCreateSection = ref(false)
 
 const showCopyModal = ref(false)
@@ -280,6 +280,8 @@ function getStageDisplay(request) {
                         </p>
                         <div class="flex gap-1">
                             <Link v-for="link in sapRequests.links" :key="link.label" :href="link.url ?? '#'"
+                                preserve-scroll
+                                preserve-state
                                 :class="[
                                     'px-3 py-1.5 rounded-lg text-xs font-bold transition-all',
                                     link.active ? 'bg-teal-600 text-white' : 'text-gray-500 hover:bg-gray-100',

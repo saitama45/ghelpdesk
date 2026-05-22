@@ -85,14 +85,21 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex -space-x-2 overflow-hidden">
-                                    <div v-for="user in store.users" :key="user.id" 
+                                <button v-if="store.users.length > 0" 
+                                        @click="openTeamModal(store)"
+                                        class="flex -space-x-2 overflow-hidden hover:opacity-80 transition-opacity focus:outline-none"
+                                        title="View Assigned Team">
+                                    <div v-for="user in store.users.slice(0, 3)" :key="user.id" 
                                          class="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700"
                                          :title="user.name">
                                         {{ user.name.charAt(0) }}
                                     </div>
-                                    <div v-if="store.users.length === 0" class="text-xs text-gray-400 italic">Unassigned</div>
-                                </div>
+                                    <div v-if="store.users.length > 3"
+                                         class="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">
+                                        +{{ store.users.length - 3 }}
+                                    </div>
+                                </button>
+                                <div v-else class="text-xs text-gray-400 italic">Unassigned</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div v-if="store.latitude && store.longitude" class="flex flex-col">
@@ -287,6 +294,45 @@
             </div>
         </div>
 
+        <!-- Assigned Team Modal -->
+        <div v-if="showTeamModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showTeamModal = false"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md p-6 border border-gray-100 transform transition-all">
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900">Assigned Team</h3>
+                            <p class="text-xs text-gray-500 font-medium mt-1">{{ selectedTeamStore?.name }}</p>
+                        </div>
+                        <button @click="showTeamModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                        <div v-for="user in selectedTeamStore?.users" :key="user.id" class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
+                                {{ user.name.charAt(0) }}
+                            </div>
+                            <div class="ml-3 overflow-hidden">
+                                <div class="text-sm font-bold text-gray-900 truncate">{{ user.name }}</div>
+                                <div class="text-xs text-gray-500 truncate">{{ user.email }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button type="button" @click="showTeamModal = false" 
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Import Modal -->
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
@@ -407,6 +453,14 @@ const form = reactive({
     radius_meters: '',
     is_active: true
 })
+
+const showTeamModal = ref(false)
+const selectedTeamStore = ref(null)
+
+const openTeamModal = (store) => {
+    selectedTeamStore.value = store
+    showTeamModal.value = true
+}
 
 onMounted(() => {
     pagination.updateData(props.stores)

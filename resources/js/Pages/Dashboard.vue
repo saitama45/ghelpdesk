@@ -330,6 +330,13 @@ const activeTicketFilterParams = computed(() => {
 const kanbanColumns = computed(() => props.kanbanReport?.columns || []);
 const kanbanGroups = computed(() => props.kanbanReport?.groups?.[kanbanView.value] || []);
 const kanbanTotals = computed(() => props.kanbanReport?.totals || {});
+const activeKanbanTotals = computed(() => {
+    const totals = props.kanbanReport?.totals || {};
+    const viewTotals = kanbanView.value !== 'project' ? totals?.[kanbanView.value] : null;
+
+    return viewTotals && typeof viewTotals === 'object' ? viewTotals : totals;
+});
+const kanbanDepartmentHeader = computed(() => props.kanbanReport?.department_view_label || 'Department');
 
 // Project board helpers
 const projectColumns = computed(() => props.kanbanProjects?.columns || []);
@@ -816,7 +823,7 @@ const exportToExcel = (type) => {
                     </h3>
                     <p class="text-xs text-gray-500 mt-1">
                         <template v-if="kanbanView === 'project'">Projects grouped by status with task completion.</template>
-                        <template v-else>Static workload view grouped by {{ kanbanView === 'sub_unit' ? 'department' : 'user' }}.</template>
+                        <template v-else>Static workload view grouped by {{ kanbanView === 'sub_unit' ? kanbanDepartmentHeader.toLowerCase() : 'user' }}.</template>
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -841,7 +848,7 @@ const exportToExcel = (type) => {
                         </button>
                     </div>
                     <span v-if="kanbanView !== 'project'" class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
-                        {{ kanbanTotals.all || 0 }} Tickets
+                        {{ activeKanbanTotals.all || 0 }} Tickets
                     </span>
                     <span v-else class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
                         {{ projectTotals.all || 0 }} Projects
@@ -853,7 +860,7 @@ const exportToExcel = (type) => {
             <div v-if="kanbanView !== 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
                 <div class="grid min-w-[1120px]" :style="{ gridTemplateColumns: `220px repeat(${kanbanColumns.length}, minmax(220px, 1fr))` }">
                     <div class="sticky top-0 left-0 z-30 bg-gray-50 border-r border-b border-gray-200 px-4 py-3">
-                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? 'Department' : 'User' }}</p>
+                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? kanbanDepartmentHeader : 'User' }}</p>
                     </div>
                     <div
                         v-for="column in kanbanColumns"
@@ -864,7 +871,7 @@ const exportToExcel = (type) => {
                         <div class="flex items-center justify-between gap-2">
                             <span class="text-[11px] font-black uppercase tracking-widest">{{ column.label }}</span>
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="getKanbanColumnTheme(column.key).count">
-                                {{ kanbanTotals[column.key] || 0 }}
+                                {{ activeKanbanTotals[column.key] || 0 }}
                             </span>
                         </div>
                         <div class="mt-3 grid grid-cols-4 gap-1.5">
