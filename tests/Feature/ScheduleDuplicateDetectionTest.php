@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\AttendanceLog;
+use App\Models\Department;
+use App\Models\DepartmentNode;
 use App\Models\Schedule;
 use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -24,6 +27,7 @@ class ScheduleDuplicateDetectionTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         Permission::firstOrCreate(['name' => 'schedules.delete']);
+        Permission::firstOrCreate(['name' => 'schedules.view']);
     }
 
     public function test_duplicate_scan_detects_location_rows_even_when_metadata_differs(): void
@@ -151,6 +155,97 @@ class ScheduleDuplicateDetectionTest extends TestCase
         ]);
     }
 
+    public function test_top_level_department_manager_can_edit_schedule_when_intermediate_manager_is_inactive(): void
+    {
+        [$department, $businessSolutions, $processExcellence] = $this->scheduleDepartmentHierarchy();
+        $yssa = $this->departmentUser('Yssa Dysangco', 'yssa.dysangco@tablegroup.com.ph', $department, null, true, true);
+        $lea = $this->departmentUser('Lea Dizon', 'lea.dizon@tablegroup.com.ph', $department, $businessSolutions, false, false);
+        $patrick = $this->departmentUser('Patrick Lopez', 'patrick.lopez@tablegroup.com.ph', $department, $processExcellence, true, true);
+
+        $yssa->givePermissionTo('schedules.view');
+        $lea->managers()->attach($yssa->id);
+        $patrick->managers()->attach($lea->id);
+
+        $schedule = $this->createSchedule($patrick, 'WFH', 'patrick schedule');
+        $store = Store::create([
+            'code' => 'STR-003',
+            'name' => 'Schedule Store',
+            'sector' => 1,
+            'area' => 'Metro',
+            'brand' => 'Brand',
+            'cluster' => 'Cluster',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($yssa)
+            ->get(route('schedules.index', [
+                'department_id' => $department->id,
+                'start' => '2026-05-01',
+                'end' => '2026-05-31',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Schedules/Index')
+                ->where('schedules.0.id', $schedule->id)
+                ->where('schedules.0.user_id', $patrick->id)
+                ->where('schedules.0.can_edit', true)
+                ->where('editableUserIds', fn ($ids) => collect($ids)->map(fn ($id) => (int) $id)->contains($patrick->id))
+            );
+
+        $response = $this->actingAs($yssa)->put(route('schedules.update', $schedule), [
+            'user_id' => $patrick->id,
+            'status' => 'On-site',
+            'stores' => [[
+                'store_id' => $store->id,
+                'ticket_id' => null,
+                'start_time' => '2026-05-10T08:00',
+                'end_time' => '2026-05-10T17:00',
+                'grace_period_minutes' => 30,
+                'remarks' => 'updated by top-level manager',
+            ]],
+            'pickup_start' => null,
+            'pickup_end' => null,
+            'backlogs_start' => null,
+            'backlogs_end' => null,
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+        $this->assertSame('On-site', $schedule->fresh()->status);
+    }
+
+    public function test_user_outside_department_cannot_edit_another_departments_schedule(): void
+    {
+        [$department, , $processExcellence] = $this->scheduleDepartmentHierarchy();
+        $otherDepartment = Department::create([
+            'name' => 'Operations',
+            'code' => 'OPS',
+            'is_active' => true,
+        ]);
+        $outsider = $this->departmentUser('Outside Manager', 'outside@example.test', $otherDepartment, null, true, true);
+        $patrick = $this->departmentUser('Patrick Lopez', 'patrick.lopez@tablegroup.com.ph', $department, $processExcellence, true, true);
+        $schedule = $this->createSchedule($patrick, 'WFH', 'patrick schedule');
+
+        $this->actingAs($outsider)
+            ->put(route('schedules.update', $schedule), [
+                'user_id' => $patrick->id,
+                'status' => 'Restday',
+                'stores' => [[
+                    'store_id' => null,
+                    'ticket_id' => null,
+                    'start_time' => '2026-05-10T08:00',
+                    'end_time' => '2026-05-10T17:00',
+                    'grace_period_minutes' => 30,
+                    'remarks' => 'should fail',
+                ]],
+                'pickup_start' => null,
+                'pickup_end' => null,
+                'backlogs_start' => null,
+                'backlogs_end' => null,
+            ])
+            ->assertForbidden();
+    }
+
     private function createSchedule(User $scheduledUser, string $status, string $remarks): Schedule
     {
         return Schedule::create([
@@ -162,5 +257,66 @@ class ScheduleDuplicateDetectionTest extends TestCase
             'end_time' => '2026-05-10 17:00:00',
             'remarks' => $remarks,
         ]);
+    }
+
+    private function scheduleDepartmentHierarchy(): array
+    {
+        $department = Department::create([
+            'name' => 'Technology And Solutions',
+            'code' => 'TAS',
+            'is_active' => true,
+        ]);
+
+        $businessSolutions = DepartmentNode::create([
+            'department_id' => $department->id,
+            'name' => 'Business Solutions',
+            'code' => 'BS',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        $processExcellence = DepartmentNode::create([
+            'department_id' => $department->id,
+            'parent_id' => $businessSolutions->id,
+            'name' => 'Process Excellence',
+            'code' => 'PE',
+            'is_active' => true,
+            'sort_order' => 1,
+        ]);
+
+        return [$department, $businessSolutions, $processExcellence];
+    }
+
+    private function departmentUser(
+        string $name,
+        string $email,
+        Department $department,
+        ?DepartmentNode $node = null,
+        bool $active = true,
+        bool $manager = false
+    ): User {
+        return User::factory()->create([
+            'name' => $name,
+            'email' => $email,
+            'department' => $department->name,
+            'department_id' => $department->id,
+            'department_node_id' => $node?->id,
+            'org_path' => $node ? $this->nodePath($node) : null,
+            'is_active' => $active,
+            'is_manager' => $manager,
+        ]);
+    }
+
+    private function nodePath(DepartmentNode $node): string
+    {
+        $parts = [];
+        $current = $node;
+
+        while ($current) {
+            array_unshift($parts, $current->name);
+            $current = $current->parent_id ? DepartmentNode::find($current->parent_id) : null;
+        }
+
+        return implode(' > ', $parts);
     }
 }

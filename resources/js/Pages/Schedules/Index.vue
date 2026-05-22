@@ -1023,6 +1023,7 @@ const props = defineProps({
     departments: Array,
     activeDepartments: Array,
     hierarchicalDepartments: Array,
+    editableUserIds: Array,
     pivotYears: Array,
     availableYears: Array,
     pivotStatuses: Array,
@@ -1201,32 +1202,8 @@ const getDescendantNodeIds = (nodeId, nodes) => {
     return ids;
 }
 
-const authUserDescendantNodeIds = computed(() => {
-    return getDescendantNodeIds(authUser.value?.department_node_id, props.departmentNodes);
-});
-
-const orgChartSubordinateIds = computed(() => {
-    const users = props.users ?? []
-    const subMap = new Map()
-    users.forEach(u => {
-        ;(u.managers || []).forEach(m => {
-            const mId = Number(m.id)
-            if (!subMap.has(mId)) subMap.set(mId, [])
-            subMap.get(mId).push(Number(u.id))
-        })
-    })
-    const visited = new Set()
-    const queue = [Number(authUser.value?.id)]
-    while (queue.length) {
-        const current = queue.shift()
-        for (const subId of (subMap.get(current) ?? [])) {
-            if (!visited.has(subId)) {
-                visited.add(subId)
-                queue.push(subId)
-            }
-        }
-    }
-    return visited
+const editableUserIdSet = computed(() => {
+    return new Set((props.editableUserIds ?? []).map(Number))
 })
 
 const calendarUsers = computed(() => {
@@ -1469,16 +1446,7 @@ const isManager = computed(() => !!authUser.value?.is_manager)
 // the manager themselves + their direct subordinates (explicit or hierarchical)
 const subordinateUsers = computed(() => {
     const all = props.users ?? []
-    const descendantNodeIds = authUserDescendantNodeIds.value;
-
-    const subs = all.filter(u => orgChartSubordinateIds.value.has(Number(u.id)))
-
-    const self = all.find(u => Number(u.id) === Number(authUser.value?.id))
-    // Prepend self if not already in the subordinates list
-    if (self && !subs.some(u => Number(u.id) === Number(authUser.value?.id))) {
-        return [self, ...subs]
-    }
-    return subs
+    return all.filter(user => editableUserIdSet.value.has(Number(user.id)))
 })
 
 const storeOptions = computed(() => {
@@ -2114,16 +2082,9 @@ const handleEventClick = (payload) => {
 
     if (!hasPermission('schedules.view') && !hasPermission('schedules.edit')) return;
 
-    const user = page.props.auth.user;
-    const isAdmin = user.roles?.some(r => r.name === 'Admin');
-    const isOwner = Number(event.user_id) === Number(user.id);
-    
-    const isOrgChartSubordinate = orgChartSubordinateIds.value.has(Number(event.user_id));
-    const canEdit = isOwner || isAdmin || isOrgChartSubordinate;
-
     isEditing.value = true; // Signifies we are interacting with an existing record
     isViewingOnly.value = true; // Always start in View mode
-    canEditSchedule.value = canEdit; // Store permission for the Pencil icon
+    canEditSchedule.value = Boolean(event.can_edit); // Store permission for the Pencil icon
     currentScheduleId.value    = event.id
     const eventActualTimes = getActualTimesForDate(event, clickedDateKey)
     currentActualTimeIn.value  = eventActualTimes.actual_time_in

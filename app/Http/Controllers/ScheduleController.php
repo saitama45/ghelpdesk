@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\Schedule;
 use App\Models\ScheduleStore;
 use App\Models\AttendanceLog;
+use App\Models\DepartmentNode;
 use App\Models\User;
 use App\Models\Store;
 use Illuminate\Support\Carbon;
@@ -146,8 +147,9 @@ class ScheduleController extends Controller implements HasMiddleware
         }
         
         $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
+        $editableUserIds = $this->editableScheduleUserIds($request->user());
 
-        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule) {
+        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $editableUserIds) {
             $schedLogs     = $logsBySchedule->get($schedule->id, collect());
             $actualTimeIn  = $schedLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
             $actualTimeOut = $schedLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
@@ -170,6 +172,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'updated_by_name' => $schedule->updater?->name,
                 'created_at'      => $schedule->created_at?->toIso8601String(),
                 'updated_at'      => $schedule->updated_at?->toIso8601String(),
+                'can_edit'        => in_array((int) $schedule->user_id, $editableUserIds, true),
                 'actual_time_in'  => $actualTimeIn,
                 'actual_time_out' => $actualTimeOut,
                 'actual_times_by_date' => $actualTimesByDate,
@@ -219,7 +222,11 @@ class ScheduleController extends Controller implements HasMiddleware
 
         // Pivot report metadata (cheap — just year lists, no schedule data)
         $currentYear = (int)date('Y');
-        $dbYears = Schedule::selectRaw('YEAR(start_time) as year')
+        $yearExpression = DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y', start_time)"
+            : 'YEAR(start_time)';
+
+        $dbYears = Schedule::selectRaw("{$yearExpression} as year")
             ->distinct()
             ->pluck('year')
             ->map(fn($y) => (int)$y)
@@ -248,6 +255,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'departments'    => $departments,
             'activeDepartments' => $activeDepartments,
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
+            'editableUserIds' => $editableUserIds,
             'pivotYears'     => $selectedYears,
             'availableYears' => $availableYears,
             'pivotStatuses'  => $pivotStatuses,
@@ -323,12 +331,7 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         $user = auth()->user();
         
-        // Authorization Logic
-        $isOwner = (int) $schedule->user_id === (int) $user->id;
-        $isAdmin = $user->hasRole('Admin');
-        $isOrgChartSubordinate = in_array($schedule->user_id, $this->getTransitiveSubordinateIds($user->id));
-
-        if (!$isOwner && !$isAdmin && !$isOrgChartSubordinate) {
+        if (! in_array((int) $schedule->user_id, $this->editableScheduleUserIds($user), true)) {
             abort(403, 'You are not authorized to edit this schedule.');
         }
 
@@ -2140,5 +2143,46 @@ class ScheduleController extends Controller implements HasMiddleware
             }
         }
         return $visited;
+    }
+
+    private function editableScheduleUserIds(User $user): array
+    {
+        if ($user->hasRole('Admin')) {
+            return User::query()
+                ->where('is_active', true)
+                ->where('is_vacant', false)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $ids = collect([(int) $user->id])
+            ->merge($this->getTransitiveSubordinateIds((int) $user->id))
+            ->map(fn ($id) => (int) $id);
+
+        if ($user->department_node_id) {
+            $nodeIds = array_merge(
+                [(int) $user->department_node_id],
+                DepartmentNode::getAllDescendantIds((int) $user->department_node_id)
+            );
+
+            $ids = $ids->merge(
+                User::active()
+                    ->where('is_vacant', false)
+                    ->whereIn('department_node_id', $nodeIds)
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+            );
+        } elseif ($user->department_id) {
+            $ids = $ids->merge(
+                User::active()
+                    ->where('is_vacant', false)
+                    ->where('department_id', (int) $user->department_id)
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+            );
+        }
+
+        return $ids->unique()->values()->all();
     }
 }
