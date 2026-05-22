@@ -11,6 +11,7 @@ import { useConfirm } from '@/Composables/useConfirm.js';
 import { usePermission } from '@/Composables/usePermission.js';
 import UserStatus from '@/Components/UserStatus.vue';
 import { usePresence } from '@/Composables/usePresence.js';
+import NotificationBell from '@/Components/NotificationBell.vue';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
@@ -172,6 +173,8 @@ const isCurrentRoute = (routeName) => {
                             <span>Knowledge Base</span>
                         </Link>
                         
+                        <NotificationBell />
+
                         <!-- User Menu -->
                         <div class="relative ml-2" ref="userMenuRef">
                             <button

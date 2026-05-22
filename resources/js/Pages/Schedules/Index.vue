@@ -1004,7 +1004,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { router, usePage, useRemember, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
@@ -1425,7 +1425,6 @@ const fetchCompleteSchedulesData = async (page = 1) => {
         isCompleteSchedulesLoading.value = false
     }
 }
-
 const switchView = (view) => {
     currentView.value = view
     if (view === 'report') fetchPivotData()
@@ -1433,16 +1432,28 @@ const switchView = (view) => {
     if (view === 'complete-schedules') fetchCompleteSchedulesData()
 }
 
+const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+        if (showImportModal.value) closeImportModal()
+        else if (showDuplicateModal.value) closeDuplicateModal()
+        else if (showModal.value) closeModal()
+    }
+}
+
 onMounted(() => {
     if (currentView.value === 'report') fetchPivotData()
     if (currentView.value === 'missing-schedules') fetchMissingSchedulesData()
     if (currentView.value === 'complete-schedules') fetchCompleteSchedulesData()
+    
+    document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeydown)
 })
 
 const authUser = computed(() => page.props.auth.user)
 const isManager = computed(() => !!authUser.value?.is_manager)
-
-// Users available to a manager in the schedule form:
 // the manager themselves + their direct subordinates (explicit or hierarchical)
 const subordinateUsers = computed(() => {
     const all = props.users ?? []

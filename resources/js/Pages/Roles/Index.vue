@@ -279,6 +279,23 @@ const copyRole = (role) => {
     showModal.value = true;
 };
 
+const deleteRole = async (role) => {
+    const confirmed = await confirm({
+        title: 'Delete Role',
+        message: `Are you sure you want to delete "${role.name}"? This action cannot be undone.`
+    })
+
+    if (!confirmed) return
+
+    destroy(`/roles/${role.id}`, {
+        onSuccess: () => showSuccess('Role deleted successfully'),
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete role'
+            showError(errorMessage)
+        }
+    })
+}
+
 const closeModal = () => {
     showModal.value = false
     form.name = ''

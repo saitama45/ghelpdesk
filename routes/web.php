@@ -268,6 +268,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/knowledge-base/{kb_article:slug}', [\App\Http\Controllers\KbArticleController::class, 'show'])->name('knowledge-base.show');
     Route::post('/knowledge-base/{kb_article}/feedback', [\App\Http\Controllers\KbArticleController::class, 'submitFeedback'])->name('knowledge-base.feedback');
 
+    Route::get('/notifications/summary', [\App\Http\Controllers\NotificationController::class, 'summary'])->name('notifications.summary');
+
     // NSO Project Tracker
     Route::post('projects/{project}/task-board', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-board');
     Route::post('projects/{project}/duplicate', [\App\Http\Controllers\ProjectController::class, 'duplicate'])->name('projects.duplicate');

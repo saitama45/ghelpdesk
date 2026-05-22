@@ -486,7 +486,7 @@ const groupedTasks = computed(() => {
         childrenByParent.get(parentId).push(task);
     });
 
-    return localTasks.value.reduce((groups, task) => {
+    const groups = localTasks.value.reduce((groups, task) => {
         const parentId = task.parent_task_id ? Number(task.parent_task_id) : null;
 
         if (parentId && taskLookup.value.has(parentId)) {
@@ -501,6 +501,14 @@ const groupedTasks = computed(() => {
         });
         return groups;
     }, {});
+
+    const sorted = Object.entries(groups).sort(([, a], [, b]) => {
+        const aMin = Math.min(...a.map(act => Number(act.order) || 0));
+        const bMin = Math.min(...b.map(act => Number(act.order) || 0));
+        return aMin - bMin;
+    });
+
+    return Object.fromEntries(sorted);
 });
 
 const taskRows = (task) => {

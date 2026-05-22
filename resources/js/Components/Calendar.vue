@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { ChevronLeftIcon, ChevronRightIcon, InformationCircleIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -458,9 +458,20 @@ const goToDate = () => {
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
+const handleKeydown = (e) => {
+    if (e.key === 'Escape' && showDayModal.value) {
+        closeDayModal();
+    }
+};
+
 onMounted(() => {
     setInterval(() => { nowDate.value = new Date(); }, 60000);
     emitVisibleRange();
+    document.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeydown);
 });
 
 const emitVisibleRange = () => {
@@ -850,6 +861,28 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                         </button>
                     </div>
                     <div class="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-2">
+                        <!-- Unscheduled Users (No Schedule Plotted) -->
+                        <div v-if="unscheduledUsers.length > 0" class="mb-3 pb-3 border-b border-dashed border-gray-200">
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                <span class="inline-block w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
+                                No Schedule Plotted ({{ unscheduledUsers.length }})
+                            </p>
+                            <div class="space-y-1">
+                                <div
+                                    v-for="user in unscheduledUsers"
+                                    :key="user.id"
+                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    <div class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></div>
+                                    <span class="text-xs text-gray-600 font-medium flex-1 truncate">{{ user.name }}</span>
+                                    <span
+                                        v-if="user.department_reference?.code"
+                                        class="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded shrink-0"
+                                    >{{ user.department_reference.code }}</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div
                             v-for="event in selectedDayEvents"
                             :key="event.id"
@@ -888,28 +921,6 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                             Actual Out: {{ formatTime(getActualTimesForDate(event, selectedDayDate).actual_time_out) }}
                                         </span>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Unscheduled Users (No Schedule Plotted) -->
-                        <div v-if="unscheduledUsers.length > 0" class="mt-2 pt-3 border-t border-dashed border-gray-200">
-                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                <span class="inline-block w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
-                                No Schedule Plotted ({{ unscheduledUsers.length }})
-                            </p>
-                            <div class="space-y-1">
-                                <div
-                                    v-for="user in unscheduledUsers"
-                                    :key="user.id"
-                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-                                >
-                                    <div class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></div>
-                                    <span class="text-xs text-gray-600 font-medium flex-1 truncate">{{ user.name }}</span>
-                                    <span
-                                        v-if="user.department_reference?.code"
-                                        class="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded shrink-0"
-                                    >{{ user.department_reference.code }}</span>
                                 </div>
                             </div>
                         </div>

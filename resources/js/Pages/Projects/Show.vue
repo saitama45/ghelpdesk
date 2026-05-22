@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectGantt from '@/Components/ProjectTracker/ProjectGantt.vue';
 import AssetsBoard from '@/Components/ProjectTracker/AssetsBoard.vue';
 import Modal from '@/Components/Modal.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
@@ -86,6 +87,13 @@ const teamForm = useForm({
 
 const teamMembers = computed(() => {
     return props.project.team_members || props.project.teamMembers || [];
+});
+
+const userOptions = computed(() => {
+    return props.users.map(u => ({
+        id: u.id,
+        label: `${u.name}${u.department || u.sub_unit ? ` - ${u.department || '-'} / ${u.sub_unit || '-'}` : ''}`
+    }));
 });
 
 const showEditProjectModal = ref(false);
@@ -321,16 +329,13 @@ const getStatusColor = (status) => {
 
                             <div>
                                 <InputLabel for="edit_store_id" value="Store Branch" />
-                                <select 
-                                    id="edit_store_id"
+                                <Autocomplete
                                     v-model="editForm.store_id"
-                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                    required
-                                >
-                                    <option v-for="store in stores" :key="store.id" :value="store.id">
-                                        {{ store.name }}
-                                    </option>
-                                </select>
+                                    :options="stores"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Select a store"
+                                />
                                 <InputError :message="editForm.errors.store_id" />
                             </div>
 
@@ -486,17 +491,14 @@ const getStatusColor = (status) => {
                         <form @submit.prevent="addTeamMember" class="space-y-4">
                             <div>
                                 <InputLabel for="user_id" value="System User" />
-                                <select 
-                                    v-model="teamForm.user_id" 
-                                    id="user_id"
-                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                    @change="syncTeamTargetFromUser"
-                                >
-                                    <option value="">Select a user...</option>
-                                    <option v-for="user in users" :key="user.id" :value="user.id">
-                                        {{ user.name }}{{ user.department || user.sub_unit ? ` - ${user.department || '-'} / ${user.sub_unit || '-'}` : '' }}
-                                    </option>
-                                </select>
+                                <Autocomplete
+                                    v-model="teamForm.user_id"
+                                    :options="userOptions"
+                                    label-key="label"
+                                    value-key="id"
+                                    placeholder="Select a user..."
+                                    @update:modelValue="syncTeamTargetFromUser"
+                                />
                                 <InputError :message="teamForm.errors.user_id" />
                             </div>
 

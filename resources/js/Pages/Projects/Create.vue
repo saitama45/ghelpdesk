@@ -2,6 +2,7 @@
 import { Head, useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { ChevronLeftIcon } from '@heroicons/vue/24/outline';
+import Autocomplete from '@/Components/Autocomplete.vue';
 
 const props = defineProps({
     stores: Array,
@@ -77,16 +78,13 @@ const submit = () => {
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Store Branch</label>
-                            <select 
+                            <Autocomplete
                                 v-model="form.store_id"
-                                required
-                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="" disabled>Select a store</option>
-                                <option v-for="store in stores" :key="store.id" :value="store.id">
-                                    {{ store.name }}
-                                </option>
-                            </select>
+                                :options="stores"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Select a store"
+                            />
                             <div v-if="form.errors.store_id" class="text-red-500 text-xs mt-1">{{ form.errors.store_id }}</div>
                         </div>
 
