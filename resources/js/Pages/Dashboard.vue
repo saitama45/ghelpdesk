@@ -291,6 +291,25 @@ const topTechCards = computed(() => {
     }));
 });
 
+const leaderboardRankings = computed(() => props.leaderboard?.rankings || props.leaderboard?.top3 || []);
+
+const formatMinutes = (minutes) => {
+    if (minutes === null || minutes === undefined) {
+        return 'No data';
+    }
+
+    const value = Math.max(0, Number(minutes) || 0);
+
+    if (value < 60) {
+        return `${value}m`;
+    }
+
+    const hours = Math.floor(value / 60);
+    const remainingMinutes = value % 60;
+
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
 const activeTicketFilterParams = computed(() => {
     const params = {
         status: ['open', 'in_progress'],
@@ -450,6 +469,7 @@ const showOpenModal = ref(false);
 const showNewModal = ref(false);
 const showClosedModal = ref(false);
 const showSurveyModal = ref(false);
+const showLeaderboardModal = ref(false);
 const selectedSurveyTicket = ref(null);
 
 const openSurveyModal = (ticket) => {
@@ -579,10 +599,22 @@ const exportToExcel = (type) => {
         <div v-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)" class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-8">
             <!-- Top 3 Agents -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 xl:col-span-2">
-                <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                    <div class="flex items-center gap-2 [&>span.text-xl]:hidden">
                     <span class="text-xs font-black uppercase tracking-widest text-blue-600">Top</span>
                     <span class="text-xl">ðŸ…</span>
                     <h3 class="text-xl font-black text-gray-900">Top 3 Techs <span class="text-blue-600">{{ leaderboardPeriodLabel }}</span></h3>
+                    </div>
+                    <button
+                        v-if="leaderboardRankings.length"
+                        @click="showLeaderboardModal = true"
+                        class="self-start sm:self-auto inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs font-black uppercase tracking-widest text-blue-700 transition-colors hover:bg-blue-100"
+                    >
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6m4 6V7m4 10v-4M5 19h14" />
+                        </svg>
+                        View full rankings
+                    </button>
                 </div>
                 <div v-if="leaderboard.top3?.length" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div v-for="card in topTechCards" :key="card.rank"
@@ -695,6 +727,84 @@ const exportToExcel = (type) => {
                 </div>
             </div>
         </div>
+
+        <Modal :show="showLeaderboardModal" @close="showLeaderboardModal = false" maxWidth="4xl">
+            <div class="p-6">
+                <div class="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                        <h2 class="text-xl font-black text-gray-900">Tech Rankings</h2>
+                        <p class="mt-1 text-xs font-semibold text-gray-500">{{ leaderboardPeriodLabel }}</p>
+                    </div>
+                    <button @click="showLeaderboardModal = false" class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="mt-5 max-h-[65vh] overflow-y-auto pr-1 custom-scrollbar">
+                    <div v-if="leaderboardRankings.length" class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-100 text-left">
+                            <thead class="bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                <tr>
+                                    <th class="px-3 py-3">Rank</th>
+                                    <th class="px-3 py-3">Tech</th>
+                                    <th class="px-3 py-3 text-right">Pts</th>
+                                    <th class="px-3 py-3 text-right">Tickets</th>
+                                    <th class="px-3 py-3 text-right">Avg Response</th>
+                                    <th class="px-3 py-3 text-right">Avg Resolution</th>
+                                    <th class="px-3 py-3">Point Details</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr v-for="agent in leaderboardRankings" :key="agent.agent_id" class="align-top">
+                                    <td class="px-3 py-4">
+                                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-black text-blue-700">
+                                            #{{ agent.rank }}
+                                        </span>
+                                    </td>
+                                    <td class="px-3 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-sm font-black text-gray-600">
+                                                <img v-if="agent.profile_photo" :src="'/serve-storage/' + agent.profile_photo" class="h-full w-full object-cover" :alt="agent.name">
+                                                <span v-else>{{ String(agent.name || '').charAt(0).toUpperCase() || '?' }}</span>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div class="truncate text-sm font-black text-gray-900">{{ agent.name }}</div>
+                                                <div class="mt-0.5 text-xs font-semibold text-gray-400">Ranked by total points</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-4 text-right text-sm font-black text-blue-700">{{ agent.total_points.toLocaleString() }}</td>
+                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700">{{ agent.ticket_count }}</td>
+                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700">{{ formatMinutes(agent.avg_response_min) }}</td>
+                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700">{{ formatMinutes(agent.avg_resolution_min) }}</td>
+                                    <td class="px-3 py-4">
+                                        <div v-if="agent.point_breakdown?.length" class="flex max-w-md flex-wrap gap-1.5">
+                                            <span
+                                                v-for="item in agent.point_breakdown"
+                                                :key="`${agent.agent_id}-${item.type}`"
+                                                class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wide"
+                                                :class="item.points >= 0 ? 'border-green-100 bg-green-50 text-green-700' : 'border-red-100 bg-red-50 text-red-700'"
+                                            >
+                                                {{ item.label }}
+                                                <span>{{ item.points > 0 ? '+' : '' }}{{ item.points }}</span>
+                                            </span>
+                                        </div>
+                                        <div v-else class="text-xs font-semibold italic text-gray-400">No breakdown available</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="py-12 text-center text-sm italic text-gray-500">No ranked techs for the selected filters.</div>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="showLeaderboardModal = false" class="rounded-lg bg-gray-100 px-6 py-2 text-sm font-black uppercase tracking-widest text-gray-700 transition-colors hover:bg-gray-200">Close</button>
+                </div>
+            </div>
+        </Modal>
 
         <!-- Static Kanban Report -->
         <div class="mb-8">

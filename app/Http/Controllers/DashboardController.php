@@ -622,7 +622,9 @@ class DashboardController extends Controller
             $year ? (int) $year : null,
             $month ? (int) $month : null,
             $departmentIdFilter,
-            $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null
+            $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
+            $userIdFilter,
+            $storeIdFilter
         );
 
         // Dropdown Data
@@ -670,20 +672,18 @@ class DashboardController extends Controller
         ]);
     }
 
-    private function buildLeaderboard(?int $year = null, ?int $month = null, ?string $departmentIdFilter = null, ?int $departmentNodeIdFilter = null): array
+    private function buildLeaderboard(
+        ?int $year = null,
+        ?int $month = null,
+        ?string $departmentIdFilter = null,
+        ?int $departmentNodeIdFilter = null,
+        string|int|null $userIdFilter = 'all',
+        string|int|null $storeIdFilter = 'all'
+    ): array
     {
         $now = \Carbon\Carbon::now();
         $filterYear  = $year  ?? $now->year;
         $filterMonth = $month ?? $now->month;
-
-        // Top 3 active assignable techs by configured leadership points this month.
-        $monthlyPointRows = \App\Models\AgentPointTransaction::query()
-            ->whereYear('awarded_at', $filterYear)
-            ->whereMonth('awarded_at', $filterMonth)
-            ->selectRaw('agent_id, SUM(points) as total_points, COUNT(DISTINCT ticket_id) as ticket_count')
-            ->groupBy('agent_id')
-            ->get()
-            ->keyBy('agent_id');
 
         $userQuery = \App\Models\User::active()
             ->whereHas('roles', fn ($q) => $q->where('is_assignable', true));
@@ -697,16 +697,75 @@ class DashboardController extends Controller
             $userQuery->whereIn('department_node_id', $nodeIds);
         }
 
-        $top = $userQuery->get(['id', 'name', 'profile_photo'])
-            ->map(function ($tech) use ($monthlyPointRows) {
-                $row = $monthlyPointRows[$tech->id] ?? null;
+        if ($userIdFilter && $userIdFilter !== 'all') {
+            $userQuery->where('id', $userIdFilter);
+        }
+
+        $techs = $userQuery->get(['id', 'name', 'profile_photo']);
+        $eligibleAgentIds = $techs->pluck('id')->all();
+
+        $pointBaseQuery = \App\Models\AgentPointTransaction::query()
+            ->leftJoin('tickets as pt', 'pt.id', '=', 'agent_point_transactions.ticket_id')
+            ->whereYear('agent_point_transactions.awarded_at', $filterYear)
+            ->whereMonth('agent_point_transactions.awarded_at', $filterMonth)
+            ->whereIn('agent_point_transactions.agent_id', $eligibleAgentIds);
+
+        if ($storeIdFilter && $storeIdFilter !== 'all') {
+            $pointBaseQuery->where('pt.store_id', $storeIdFilter);
+        }
+
+        $monthlyPointRows = (clone $pointBaseQuery)
+            ->selectRaw('agent_point_transactions.agent_id, SUM(agent_point_transactions.points) as total_points, COUNT(DISTINCT agent_point_transactions.ticket_id) as ticket_count')
+            ->groupBy('agent_point_transactions.agent_id')
+            ->havingRaw('SUM(agent_point_transactions.points) <> 0')
+            ->get()
+            ->keyBy('agent_id');
+
+        $agentIds = $monthlyPointRows->keys()->map(fn ($id) => (int) $id)->values()->all();
+
+        $breakdownRows = (clone $pointBaseQuery)
+            ->whereIn('agent_point_transactions.agent_id', $agentIds)
+            ->selectRaw('agent_point_transactions.agent_id, agent_point_transactions.type, SUM(agent_point_transactions.points) as points, COUNT(*) as count')
+            ->groupBy('agent_point_transactions.agent_id', 'agent_point_transactions.type')
+            ->get()
+            ->groupBy('agent_id');
+
+        $scoredTickets = (clone $pointBaseQuery)
+            ->whereIn('agent_point_transactions.agent_id', $agentIds)
+            ->whereNotNull('agent_point_transactions.ticket_id')
+            ->selectRaw('DISTINCT agent_point_transactions.agent_id, agent_point_transactions.ticket_id');
+
+        $avgResponseExpr = $this->minutesDiffExpression('t.created_at', 'sm.first_response_at');
+        $avgResolutionExpr = $this->minutesDiffExpression('t.created_at', 'sm.resolved_at');
+
+        $averageTimes = \Illuminate\Support\Facades\DB::query()
+            ->fromSub($scoredTickets->toBase(), 'scored')
+            ->join('tickets as t', 't.id', '=', 'scored.ticket_id')
+            ->leftJoin('ticket_sla_metrics as sm', 'sm.ticket_id', '=', 't.id')
+            ->selectRaw("
+                scored.agent_id,
+                AVG(CASE WHEN sm.first_response_at IS NOT NULL THEN {$avgResponseExpr} END) as avg_response_min,
+                AVG(CASE WHEN sm.resolved_at IS NOT NULL THEN {$avgResolutionExpr} END) as avg_resolution_min
+            ")
+            ->groupBy('scored.agent_id')
+            ->get()
+            ->keyBy('agent_id');
+
+        $rankings = $techs
+            ->filter(fn ($tech) => isset($monthlyPointRows[$tech->id]))
+            ->map(function ($tech) use ($monthlyPointRows, $breakdownRows, $averageTimes) {
+                $row = $monthlyPointRows[$tech->id];
+                $averageRow = $averageTimes[$tech->id] ?? null;
 
                 return [
                     'agent_id' => $tech->id,
                     'name' => $tech->name,
                     'profile_photo' => $tech->profile_photo,
-                    'total_points' => (int) ($row->total_points ?? 0),
-                    'ticket_count' => (int) ($row->ticket_count ?? 0),
+                    'total_points' => (int) $row->total_points,
+                    'ticket_count' => (int) $row->ticket_count,
+                    'avg_response_min' => $averageRow?->avg_response_min !== null ? (int) round($averageRow->avg_response_min) : null,
+                    'avg_resolution_min' => $averageRow?->avg_resolution_min !== null ? (int) round($averageRow->avg_resolution_min) : null,
+                    'point_breakdown' => $this->formatPointBreakdown($breakdownRows[$tech->id] ?? collect()),
                 ];
             })
             ->sortBy([
@@ -714,48 +773,40 @@ class DashboardController extends Controller
                 ['ticket_count', 'desc'],
                 ['name', 'asc'],
             ])
-            ->take(3)
-            ->values();
-
-        $agentIds = $top->pluck('agent_id')->toArray();
-
-        // Avg closing time (minutes) per agent this month
-        $avgClosingTimes = \Illuminate\Support\Facades\DB::table('ticket_sla_metrics as sm')
-            ->join('tickets as t', 't.id', '=', 'sm.ticket_id')
-            ->whereYear('sm.resolved_at', $filterYear)
-            ->whereMonth('sm.resolved_at', $filterMonth)
-            ->whereIn('t.assignee_id', $agentIds)
-            ->whereNotNull('sm.resolved_at')
-            ->selectRaw('t.assignee_id, AVG(DATEDIFF(MINUTE, t.created_at, sm.resolved_at)) as avg_minutes')
-            ->groupBy('t.assignee_id')
-            ->pluck('avg_minutes', 'assignee_id');
+            ->values()
+            ->map(fn ($row, $index) => [
+                ...$row,
+                'rank' => $index + 1,
+                'avg_close_min' => $row['avg_resolution_min'],
+            ]);
 
         // Monthly trophies (top agent per category)
-        $trophies = $this->buildTrophies(\Carbon\Carbon::create($filterYear, $filterMonth, 1), $departmentIdFilter, $departmentNodeIdFilter);
+        $trophies = $this->buildTrophies(
+            \Carbon\Carbon::create($filterYear, $filterMonth, 1),
+            $departmentIdFilter,
+            $departmentNodeIdFilter,
+            $userIdFilter,
+            $storeIdFilter
+        );
 
         return [
-            'top3' => $top->map(function ($row, $index) use ($avgClosingTimes) {
-                return [
-                    'rank'          => $index + 1,
-                    'agent_id'      => $row['agent_id'],
-                    'name'          => $row['name'],
-                    'profile_photo' => $row['profile_photo'],
-                    'total_points'  => $row['total_points'],
-                    'ticket_count'  => $row['ticket_count'],
-                    'avg_close_min' => isset($avgClosingTimes[$row['agent_id']])
-                        ? (int) round($avgClosingTimes[$row['agent_id']])
-                        : null,
-                ];
-            })->values()->toArray(),
+            'top3' => $rankings->take(3)->values()->toArray(),
+            'rankings' => $rankings->values()->toArray(),
             'trophies' => $trophies,
         ];
     }
 
-    private function buildTrophies(\Carbon\Carbon $now, ?string $departmentIdFilter = null, ?int $departmentNodeIdFilter = null): array
+    private function buildTrophies(
+        \Carbon\Carbon $now,
+        ?string $departmentIdFilter = null,
+        ?int $departmentNodeIdFilter = null,
+        string|int|null $userIdFilter = 'all',
+        string|int|null $storeIdFilter = 'all'
+    ): array
     {
         $allowedAgentIds = null;
 
-        if ($departmentIdFilter || $departmentNodeIdFilter) {
+        if ($departmentIdFilter || $departmentNodeIdFilter || ($userIdFilter && $userIdFilter !== 'all')) {
             $userQuery = \App\Models\User::active()
                 ->whereHas('roles', fn ($q) => $q->where('is_assignable', true));
 
@@ -768,21 +819,30 @@ class DashboardController extends Controller
                 $userQuery->whereIn('department_node_id', $nodeIds);
             }
 
+            if ($userIdFilter && $userIdFilter !== 'all') {
+                $userQuery->where('id', $userIdFilter);
+            }
+
             $allowedAgentIds = $userQuery->pluck('id')->toArray();
         }
 
-        $byType = function (array $types) use ($now, $allowedAgentIds) {
+        $byType = function (array $types) use ($now, $allowedAgentIds, $storeIdFilter) {
             $query = \App\Models\AgentPointTransaction::query()
-                ->whereYear('awarded_at', $now->year)
-                ->whereMonth('awarded_at', $now->month)
-                ->whereIn('type', $types);
+                ->leftJoin('tickets as pt', 'pt.id', '=', 'agent_point_transactions.ticket_id')
+                ->whereYear('agent_point_transactions.awarded_at', $now->year)
+                ->whereMonth('agent_point_transactions.awarded_at', $now->month)
+                ->whereIn('agent_point_transactions.type', $types);
 
             if ($allowedAgentIds !== null) {
-                $query->whereIn('agent_id', $allowedAgentIds);
+                $query->whereIn('agent_point_transactions.agent_id', $allowedAgentIds);
             }
 
-            $row = $query->selectRaw('agent_id, SUM(points) as total')
-                ->groupBy('agent_id')
+            if ($storeIdFilter && $storeIdFilter !== 'all') {
+                $query->where('pt.store_id', $storeIdFilter);
+            }
+
+            $row = $query->selectRaw('agent_point_transactions.agent_id, SUM(points) as total')
+                ->groupBy('agent_point_transactions.agent_id')
                 ->orderByDesc('total')
                 ->first();
             if (!$row) return null;
@@ -796,6 +856,40 @@ class DashboardController extends Controller
             ['icon' => '🧙', 'label' => 'Wizard',                  'winner' => $byType(['fcr_bonus'])],
             ['icon' => '🏎️', 'label' => 'Speed Racer',             'winner' => $byType(['fast_resolution'])],
         ];
+    }
+
+    private function minutesDiffExpression(string $startColumn, string $endColumn): string
+    {
+        return match (\Illuminate\Support\Facades\DB::connection()->getDriverName()) {
+            'sqlsrv' => "DATEDIFF(MINUTE, {$startColumn}, {$endColumn})",
+            'mysql' => "TIMESTAMPDIFF(MINUTE, {$startColumn}, {$endColumn})",
+            'sqlite' => "((julianday({$endColumn}) - julianday({$startColumn})) * 24 * 60)",
+            default => "DATEDIFF(MINUTE, {$startColumn}, {$endColumn})",
+        };
+    }
+
+    private function formatPointBreakdown($rows): array
+    {
+        $labels = [
+            'fast_resolution' => 'Fast Resolution',
+            'ontime_resolution' => 'On-Time Resolution',
+            'late_resolution' => 'Late Resolution',
+            'fcr_bonus' => 'FCR Bonus',
+            'happy_customer' => 'Happy Customer',
+            'unhappy_customer' => 'Unhappy Customer',
+            'quest_bonus' => 'Quest Bonus',
+        ];
+
+        return collect($rows)
+            ->map(fn ($row) => [
+                'type' => $row->type,
+                'label' => $labels[$row->type] ?? str_replace('_', ' ', ucfirst($row->type)),
+                'points' => (int) $row->points,
+                'count' => (int) $row->count,
+            ])
+            ->sortByDesc(fn ($row) => abs($row['points']))
+            ->values()
+            ->toArray();
     }
 
     private function extractLastOrgPathSegment(?string $orgPath): string
