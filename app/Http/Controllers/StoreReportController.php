@@ -106,10 +106,13 @@ class StoreReportController extends Controller implements HasMiddleware
     {
         $asOfDate = $request->input('as_of_date');
         $userId = $request->input('user_id');
+        $departmentId = $request->input('department_id');
+        $departmentNodeId = $request->input('department_node_id');
         
         $query = $store->tickets()
-            ->whereIn('tickets.status', ['open', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'])
-            ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at');
+            ->whereNotIn('tickets.status', ['resolved', 'closed'])
+            ->with('assignee:id,name')
+            ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at', 'tickets.assignee_id');
 
         if ($asOfDate) {
             $query->whereDate('tickets.created_at', '<=', $asOfDate);
@@ -119,10 +122,72 @@ class StoreReportController extends Controller implements HasMiddleware
             $query->where('tickets.assignee_id', $userId);
         }
 
+        if ($departmentId) {
+            $query->whereHas('assignee', function($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+        } elseif ($departmentNodeId) {
+            $nodeIds = array_merge([(int) $departmentNodeId], \App\Models\DepartmentNode::getAllDescendantIds((int) $departmentNodeId));
+            $query->whereHas('assignee', function($q) use ($nodeIds) {
+                $q->whereIn('department_node_id', $nodeIds);
+            });
+        }
+
         $tickets = $query->latest()->get();
 
         return response()->json([
             'store_name' => $store->name,
+            'tickets' => $tickets
+        ]);
+    }
+
+    public function getSectorTickets(Request $request, $sector)
+    {
+        $asOfDate = $request->input('as_of_date');
+        $userId = $request->input('user_id');
+        $storeId = $request->input('store_id');
+        $subUnit = $request->input('sub_unit');
+        $departmentId = $request->input('department_id');
+        $departmentNodeId = $request->input('department_node_id');
+        
+        $query = Ticket::whereHas('store', function($q) use ($sector) {
+                $q->where('sector', $sector);
+            })
+            ->whereNotIn('tickets.status', ['resolved', 'closed'])
+            ->with(['store:id,name,code', 'assignee:id,name'])
+            ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at', 'tickets.store_id', 'tickets.assignee_id');
+
+        if ($asOfDate) {
+            $query->whereDate('tickets.created_at', '<=', $asOfDate);
+        }
+
+        if ($userId && $userId !== 'all') {
+            $query->where('tickets.assignee_id', $userId);
+        }
+
+        if ($storeId && $storeId !== 'all') {
+            $query->where('tickets.store_id', $storeId);
+        }
+
+        if ($departmentId) {
+            $query->whereHas('assignee', function($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+        } elseif ($departmentNodeId) {
+            $nodeIds = array_merge([(int) $departmentNodeId], \App\Models\DepartmentNode::getAllDescendantIds((int) $departmentNodeId));
+            $query->whereHas('assignee', function($q) use ($nodeIds) {
+                $q->whereIn('department_node_id', $nodeIds);
+            });
+        } elseif ($subUnit && $subUnit !== 'all') {
+            $query->whereHas('assignee', function($q) use ($subUnit) {
+                $q->where('org_path', 'like', '%'.$subUnit.'%');
+            });
+        }
+
+        $tickets = $query->latest()->get();
+
+        return response()->json([
+            'store_name' => 'Sector ' . $sector,
             'tickets' => $tickets
         ]);
     }

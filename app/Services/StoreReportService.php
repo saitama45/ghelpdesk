@@ -21,9 +21,8 @@ class StoreReportService
         $departmentNodeId = $filters['department_node_id'] ?? null;
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
 
-        // Query active tickets that have an assignee
-        $ticketsQuery = Ticket::whereNotIn('status', ['resolved', 'closed'])
-            ->whereNotNull('assignee_id');
+        // Query active tickets
+        $ticketsQuery = Ticket::whereNotIn('status', ['resolved', 'closed']);
 
         if ($asOfDate) {
             $ticketsQuery->whereDate('created_at', '<=', $asOfDate);
@@ -72,8 +71,8 @@ class StoreReportService
             })->filter()->values();
 
             return [
-                'id' => $assigneeId,
-                'name' => $assignee?->name ?? 'Unknown',
+                'id' => $assigneeId ?? 'unassigned',
+                'name' => $assignee?->name ?? 'Unassigned',
                 'sub_unit' => $assignee?->org_path,
                 'stores' => $stores,
             ];
@@ -97,12 +96,12 @@ class StoreReportService
 
         for ($i = 1; $i <= 8; $i++) {
             $sectorStores = $allStores->where('sector', $i);
-            $maxTickets = 0;
+            $totalTickets = 0;
 
             foreach ($sectorStores as $store) {
                 $storeTickets = $summaryTickets->where('store_id', $store->id);
                 $count = $storeTickets->count();
-                $maxTickets = max($maxTickets, $count);
+                $totalTickets += $count;
             }
 
             $nodeName = "Sector $i";
@@ -118,7 +117,7 @@ class StoreReportService
             $sectorData = [
                 'sector' => $i,
                 'user' => $assignedUserDisplay,
-                'max_tickets' => $maxTickets
+                'total_tickets' => $totalTickets
             ];
 
             if ($i <= 4) {

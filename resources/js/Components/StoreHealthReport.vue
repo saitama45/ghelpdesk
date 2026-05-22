@@ -29,8 +29,8 @@ const filterForm = ref({
     as_of_date: props.filters?.as_of_date || new Date().toISOString().split('T')[0]
 });
 
-const getSummaryBoxColor = (maxTickets) => {
-    if (maxTickets === 0) return { class: 'bg-white border-gray-200 text-gray-400', style: 'background-color: #ffffff' };
+const getSummaryBoxColor = (totalTickets) => {
+    if (totalTickets === 0) return { class: 'bg-white border-gray-200 text-gray-400', style: 'background-color: #ffffff' };
     
     const s = props.thresholds || {};
     const th = {
@@ -40,10 +40,10 @@ const getSummaryBoxColor = (maxTickets) => {
         red_min: parseInt(s.threshold_red_min) || 5,
     };
 
-    if (maxTickets >= th.red_min) return { class: 'bg-red-500 border-red-600 text-white', style: 'background-color: #ef4444' };
-    if (maxTickets >= th.orange_min) return { class: 'bg-orange-500 border-orange-600 text-white', style: 'background-color: #f97316' };
-    if (maxTickets >= th.yellow_min) return { class: 'bg-yellow-500 border-yellow-600 text-gray-900', style: 'background-color: #eab308' };
-    if (maxTickets >= 1) return { class: 'bg-green-500 border-green-600 text-white', style: 'background-color: #22c55e' };
+    if (totalTickets >= th.red_min) return { class: 'bg-red-500 border-red-600 text-white', style: 'background-color: #ef4444' };
+    if (totalTickets >= th.orange_min) return { class: 'bg-orange-500 border-orange-600 text-white', style: 'background-color: #f97316' };
+    if (totalTickets >= th.yellow_min) return { class: 'bg-yellow-500 border-yellow-600 text-gray-900', style: 'background-color: #eab308' };
+    if (totalTickets >= 1) return { class: 'bg-green-500 border-green-600 text-white', style: 'background-color: #22c55e' };
     
     return { class: 'bg-white border-gray-200 text-gray-400', style: 'background-color: #ffffff' };
 };
@@ -60,13 +60,38 @@ const fetchTickets = async (storeId, userId) => {
         const response = await axios.get(route('reports.store-health.tickets', storeId, false), {
             params: { 
                 as_of_date: filterForm.value.as_of_date,
-                user_id: userId
+                user_id: userId,
+                department_id: props.filters?.department_id,
+                department_node_id: props.filters?.department_node_id
             }
         });
         selectedStoreTickets.value = response.data.tickets;
         selectedStoreName.value = response.data.store_name;
     } catch (error) {
         console.error('Error fetching tickets:', error);
+    } finally {
+        modalLoading.value = false;
+    }
+};
+
+const fetchSectorTickets = async (sector) => {
+    modalLoading.value = true;
+    showTicketsModal.value = true;
+    try {
+        const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), {
+            params: { 
+                as_of_date: filterForm.value.as_of_date,
+                user_id: filterForm.value.user_id,
+                store_id: filterForm.value.store_id,
+                sub_unit: filterForm.value.sub_unit,
+                department_id: props.filters?.department_id,
+                department_node_id: props.filters?.department_node_id
+            }
+        });
+        selectedStoreTickets.value = response.data.tickets;
+        selectedStoreName.value = response.data.store_name;
+    } catch (error) {
+        console.error('Error fetching sector tickets:', error);
     } finally {
         modalLoading.value = false;
     }
@@ -216,13 +241,14 @@ const exportPDF = () => {
                         <div class="p-2 text-center h-10 flex items-center justify-center">
                             <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.user">{{ item.user }}</span>
                         </div>
-                        <div 
-                            class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center"
-                            :class="getSummaryBoxColor(item.max_tickets).class"
-                            :style="getSummaryBoxColor(item.max_tickets).style"
+                        <button 
+                            @click="item.total_tickets > 0 ? fetchSectorTickets(item.sector) : null"
+                            class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center w-full"
+                            :class="[getSummaryBoxColor(item.total_tickets).class, item.total_tickets > 0 ? 'hover:opacity-90 cursor-pointer' : 'cursor-default']"
+                            :style="getSummaryBoxColor(item.total_tickets).style"
                         >
-                            {{ item.max_tickets }}
-                        </div>
+                            {{ item.total_tickets }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -240,13 +266,14 @@ const exportPDF = () => {
                         <div class="p-2 text-center h-10 flex items-center justify-center">
                             <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.user">{{ item.user }}</span>
                         </div>
-                        <div 
-                            class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center"
-                            :class="getSummaryBoxColor(item.max_tickets).class"
-                            :style="getSummaryBoxColor(item.max_tickets).style"
+                        <button 
+                            @click="item.total_tickets > 0 ? fetchSectorTickets(item.sector) : null"
+                            class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center w-full"
+                            :class="[getSummaryBoxColor(item.total_tickets).class, item.total_tickets > 0 ? 'hover:opacity-90 cursor-pointer' : 'cursor-default']"
+                            :style="getSummaryBoxColor(item.total_tickets).style"
                         >
-                            {{ item.max_tickets }}
-                        </div>
+                            {{ item.total_tickets }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -325,7 +352,9 @@ const exportPDF = () => {
                         <thead class="bg-gray-50 sticky top-0">
                             <tr>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket #</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Store</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Subject/Title</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Assignee</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Created</th>
                             </tr>
@@ -337,10 +366,16 @@ const exportPDF = () => {
                                         {{ ticket.ticket_key }}
                                     </Link>
                                 </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                    {{ ticket.store ? ticket.store.code : 'N/A' }}
+                                </td>
                                 <td class="px-4 py-3 text-sm text-gray-900">
                                     <Link :href="route('tickets.edit', ticket.id)" class="hover:underline line-clamp-1">
                                         {{ ticket.title }}
                                     </Link>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                    {{ ticket.assignee ? ticket.assignee.name : 'Unassigned' }}
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap">
                                     <span class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full" 
