@@ -27,9 +27,13 @@ class RecalculateSlaMetrics extends Command
         $query = Ticket::with(['slaMetric'])->whereHas('slaMetric');
 
         if ($ticketRef) {
-            $query->where(function ($q) use ($ticketRef) {
-                $q->where('ticket_key', $ticketRef)->orWhere('id', $ticketRef);
-            });
+            // Avoid casting a ticket_key string to UUID on SQL Server — match by ticket_key only.
+            // If the ref looks like a UUID, match by id instead.
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-/i', $ticketRef)) {
+                $query->where('id', $ticketRef);
+            } else {
+                $query->where('ticket_key', $ticketRef);
+            }
         }
 
         $total   = 0;
