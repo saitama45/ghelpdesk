@@ -192,10 +192,39 @@ class TicketObserver
             if (!$metric->resolved_at) {
                 $updates['resolution_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit);
             }
-            
+
             if (!empty($updates)) {
                 $metric->update($updates);
             }
+        }
+
+        // Handle Item Change (Recalculate SLA targets based on the new item's priority)
+        if ($ticket->wasChanged('item_id') && $metric) {
+            $updates = [];
+
+            $newResponseTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit);
+            if ((int) $metric->total_paused_seconds > 0) {
+                $newResponseTarget = SlaService::addSecondsRespectingBusinessHours($newResponseTarget, (int) $metric->total_paused_seconds, null, $subUnit);
+            }
+            $updates['response_target_at'] = $newResponseTarget;
+
+            // Re-evaluate breach status against new target if response was already recorded
+            if ($metric->first_response_at) {
+                $updates['is_response_breached'] = $metric->first_response_at->gt($newResponseTarget);
+            }
+
+            $newResolutionTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit);
+            if ((int) $metric->total_paused_seconds > 0) {
+                $newResolutionTarget = SlaService::addSecondsRespectingBusinessHours($newResolutionTarget, (int) $metric->total_paused_seconds, null, $subUnit);
+            }
+            $updates['resolution_target_at'] = $newResolutionTarget;
+
+            // Re-evaluate breach status against new target if resolution was already recorded
+            if ($metric->resolved_at) {
+                $updates['is_resolution_breached'] = $metric->resolved_at->gt($newResolutionTarget);
+            }
+
+            $metric->update($updates);
         }
     }
 
