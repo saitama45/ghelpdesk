@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\Ticket;
-use App\Models\TicketSlaMetric;
 use App\Models\User;
 use App\Services\SlaService;
 use Illuminate\Console\Command;
@@ -11,39 +10,40 @@ use Illuminate\Console\Command;
 class RecalculateSlaMetrics extends Command
 {
     protected $signature = 'sla:recalculate
-                            {--ticket= : Recalculate a single ticket by ID}
+                            {--ticket= : Filter to a single ticket by ticket_key (e.g. GH-42) or DB id}
                             {--dry-run : Preview changes without saving}';
 
-    protected $description = 'Recalculate SLA response/resolution targets and breach flags for tickets based on their current item priority and SLA settings.';
+    protected $description = 'Recalculate SLA response/resolution targets and breach flags for all tickets based on their current item priority and SLA settings.';
 
     public function handle(): int
     {
-        $dryRun  = $this->option('dry-run');
-        $ticketId = $this->option('ticket');
+        $dryRun   = $this->option('dry-run');
+        $ticketRef = $this->option('ticket');
 
         if ($dryRun) {
             $this->warn('[DRY RUN] No changes will be saved.');
         }
 
-        $query = Ticket::with(['slaMetric'])
-            ->whereHas('slaMetric')
-            ->whereNotNull('item_id');
+        $query = Ticket::with(['slaMetric'])->whereHas('slaMetric');
 
-        if ($ticketId) {
-            $query->where('id', $ticketId);
+        if ($ticketRef) {
+            $query->where(function ($q) use ($ticketRef) {
+                $q->where('ticket_key', $ticketRef)->orWhere('id', $ticketRef);
+            });
         }
 
         $total   = 0;
         $updated = 0;
-        $skipped = 0;
+        $noItem  = 0;
+        $noChange = 0;
 
-        $query->chunkById(100, function ($tickets) use ($dryRun, &$total, &$updated, &$skipped) {
+        // Use chunk() instead of chunkById() for compatibility with UUID primary keys
+        $query->chunk(100, function ($tickets) use ($dryRun, &$total, &$updated, &$noItem, &$noChange) {
             foreach ($tickets as $ticket) {
                 $total++;
                 $metric = $ticket->slaMetric;
 
                 if (!$metric) {
-                    $skipped++;
                     continue;
                 }
 
@@ -51,11 +51,11 @@ class RecalculateSlaMetrics extends Command
                     ? User::find($ticket->assignee_id)?->org_path
                     : null;
 
-                // Calculate base targets from creation date and current item priority
+                // SlaService handles null item_id by defaulting to 'medium' priority
                 $newResponseTarget   = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit);
                 $newResolutionTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit);
 
-                // Push targets forward by historical paused seconds
+                // Preserve historical paused seconds by pushing targets forward
                 $pausedSeconds = (int) $metric->total_paused_seconds;
                 if ($pausedSeconds > 0) {
                     $newResponseTarget   = SlaService::addSecondsRespectingBusinessHours($newResponseTarget, $pausedSeconds, null, $subUnit);
@@ -67,26 +67,41 @@ class RecalculateSlaMetrics extends Command
                     'resolution_target_at' => $newResolutionTarget,
                 ];
 
+                // Always re-evaluate breach flags:
+                // - If first_response_at exists: compare it against new target
+                // - If not: ensure flag is cleared (it can't be breached without a response)
                 if ($metric->first_response_at) {
                     $changes['is_response_breached'] = $metric->first_response_at->gt($newResponseTarget);
+                } else {
+                    $changes['is_response_breached'] = false;
                 }
 
                 if ($metric->resolved_at) {
                     $changes['is_resolution_breached'] = $metric->resolved_at->gt($newResolutionTarget);
+                } else {
+                    $changes['is_resolution_breached'] = false;
                 }
 
-                if ($dryRun) {
-                    $this->line(sprintf(
-                        '  Ticket %s: response_target %s → %s | resolution_target %s → %s%s%s',
-                        $ticket->ticket_key ?? $ticket->id,
-                        optional($metric->response_target_at)->format('Y-m-d H:i'),
-                        $newResponseTarget->format('Y-m-d H:i'),
-                        optional($metric->resolution_target_at)->format('Y-m-d H:i'),
-                        $newResolutionTarget->format('Y-m-d H:i'),
-                        isset($changes['is_response_breached']) ? ' | resp_breached=' . ($changes['is_response_breached'] ? 'true' : 'false') : '',
-                        isset($changes['is_resolution_breached']) ? ' | resol_breached=' . ($changes['is_resolution_breached'] ? 'true' : 'false') : ''
-                    ));
-                } else {
+                $responseBreachedLabel   = $changes['is_response_breached']   ? 'BREACHED' : 'ok';
+                $resolutionBreachedLabel = $changes['is_resolution_breached'] ? 'BREACHED' : 'ok';
+
+                if (!$ticket->item_id) {
+                    $noItem++;
+                }
+
+                $this->line(sprintf(
+                    '  %s | item=%s | response_target: %s → %s [%s] | resolution_target: %s → %s [%s]',
+                    $ticket->ticket_key ?? $ticket->id,
+                    $ticket->item_id ? ($ticket->item?->name ?? $ticket->item_id) : 'none (default medium)',
+                    optional($metric->response_target_at)->format('Y-m-d H:i:s') ?? 'null',
+                    $newResponseTarget->format('Y-m-d H:i:s'),
+                    $responseBreachedLabel,
+                    optional($metric->resolution_target_at)->format('Y-m-d H:i:s') ?? 'null',
+                    $newResolutionTarget->format('Y-m-d H:i:s'),
+                    $resolutionBreachedLabel,
+                ));
+
+                if (!$dryRun) {
                     $metric->update($changes);
                 }
 
@@ -94,12 +109,13 @@ class RecalculateSlaMetrics extends Command
             }
         });
 
+        $this->newLine();
         $this->info(sprintf(
-            '%sProcessed %d ticket(s): %d recalculated, %d skipped (no metric).',
+            '%sProcessed %d ticket(s): %d updated (%d without item, used medium default).',
             $dryRun ? '[DRY RUN] ' : '',
             $total,
             $updated,
-            $skipped
+            $noItem,
         ));
 
         return self::SUCCESS;
