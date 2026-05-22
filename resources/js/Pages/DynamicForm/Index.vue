@@ -148,7 +148,51 @@ const closeModal = () => {
     dynamicForm.clearErrors()
 }
 
+const validateForm = () => {
+    let isValid = true
+    const errors = {}
+    
+    if (effectiveSchema.value?.fields) {
+        effectiveSchema.value.fields.forEach(field => {
+            if (field.required) {
+                const val = dynamicForm.form_data[field.key]
+                if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    errors[`form_data.${field.key}`] = `${field.label || field.key} is required`
+                    isValid = false
+                }
+            }
+        })
+    }
+    
+    if (effectiveSchema.value?.has_items && dynamicForm.items?.length > 0) {
+        const columns = getActiveItemColumns(dynamicForm.form_data)
+        if (columns?.length > 0) {
+            dynamicForm.items.forEach((row, rowIdx) => {
+                columns.forEach(col => {
+                    if (col.required) {
+                        const val = row[col.key]
+                        if (val === null || val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+                            errors[`items.${rowIdx}.${col.key}`] = `${col.label || col.key} is required in row ${rowIdx + 1}`
+                            isValid = false
+                        }
+                    }
+                })
+            })
+        }
+    }
+    
+    if (!isValid) {
+        dynamicForm.clearErrors()
+        dynamicForm.setError(errors)
+        showError('Please fill in all required fields.')
+    }
+    
+    return isValid
+}
+
 const submitForm = () => {
+    if (!validateForm()) return
+
     const url = isEditing.value 
         ? route('dynamic-form.update', { slug: props.form.slug, id: currentRecord.value.id }) 
         : route('dynamic-form.store', props.form.slug)
@@ -163,6 +207,10 @@ const submitForm = () => {
                 closeModal()
                 showSuccess('Record updated successfully')
             },
+            onError: (errors) => {
+                const errorMessage = Object.values(errors).flat().join('\n') || 'Please fix the validation errors'
+                showError(errorMessage)
+            }
         })
     } else {
         dynamicForm.post(url, {
@@ -170,6 +218,10 @@ const submitForm = () => {
                 closeModal()
                 showSuccess('Record created successfully')
             },
+            onError: (errors) => {
+                const errorMessage = Object.values(errors).flat().join('\n') || 'Please fix the validation errors'
+                showError(errorMessage)
+            }
         })
     }
 }
@@ -459,7 +511,7 @@ const getStageDisplay = (record) => {
                         </button>
                     </div>
 
-                    <form @submit.prevent="submitForm" class="space-y-6">
+                    <form @submit.prevent="submitForm" class="space-y-6" novalidate>
                         <!-- Notice about request type -->
                         <div v-if="selectedRequestType" class="flex items-center gap-3 p-3 bg-teal-50 border border-teal-100 rounded-2xl mb-4">
                             <div class="h-8 w-8 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600">
