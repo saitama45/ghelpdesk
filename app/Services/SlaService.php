@@ -75,11 +75,15 @@ class SlaService
     {
         $item     = \App\Models\Item::find($itemId);
         $priority = $item ? strtolower($item->priority) : 'medium';
-        $hours    = (int) Setting::get("sla_{$priority}_{$type}", $type === 'response' ? 24 : 72);
+        $default  = $type === 'response' ? 24 : 72;
+        $hours    = (int) Setting::get("sla_{$priority}_{$type}", $default);
+        if ($hours <= 0) {
+            $hours = $default;
+        }
 
         [$workStart, $workEnd, $workingDays] = self::parseWorkHours($subUnit);
 
-        $secondsPerWorkDay = $workStart->diffInSeconds($workEnd); // e.g. 32400 for 9-hour day
+        $secondsPerWorkDay = (int) $workStart->diffInSeconds($workEnd); // e.g. 32400 for 9-hour day
         $secondsToAdd      = $hours * 3600;
         $targetDate        = $startDate->copy();
 
@@ -112,8 +116,15 @@ class SlaService
 
         $secondsToAdd -= $availableToday;
 
-        // ── Step 3: skip full working days in one arithmetic step ─────────────
-        // This replaces the original per-hour loop with an O(days) operation.
+        // ── Step 3: today's window is exhausted — move to the next working day ──
+        // Must advance the date BEFORE calculating remaining days, because today's
+        // partial window was already consumed in Step 2 and cannot be reused.
+        $targetDate->addDay();
+        $guard = 0;
+        while (!in_array($targetDate->dayOfWeekIso, $workingDays) && $guard++ < 14) {
+            $targetDate->addDay();
+        }
+
         if ($secondsPerWorkDay > 0) {
             $fullWorkDays     = intdiv($secondsToAdd, $secondsPerWorkDay);
             $remainingSeconds = $secondsToAdd % $secondsPerWorkDay;
@@ -122,7 +133,7 @@ class SlaService
             $remainingSeconds = 0;
         }
 
-        // Advance $fullWorkDays working days (skipping non-working days)
+        // Advance any additional full working days beyond the first
         for ($i = 0; $i < $fullWorkDays; $i++) {
             $targetDate->addDay();
             $guard = 0;
