@@ -78,12 +78,9 @@ class OrganizationReferenceService
 
         return [
             'department' => $node->department->name,
-            'department_code' => $node->department->code,
             'department_id' => $node->department_id,
             'department_node_id' => $node->id,
             'org_path' => implode(' > ', $pathParts),
-            'node_name' => $node->name,
-            'node_code' => $node->code,
         ];
     }
 

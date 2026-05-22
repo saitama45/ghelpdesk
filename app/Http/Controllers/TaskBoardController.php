@@ -6,6 +6,8 @@ use App\Models\TaskBoard;
 use App\Models\TaskBoardMember;
 use App\Models\TaskCard;
 use App\Models\TaskCardActivity;
+use App\Models\Department;
+use App\Models\DepartmentNode;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\User;
@@ -62,6 +64,8 @@ class TaskBoardController extends Controller implements HasMiddleware
         $orgPathFilter = null;
         $nodeName = null;
         $legacySubUnitFilter = null;
+        $departmentNodeIdsFilter = [];
+        $subUnitTextFilters = [];
         
         if ($departmentIdFilter) {
             $dept = \App\Models\Department::find($departmentIdFilter);
@@ -73,11 +77,34 @@ class TaskBoardController extends Controller implements HasMiddleware
             $legacyDepartmentFilter = $payload['department_code'] ?? null;
             $orgPathFilter = $payload['org_path'] ?? null;
             $nodeName = $payload['node_name'] ?? null;
+            $departmentNodeIdsFilter = array_merge(
+                [(int) $departmentNodeIdFilter],
+                DepartmentNode::getAllDescendantIds((int) $departmentNodeIdFilter)
+            );
             
             if (!empty($payload['node_code'])) {
                 $parts = explode('-', $payload['node_code']);
                 $legacySubUnitFilter = end($parts);
             }
+
+            $subUnitTextFilters = DepartmentNode::query()
+                ->whereIn('id', $departmentNodeIdsFilter)
+                ->get(['id', 'name', 'code'])
+                ->flatMap(function (DepartmentNode $node) {
+                    $path = $this->orgReference->payloadFromNodeId($node->id)['org_path'] ?? null;
+                    $codeParts = $node->code ? explode('-', $node->code) : [];
+
+                    return [
+                        $node->name,
+                        $node->code,
+                        end($codeParts) ?: null,
+                        $path,
+                    ];
+                })
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
         }
 
         $isExplicitFilter = $request->has('department_id') || $request->has('department_node_id');
@@ -93,27 +120,43 @@ class TaskBoardController extends Controller implements HasMiddleware
                 $query->whereHas('memberRecords', fn ($q) => $q->where('user_id', $user->id));
             })
             ->when(! $showClosed, fn ($query) => $query->whereNull('closed_at'))
-            ->when($departmentNameFilter, function ($query) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter, $user, $isExplicitFilter) {
+            ->when($departmentNameFilter, function ($query) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter, $departmentIdFilter, $departmentNodeIdsFilter, $subUnitTextFilters, $user, $isExplicitFilter) {
                 if ($isExplicitFilter) {
-                    $query->where(function ($q) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter) {
-                        $q->where(function ($deptQuery) use ($departmentNameFilter, $legacyDepartmentFilter) {
-                            $deptQuery->where('department', $departmentNameFilter);
-                            if ($legacyDepartmentFilter) {
-                                $deptQuery->orWhere('department', $legacyDepartmentFilter);
-                            }
-                        });
+                    $query->where(function ($q) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter, $departmentIdFilter, $departmentNodeIdsFilter, $subUnitTextFilters) {
+                        if ($departmentIdFilter) {
+                            $q->orWhereHas('members', fn ($memberQuery) => $memberQuery->where('users.department_id', $departmentIdFilter));
+                        }
 
-                        if ($orgPathFilter) {
-                            $q->where(function ($subQuery) use ($orgPathFilter, $nodeName, $legacySubUnitFilter) {
-                                $subQuery->where('sub_unit', 'like', $orgPathFilter . '%');
-                                if ($nodeName) {
-                                    $subQuery->orWhere('sub_unit', 'like', $nodeName . '%');
-                                }
-                                if ($legacySubUnitFilter) {
-                                    $subQuery->orWhere('sub_unit', $legacySubUnitFilter);
+                        if (!empty($departmentNodeIdsFilter)) {
+                            $q->orWhereHas('members', fn ($memberQuery) => $memberQuery->whereIn('users.department_node_id', $departmentNodeIdsFilter));
+                        }
+
+                        $q->orWhere(function ($textQuery) use ($departmentNameFilter, $legacyDepartmentFilter, $orgPathFilter, $nodeName, $legacySubUnitFilter, $subUnitTextFilters) {
+                            $textQuery->where(function ($deptQuery) use ($departmentNameFilter, $legacyDepartmentFilter) {
+                                $deptQuery->where('department', $departmentNameFilter);
+                                if ($legacyDepartmentFilter) {
+                                    $deptQuery->orWhere('department', $legacyDepartmentFilter);
                                 }
                             });
-                        }
+
+                            if ($orgPathFilter || $nodeName || $legacySubUnitFilter || !empty($subUnitTextFilters)) {
+                                $textQuery->where(function ($subQuery) use ($orgPathFilter, $nodeName, $legacySubUnitFilter, $subUnitTextFilters) {
+                                    if ($orgPathFilter) {
+                                        $subQuery->orWhere('sub_unit', 'like', $orgPathFilter . '%');
+                                    }
+                                    if ($nodeName) {
+                                        $subQuery->orWhere('sub_unit', 'like', $nodeName . '%');
+                                    }
+                                    if ($legacySubUnitFilter) {
+                                        $subQuery->orWhere('sub_unit', $legacySubUnitFilter);
+                                    }
+                                    foreach ($subUnitTextFilters as $textFilter) {
+                                        $subQuery->orWhere('sub_unit', $textFilter)
+                                            ->orWhere('sub_unit', 'like', $textFilter . ' > %');
+                                    }
+                                });
+                            }
+                        });
                     });
                 } else {
                     $query->where(function ($q) use ($departmentNameFilter, $legacyDepartmentFilter, $user) {
@@ -197,50 +240,36 @@ class TaskBoardController extends Controller implements HasMiddleware
     public function generateMonthly(Request $request)
     {
         $validated = $request->validate([
-            'department' => 'required|string|max:255',
+            'department' => 'nullable|string|max:255',
+            'department_id' => 'nullable|integer|exists:departments,id',
+            'department_node_id' => 'nullable|integer|exists:department_nodes,id',
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000|max:2100',
         ]);
 
-        $department = $this->cleanOrgValue($validated['department']);
         $month = (int) $validated['month'];
         $year = (int) $validated['year'];
-
-        if ($department === '') {
-            throw ValidationException::withMessages([
-                'department' => 'Select a department.',
-            ]);
-        }
-
-        $usersBySubUnit = $this->activeUsersForDepartment($department)
-            ->groupBy(fn (User $user) => $this->cleanOrgValue($user->org_path))
-            ->filter(fn ($users, $subUnit) => (string) $subUnit !== '')
-            ->sortKeys();
-
-        if ($usersBySubUnit->isEmpty()) {
-            throw ValidationException::withMessages([
-                'department' => 'No active sub-units found for this department.',
-            ]);
-        }
+        $targets = $this->monthlyBoardTargets($validated);
 
         $periodLabel = CarbonImmutable::create($year, $month, 1)->format('F Y');
         $created = [];
         $skipped = [];
 
-        DB::transaction(function () use ($request, $department, $month, $year, $periodLabel, $usersBySubUnit, &$created, &$skipped) {
-            foreach ($usersBySubUnit as $subUnit => $subUnitUsers) {
-                $monthlyKey = $this->monthlyBoardKey($department, $subUnit, $month, $year);
-                $title = $this->monthlyBoardTitle($department, $subUnit, $periodLabel);
+        DB::transaction(function () use ($request, $month, $year, $periodLabel, $targets, &$created, &$skipped) {
+            foreach ($targets as $target) {
+                $monthlyKey = $this->monthlyBoardKey($target['department'], $target['key_sub_unit'], $month, $year);
+                $legacyMonthlyKey = $this->monthlyBoardKey($target['department'], $target['sub_unit'], $month, $year);
+                $title = $this->monthlyBoardTitle($target['department'], $target['sub_unit'], $periodLabel);
 
                 $existing = TaskBoard::withTrashed()
-                    ->where('monthly_key', $monthlyKey)
+                    ->whereIn('monthly_key', array_unique([$monthlyKey, $legacyMonthlyKey]))
                     ->first();
 
                 if ($existing) {
                     $skipped[] = [
                         'id' => $existing->id,
                         'title' => $existing->title,
-                        'sub_unit' => $subUnit,
+                        'sub_unit' => $target['sub_unit'],
                     ];
 
                     continue;
@@ -248,19 +277,19 @@ class TaskBoardController extends Controller implements HasMiddleware
 
                 $board = TaskBoard::create([
                     'board_source' => 'monthly',
-                    'department' => $department,
-                    'sub_unit' => $subUnit,
+                    'department' => $target['department'],
+                    'sub_unit' => $target['sub_unit'],
                     'board_month' => $month,
                     'board_year' => $year,
                     'monthly_key' => $monthlyKey,
                     'title' => $title,
-                    'description' => "Monthly task board for {$department} / {$subUnit} - {$periodLabel}.",
+                    'description' => "Monthly task board for {$target['department']} / {$target['path']} - {$periodLabel}.",
                     'background_type' => 'color',
                     'background_value' => '#0f766e',
                     'created_by' => $request->user()->id,
                 ]);
 
-                $memberIds = $subUnitUsers
+                $memberIds = $target['users']
                     ->pluck('id')
                     ->push($request->user()->id)
                     ->unique()
@@ -288,8 +317,9 @@ class TaskBoardController extends Controller implements HasMiddleware
                     'board.monthly_created',
                     'generated this monthly board',
                     [
-                        'department' => $department,
-                        'sub_unit' => $subUnit,
+                        'department' => $target['department'],
+                        'sub_unit' => $target['sub_unit'],
+                        'org_path' => $target['path'],
                         'month' => $month,
                         'year' => $year,
                     ]
@@ -298,7 +328,7 @@ class TaskBoardController extends Controller implements HasMiddleware
                 $created[] = [
                     'id' => $board->id,
                     'title' => $board->title,
-                    'sub_unit' => $subUnit,
+                    'sub_unit' => $target['sub_unit'],
                 ];
             }
         });
@@ -784,11 +814,113 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->all();
     }
 
-    private function activeUsersForDepartment(string $department)
+    private function monthlyBoardTargets(array $validated)
+    {
+        if (!empty($validated['department_node_id'])) {
+            return $this->monthlyTargetsForNode((int) $validated['department_node_id']);
+        }
+
+        if (!empty($validated['department_id'])) {
+            return $this->monthlyTargetsForDepartment((int) $validated['department_id']);
+        }
+
+        $department = $this->cleanOrgValue($validated['department'] ?? '');
+
+        if ($department !== '') {
+            return $this->legacyMonthlyTargetsForDepartment($department);
+        }
+
+        throw ValidationException::withMessages([
+            'department' => 'Select a department.',
+        ]);
+    }
+
+    private function monthlyTargetsForDepartment(int $departmentId): array
+    {
+        $department = Department::query()
+            ->where('is_active', true)
+            ->find($departmentId);
+
+        if (! $department) {
+            throw ValidationException::withMessages([
+                'department_id' => 'Selected department is invalid or inactive.',
+            ]);
+        }
+
+        $users = $this->activeUsersForDepartmentId($department->id);
+        $targets = collect();
+
+        $directUsers = $users->filter(fn (User $user) => empty($user->department_node_id))->values();
+        if ($directUsers->isNotEmpty()) {
+            $targets->push($this->monthlyTarget($department->name, $department->name, $department->name, $directUsers));
+        }
+
+        $children = DepartmentNode::query()
+            ->where('department_id', $department->id)
+            ->whereNull('parent_id')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        foreach ($children as $child) {
+            $nodeIds = array_merge([$child->id], DepartmentNode::getAllDescendantIds($child->id));
+            $childUsers = $users->filter(fn (User $user) => in_array((int) $user->department_node_id, $nodeIds, true))->values();
+
+            if ($childUsers->isNotEmpty()) {
+                $path = $this->nodeOrgPath($child);
+                $targets->push($this->monthlyTarget($department->name, $child->name, $path, $childUsers));
+            }
+        }
+
+        return $this->validateMonthlyTargets($targets, 'No active users found for this department.');
+    }
+
+    private function monthlyTargetsForNode(int $nodeId): array
+    {
+        $node = DepartmentNode::query()
+            ->with('department')
+            ->where('is_active', true)
+            ->find($nodeId);
+
+        if (! $node || ! $node->department || ! $node->department->is_active) {
+            throw ValidationException::withMessages([
+                'department_node_id' => 'Selected department level is invalid or inactive.',
+            ]);
+        }
+
+        $users = $this->activeUsersForDepartmentId($node->department_id);
+        $targets = collect();
+
+        $directUsers = $users->filter(fn (User $user) => (int) $user->department_node_id === (int) $node->id)->values();
+        if ($directUsers->isNotEmpty()) {
+            $targets->push($this->monthlyTarget($node->department->name, $node->name, $this->nodeOrgPath($node), $directUsers));
+        }
+
+        $children = DepartmentNode::query()
+            ->where('parent_id', $node->id)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        foreach ($children as $child) {
+            $nodeIds = array_merge([$child->id], DepartmentNode::getAllDescendantIds($child->id));
+            $childUsers = $users->filter(fn (User $user) => in_array((int) $user->department_node_id, $nodeIds, true))->values();
+
+            if ($childUsers->isNotEmpty()) {
+                $targets->push($this->monthlyTarget($node->department->name, $child->name, $this->nodeOrgPath($child), $childUsers));
+            }
+        }
+
+        return $this->validateMonthlyTargets($targets, 'No active users found for this department level.');
+    }
+
+    private function legacyMonthlyTargetsForDepartment(string $department): array
     {
         $departmentKey = $this->normalizeOrgKey($department);
 
-        return User::active()
+        $targets = User::active()
             ->whereNotNull('department')
             ->where('department', '!=', '')
             ->whereNotNull('org_path')
@@ -797,7 +929,51 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->orderBy('name')
             ->get(['id', 'name', 'department', 'org_path'])
             ->filter(fn (User $user) => $this->normalizeOrgKey($user->department) === $departmentKey)
+            ->groupBy(fn (User $user) => $this->cleanOrgValue($user->org_path))
+            ->filter(fn ($users, $subUnit) => (string) $subUnit !== '')
+            ->sortKeys()
+            ->map(fn ($users, $subUnit) => $this->monthlyTarget($department, $subUnit, $subUnit, $users->values()))
             ->values();
+
+        return $this->validateMonthlyTargets($targets, 'No active sub-units found for this department.');
+    }
+
+    private function activeUsersForDepartmentId(int $departmentId)
+    {
+        return User::active()
+            ->where('department_id', $departmentId)
+            ->orderBy('org_path')
+            ->orderBy('name')
+            ->get(['id', 'name', 'department', 'department_id', 'department_node_id', 'org_path']);
+    }
+
+    private function monthlyTarget(string $department, string $subUnit, string $path, $users): array
+    {
+        return [
+            'department' => $this->cleanOrgValue($department),
+            'sub_unit' => $this->cleanOrgValue($subUnit),
+            'key_sub_unit' => $this->cleanOrgValue($path) ?: $this->cleanOrgValue($subUnit),
+            'path' => $this->cleanOrgValue($path) ?: $this->cleanOrgValue($subUnit),
+            'users' => collect($users)->values(),
+        ];
+    }
+
+    private function validateMonthlyTargets($targets, string $message): array
+    {
+        $targets = collect($targets)->filter(fn (array $target) => $target['users']->isNotEmpty())->values();
+
+        if ($targets->isEmpty()) {
+            throw ValidationException::withMessages([
+                'department' => $message,
+            ]);
+        }
+
+        return $targets->all();
+    }
+
+    private function nodeOrgPath(DepartmentNode $node): string
+    {
+        return $this->orgReference->payloadFromNodeId($node->id)['org_path'] ?? $node->name;
     }
 
     private function monthlyBoardTitle(string $department, string $subUnit, string $periodLabel): string
@@ -827,7 +1003,7 @@ class TaskBoardController extends Controller implements HasMiddleware
     {
         return User::active()
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'org_path']);
+            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'department_id', 'department_node_id', 'org_path']);
     }
 
     private function defaultLabels(): array

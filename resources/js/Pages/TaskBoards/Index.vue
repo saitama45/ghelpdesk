@@ -12,10 +12,8 @@ import {
     CalendarDaysIcon,
     PlusIcon,
     StarIcon,
-    UserGroupIcon,
     XMarkIcon,
 } from '@heroicons/vue/24/outline';
-import { StarIcon as StarSolidIcon } from '@heroicons/vue/24/solid';
 
 const props = defineProps({
     boards: Array,
@@ -42,6 +40,7 @@ const filterNodeId = ref(
         ? props.filters.department_node_id
         : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
 );
+const monthlyNodeId = ref('');
 
 const form = reactive({
     title: '',
@@ -52,7 +51,6 @@ const form = reactive({
 });
 
 const monthlyForm = reactive({
-    department: '',
     month: now.getMonth() + 1,
     year: currentYear,
 });
@@ -92,11 +90,6 @@ const yearOptions = computed(() => {
 
 const normalizeValue = (value) => String(value || '').trim();
 
-const uniqueSorted = (values) => {
-    return [...new Set(values.map(normalizeValue).filter(Boolean))]
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
-};
-
 const hierarchicalOptions = computed(() =>
     (props.hierarchicalDepartments || []).map((dept) => ({
         ...dept,
@@ -127,14 +120,6 @@ const applyDepartmentFilter = () => {
 };
 
 watch(filterNodeId, applyDepartmentFilter);
-
-const monthFilterOptions = computed(() => {
-    const boardMonths = uniqueSorted((props.boards || []).map((board) => board.board_month))
-        .map((month) => Number(month))
-        .filter((month) => month >= 1 && month <= 12);
-
-    return monthOptions.filter((month) => boardMonths.includes(month.value));
-});
 
 const yearFilterOptions = computed(() => {
     return [...new Set([
@@ -175,6 +160,159 @@ const sortedBoards = computed(() => {
     return [...filteredBoards.value].sort((a, b) => Number(b.starred) - Number(a.starred));
 });
 
+const normalizeMatrixKey = (value) => normalizeValue(value).toLowerCase();
+
+const effectiveMatrixNodeId = computed(() => filterNodeId.value || hierarchicalOptions.value[0]?.id || '');
+
+const selectedMatrixNode = computed(() => findNode(hierarchicalOptions.value, effectiveMatrixNodeId.value));
+
+const collectMatrixNodes = (node) => {
+    if (!node) return [];
+
+    return [
+        node,
+        ...(node.children || []).flatMap((child) => collectMatrixNodes(child)),
+    ];
+};
+
+const makeHierarchyMatrixColumn = (node) => {
+    const path = findNodePath(hierarchicalOptions.value, node.id).join(' > ') || node.name;
+
+    return {
+        id: `node-${node.id}`,
+        label: node.name,
+        path,
+        matchKeys: [
+            normalizeMatrixKey(node.name),
+            normalizeMatrixKey(path),
+        ].filter(Boolean),
+    };
+};
+
+const hierarchyMatrixColumns = computed(() => {
+    const selected = selectedMatrixNode.value;
+    if (!selected) return [];
+
+    return collectMatrixNodes(selected).map((node) => makeHierarchyMatrixColumn(node));
+});
+
+const selectedMatrixYear = computed(() => Number(boardFilters.year) || currentYear);
+
+const displayedMonths = computed(() => {
+    const month = Number(boardFilters.month) || null;
+
+    return month ? monthOptions.filter((item) => Number(item.value) === month) : monthOptions;
+});
+
+const boardTeamKey = (board) => {
+    return normalizeMatrixKey(board.sub_unit || board.department || 'No Team');
+};
+
+const boardTeamLabel = (board) => {
+    return board.sub_unit || board.department || 'No Team';
+};
+
+const boardMatchesColumn = (board, column) => {
+    const teamKey = boardTeamKey(board);
+    if (!teamKey) return false;
+
+    return column.matchKeys.some((key) => teamKey === key || teamKey.startsWith(`${key} > `));
+};
+
+const fallbackMatrixColumns = computed(() => {
+    const columns = [];
+    const seen = new Set(hierarchyMatrixColumns.value.flatMap((column) => column.matchKeys));
+
+    for (const board of sortedBoards.value) {
+        if (hierarchyMatrixColumns.value.some((column) => boardMatchesColumn(board, column))) {
+            continue;
+        }
+
+        const key = boardTeamKey(board);
+        if (!key || seen.has(key)) {
+            continue;
+        }
+
+        seen.add(key);
+        columns.push({
+            id: `team-${key}`,
+            label: boardTeamLabel(board),
+            path: boardTeamLabel(board),
+            matchKeys: [key],
+        });
+    }
+
+    return columns;
+});
+
+const matrixColumns = computed(() => [
+    ...hierarchyMatrixColumns.value,
+    ...fallbackMatrixColumns.value,
+]);
+
+const boardMatrixColumn = (board) => {
+    return matrixColumns.value.find((column) => boardMatchesColumn(board, column)) || null;
+};
+
+const matrixBoards = computed(() => {
+    const rows = {};
+
+    for (const board of sortedBoards.value) {
+        const year = Number(board.board_year);
+        const month = Number(board.board_month);
+        const column = boardMatrixColumn(board);
+
+        if (!column) continue;
+
+        const rowKey = year === selectedMatrixYear.value && month >= 1 && month <= 12
+            ? month
+            : 'unscheduled';
+
+        rows[rowKey] ??= {};
+        rows[rowKey][column.id] ??= [];
+        rows[rowKey][column.id].push(board);
+    }
+
+    return rows;
+});
+
+const matrixBoardItems = (rowKey) => {
+    return matrixColumns.value.flatMap((column) =>
+        (matrixBoards.value[rowKey]?.[column.id] || []).map((board) => ({
+            board,
+            column,
+        }))
+    );
+};
+
+const matrixRows = computed(() => {
+    const rows = displayedMonths.value.map((month) => ({
+        ...month,
+        boardItems: matrixBoardItems(month.value),
+    }));
+
+    if (matrixBoards.value.unscheduled) {
+        rows.push({
+            value: 'unscheduled',
+            label: 'No Date / Other Year',
+            boardItems: matrixBoardItems('unscheduled'),
+        });
+    }
+
+    return rows;
+});
+
+const boardChipLabel = (board, column) => {
+    const year = Number(board.board_year);
+    const month = Number(board.board_month);
+    const rowKey = year === selectedMatrixYear.value && month >= 1 && month <= 12
+        ? month
+        : 'unscheduled';
+    const duplicates = matrixBoards.value[rowKey]?.[column.id] || [];
+
+    return duplicates.length > 1 ? (board.title || column.label) : column.label;
+};
+
 const userOptions = computed(() => {
     return (props.users || []).map((user) => ({
         ...user,
@@ -182,24 +320,118 @@ const userOptions = computed(() => {
     }));
 });
 
-const monthlyDepartmentOptions = computed(() => props.monthlyDepartments || []);
-
-const selectedMonthlyDepartment = computed(() => {
-    return monthlyDepartmentOptions.value.find((department) => department.name === monthlyForm.department) || null;
-});
-
 const selectedMonthLabel = computed(() => {
     return monthOptions.find((month) => Number(month.value) === Number(monthlyForm.month))?.label || '';
 });
 
-const monthlyBoardPreview = computed(() => {
-    const department = selectedMonthlyDepartment.value;
-    if (!department) return [];
+const findNode = (nodes, id) => {
+    if (id === null || id === undefined || id === '') return null;
 
-    return (department.sub_units || []).map((subUnit) => ({
-        ...subUnit,
-        title: `${subUnit.name} ${selectedMonthLabel.value} ${monthlyForm.year}`,
-    }));
+    for (const node of nodes || []) {
+        if (String(node.id) === String(id)) {
+            return node;
+        }
+
+        const child = findNode(node.children || [], id);
+        if (child) return child;
+    }
+
+    return null;
+};
+
+const findNodePath = (nodes, id, path = []) => {
+    if (id === null || id === undefined || id === '') return [];
+
+    for (const node of nodes || []) {
+        const currentPath = [...path, node.name];
+        if (String(node.id) === String(id)) {
+            return currentPath;
+        }
+
+        const childPath = findNodePath(node.children || [], id, currentPath);
+        if (childPath.length) return childPath;
+    }
+
+    return [];
+};
+
+const collectNodeIds = (node) => {
+    if (!node) return [];
+
+    return [
+        Number(node.id),
+        ...(node.children || []).flatMap((child) => collectNodeIds(child)),
+    ];
+};
+
+const usersForNodeIds = (nodeIds) => {
+    const allowedIds = new Set(nodeIds.map((id) => Number(id)));
+
+    return (props.users || []).filter((user) => allowedIds.has(Number(user.department_node_id)));
+};
+
+const directUsersForNode = (nodeId) => {
+    return (props.users || []).filter((user) => Number(user.department_node_id) === Number(nodeId));
+};
+
+const directUsersForDepartment = (departmentId) => {
+    return (props.users || []).filter((user) =>
+        Number(user.department_id) === Number(departmentId) &&
+        !user.department_node_id
+    );
+};
+
+const monthlySelectionParams = computed(() => {
+    const nodeId = monthlyNodeId.value;
+    if (!nodeId) return {};
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        return { department_id: nodeId.replace('dept-', '') };
+    }
+
+    return { department_node_id: nodeId };
+});
+
+const monthlyBoardPreview = computed(() => {
+    const selected = monthlyNodeId.value ? findNode(hierarchicalOptions.value, monthlyNodeId.value) : null;
+    if (!selected) return [];
+
+    const rows = [];
+    const isDepartmentRoot = String(selected.id).startsWith('dept-');
+    const selectedDepartmentId = isDepartmentRoot
+        ? Number(String(selected.id).replace('dept-', ''))
+        : Number(selected.department_id);
+
+    const pushTarget = (node, users, pathOverride = null) => {
+        if (!users.length) return;
+
+        const path = pathOverride || findNodePath(hierarchicalOptions.value, node.id).join(' > ') || node.name;
+
+        rows.push({
+            id: node.id,
+            name: node.name,
+            path,
+            user_count: users.length,
+            title: `${node.name} ${selectedMonthLabel.value} ${monthlyForm.year}`,
+        });
+    };
+
+    if (isDepartmentRoot) {
+        pushTarget(selected, directUsersForDepartment(selectedDepartmentId), selected.name);
+
+        for (const child of selected.children || []) {
+            pushTarget(child, usersForNodeIds(collectNodeIds(child)));
+        }
+
+        return rows;
+    }
+
+    pushTarget(selected, directUsersForNode(selected.id));
+
+    for (const child of selected.children || []) {
+        pushTarget(child, usersForNodeIds(collectNodeIds(child)));
+    }
+
+    return rows;
 });
 
 const clearBoardFilters = () => {
@@ -219,10 +451,7 @@ const openCreateModal = () => {
 };
 
 const openGenerateMonthlyModal = () => {
-    if (!monthlyForm.department && monthlyDepartmentOptions.value.length) {
-        monthlyForm.department = monthlyDepartmentOptions.value[0].name;
-    }
-
+    monthlyNodeId.value = filterNodeId.value || hierarchicalOptions.value[0]?.id || '';
     monthlyForm.month = now.getMonth() + 1;
     monthlyForm.year = now.getFullYear();
     showGenerateMonthlyModal.value = true;
@@ -248,14 +477,17 @@ const submitBoard = () => {
 const submitMonthlyBoards = () => {
     if (isGeneratingMonthly.value) return;
 
-    if (!monthlyForm.department || monthlyBoardPreview.value.length === 0) {
-        showError('Select a department with active sub-units.');
+    if (!monthlyNodeId.value || monthlyBoardPreview.value.length === 0) {
+        showError('Select a department level with active users.');
         return;
     }
 
     isGeneratingMonthly.value = true;
 
-    router.post(route('task-boards.monthly-generate'), monthlyForm, {
+    router.post(route('task-boards.monthly-generate'), {
+        ...monthlyForm,
+        ...monthlySelectionParams.value,
+    }, {
         preserveScroll: true,
         onSuccess: () => {
             showGenerateMonthlyModal.value = false;
@@ -281,20 +513,6 @@ const toggleClosed = () => {
     });
 };
 
-const boardBackground = (board) => {
-    if (board.background_type === 'image' && board.background_value) {
-        return {
-            backgroundImage: `linear-gradient(120deg, rgba(15, 23, 42, 0.74), rgba(15, 23, 42, 0.38)), url(${board.background_value})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-        };
-    }
-
-    return {
-        background: board.background_value || '#0f766e',
-    };
-};
-
 const monthLabel = (value) => monthOptions.find((month) => Number(month.value) === Number(value))?.label || '';
 
 const boardPeriodLabel = (board) => {
@@ -302,7 +520,6 @@ const boardPeriodLabel = (board) => {
     return label && board.board_year ? `${label} ${board.board_year}` : '';
 };
 
-const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 </script>
 
 <template>
@@ -370,7 +587,7 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Month</label>
                         <select v-model="boardFilters.month" class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
                             <option value="">All months</option>
-                            <option v-for="month in monthFilterOptions" :key="month.value" :value="month.value">
+                            <option v-for="month in monthOptions" :key="month.value" :value="month.value">
                                 {{ month.label }}
                             </option>
                         </select>
@@ -398,69 +615,54 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                 </p>
             </div>
 
-            <div v-if="sortedBoards.length" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <Link
-                    v-for="board in sortedBoards"
-                    :key="board.id"
-                    :href="route('task-boards.show', board.id)"
-                    class="group overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                >
-                    <div class="h-28 p-4 text-white" :style="boardBackground(board)">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2">
-                                    <StarSolidIcon v-if="board.starred" class="h-4 w-4 shrink-0 text-yellow-300" />
-                                    <StarIcon v-else class="h-4 w-4 shrink-0 text-white/50 opacity-0 transition-opacity group-hover:opacity-100" />
-                                    <h2 class="truncate text-lg font-black">{{ board.title }}</h2>
-                                </div>
-                                <p class="mt-2 line-clamp-2 text-xs font-medium text-white/80">{{ board.description || 'No board description' }}</p>
-                            </div>
-                            <div class="flex shrink-0 flex-col items-end gap-1">
-                                <span v-if="board.is_monthly_board" class="rounded-full bg-white/20 px-2 py-1 text-[10px] font-black uppercase tracking-wider">Monthly</span>
-                                <span v-if="board.is_project_board" class="rounded-full bg-white/20 px-2 py-1 text-[10px] font-black uppercase tracking-wider">Project</span>
-                                <span v-if="board.closed_at" class="rounded-full bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-wider">Closed</span>
-                            </div>
+            <div v-if="sortedBoards.length" class="space-y-4">
+                <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+                    <div class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Year</p>
+                            <h2 class="text-2xl font-black text-gray-900">{{ selectedMatrixYear }}</h2>
+                        </div>
+                        <div class="text-xs font-semibold text-gray-500">
+                            {{ matrixColumns.length }} team{{ matrixColumns.length === 1 ? '' : 's' }}
                         </div>
                     </div>
-                    <div class="space-y-3 px-4 py-3">
-                        <div v-if="board.department || board.sub_unit || boardPeriodLabel(board)" class="flex flex-wrap gap-2 text-[11px] font-bold text-gray-600">
-                            <span v-if="board.department || board.sub_unit" class="rounded-md bg-gray-100 px-2 py-1">
-                                {{ [board.department, board.sub_unit].filter(Boolean).join(' / ') }}
-                            </span>
-                            <span v-if="boardPeriodLabel(board)" class="rounded-md bg-gray-100 px-2 py-1">
-                                {{ boardPeriodLabel(board) }}
-                            </span>
-                        </div>
-                        <div v-if="board.project" class="rounded-md bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900">
-                            <div class="flex items-center justify-between gap-3">
-                                <span class="truncate">{{ board.project.store?.name || board.project.name }}</span>
-                                <span class="shrink-0">{{ board.project.progress }}%</span>
-                            </div>
-                            <div class="mt-1 flex flex-wrap gap-2 text-[11px] text-blue-700">
-                                <span>{{ board.project.activity_count }} activities</span>
-                                <span>{{ board.project.subtask_count }} sub-tasks</span>
-                                <span>{{ board.project.milestone_count }} milestones</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <div class="flex -space-x-2">
-                                <div
-                                    v-for="member in board.members.slice(0, 5)"
-                                    :key="member.id"
-                                    class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-gray-100 text-[10px] font-bold text-gray-700"
-                                    :title="member.name"
-                                >
-                                    <img v-if="member.profile_photo" :src="'/serve-storage/' + member.profile_photo" class="h-full w-full object-cover" :alt="member.name">
-                                    <span v-else>{{ initials(member.name) }}</span>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2 text-xs font-semibold text-gray-500">
-                                <UserGroupIcon class="h-4 w-4" />
-                                {{ board.members_count }}
-                            </div>
-                        </div>
+
+                    <div v-if="matrixColumns.length" class="overflow-x-auto">
+                        <table class="min-w-full border-collapse text-left">
+                            <thead>
+                                <tr class="border-b border-gray-200 bg-gray-50">
+                                    <th class="sticky left-0 z-10 w-28 bg-gray-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500">Month</th>
+                                    <th class="min-w-96 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500">Team</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="row in matrixRows" :key="row.value" class="border-b border-gray-100 last:border-b-0">
+                                    <th class="sticky left-0 z-10 bg-white px-4 py-4 text-sm font-black text-gray-800">
+                                        {{ row.label }}
+                                    </th>
+                                    <td class="h-16 min-w-96 border-l border-gray-100 px-3 py-3 align-top">
+                                        <div v-if="row.boardItems.length" class="flex flex-wrap gap-2">
+                                            <Link
+                                                v-for="item in row.boardItems"
+                                                :key="item.board.id"
+                                                :href="route('task-boards.show', item.board.id)"
+                                                :title="item.board.title"
+                                                class="inline-flex min-w-20 max-w-full items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-black text-blue-700 transition-colors hover:border-blue-200 hover:bg-blue-100"
+                                            >
+                                                <StarIcon v-if="item.board.starred" class="h-3.5 w-3.5 shrink-0 text-yellow-500" />
+                                                <span class="truncate">{{ boardChipLabel(item.board, item.column) }}</span>
+                                            </Link>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                </Link>
+
+                    <div v-else class="p-10 text-center text-sm font-semibold text-gray-500">
+                        Select a department with configured teams to show the matrix.
+                    </div>
+                </div>
             </div>
 
             <div v-else class="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center">
@@ -481,12 +683,11 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                     <div class="grid gap-4 md:grid-cols-3">
                         <div class="md:col-span-1">
                             <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
-                            <select v-model="monthlyForm.department" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                <option value="" disabled>Select department</option>
-                                <option v-for="department in monthlyDepartmentOptions" :key="department.name" :value="department.name">
-                                    {{ department.name }}
-                                </option>
-                            </select>
+                            <HierarchySelector
+                                v-model="monthlyNodeId"
+                                :nodes="hierarchicalOptions"
+                                placeholder="Select department"
+                            />
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Month</label>
@@ -522,7 +723,7 @@ const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join(
                             >
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-bold text-gray-900">{{ board.title }}</p>
-                                    <p class="text-xs font-medium text-gray-500">{{ board.name }}</p>
+                                    <p class="text-xs font-medium text-gray-500">{{ board.path }}</p>
                                 </div>
                                 <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                                     {{ board.user_count }} user{{ board.user_count === 1 ? '' : 's' }}
