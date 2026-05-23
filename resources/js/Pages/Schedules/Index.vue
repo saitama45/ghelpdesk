@@ -45,12 +45,22 @@
                                 </svg>
                                 <span>Complete</span>
                             </button>
+                            <button
+                                @click="switchView('pending-requests')"
+                                :class="['inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-all duration-200 rounded-lg', currentView === 'pending-requests' ? 'bg-white text-blue-600 shadow-md transform scale-100' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50']"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>Requests</span>
+                                <span v-if="pendingRequestCount" class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-black text-blue-700">{{ pendingRequestCount }}</span>
+                            </button>
                         </div>
 
                         <!-- Action Buttons Group -->
                         <div class="flex flex-wrap items-center gap-3">
                             <button
-                                v-if="currentView !== 'complete-schedules'"
+                                v-if="currentView !== 'complete-schedules' && currentView !== 'pending-requests'"
                                 @click="exportPdf"
                                 class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 group"
                             >
@@ -210,6 +220,97 @@
                         @date-click="handleDateClick"
                         @event-click="handleEventClick"
                     />
+                </div>
+
+                <!-- Pending Requests View -->
+                <div v-else-if="currentView === 'pending-requests'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-900">Schedule Change Requests</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Pending approval workflow</span>
+                    </div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Request</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Requester</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Requested Change</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Status</th>
+                                    <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-widest">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <tr v-for="request in scheduleChangeRequests" :key="request.id" class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-black text-gray-900">#{{ request.id }}</div>
+                                        <div class="text-[10px] font-bold text-gray-400 uppercase">Schedule #{{ request.schedule_id }} • {{ formatAuditDateTime(request.created_at) }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-bold text-gray-900">{{ request.requester_name || '-' }}</div>
+                                        <div class="text-xs text-gray-500">{{ request.schedule_user_name || '-' }}</div>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <div class="text-xs font-bold text-gray-700">
+                                            {{ request.original_payload?.status || '-' }} → {{ request.requested_payload?.status || '-' }}
+                                        </div>
+                                        <div class="text-[10px] font-medium text-gray-400 mt-1">
+                                            {{ summarizeRequestWindow(request.requested_payload) }}
+                                        </div>
+                                        <div v-if="request.requester_remarks" class="text-[10px] text-gray-500 mt-1 max-w-md truncate">
+                                            {{ request.requester_remarks }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span :class="requestStatusClass(request.status)" class="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                                            {{ request.status }}
+                                        </span>
+                                        <div v-if="request.approver_remarks" class="text-[10px] text-gray-400 mt-1 max-w-[180px] truncate">{{ request.approver_remarks }}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                                        <div class="inline-flex items-center gap-2">
+                                            <button
+                                                v-if="!request.can_approve"
+                                                type="button"
+                                                @click="openScheduleRequestDecision(request, 'view')"
+                                                class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                                            >
+                                                View
+                                            </button>
+                                            <button
+                                                v-if="request.can_approve"
+                                                type="button"
+                                                @click="openScheduleRequestDecision(request, 'approve')"
+                                                class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors"
+                                            >
+                                                Approve
+                                            </button>
+                                            <button
+                                                v-if="request.can_approve"
+                                                type="button"
+                                                @click="openScheduleRequestDecision(request, 'reject')"
+                                                class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                                            >
+                                                Reject
+                                            </button>
+                                            <button
+                                                v-if="request.can_cancel"
+                                                type="button"
+                                                @click="openScheduleRequestDecision(request, 'cancel')"
+                                                class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-if="scheduleChangeRequests.length === 0">
+                                    <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        No schedule change requests to show.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- Pivot Report View -->
@@ -522,6 +623,122 @@
             </div>
         </div>
 
+        <!-- Schedule Request Decision Modal -->
+        <div v-if="showScheduleRequestDecisionModal && selectedScheduleRequest" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4 py-6">
+                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" @click="closeScheduleRequestDecision"></div>
+                <div class="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+                    <div class="flex items-start justify-between border-b border-gray-100 bg-gray-50 px-6 py-5">
+                        <div>
+                            <h3 class="text-lg font-black text-gray-900">
+                                {{ scheduleRequestDecisionTitle }}
+                            </h3>
+                            <p class="mt-1 text-xs font-bold text-gray-500">
+                                Request #{{ selectedScheduleRequest.id }} for {{ selectedScheduleRequest.schedule_user_name || '-' }}
+                            </p>
+                        </div>
+                        <button type="button" @click="closeScheduleRequestDecision" class="rounded-xl p-2 text-gray-400 transition-colors hover:bg-white hover:text-gray-600">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5 custom-scrollbar">
+                        <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                            <div class="rounded-xl border border-gray-100 bg-white p-4">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Requester</div>
+                                <div class="mt-1 text-sm font-bold text-gray-800">{{ selectedScheduleRequest.requester_name || '-' }}</div>
+                            </div>
+                            <div class="rounded-xl border border-gray-100 bg-white p-4">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Submitted</div>
+                                <div class="mt-1 text-sm font-bold text-gray-800">{{ formatAuditDateTime(selectedScheduleRequest.created_at) }}</div>
+                            </div>
+                            <div class="rounded-xl border border-gray-100 bg-white p-4">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Request Status</div>
+                                <div class="mt-1 text-sm font-bold text-gray-800">{{ selectedScheduleRequest.status || '-' }}</div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="mb-2 flex items-center justify-between">
+                                <h4 class="text-xs font-black uppercase tracking-widest text-gray-500">Entries</h4>
+                                <span class="text-[10px] font-bold text-gray-400">{{ scheduleRequestEntryRows.length }} row(s)</span>
+                            </div>
+                            <div class="overflow-x-auto rounded-xl border border-gray-200 custom-scrollbar">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-100">
+                                        <tr>
+                                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-500">From</th>
+                                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-500">To</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 bg-white">
+                                        <tr v-for="row in scheduleRequestEntryRows" :key="row.key">
+                                            <td class="px-3 py-3 align-top">
+                                                <div class="space-y-1 text-xs font-bold text-gray-700">
+                                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">{{ row.label }}</div>
+                                                    <div v-for="line in row.from.lines" :key="line.label" class="text-gray-600">{{ line.text }}</div>
+                                                </div>
+                                            </td>
+                                            <td class="px-3 py-3 align-top">
+                                                <div class="space-y-1 text-xs font-bold text-blue-700">
+                                                    <div class="text-[10px] font-black uppercase tracking-widest text-blue-400">{{ row.label }}</div>
+                                                    <div
+                                                        v-for="line in row.to.lines"
+                                                        :key="line.label"
+                                                        :class="line.changed ? 'text-blue-700' : 'text-gray-600'"
+                                                    >
+                                                        {{ line.text }}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr v-if="scheduleRequestEntryRows.length === 0">
+                                            <td colspan="2" class="px-3 py-8 text-center text-sm text-gray-500">No entries submitted.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div v-if="selectedScheduleRequest.requester_remarks" class="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                            <div class="text-[10px] font-black uppercase tracking-widest text-blue-500">Requester Remarks</div>
+                            <div class="mt-1 text-sm font-bold text-gray-700">{{ selectedScheduleRequest.requester_remarks }}</div>
+                        </div>
+
+                        <div v-if="scheduleDecisionAction === 'approve' || scheduleDecisionAction === 'reject'">
+                            <label class="mb-1 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Approver Remarks</label>
+                            <textarea
+                                v-model="scheduleDecisionRemarks"
+                                rows="3"
+                                class="w-full rounded-xl border-gray-200 text-sm font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                :placeholder="scheduleDecisionAction === 'approve' ? 'Optional approval remarks' : 'Reason for rejection'"
+                            ></textarea>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+                        <button type="button" @click="closeScheduleRequestDecision" class="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-500 transition-colors hover:bg-white hover:text-gray-700">
+                            {{ scheduleDecisionAction === 'view' ? 'Close' : 'Cancel' }}
+                        </button>
+                        <button
+                            v-if="scheduleDecisionAction !== 'view'"
+                            type="button"
+                            @click="submitScheduleRequestDecision"
+                            :disabled="isSubmittingScheduleDecision"
+                            :class="[
+                                'rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-colors disabled:opacity-50',
+                                scheduleDecisionAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
+                            ]"
+                        >
+                            {{ scheduleRequestDecisionSubmitLabel }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Import Modal -->
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
@@ -801,10 +1018,10 @@
                         </div>
                         <div class="flex items-center gap-2">
                             <button 
-                                v-if="isViewingOnly && canEditSchedule"
+                                v-if="isViewingOnly && (canEditSchedule || canRequestScheduleChange)"
                                 @click="isViewingOnly = false"
                                 class="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all group"
-                                title="Edit Schedule"
+                                :title="canEditSchedule ? 'Edit Schedule' : 'Request Change'"
                             >
                                 <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -952,6 +1169,16 @@
                             </div>
                         </div>
 
+                        <div v-if="isRequestingScheduleChange" class="bg-blue-50 rounded-2xl p-5 border border-blue-100">
+                            <label class="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 ml-1">Request Remarks</label>
+                            <textarea
+                                v-model="form.requester_remarks"
+                                rows="3"
+                                class="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500"
+                                placeholder="Reason for this schedule change"
+                            ></textarea>
+                        </div>
+
                         <!-- Audit Footer -->
                         <div v-if="isEditing" class="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm">
@@ -992,7 +1219,7 @@
                                 </button>
                                 <button v-if="!isViewingOnly" type="submit"
                                         class="px-8 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all transform active:scale-95">
-                                    {{ isEditing ? 'Save Changes' : 'Create Schedule' }}
+                                    {{ isRequestingScheduleChange ? 'Submit Request' : (isEditing ? 'Save Changes' : 'Create Schedule') }}
                                 </button>
                             </div>
                         </div>
@@ -1024,6 +1251,7 @@ const props = defineProps({
     activeDepartments: Array,
     hierarchicalDepartments: Array,
     editableUserIds: Array,
+    scheduleChangeRequests: Array,
     pivotYears: Array,
     availableYears: Array,
     pivotStatuses: Array,
@@ -1191,6 +1419,37 @@ const reportTitle = computed(() => {
 })
 const currentView = useRemember('calendar', 'schedules.currentView')
 const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
+const scheduleChangeRequests = computed(() => props.scheduleChangeRequests ?? [])
+const pendingRequestCount = computed(() => scheduleChangeRequests.value.filter(request => request.status === 'pending').length)
+const showScheduleRequestDecisionModal = ref(false)
+const selectedScheduleRequest = ref(null)
+const scheduleDecisionAction = ref('approve')
+const scheduleDecisionRemarks = ref('')
+const isSubmittingScheduleDecision = ref(false)
+const scheduleRequestDecisionTitle = computed(() => {
+    switch (scheduleDecisionAction.value) {
+        case 'approve':
+            return 'Approve Schedule Change'
+        case 'reject':
+            return 'Reject Schedule Change'
+        case 'cancel':
+            return 'Cancel Schedule Change Request'
+        default:
+            return 'View Schedule Change Request'
+    }
+})
+const scheduleRequestDecisionSubmitLabel = computed(() => {
+    switch (scheduleDecisionAction.value) {
+        case 'approve':
+            return 'Approve Request'
+        case 'reject':
+            return 'Reject Request'
+        case 'cancel':
+            return 'Cancel Request'
+        default:
+            return 'Close'
+    }
+})
 
 const getDescendantNodeIds = (nodeId, nodes) => {
     if (!nodeId || !nodes) return [];
@@ -1434,7 +1693,8 @@ const switchView = (view) => {
 
 const handleKeydown = (e) => {
     if (e.key === 'Escape') {
-        if (showImportModal.value) closeImportModal()
+        if (showScheduleRequestDecisionModal.value) closeScheduleRequestDecision()
+        else if (showImportModal.value) closeImportModal()
         else if (showDuplicateModal.value) closeDuplicateModal()
         else if (showModal.value) closeModal()
     }
@@ -1891,6 +2151,7 @@ const isEditing = ref(false)
 const isViewingOnly = ref(false)
 const isDeletingSchedule = ref(false)
 const canEditSchedule = ref(false)
+const selectedScheduleCanRequestChange = ref(false)
 const currentScheduleId    = ref(null)
 const currentActualTimeIn  = ref(null)
 const currentActualTimeOut = ref(null)
@@ -1931,6 +2192,7 @@ const form = reactive({
     pickup_end: '',
     backlogs_start: '',
     backlogs_end: '',
+    requester_remarks: '',
 })
 
 const formatAuditDateTime = (value) => {
@@ -1972,6 +2234,18 @@ const modalAudit = computed(() => {
 })
 
 const isLocationRequired = computed(() => !optionalScheduleLocationStatuses.has(form.status))
+const canRequestScheduleChange = computed(() => {
+    return Boolean(
+        isEditing.value
+        && currentScheduleId.value
+        && !hasPermission('schedules.edit')
+        && selectedScheduleCanRequestChange.value
+        && Number(form.user_id) === Number(authUser.value?.id)
+    )
+})
+const isRequestingScheduleChange = computed(() => {
+    return Boolean(!isViewingOnly.value && canRequestScheduleChange.value)
+})
 
 const formatTime = (isoString) => {
     if (!isoString) return '-'
@@ -2041,6 +2315,7 @@ const resetScheduleModalState = () => {
     isViewingOnly.value = false
     isDeletingSchedule.value = false
     canEditSchedule.value = false
+    selectedScheduleCanRequestChange.value = false
     currentScheduleId.value = null
     currentActualTimeIn.value = null
     currentActualTimeOut.value = null
@@ -2049,6 +2324,7 @@ const resetScheduleModalState = () => {
     currentUpdatedBy.value = null
     currentUpdatedAt.value = null
     form.scope_date = null
+    form.requester_remarks = ''
 }
 
 const openCreateModal = () => {
@@ -2065,6 +2341,7 @@ const openCreateModal = () => {
     form.pickup_end = ''
     form.backlogs_start = ''
     form.backlogs_end = ''
+    form.requester_remarks = ''
 
     const now = new Date()
     const start = new Date(now)
@@ -2095,7 +2372,8 @@ const handleEventClick = (payload) => {
 
     isEditing.value = true; // Signifies we are interacting with an existing record
     isViewingOnly.value = true; // Always start in View mode
-    canEditSchedule.value = Boolean(event.can_edit); // Store permission for the Pencil icon
+    canEditSchedule.value = Boolean(event.can_edit);
+    selectedScheduleCanRequestChange.value = Boolean(event.can_request_change);
     currentScheduleId.value    = event.id
     const eventActualTimes = getActualTimesForDate(event, clickedDateKey)
     currentActualTimeIn.value  = eventActualTimes.actual_time_in
@@ -2112,6 +2390,7 @@ const handleEventClick = (payload) => {
     form.pickup_end = event.pickup_end || ''
     form.backlogs_start = event.backlogs_start || ''
     form.backlogs_end = event.backlogs_end || ''
+    form.requester_remarks = ''
 
     // Populate store entries from schedule_stores; fall back to legacy single store+time
     if (event.schedule_stores && event.schedule_stores.length > 0) {
@@ -2203,13 +2482,16 @@ const submitForm = () => {
 
     const editingScheduleId = isEditing.value ? currentScheduleId.value : null
     const isUpdatingSchedule = Boolean(editingScheduleId)
-    const url = isUpdatingSchedule ? `/schedules/${editingScheduleId}` : '/schedules'
-    const requestMethod = isUpdatingSchedule ? put : post
+    const isChangeRequest = isRequestingScheduleChange.value
+    const url = isChangeRequest ? `/schedules/${editingScheduleId}/change-requests` : (isUpdatingSchedule ? `/schedules/${editingScheduleId}` : '/schedules')
+    const requestMethod = isChangeRequest ? post : (isUpdatingSchedule ? put : post)
     
     requestMethod(url, form, {
         onSuccess: () => {
             closeModal()
-            showSuccess(isUpdatingSchedule ? 'Schedule updated successfully' : 'Schedule created successfully')
+            if (!isChangeRequest) {
+                showSuccess(isUpdatingSchedule ? 'Schedule updated successfully' : 'Schedule created successfully')
+            }
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -2244,6 +2526,203 @@ const deleteSchedule = async () => {
         },
         onFinish: () => {
             isDeletingSchedule.value = false
+        },
+    })
+}
+
+const requestStatusClass = (status) => {
+    switch (status) {
+        case 'approved':
+            return 'bg-emerald-50 text-emerald-700'
+        case 'rejected':
+            return 'bg-red-50 text-red-700'
+        case 'cancelled':
+            return 'bg-gray-100 text-gray-600'
+        default:
+            return 'bg-blue-50 text-blue-700'
+    }
+}
+
+const summarizeRequestWindow = (payload) => {
+    const stores = payload?.stores || []
+    if (!stores.length) return 'No deployment entries'
+
+    const first = stores[0]
+    const extra = stores.length > 1 ? ` + ${stores.length - 1} more` : ''
+    return `${formatDateTime(first.start_time)} to ${formatDateTime(first.end_time)}${extra}`
+}
+
+const formatScheduleDecisionTime = (value) => {
+    if (!value) return '-'
+
+    if (typeof value === 'string' && /^\d{2}:\d{2}/.test(value)) {
+        const [hour, minute] = value.split(':').map(Number)
+        const date = new Date()
+        date.setHours(hour, minute, 0, 0)
+
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+    }
+
+    return formatTime(value)
+}
+
+const formatScheduleRequestWindow = (entry) => {
+    if (!entry) return '-'
+
+    return `${formatAuditDateTime(entry.start_time)} to ${formatAuditDateTime(entry.end_time)}`
+}
+
+const formatScheduleRequestEntry = (entry) => {
+    if (!entry) {
+        return {
+            values: {
+                location: '-',
+                window: '-',
+                ticket: '-',
+                grace: '-',
+                remarks: '-',
+            },
+        }
+    }
+
+    return {
+        values: {
+            location: entry.store_label || entry.store?.name || entry.store_id || '-',
+            window: formatScheduleRequestWindow(entry),
+            ticket: entry.ticket_label || entry.ticket?.ticket_key || entry.ticket_id || '-',
+            grace: `${entry.grace_period_minutes ?? 30} min`,
+            remarks: entry.remarks || '-',
+        },
+    }
+}
+
+const formatScheduleRequestHeader = (payload) => {
+    return {
+        values: {
+            status: payload.status || '-',
+            pickup: `${formatScheduleDecisionTime(payload.pickup_start)} to ${formatScheduleDecisionTime(payload.pickup_end)}`,
+            backlogs: `${formatScheduleDecisionTime(payload.backlogs_start)} to ${formatScheduleDecisionTime(payload.backlogs_end)}`,
+            scopeDate: payload.scope_date || '-',
+        },
+    }
+}
+
+const scheduleRequestComparison = (fromValues, toValues, labels) => {
+    const from = []
+    const to = []
+
+    for (const [key, label] of Object.entries(labels)) {
+        const fromValue = fromValues?.[key] ?? '-'
+        const toValue = toValues?.[key] ?? '-'
+        const changed = String(fromValue) !== String(toValue)
+
+        from.push({
+            label,
+            text: `${label}: ${fromValue}`,
+            changed,
+        })
+
+        to.push({
+            label,
+            text: `${label}: ${toValue}`,
+            changed,
+        })
+    }
+
+    return { from: { lines: from }, to: { lines: to } }
+}
+
+const scheduleRequestEntryRows = computed(() => {
+    const original = selectedScheduleRequest.value?.original_payload ?? {}
+    const requested = selectedScheduleRequest.value?.requested_payload ?? {}
+    const scopeDate = requested.scope_date || original.scope_date || null
+    const scopedEntries = (entries) => {
+        const rows = entries ?? []
+
+        if (!scopeDate) {
+            return rows
+        }
+
+        return rows.filter(entry => isEntryOnDate(entry, scopeDate))
+    }
+    const originalStores = scopedEntries(original.stores)
+    const requestedStores = scopedEntries(requested.stores)
+    const rowCount = Math.max(originalStores.length, requestedStores.length)
+
+    return [
+        {
+            key: 'schedule',
+            label: 'Schedule',
+            ...scheduleRequestComparison(
+                formatScheduleRequestHeader(original).values,
+                formatScheduleRequestHeader(requested).values,
+                {
+                    status: 'Status',
+                    pickup: 'Pickup Window',
+                    backlogs: 'Backlogs Window',
+                    scopeDate: 'Scope Date',
+                },
+            ),
+        },
+        ...Array.from({ length: rowCount }, (_, index) => ({
+            key: `entry-${index}`,
+            label: `Entry ${index + 1}`,
+            ...scheduleRequestComparison(
+                formatScheduleRequestEntry(originalStores[index]).values,
+                formatScheduleRequestEntry(requestedStores[index]).values,
+                {
+                    location: 'Location',
+                    window: 'Window',
+                    ticket: 'Ticket',
+                    grace: 'Grace',
+                    remarks: 'Remarks',
+                },
+            ),
+        })),
+    ]
+})
+
+const openScheduleRequestDecision = (request, action) => {
+    selectedScheduleRequest.value = request
+    scheduleDecisionAction.value = action
+    scheduleDecisionRemarks.value = ''
+    showScheduleRequestDecisionModal.value = true
+}
+
+const closeScheduleRequestDecision = () => {
+    showScheduleRequestDecisionModal.value = false
+    selectedScheduleRequest.value = null
+    scheduleDecisionRemarks.value = ''
+    isSubmittingScheduleDecision.value = false
+}
+
+const submitScheduleRequestDecision = () => {
+    if (!selectedScheduleRequest.value || isSubmittingScheduleDecision.value) return
+
+    isSubmittingScheduleDecision.value = true
+    const action = scheduleDecisionAction.value
+
+    if (action === 'cancel') {
+        destroy(`/schedule-change-requests/${selectedScheduleRequest.value.id}`, {
+            preserveScroll: true,
+            onSuccess: () => closeScheduleRequestDecision(),
+            onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Cancellation failed'),
+            onFinish: () => {
+                isSubmittingScheduleDecision.value = false
+            },
+        })
+
+        return
+    }
+
+    post(`/schedule-change-requests/${selectedScheduleRequest.value.id}/${action}`, {
+        remarks: scheduleDecisionRemarks.value,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => closeScheduleRequestDecision(),
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || `${action === 'approve' ? 'Approval' : 'Rejection'} failed`),
+        onFinish: () => {
+            isSubmittingScheduleDecision.value = false
         },
     })
 }

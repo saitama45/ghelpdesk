@@ -58,6 +58,11 @@ class Schedule extends Model
         return $this->hasMany(ScheduleStore::class)->orderBy('start_time');
     }
 
+    public function changeRequests()
+    {
+        return $this->hasMany(ScheduleChangeRequest::class);
+    }
+
     /**
      * Get the primary store for this schedule (shortcut for legacy single-store logic).
      */

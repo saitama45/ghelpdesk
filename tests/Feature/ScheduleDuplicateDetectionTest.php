@@ -28,6 +28,7 @@ class ScheduleDuplicateDetectionTest extends TestCase
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         Permission::firstOrCreate(['name' => 'schedules.delete']);
         Permission::firstOrCreate(['name' => 'schedules.view']);
+        Permission::firstOrCreate(['name' => 'schedules.edit']);
     }
 
     public function test_duplicate_scan_detects_location_rows_even_when_metadata_differs(): void
@@ -102,6 +103,7 @@ class ScheduleDuplicateDetectionTest extends TestCase
     public function test_location_can_be_added_to_attended_schedule_without_changing_time_window(): void
     {
         $scheduledUser = User::factory()->create();
+        $scheduledUser->givePermissionTo('schedules.edit');
         $store = Store::create([
             'code' => 'STR-002',
             'name' => 'Assigned Store',
@@ -155,7 +157,7 @@ class ScheduleDuplicateDetectionTest extends TestCase
         ]);
     }
 
-    public function test_top_level_department_manager_can_edit_schedule_when_intermediate_manager_is_inactive(): void
+    public function test_user_with_schedule_edit_permission_can_edit_schedule(): void
     {
         [$department, $businessSolutions, $processExcellence] = $this->scheduleDepartmentHierarchy();
         $yssa = $this->departmentUser('Yssa Dysangco', 'yssa.dysangco@tablegroup.com.ph', $department, null, true, true);
@@ -163,6 +165,7 @@ class ScheduleDuplicateDetectionTest extends TestCase
         $patrick = $this->departmentUser('Patrick Lopez', 'patrick.lopez@tablegroup.com.ph', $department, $processExcellence, true, true);
 
         $yssa->givePermissionTo('schedules.view');
+        $yssa->givePermissionTo('schedules.edit');
         $lea->managers()->attach($yssa->id);
         $patrick->managers()->attach($lea->id);
 

@@ -177,6 +177,10 @@ Route::middleware('auth')->group(function () {
     Route::get('schedules/complete-schedules', [\App\Http\Controllers\ScheduleController::class, 'completeSchedules'])->name('schedules.complete-schedules');
     Route::get('schedules/duplicates', [\App\Http\Controllers\ScheduleController::class, 'duplicates'])->name('schedules.duplicates');
     Route::delete('schedules/duplicates', [\App\Http\Controllers\ScheduleController::class, 'destroyDuplicates'])->name('schedules.duplicates.destroy');
+    Route::post('schedules/{schedule}/change-requests', [\App\Http\Controllers\ScheduleController::class, 'storeChangeRequest'])->name('schedules.change-requests.store');
+    Route::post('schedule-change-requests/{scheduleChangeRequest}/approve', [\App\Http\Controllers\ScheduleController::class, 'approveChangeRequest'])->name('schedule-change-requests.approve');
+    Route::post('schedule-change-requests/{scheduleChangeRequest}/reject', [\App\Http\Controllers\ScheduleController::class, 'rejectChangeRequest'])->name('schedule-change-requests.reject');
+    Route::delete('schedule-change-requests/{scheduleChangeRequest}', [\App\Http\Controllers\ScheduleController::class, 'cancelChangeRequest'])->name('schedule-change-requests.cancel');
     Route::resource('schedules', \App\Http\Controllers\ScheduleController::class)->except(['show', 'create', 'edit']);
     Route::get('schedules/export/pdf', [\App\Http\Controllers\ScheduleExportController::class, 'pdf'])->name('schedules.export.pdf');
     Route::get('tickets/data/categories', [\App\Http\Controllers\TicketController::class, 'getCategories'])->name('tickets.data.categories');

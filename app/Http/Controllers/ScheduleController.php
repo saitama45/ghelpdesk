@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Department;
 use App\Models\Schedule;
+use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleStore;
 use App\Models\AttendanceLog;
 use App\Models\DepartmentNode;
 use App\Models\User;
 use App\Models\Store;
+use App\Models\Ticket;
+use App\Mail\ScheduleChangeRequestNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,6 +24,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
 
@@ -64,8 +68,9 @@ class ScheduleController extends Controller implements HasMiddleware
         return [
             new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules', 'completeSchedules']),
             new Middleware('can:schedules.create', only: ['store', 'import']),
+            new Middleware('can:schedules.edit', only: ['update']),
+            new Middleware('can:schedules.approve', only: ['approveChangeRequest', 'rejectChangeRequest']),
             new Middleware('can:schedules.delete', only: ['destroy', 'duplicates', 'destroyDuplicates']),
-            // schedules.edit is checked inside update() to also allow the schedule owner
         ];
     }
 
@@ -148,8 +153,10 @@ class ScheduleController extends Controller implements HasMiddleware
         
         $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
         $editableUserIds = $this->editableScheduleUserIds($request->user());
+        $scheduleChangeRequests = $this->scheduleChangeRequestRows($request->user());
+        $canDirectEditSchedules = $request->user()->can('schedules.edit');
 
-        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $editableUserIds) {
+        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $editableUserIds, $canDirectEditSchedules) {
             $schedLogs     = $logsBySchedule->get($schedule->id, collect());
             $actualTimeIn  = $schedLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
             $actualTimeOut = $schedLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
@@ -172,7 +179,8 @@ class ScheduleController extends Controller implements HasMiddleware
                 'updated_by_name' => $schedule->updater?->name,
                 'created_at'      => $schedule->created_at?->toIso8601String(),
                 'updated_at'      => $schedule->updated_at?->toIso8601String(),
-                'can_edit'        => in_array((int) $schedule->user_id, $editableUserIds, true),
+                'can_edit'        => $canDirectEditSchedules && in_array((int) $schedule->user_id, $editableUserIds, true),
+                'can_request_change' => ! $canDirectEditSchedules && (int) $schedule->user_id === (int) auth()->id(),
                 'actual_time_in'  => $actualTimeIn,
                 'actual_time_out' => $actualTimeOut,
                 'actual_times_by_date' => $actualTimesByDate,
@@ -256,6 +264,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'activeDepartments' => $activeDepartments,
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'editableUserIds' => $editableUserIds,
+            'scheduleChangeRequests' => $scheduleChangeRequests,
             'pivotYears'     => $selectedYears,
             'availableYears' => $availableYears,
             'pivotStatuses'  => $pivotStatuses,
@@ -329,13 +338,124 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function update(Request $request, Schedule $schedule)
     {
-        $user = auth()->user();
-        
-        if (! in_array((int) $schedule->user_id, $this->editableScheduleUserIds($user), true)) {
-            abort(403, 'You are not authorized to edit this schedule.');
+        $this->applyScheduleUpdate($request->all(), $schedule, auth()->id());
+
+        return redirect()->back()->with('success', 'Schedule updated successfully');
+    }
+
+    public function storeChangeRequest(Request $request, Schedule $schedule)
+    {
+        abort_unless((int) $schedule->user_id === (int) $request->user()->id, 403, 'You can only request changes for your own schedule.');
+        abort_if($request->user()->can('schedules.edit'), 403, 'Users with direct edit access should update schedules directly.');
+
+        $payload = $this->validateScheduleUpdatePayload($request->all());
+
+        if ((int) $payload['user_id'] !== (int) $schedule->user_id) {
+            return redirect()->back()->withErrors([
+                'user_id' => 'Schedule change requests cannot reassign the schedule to another user.',
+            ]);
+        }
+
+        $approverIds = $this->resolveScheduleChangeApproverIds($request->user());
+
+        if (empty($approverIds)) {
+            return redirect()->back()->withErrors([
+                'approver' => 'No eligible schedule approver is available for this request.',
+            ]);
+        }
+
+        $changeRequest = ScheduleChangeRequest::updateOrCreate(
+            [
+                'schedule_id' => $schedule->id,
+                'requester_id' => $request->user()->id,
+                'status' => 'pending',
+            ],
+            [
+                'assigned_approver_ids' => $approverIds,
+                'original_payload' => $this->schedulePayload($schedule->fresh(['scheduleStores'])),
+                'requested_payload' => $payload,
+                'requester_remarks' => $request->input('requester_remarks'),
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+                'approver_remarks' => null,
+            ]
+        );
+
+        $changeRequest->load(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester']);
+        $this->notifyScheduleChangeApprovers($changeRequest);
+
+        return redirect()->back()->with('success', 'Schedule change request submitted for approval.');
+    }
+
+    public function approveChangeRequest(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
+    {
+        $this->authorizeScheduleChangeApprover($scheduleChangeRequest);
+
+        if ($scheduleChangeRequest->status !== 'pending') {
+            return redirect()->back()->withErrors(['request' => 'This schedule change request is no longer pending.']);
         }
 
         $request->validate([
+            'remarks' => 'nullable|string|max:1000',
+        ]);
+
+        DB::transaction(function () use ($request, $scheduleChangeRequest) {
+            $this->applyScheduleUpdate($scheduleChangeRequest->requested_payload, $scheduleChangeRequest->schedule, auth()->id());
+
+            $scheduleChangeRequest->update([
+                'status' => 'approved',
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+                'approver_remarks' => $request->remarks,
+            ]);
+        });
+
+        $scheduleChangeRequest->refresh()->load(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester']);
+        $this->notifyScheduleChangeRequester($scheduleChangeRequest, 'approved');
+
+        return redirect()->back()->with('success', 'Schedule change request approved and applied.');
+    }
+
+    public function rejectChangeRequest(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
+    {
+        $this->authorizeScheduleChangeApprover($scheduleChangeRequest);
+
+        if ($scheduleChangeRequest->status !== 'pending') {
+            return redirect()->back()->withErrors(['request' => 'This schedule change request is no longer pending.']);
+        }
+
+        $request->validate([
+            'remarks' => 'nullable|string|max:1000',
+        ]);
+
+        $scheduleChangeRequest->update([
+            'status' => 'rejected',
+            'rejected_by' => auth()->id(),
+            'rejected_at' => now(),
+            'approver_remarks' => $request->remarks,
+        ]);
+
+        $scheduleChangeRequest->load(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester']);
+        $this->notifyScheduleChangeRequester($scheduleChangeRequest, 'rejected');
+
+        return redirect()->back()->with('success', 'Schedule change request rejected.');
+    }
+
+    public function cancelChangeRequest(ScheduleChangeRequest $scheduleChangeRequest)
+    {
+        abort_unless((int) $scheduleChangeRequest->requester_id === (int) auth()->id(), 403);
+        abort_unless($scheduleChangeRequest->status === 'pending', 403);
+
+        $scheduleChangeRequest->update(['status' => 'cancelled']);
+
+        return redirect()->back()->with('success', 'Schedule change request cancelled.');
+    }
+
+    private function validateScheduleUpdatePayload(array $payload): array
+    {
+        return validator($payload, [
             'user_id'                          => 'required|exists:users,id',
             'status'                           => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday,N/A',
             'stores'                           => 'required|array|min:1',
@@ -351,73 +471,103 @@ class ScheduleController extends Controller implements HasMiddleware
             'backlogs_start'                   => 'nullable|string',
             'backlogs_end'                     => 'nullable|string',
             'scope_date'                       => 'nullable|date',
+            'requester_remarks'                => 'nullable|string|max:1000',
         ], [
             'stores.*.store_id.required_unless' => 'Location is required for every schedule entry.',
-        ]);
+        ])->validate();
+    }
 
-        $storeEntries = $request->input('stores');
+    private function applyScheduleUpdate(array $payload, Schedule $schedule, int $updaterId): void
+    {
+        $payload = $this->validateScheduleUpdatePayload($payload);
+        $storeEntries = $payload['stores'];
         $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
-        $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
-        $scopeDate = $request->filled('scope_date') ? Carbon::parse($request->scope_date)->toDateString() : null;
+        $endTime = Carbon::parse(collect($storeEntries)->max('end_time'));
+        $scopeDate = !empty($payload['scope_date']) ? Carbon::parse($payload['scope_date'])->toDateString() : null;
 
-        if ($this->scheduleHasAttendanceLogs($schedule) && (int) $request->user_id !== (int) $schedule->user_id) {
-            return redirect()->back()->withErrors([
+        if ($this->scheduleHasAttendanceLogs($schedule) && (int) $payload['user_id'] !== (int) $schedule->user_id) {
+            throw ValidationException::withMessages([
                 'user_id' => 'This schedule already has attendance logs and cannot be reassigned to another user.',
             ]);
         }
 
         if ($this->hasInvalidSubmittedScheduleStoreIds($schedule, $storeEntries)) {
-            return redirect()->back()->withErrors([
+            throw ValidationException::withMessages([
                 'stores' => 'One or more selected schedule entries do not belong to this schedule.',
             ]);
         }
 
         if (
             $this->scheduleEntryWindowsChanged($schedule, $expandedStoreEntries, $scopeDate)
-            && $this->hasAttendanceLogsOutsideEntries($schedule, $expandedStoreEntries, $scopeDate)
+            && ($outsideAttendanceLog = $this->firstAttendanceLogOutsideEntries($schedule, $expandedStoreEntries, $scopeDate))
         ) {
-            return redirect()->back()->withErrors([
-                'stores' => 'This schedule already has attendance logs. The selected date and time range must still include the existing time-in/time-out logs.',
+            throw ValidationException::withMessages([
+                'stores' => 'This schedule already has attendance logs. The selected date and time range must still include the existing '
+                    . str_replace('_', ' ', $outsideAttendanceLog->type)
+                    . ' log at '
+                    . $outsideAttendanceLog->log_time?->copy()->timezone('Asia/Manila')->format('M d, Y h:i A')
+                    . '.',
             ]);
         }
 
-        if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries, $schedule->id)) {
-            return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
+        if ($this->hasScheduleOverlap((int) $payload['user_id'], $expandedStoreEntries, $schedule->id)) {
+            throw ValidationException::withMessages([
+                'stores' => 'This user already has a schedule that overlaps with the selected time range.',
+            ]);
         }
 
-        DB::transaction(function () use ($request, $schedule, $startTime, $endTime, $expandedStoreEntries, $scopeDate) {
+        DB::transaction(function () use ($payload, $schedule, $startTime, $endTime, $expandedStoreEntries, $scopeDate, $updaterId) {
             if ($scopeDate && $this->scheduleHasEntriesOutsideScope($schedule, $scopeDate)) {
-                $this->splitScopedSchedule($request, $schedule, $expandedStoreEntries, $scopeDate);
+                $this->splitScopedSchedule($payload, $schedule, $expandedStoreEntries, $scopeDate, $updaterId);
 
                 return;
             }
 
             $schedule->update([
-                'user_id'        => $request->user_id,
-                'updated_by'     => auth()->id(),
-                'status'         => $request->status,
+                'user_id'        => $payload['user_id'],
+                'updated_by'     => $updaterId,
+                'status'         => $payload['status'],
                 'start_time'     => $startTime,
                 'end_time'       => $endTime,
-                'pickup_start'   => $request->pickup_start,
-                'pickup_end'     => $request->pickup_end,
-                'backlogs_start' => $request->backlogs_start,
-                'backlogs_end'   => $request->backlogs_end,
+                'pickup_start'   => $payload['pickup_start'] ?? null,
+                'pickup_end'     => $payload['pickup_end'] ?? null,
+                'backlogs_start' => $payload['backlogs_start'] ?? null,
+                'backlogs_end'   => $payload['backlogs_end'] ?? null,
             ]);
 
             if ($scopeDate) {
                 $this->syncScopedScheduleStores($schedule, $expandedStoreEntries, $scopeDate);
                 $this->refreshScheduleBounds($schedule);
             } else {
-                // Rebuild store entries
                 $schedule->scheduleStores()->delete();
                 foreach ($expandedStoreEntries as $entry) {
                     $schedule->scheduleStores()->create($this->scheduleStorePayload($entry));
                 }
             }
         });
+    }
 
-        return redirect()->back()->with('success', 'Schedule updated successfully');
+    private function schedulePayload(Schedule $schedule): array
+    {
+        return [
+            'user_id' => (int) $schedule->user_id,
+            'status' => $schedule->status,
+            'pickup_start' => $schedule->pickup_start ? substr($schedule->pickup_start, 0, 5) : null,
+            'pickup_end' => $schedule->pickup_end ? substr($schedule->pickup_end, 0, 5) : null,
+            'backlogs_start' => $schedule->backlogs_start ? substr($schedule->backlogs_start, 0, 5) : null,
+            'backlogs_end' => $schedule->backlogs_end ? substr($schedule->backlogs_end, 0, 5) : null,
+            'stores' => $schedule->scheduleStores->map(fn (ScheduleStore $scheduleStore) => [
+                'id' => $scheduleStore->id,
+                'store_id' => $scheduleStore->store_id,
+                'ticket_id' => $scheduleStore->ticket_id,
+                'start_time' => $scheduleStore->start_time?->toIso8601String(),
+                'end_time' => $scheduleStore->end_time?->toIso8601String(),
+                'grace_period_minutes' => $scheduleStore->grace_period_minutes ?? 30,
+                'remarks' => $scheduleStore->remarks,
+            ])->values()->all(),
+            'scope_date' => null,
+        ];
     }
 
     public function destroy(Schedule $schedule)
@@ -831,19 +981,20 @@ class ScheduleController extends Controller implements HasMiddleware
             ->count() !== $ids->count();
     }
 
-    private function hasAttendanceLogsOutsideEntries(Schedule $schedule, array $entries, ?string $scopeDate = null): bool
+    private function firstAttendanceLogOutsideEntries(Schedule $schedule, array $entries, ?string $scopeDate = null): ?AttendanceLog
     {
         $logs = AttendanceLog::where('schedule_id', $schedule->id)
-            ->when($scopeDate, fn ($query) => $query->whereDate('log_time', $scopeDate))
-            ->get(['log_time']);
+            ->orderBy('log_time')
+            ->get(['id', 'type', 'log_time'])
+            ->when($scopeDate, fn ($logs) => $logs->filter(
+                fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString() === $scopeDate
+            )->values());
 
         if ($logs->isEmpty()) {
-            return false;
+            return null;
         }
 
-        return $logs->contains(function ($log) use ($entries) {
-            return !$this->entriesContainLogTime($entries, $log->log_time);
-        });
+        return $logs->first(fn ($log) => !$this->entriesContainLogTime($entries, $log->log_time));
     }
 
     private function scheduleEntryWindowsChanged(Schedule $schedule, array $entries, ?string $scopeDate = null): bool
@@ -918,19 +1069,19 @@ class ScheduleController extends Controller implements HasMiddleware
         $this->syncScheduleStoreRows($schedule, $existingRows, $entries);
     }
 
-    private function splitScopedSchedule(Request $request, Schedule $schedule, array $entries, string $scopeDate): void
+    private function splitScopedSchedule(array $payload, Schedule $schedule, array $entries, string $scopeDate, int $updaterId): void
     {
         $newSchedule = Schedule::create([
-            'user_id'        => $request->user_id,
+            'user_id'        => $payload['user_id'],
             'created_by'     => $schedule->created_by ?: auth()->id(),
-            'updated_by'     => auth()->id(),
-            'status'         => $request->status,
+            'updated_by'     => $updaterId,
+            'status'         => $payload['status'],
             'start_time'     => collect($entries)->min('start_time'),
             'end_time'       => collect($entries)->max('end_time'),
-            'pickup_start'   => $request->pickup_start,
-            'pickup_end'     => $request->pickup_end,
-            'backlogs_start' => $request->backlogs_start,
-            'backlogs_end'   => $request->backlogs_end,
+            'pickup_start'   => $payload['pickup_start'] ?? null,
+            'pickup_end'     => $payload['pickup_end'] ?? null,
+            'backlogs_start' => $payload['backlogs_start'] ?? null,
+            'backlogs_end'   => $payload['backlogs_end'] ?? null,
         ]);
 
         $existingRows = $this->scopedScheduleStoreRows($schedule, $scopeDate);
@@ -2145,9 +2296,190 @@ class ScheduleController extends Controller implements HasMiddleware
         return $visited;
     }
 
+    private function resolveScheduleChangeApproverIds(User $requester): array
+    {
+        $approverIds = collect();
+
+        $directManagerIds = $requester->managers()
+            ->where('is_active', true)
+            ->where('is_vacant', false)
+            ->where('is_manager', true)
+            ->pluck('users.id');
+
+        $approverIds = $approverIds->merge($this->filterScheduleApproverIds($directManagerIds));
+
+        if ($approverIds->isEmpty() && $requester->department_node_id) {
+            $node = DepartmentNode::find($requester->department_node_id);
+
+            while ($node && $approverIds->isEmpty()) {
+                $node = $node->parent_id ? DepartmentNode::find($node->parent_id) : null;
+
+                if (!$node) {
+                    break;
+                }
+
+                $leaderIds = User::active()
+                    ->where('is_vacant', false)
+                    ->where('is_manager', true)
+                    ->where('department_node_id', $node->id)
+                    ->where('id', '!=', $requester->id)
+                    ->pluck('id');
+
+                $approverIds = $approverIds->merge($this->filterScheduleApproverIds($leaderIds));
+            }
+        }
+
+        if ($approverIds->isEmpty()) {
+            $adminIds = User::role(['Admin', 'Solutions Admin'])
+                ->where('is_active', true)
+                ->where('is_vacant', false)
+                ->where('id', '!=', $requester->id)
+                ->pluck('id');
+
+            $approverIds = $approverIds->merge($this->filterScheduleApproverIds($adminIds));
+        }
+
+        return $approverIds
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function filterScheduleApproverIds($ids)
+    {
+        $ids = collect($ids)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return User::whereIn('id', $ids->all())
+            ->where('is_active', true)
+            ->where('is_vacant', false)
+            ->get()
+            ->filter(fn (User $user) => $user->can('schedules.approve'))
+            ->pluck('id')
+            ->values();
+    }
+
+    private function authorizeScheduleChangeApprover(ScheduleChangeRequest $scheduleChangeRequest): void
+    {
+        $assignedApproverIds = collect($scheduleChangeRequest->assigned_approver_ids ?? [])
+            ->map(fn ($id) => (int) $id);
+
+        abort_unless($assignedApproverIds->contains((int) auth()->id()), 403, 'You are not assigned to approve this schedule change request.');
+    }
+
+    private function notifyScheduleChangeApprovers(ScheduleChangeRequest $changeRequest): void
+    {
+        $approvers = User::whereIn('id', $changeRequest->assigned_approver_ids ?? [])
+            ->whereNotNull('email')
+            ->get();
+
+        foreach ($approvers as $approver) {
+            Mail::to($approver->email)->send(new ScheduleChangeRequestNotification($changeRequest, 'submitted', true));
+        }
+    }
+
+    private function notifyScheduleChangeRequester(ScheduleChangeRequest $changeRequest, string $action): void
+    {
+        if (!$changeRequest->requester?->email) {
+            return;
+        }
+
+        Mail::to($changeRequest->requester->email)->send(new ScheduleChangeRequestNotification($changeRequest, $action));
+    }
+
+    private function scheduleChangeRequestRows(User $user)
+    {
+        $query = ScheduleChangeRequest::with([
+            'schedule.user:id,name',
+            'requester:id,name,email',
+            'approver:id,name',
+            'rejecter:id,name',
+        ])->latest();
+
+        if ($user->can('schedules.approve')) {
+            $query->where(function ($subQuery) use ($user) {
+                $subQuery->where('requester_id', $user->id)
+                    ->orWhere(function ($approvalQuery) use ($user) {
+                        $approvalQuery->where('status', 'pending')
+                            ->where(function ($jsonQuery) use ($user) {
+                                $jsonQuery->whereJsonContains('assigned_approver_ids', (int) $user->id)
+                                    ->orWhereJsonContains('assigned_approver_ids', (string) $user->id);
+                            });
+                        });
+            });
+        } else {
+            $query->where('requester_id', $user->id);
+        }
+
+        $changeRequests = $query->limit(100)->get();
+        $payloadStores = $changeRequests
+            ->flatMap(fn (ScheduleChangeRequest $changeRequest) => array_merge(
+                $changeRequest->original_payload['stores'] ?? [],
+                $changeRequest->requested_payload['stores'] ?? [],
+            ));
+
+        $storeLabels = Store::query()
+            ->whereIn('id', $payloadStores->pluck('store_id')->filter()->unique()->values())
+            ->get(['id', 'code', 'name'])
+            ->mapWithKeys(fn (Store $store) => [
+                $store->id => trim(collect([$store->code, $store->name])->filter()->implode(' - ')),
+            ]);
+
+        $ticketLabels = Ticket::query()
+            ->whereIn('id', $payloadStores->pluck('ticket_id')->filter()->unique()->values())
+            ->pluck('ticket_key', 'id');
+
+        return $changeRequests->map(function (ScheduleChangeRequest $changeRequest) use ($storeLabels, $ticketLabels) {
+            return [
+                'id' => $changeRequest->id,
+                'schedule_id' => $changeRequest->schedule_id,
+                'requester_id' => $changeRequest->requester_id,
+                'requester_name' => $changeRequest->requester?->name,
+                'schedule_user_name' => $changeRequest->schedule?->user?->name,
+                'assigned_approver_ids' => $changeRequest->assigned_approver_ids ?? [],
+                'status' => $changeRequest->status,
+                'original_payload' => $this->scheduleRequestPayloadWithLabels($changeRequest->original_payload, $storeLabels, $ticketLabels),
+                'requested_payload' => $this->scheduleRequestPayloadWithLabels($changeRequest->requested_payload, $storeLabels, $ticketLabels),
+                'requester_remarks' => $changeRequest->requester_remarks,
+                'approver_remarks' => $changeRequest->approver_remarks,
+                'approved_by_name' => $changeRequest->approver?->name,
+                'approved_at' => $changeRequest->approved_at?->toIso8601String(),
+                'rejected_by_name' => $changeRequest->rejecter?->name,
+                'rejected_at' => $changeRequest->rejected_at?->toIso8601String(),
+                'created_at' => $changeRequest->created_at?->toIso8601String(),
+                'updated_at' => $changeRequest->updated_at?->toIso8601String(),
+                'can_approve' => $changeRequest->status === 'pending'
+                    && collect($changeRequest->assigned_approver_ids ?? [])->map(fn ($id) => (int) $id)->contains((int) auth()->id())
+                    && auth()->user()?->can('schedules.approve'),
+                'can_cancel' => $changeRequest->status === 'pending'
+                    && (int) $changeRequest->requester_id === (int) auth()->id(),
+            ];
+        })->values();
+    }
+
+    private function scheduleRequestPayloadWithLabels(?array $payload, $storeLabels, $ticketLabels): ?array
+    {
+        if (!is_array($payload)) {
+            return $payload;
+        }
+
+        $payload['stores'] = collect($payload['stores'] ?? [])->map(function (array $entry) use ($storeLabels, $ticketLabels) {
+            $entry['store_label'] = $storeLabels->get($entry['store_id'] ?? null);
+            $entry['ticket_label'] = $ticketLabels->get($entry['ticket_id'] ?? null);
+
+            return $entry;
+        })->values()->all();
+
+        return $payload;
+    }
+
     private function editableScheduleUserIds(User $user): array
     {
-        if ($user->hasRole('Admin')) {
+        if ($user->can('schedules.edit')) {
             return User::query()
                 ->where('is_active', true)
                 ->where('is_vacant', false)
@@ -2156,33 +2488,6 @@ class ScheduleController extends Controller implements HasMiddleware
                 ->all();
         }
 
-        $ids = collect([(int) $user->id])
-            ->merge($this->getTransitiveSubordinateIds((int) $user->id))
-            ->map(fn ($id) => (int) $id);
-
-        if ($user->department_node_id) {
-            $nodeIds = array_merge(
-                [(int) $user->department_node_id],
-                DepartmentNode::getAllDescendantIds((int) $user->department_node_id)
-            );
-
-            $ids = $ids->merge(
-                User::active()
-                    ->where('is_vacant', false)
-                    ->whereIn('department_node_id', $nodeIds)
-                    ->pluck('id')
-                    ->map(fn ($id) => (int) $id)
-            );
-        } elseif ($user->department_id) {
-            $ids = $ids->merge(
-                User::active()
-                    ->where('is_vacant', false)
-                    ->where('department_id', (int) $user->department_id)
-                    ->pluck('id')
-                    ->map(fn ($id) => (int) $id)
-            );
-        }
-
-        return $ids->unique()->values()->all();
+        return [];
     }
 }

@@ -165,6 +165,7 @@ class RolesAndPermissionSeeder extends Seeder
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',
             'schedules.edit' => 'Edit schedules',
+            'schedules.approve' => 'Approve schedule change requests',
             'schedules.delete' => 'Delete schedules',
 
             // Administrative - Presence

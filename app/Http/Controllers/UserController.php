@@ -219,6 +219,11 @@ class UserController extends Controller
             if (Schema::hasTable('pos_request_approvals')) {
                 DB::table('pos_request_approvals')->where('user_id', $user->id)->delete();
             }
+            if (Schema::hasTable('schedule_change_requests')) {
+                DB::table('schedule_change_requests')->where('requester_id', $user->id)->delete();
+                DB::table('schedule_change_requests')->where('approved_by', $user->id)->update(['approved_by' => null]);
+                DB::table('schedule_change_requests')->where('rejected_by', $user->id)->update(['rejected_by' => null]);
+            }
 
             // Cleanup attendance and schedules (Required fields, manual delete for safety)
             if (Schema::hasTable('attendance_logs')) {
