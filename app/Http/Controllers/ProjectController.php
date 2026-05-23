@@ -158,10 +158,21 @@ class ProjectController extends Controller
 
     public function destroy(Project $project)
     {
-        $project->delete();
+        abort_unless(auth()->user()->can('projects.delete'), 403);
+
+        DB::transaction(function () use ($project) {
+            if ($project->taskBoard) {
+                $project->taskBoard->forceDelete();
+            }
+            $project->teamMembers()->delete();
+            $project->assets()->delete();
+            $project->tasks()->forceDelete();
+            
+            $project->forceDelete();
+        });
 
         return redirect()->route('projects.index')
-            ->with('success', 'Project deleted successfully.');
+            ->with('success', 'Project permanently deleted.');
     }
 
     private function departmentOptions(): array

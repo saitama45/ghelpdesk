@@ -8,13 +8,32 @@ import {
     BuildingStorefrontIcon,
     ChevronRightIcon,
     MagnifyingGlassIcon,
-    DocumentDuplicateIcon
+    DocumentDuplicateIcon,
+    TrashIcon,
 } from '@heroicons/vue/24/outline';
 import { ref, computed } from 'vue';
 import { useConfirm } from '@/Composables/useConfirm';
+import { usePermission } from '@/Composables/usePermission';
 
 const { confirm } = useConfirm()
+const { hasPermission } = usePermission()
 const duplicating = ref(null)
+const deleting = ref(null)
+
+const deleteProject = async (project) => {
+    const ok = await confirm({
+        title: 'Delete Project',
+        message: `Are you sure you want to delete "${project.name}" and all its details? This action cannot be undone.`,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+    })
+    if (!ok) return
+    deleting.value = project.id
+    router.delete(route('projects.destroy', project.id), {
+        onFinish: () => { deleting.value = null }
+    })
+}
 
 const duplicateProject = async (project) => {
     const ok = await confirm({
@@ -123,6 +142,16 @@ const formatDate = (dateString) => {
                                 <span class="text-sm font-medium text-gray-700">{{ formatDate(project.turn_over_date) }}</span>
                             </div>
                             <div class="flex items-center gap-2">
+                                <button
+                                    v-if="hasPermission('projects.delete')"
+                                    type="button"
+                                    @click.prevent="deleteProject(project)"
+                                    :disabled="deleting === project.id"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                                    title="Delete project"
+                                >
+                                    <TrashIcon class="h-4 w-4" />
+                                </button>
                                 <button
                                     type="button"
                                     @click.prevent="duplicateProject(project)"
