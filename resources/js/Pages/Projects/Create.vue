@@ -1,5 +1,6 @@
 <script setup>
 import { Head, useForm, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { ChevronLeftIcon } from '@heroicons/vue/24/outline';
 import Autocomplete from '@/Components/Autocomplete.vue';
@@ -10,6 +11,12 @@ const props = defineProps({
 });
 
 const now = new Date();
+
+const sortedStores = computed(() => {
+    return [...(props.stores ?? [])].sort((a, b) => {
+        return String(a.name ?? '').localeCompare(String(b.name ?? ''), undefined, { sensitivity: 'base' });
+    });
+});
 
 const form = useForm({
     store_id: '',
@@ -80,7 +87,7 @@ const submit = () => {
                             <label class="block text-sm font-medium text-gray-700 mb-1">Store Branch</label>
                             <Autocomplete
                                 v-model="form.store_id"
-                                :options="stores"
+                                :options="sortedStores"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Select a store"

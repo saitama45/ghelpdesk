@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\ProjectTemplate;
 use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProjectTaskController extends Controller
@@ -28,72 +29,86 @@ class ProjectTaskController extends Controller
             return redirect()->back()->with('info', 'The selected template has no activities.');
         }
 
-        $addedCount = 0;
+        [$addedCount, $reorderedCount] = DB::transaction(function () use ($project, $activities) {
+            $addedCount = 0;
+            $reorderedCount = 0;
+            $projectTasksByTemplateActivity = [];
 
-        $projectTasksByTemplateActivity = [];
+            foreach ($activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
+                $task = ProjectTask::where('project_id', $project->id)
+                    ->whereNull('parent_task_id')
+                    ->where('name', $activity->activity)
+                    ->where('category', $activity->milestone)
+                    ->first();
 
-        foreach ($activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
-            $task = ProjectTask::where('project_id', $project->id)
-                ->whereNull('parent_task_id')
-                ->where('name', $activity->activity)
-                ->where('category', $activity->milestone)
-                ->first();
+                if (!$task) {
+                    $task = ProjectTask::create([
+                        'project_id' => $project->id,
+                        'name' => $activity->activity,
+                        'category' => $activity->milestone,
+                        'asset_item' => $activity->asset_item,
+                        'model_specs' => $activity->model_specs,
+                        'qty' => $activity->qty,
+                        'responsible' => $activity->responsible,
+                        'department' => $activity->department,
+                        'sub_unit' => $activity->sub_unit,
+                        'status' => 'Pending',
+                        'progress' => 0,
+                        'order' => $activity->order,
+                    ]);
+                    $addedCount++;
+                } elseif ((int) $task->order !== (int) $activity->order) {
+                    $task->update(['order' => $activity->order]);
+                    $reorderedCount++;
+                }
 
-            if (!$task) {
-                $task = ProjectTask::create([
-                    'project_id' => $project->id,
-                    'name' => $activity->activity,
-                    'category' => $activity->milestone,
-                    'asset_item' => $activity->asset_item,
-                    'model_specs' => $activity->model_specs,
-                    'qty' => $activity->qty,
-                    'responsible' => $activity->responsible,
-                    'department' => $activity->department,
-                    'sub_unit' => $activity->sub_unit,
-                    'status' => 'Pending',
-                    'progress' => 0,
-                    'order' => $activity->order,
-                ]);
-                $addedCount++;
+                $projectTasksByTemplateActivity[$activity->id] = $task->fresh();
             }
 
-            $projectTasksByTemplateActivity[$activity->id] = $task;
-        }
+            foreach ($activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
+                $parentTask = $projectTasksByTemplateActivity[$activity->parent_activity_template_id] ?? null;
 
-        foreach ($activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
-            $parentTask = $projectTasksByTemplateActivity[$activity->parent_activity_template_id] ?? null;
+                if (!$parentTask) {
+                    continue;
+                }
 
-            if (!$parentTask) {
-                continue;
+                $task = ProjectTask::where('project_id', $project->id)
+                    ->where('parent_task_id', $parentTask->id)
+                    ->where('name', $activity->activity)
+                    ->first();
+
+                if (!$task) {
+                    ProjectTask::create([
+                        'project_id' => $project->id,
+                        'parent_task_id' => $parentTask->id,
+                        'name' => $activity->activity,
+                        'category' => $activity->milestone,
+                        'asset_item' => $activity->asset_item,
+                        'model_specs' => $activity->model_specs,
+                        'qty' => $activity->qty,
+                        'responsible' => $activity->responsible,
+                        'status' => 'Pending',
+                        'progress' => 0,
+                        'order' => $activity->order,
+                    ]);
+                    $addedCount++;
+                } elseif ((int) $task->order !== (int) $activity->order) {
+                    $task->update(['order' => $activity->order]);
+                    $reorderedCount++;
+                }
             }
 
-            $exists = ProjectTask::where('project_id', $project->id)
-                ->where('parent_task_id', $parentTask->id)
-                ->where('name', $activity->activity)
-                ->exists();
-
-            if (!$exists) {
-                ProjectTask::create([
-                    'project_id' => $project->id,
-                    'parent_task_id' => $parentTask->id,
-                    'name' => $activity->activity,
-                    'category' => $activity->milestone,
-                    'asset_item' => $activity->asset_item,
-                    'model_specs' => $activity->model_specs,
-                    'qty' => $activity->qty,
-                    'responsible' => $activity->responsible,
-                    'status' => 'Pending',
-                    'progress' => 0,
-                    'order' => $activity->order,
-                ]);
-                $addedCount++;
-            }
-        }
+            return [$addedCount, $reorderedCount];
+        });
 
         $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
 
         if ($addedCount > 0) {
             return redirect()->back()->with('success', "Applied {$addedCount} activities from \"{$template->name}\" template successfully.");
+        }
+
+        if ($reorderedCount > 0) {
+            return redirect()->back()->with('success', "Reapplied \"{$template->name}\" template sort order successfully.");
         }
 
         return redirect()->back()->with('info', 'All activities from this template have already been added.');

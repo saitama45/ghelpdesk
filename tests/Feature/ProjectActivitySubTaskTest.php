@@ -216,6 +216,73 @@ class ProjectActivitySubTaskTest extends TestCase
         $this->assertSame(2, ProjectTask::where('project_id', $project->id)->count());
     }
 
+    public function test_reapplying_template_refreshes_project_activity_sort_order(): void
+    {
+        $project = $this->createProject();
+        $template = ProjectTemplate::create([
+            'name' => 'Sorted NSO',
+            'project_type' => 'NSO',
+            'store_class' => 'Regular',
+        ]);
+
+        $firstActivity = $template->activities()->create([
+            'activity' => 'Install POS',
+            'milestone' => 'POS',
+            'qty' => 1,
+            'default_duration_days' => 2,
+            'order' => 1,
+        ]);
+
+        $secondActivity = $template->activities()->create([
+            'activity' => 'Network Setup',
+            'milestone' => 'Network',
+            'qty' => 1,
+            'default_duration_days' => 1,
+            'order' => 2,
+        ]);
+
+        $childActivity = $template->activities()->create([
+            'parent_activity_template_id' => $firstActivity->id,
+            'activity' => 'Configure menu',
+            'milestone' => 'POS',
+            'qty' => 1,
+            'default_duration_days' => 1,
+            'order' => 1,
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+            ])
+            ->assertRedirect();
+
+        $firstTask = ProjectTask::where('project_id', $project->id)->where('name', 'Install POS')->firstOrFail();
+        $secondTask = ProjectTask::where('project_id', $project->id)->where('name', 'Network Setup')->firstOrFail();
+        $childTask = ProjectTask::where('project_id', $project->id)->where('name', 'Configure menu')->firstOrFail();
+
+        $firstTask->update(['order' => 50]);
+        $secondTask->update(['order' => 10]);
+        $childTask->update(['order' => 25]);
+
+        $firstActivity->update(['order' => 3]);
+        $secondActivity->update(['order' => 1]);
+        $childActivity->update(['order' => 2]);
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Reapplied "Sorted NSO" template sort order successfully.');
+
+        $this->assertSame(3, $firstTask->refresh()->order);
+        $this->assertSame(1, $secondTask->refresh()->order);
+        $this->assertSame(2, $childTask->refresh()->order);
+        $this->assertSame(3, ProjectTask::where('project_id', $project->id)->count());
+    }
+
     public function test_sub_task_parent_must_belong_to_same_project(): void
     {
         $firstProject = $this->createProject('First Store');
