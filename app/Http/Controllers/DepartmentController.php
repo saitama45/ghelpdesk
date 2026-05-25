@@ -21,8 +21,8 @@ class DepartmentController extends Controller implements HasMiddleware
         return [
             new Middleware('can:departments.view', only: ['index']),
             new Middleware('can:departments.create', only: ['store', 'storeNode', 'storeVacant']),
-            new Middleware('can:departments.edit', only: ['update', 'updateNode', 'updateUserPlacement', 'updateVacant', 'reorderStructure', 'reorderUsers']),
-            new Middleware('can:departments.delete', only: ['destroy', 'destroyNode', 'destroyVacant']),
+            new Middleware('can:departments.edit', only: ['update', 'updateNode', 'updateUserPlacement', 'destroyUserPlacement', 'updateVacant', 'destroyVacant', 'reorderStructure', 'reorderUsers']),
+            new Middleware('can:departments.delete', only: ['destroy', 'destroyNode']),
         ];
     }
 
@@ -186,6 +186,7 @@ class DepartmentController extends Controller implements HasMiddleware
             'manager_ids.*' => ['integer', 'exists:users,id'],
             'profile_photo' => ['nullable', 'image', 'max:2048'],
             'org_sort_order' => ['nullable', 'integer'],
+            'replace_user_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         $managerIds = collect($validated['manager_ids'] ?? [])
@@ -199,7 +200,32 @@ class DepartmentController extends Controller implements HasMiddleware
             ]);
         }
 
-        DB::transaction(function () use ($user, $validated, $managerIds, $request) {
+        $replaceUser = null;
+        if ($request->filled('replace_user_id')) {
+            $replaceUser = User::find($request->input('replace_user_id'));
+        }
+
+        DB::transaction(function () use ($user, $validated, $managerIds, $request, $replaceUser) {
+            if ($replaceUser) {
+                // Get all subordinates of the inactive user
+                $subordinateIds = $replaceUser->subordinates()->pluck('users.id')->all();
+
+                $replaceUser->forceFill([
+                    ...$this->organizationReferences->clearPayload(),
+                    'org_sort_order' => 0,
+                    'updated_by' => auth()->id(),
+                ])->save();
+
+                // Detach managers and subordinates from the inactive user
+                $replaceUser->managers()->detach();
+                $replaceUser->subordinates()->detach();
+
+                // Re-route those subordinates to the newly hired active user
+                if (!empty($subordinateIds)) {
+                    $user->subordinates()->syncWithoutDetaching($subordinateIds);
+                }
+            }
+
             if ($request->hasFile('profile_photo')) {
                 if ($user->profile_photo) {
                     \Illuminate\Support\Facades\Storage::disk('public')->delete($user->profile_photo);
@@ -326,9 +352,140 @@ class DepartmentController extends Controller implements HasMiddleware
     public function destroyVacant(User $user)
     {
         abort_if(! $user->is_vacant, 403);
-        $user->managers()->detach();
-        $user->delete();
+
+        DB::transaction(function () use ($user) {
+            // Get subordinates and managers
+            $subordinateIds = $user->subordinates()->pluck('users.id')->all();
+            $managerIds = $user->managers()->pluck('users.id')->all();
+
+            $user->managers()->detach();
+            $user->subordinates()->detach();
+
+            // Re-route subordinates to report to the vacant position's manager(s)
+            if (!empty($subordinateIds) && !empty($managerIds)) {
+                foreach ($subordinateIds as $subId) {
+                    $subordinate = User::find($subId);
+                    if ($subordinate) {
+                        $subordinate->managers()->syncWithoutDetaching($managerIds);
+                    }
+                }
+            }
+
+            // --- COMPREHENSIVE DB CLEANUP (mirroring UserController@destroy to prevent foreign key errors) ---
+            
+            // Null out references in tickets
+            DB::table('tickets')->where('reporter_id', $user->id)->update(['reporter_id' => null]);
+            DB::table('tickets')->where('assignee_id', $user->id)->update(['assignee_id' => null]);
+
+            // Null out references in ticket comments and history
+            DB::table('ticket_comments')->where('user_id', $user->id)->update(['user_id' => null]);
+            DB::table('ticket_histories')->where('user_id', $user->id)->update(['user_id' => null]);
+
+            // Null out references in project tasks
+            DB::table('project_tasks')->where('assigned_to', $user->id)->update(['assigned_to' => null]);
+            DB::table('project_tasks')->where('support_by', $user->id)->update(['support_by' => null]);
+
+            // Null out references in inventory transactions
+            if (\Illuminate\Support\Facades\Schema::hasTable('inventory_transactions')) {
+                DB::table('inventory_transactions')->where('created_by', $user->id)->update(['created_by' => null]);
+                DB::table('inventory_transactions')->where('updated_by', $user->id)->update(['updated_by' => null]);
+            }
+
+            // Cleanup SAP and POS requests
+            if (\Illuminate\Support\Facades\Schema::hasTable('sap_requests')) {
+                DB::table('sap_requests')->where('user_id', $user->id)->update(['user_id' => null]);
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('sap_request_approvals')) {
+                DB::table('sap_request_approvals')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('pos_requests')) {
+                DB::table('pos_requests')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('pos_request_approvals')) {
+                DB::table('pos_request_approvals')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('schedule_change_requests')) {
+                DB::table('schedule_change_requests')->where('requester_id', $user->id)->delete();
+                DB::table('schedule_change_requests')->where('approved_by', $user->id)->update(['approved_by' => null]);
+                DB::table('schedule_change_requests')->where('rejected_by', $user->id)->update(['rejected_by' => null]);
+            }
+
+            // Cleanup attendance and schedules
+            if (\Illuminate\Support\Facades\Schema::hasTable('attendance_logs')) {
+                DB::table('attendance_logs')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('schedules')) {
+                DB::table('schedules')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('user_presence_logs')) {
+                DB::table('user_presence_logs')->where('user_id', $user->id)->delete();
+            }
+
+            // Cleanup task board memberships and assignments
+            if (\Illuminate\Support\Facades\Schema::hasTable('task_board_members')) {
+                DB::table('task_board_members')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('task_board_watchers')) {
+                DB::table('task_board_watchers')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('task_card_assignees')) {
+                DB::table('task_card_assignees')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('task_card_watchers')) {
+                DB::table('task_card_watchers')->where('user_id', $user->id)->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('task_card_comments')) {
+                DB::table('task_card_comments')->where('user_id', $user->id)->delete();
+            }
+
+            // Remove manager associations
+            DB::table('manager_user')->where('manager_id', $user->id)->delete();
+            DB::table('manager_user')->where('user_id', $user->id)->delete();
+
+            // Null out audit columns in users table
+            DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
+            DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);
+
+            $user->delete();
+        });
+
         return redirect()->back()->with('success', 'Vacant position removed from org chart.');
+    }
+
+    public function destroyUserPlacement(User $user)
+    {
+        abort_if($user->is_vacant, 403);
+
+        DB::transaction(function () use ($user) {
+            // Get all subordinates of the user being removed
+            $subordinateIds = $user->subordinates()->pluck('users.id')->all();
+            
+            // Get all managers of the user being removed (so we can re-route subordinates upwards)
+            $managerIds = $user->managers()->pluck('users.id')->all();
+
+            // Clear the user's organizational placement (remove from org chart)
+            $user->forceFill([
+                ...$this->organizationReferences->clearPayload(),
+                'org_sort_order' => 0,
+                'updated_by' => auth()->id(),
+            ])->save();
+
+            // Detach managers and subordinates from the user
+            $user->managers()->detach();
+            $user->subordinates()->detach();
+
+            // Re-route subordinates to report to the user's manager(s)
+            if (!empty($subordinateIds) && !empty($managerIds)) {
+                foreach ($subordinateIds as $subId) {
+                    $subordinate = User::find($subId);
+                    if ($subordinate) {
+                        $subordinate->managers()->syncWithoutDetaching($managerIds);
+                    }
+                }
+            }
+        });
+
+        return redirect()->back()->with('success', 'User removed from organisation chart.');
     }
 
     public function reorderUsers(Request $request)

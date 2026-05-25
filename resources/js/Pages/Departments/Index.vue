@@ -149,7 +149,7 @@ const leaveCardTarget = () => {
 
 const UserNode = defineComponent({
     name: 'UserNode',
-    props: ['node', 'getOrgPath', 'hasPermission', 'openEditPlacementModal', 'openQuickAddModal', 'openAddVacantModal', 'openEditVacantModal', 'destroyVacant', 'setUserCardRef', 'startCardDrag', 'enterCardTarget', 'leaveCardTarget', 'draggedId', 'dragTargetId', 'dragKind'],
+    props: ['node', 'getOrgPath', 'hasPermission', 'openEditPlacementModal', 'openQuickAddModal', 'openAddVacantModal', 'openEditVacantModal', 'destroyVacant', 'removeUserPlacement', 'setUserCardRef', 'startCardDrag', 'enterCardTarget', 'leaveCardTarget', 'draggedId', 'dragTargetId', 'dragKind'],
     setup(props) {
         const isUser = props.node.type === 'user'
         const isStructure = props.node.type === 'structure'
@@ -157,7 +157,9 @@ const UserNode = defineComponent({
         return () => {
             const isDragSource = isUser && Number(props.node.id) === Number(props.draggedId) && props.dragKind === 'user'
             const isDragTarget = isUser && Number(props.node.id) === Number(props.dragTargetId) && props.dragKind === 'user'
-            const isVacant = isUser && props.node.data?.is_vacant
+            const isDbVacant = isUser && props.node.data?.is_vacant
+            const isInactiveUser = isUser && !isDbVacant && !props.node.data?.is_active
+            const isVacant = isDbVacant || isInactiveUser
             const isStructureDragSource = isStructure && props.node.id === props.draggedId && props.dragKind === 'structure'
             const isStructureDragTarget = isStructure && props.node.id === props.dragTargetId && props.dragKind === 'structure'
 
@@ -214,16 +216,28 @@ const UserNode = defineComponent({
                         h('button', {
                             type: 'button',
                             onMousedown: (e) => e.stopPropagation(),
-                            onClick: () => isVacant ? props.openEditVacantModal(props.node.data) : props.openEditPlacementModal(props.node.data),
+                            onClick: () => isDbVacant ? props.openEditVacantModal(props.node.data) : props.openEditPlacementModal(props.node.data),
                             class: 'rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors z-30',
-                            title: isVacant ? 'Edit Vacant Position' : 'Edit Placement'
+                            title: isDbVacant ? 'Edit Vacant Position' : (isInactiveUser ? 'Replace Inactive User' : 'Edit Placement')
                         }, [
                             h('svg', { class: 'h-3.5 w-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
                                 h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' })
                             ])
                         ]),
+                        // Delete/Remove button for real users
+                        !isDbVacant && props.hasPermission('departments.edit') ? h('button', {
+                            type: 'button',
+                            onMousedown: (e) => e.stopPropagation(),
+                            onClick: () => props.removeUserPlacement(props.node.data),
+                            class: 'rounded p-1 text-gray-300 hover:bg-rose-50 hover:text-rose-500 transition-colors z-30',
+                            title: 'Remove User from Org Chart'
+                        }, [
+                            h('svg', { class: 'h-3.5 w-3.5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, [
+                                h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
+                            ])
+                        ]) : null,
                         // Delete button for vacant
-                        isVacant && props.hasPermission('departments.delete') ? h('button', {
+                        isDbVacant && (props.hasPermission('departments.edit') || props.hasPermission('departments.delete')) ? h('button', {
                             type: 'button',
                             onMousedown: (e) => e.stopPropagation(),
                             onClick: () => props.destroyVacant(props.node.data),
@@ -250,13 +264,15 @@ const UserNode = defineComponent({
                                     : props.node.data.name.charAt(0).toUpperCase()
                               ),
                         h('div', { class: 'min-w-0 flex-1 text-left' }, [
-                            h('div', { class: ['truncate text-sm font-black leading-tight', isVacant ? 'text-gray-500 italic' : 'text-gray-900'] }, props.node.data.name),
+                            h('div', { class: ['truncate text-sm font-black leading-tight', isVacant ? 'text-gray-500 italic' : 'text-gray-900'] },
+                                isInactiveUser ? 'Vacant' : props.node.data.name
+                            ),
                             isVacant
                                 ? h('span', { class: 'mt-1 inline-block rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-600' }, 'Vacant')
                                 : h('div', { class: 'truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight' }, props.node.data.position || 'No position'),
-                            !props.node.data.is_active && !isVacant ? h('div', { class: 'mt-1' }, [
-                                h('span', { class: 'rounded-full bg-rose-50 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-rose-700' }, 'Inactive')
-                            ]) : null
+                            isInactiveUser
+                                ? h('div', { class: 'truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight mt-1' }, props.node.data.position || 'No position')
+                                : null
                         ])
                     ])
                 ] : [
@@ -274,6 +290,7 @@ const UserNode = defineComponent({
                         openAddVacantModal: props.openAddVacantModal,
                         openEditVacantModal: props.openEditVacantModal,
                         destroyVacant: props.destroyVacant,
+                        removeUserPlacement: props.removeUserPlacement,
                         setUserCardRef: props.setUserCardRef,
                         startCardDrag: props.startCardDrag,
                         enterCardTarget: props.enterCardTarget,
@@ -922,6 +939,7 @@ const placementForm = useForm({
     manager_ids: [],
     profile_photo: null,
     org_sort_order: 0,
+    replace_user_id: '',
 })
 
 const showPlacementModal = ref(false)
@@ -936,6 +954,7 @@ const openTeamAssignUserModal = (department, node) => {
     placementForm.manager_ids = []
     placementForm.profile_photo = null
     placementForm.org_sort_order = 0
+    placementForm.replace_user_id = ''
     photoPreview.value = null
     showPlacementModal.value = true
 }
@@ -949,20 +968,37 @@ const openAssignUserModal = () => {
     placementForm.manager_ids = []
     placementForm.profile_photo = null
     placementForm.org_sort_order = 0
+    placementForm.replace_user_id = ''
     photoPreview.value = null
     showPlacementModal.value = true
 }
 
 const openEditPlacementModal = (user) => {
-    placementMode.value = 'edit'
-    placementForm.user_id = user.id
-    placementForm.department_id = user.department_id ? Number(user.department_id) : ''
-    placementForm.department_node_id = user.department_node_id ? Number(user.department_node_id) : ''
-    placementForm.manager_ids = (user.managers || []).map(manager => Number(manager.id))
-    placementForm.profile_photo = null
-    placementForm.org_sort_order = user.org_sort_order || 0
-    photoPreview.value = user.profile_photo ? `/serve-storage/${user.profile_photo}` : null
-    showPlacementModal.value = true
+    if (!user.is_active) {
+        placementMode.value = 'assign'
+        placementForm.reset()
+        placementForm.user_id = ''
+        placementForm.department_id = user.department_id ? Number(user.department_id) : ''
+        placementForm.department_node_id = user.department_node_id ? Number(user.department_node_id) : ''
+        placementForm.manager_ids = (user.managers || []).map(manager => Number(manager.id))
+        placementForm.profile_photo = null
+        placementForm.org_sort_order = user.org_sort_order || 0
+        placementForm.replace_user_id = user.id
+        photoPreview.value = null
+        showPlacementModal.value = true
+    } else {
+        placementMode.value = 'edit'
+        placementForm.reset()
+        placementForm.user_id = user.id
+        placementForm.department_id = user.department_id ? Number(user.department_id) : ''
+        placementForm.department_node_id = user.department_node_id ? Number(user.department_node_id) : ''
+        placementForm.manager_ids = (user.managers || []).map(manager => Number(manager.id))
+        placementForm.profile_photo = null
+        placementForm.org_sort_order = user.org_sort_order || 0
+        placementForm.replace_user_id = ''
+        photoPreview.value = user.profile_photo ? `/serve-storage/${user.profile_photo}` : null
+        showPlacementModal.value = true
+    }
 }
 
 const openQuickAddModal = (user) => {
@@ -974,6 +1010,7 @@ const openQuickAddModal = (user) => {
     placementForm.manager_ids = [Number(user.id)]
     placementForm.profile_photo = null
     placementForm.org_sort_order = 0
+    placementForm.replace_user_id = ''
     photoPreview.value = null
     showPlacementModal.value = true
 }
@@ -981,6 +1018,7 @@ const openQuickAddModal = (user) => {
 const closePlacementModal = () => {
     showPlacementModal.value = false
     placementForm.clearErrors()
+    placementForm.replace_user_id = ''
     photoPreview.value = null
 }
 
@@ -1038,12 +1076,30 @@ const submitVacant = () => {
 const destroyVacant = async (user) => {
     const confirmed = await confirm({
         title: 'Remove Vacant Position',
-        message: `Remove "${user.name}" from the org chart?`,
+        message: `Remove "${user.name}" from the org chart? Their subordinates will be automatically updated to report to their manager(s).`,
         confirmLabel: 'Remove',
         variant: 'danger',
     })
     if (!confirmed) return
     destroy(route('departments.users.vacant.destroy', user.id), { preserveScroll: true, onError: handleErrors })
+}
+
+const removeUserPlacement = async (user) => {
+    const confirmed = await confirm({
+        title: 'Remove User from Org Chart',
+        message: `Remove "${user.name}" from the organisation chart? Their subordinates will be automatically updated to report to their manager(s).`,
+        confirmLabel: 'Remove',
+        variant: 'danger',
+    })
+    if (!confirmed) return
+
+    post(route('departments.users.remove-placement', user.id), {
+        _method: 'DELETE',
+    }, {
+        preserveScroll: true,
+        onSuccess: () => refreshChartLinks(),
+        onError: handleErrors,
+    })
 }
 
 const clearPlacementOrg = () => {
@@ -1329,6 +1385,7 @@ const downloadChart = async () => {
                                             :openAddVacantModal="openAddVacantModal"
                                             :openEditVacantModal="openEditVacantModal"
                                             :destroyVacant="destroyVacant"
+                                            :removeUserPlacement="removeUserPlacement"
                                             :setUserCardRef="setUserCardRef"
                                             :startCardDrag="startCardDrag"
                                             :enterCardTarget="enterCardTarget"
@@ -1400,7 +1457,9 @@ const downloadChart = async () => {
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closePlacementModal"></div>
                 <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
                     <div class="mb-6 flex items-center justify-between">
-                        <h3 class="text-xl font-black text-gray-900">{{ placementMode === 'assign' ? 'Assign User' : 'Edit Organisation Placement' }}</h3>
+                        <h3 class="text-xl font-black text-gray-900">
+                            {{ placementForm.replace_user_id ? 'Replace Inactive User Position' : (placementMode === 'assign' ? 'Assign User' : 'Edit Organisation Placement') }}
+                        </h3>
                         <button type="button" @click="closePlacementModal" class="text-gray-400 transition-colors hover:text-gray-600">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

@@ -69,6 +69,7 @@ Route::middleware('auth')->group(function () {
     Route::put('departments/users/reorder', [DepartmentController::class, 'reorderUsers'])->name('departments.users.reorder');
     Route::put('departments/structure/reorder', [DepartmentController::class, 'reorderStructure'])->name('departments.structure.reorder');
     Route::put('departments/users/{user}/placement', [DepartmentController::class, 'updateUserPlacement'])->name('departments.users.placement');
+    Route::delete('departments/users/{user}/placement', [DepartmentController::class, 'destroyUserPlacement'])->name('departments.users.remove-placement');
     Route::post('departments/users/vacant', [DepartmentController::class, 'storeVacant'])->name('departments.users.vacant.store');
     Route::put('departments/users/vacant/{user}', [DepartmentController::class, 'updateVacant'])->name('departments.users.vacant.update');
     Route::delete('departments/users/vacant/{user}', [DepartmentController::class, 'destroyVacant'])->name('departments.users.vacant.destroy');
