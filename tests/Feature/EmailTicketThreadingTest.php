@@ -317,6 +317,68 @@ class EmailTicketThreadingTest extends TestCase
             'message_id' => 'subject-reply@example.test',
         ]);
     }
+
+    public function test_closed_ticket_older_than_three_days_creates_new_ticket(): void
+    {
+        // 1. Create a ticket and mark it closed, with updated_at set to 4 days ago
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<root@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'UOM issue',
+            body: 'Please change the uom of horseradish.',
+        ));
+
+        $ticket = Ticket::firstOrFail();
+        $ticket->status = 'closed';
+        $ticket->save();
+
+        // Artificially age the ticket's updated_at timestamp to 4 days ago
+        $ticket->updated_at = now()->subDays(4);
+        $ticket->save();
+
+        // 2. Receive a reply/matching email
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<reply@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'UOM issue',
+            body: 'Another completely unrelated uom change request.',
+        ));
+
+        // It should bypass the closed ticket and create a brand new ticket!
+        $this->assertSame(2, Ticket::count());
+        $this->assertSame(0, TicketComment::count());
+    }
+
+    public function test_closed_ticket_newer_than_three_days_sends_lockout_notification(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        // 1. Create a ticket and mark it closed
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<root2@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'POS issue',
+            body: 'The POS terminal is broken.',
+        ));
+
+        $ticket = Ticket::firstOrFail();
+        $ticket->status = 'closed';
+        $ticket->save();
+
+        // 2. Receive a reply/matching email within 3 days (e.g. today)
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<reply2@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'POS issue',
+            body: 'Please check this POS issue.',
+        ));
+
+        // It should trigger the lockout notification and not create any comments/new tickets
+        $this->assertSame(1, Ticket::count());
+        $this->assertSame(0, TicketComment::count());
+
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\ClosedTicketReplyNotification::class);
+    }
 }
 
 class TestableEmailTicketService extends EmailTicketService

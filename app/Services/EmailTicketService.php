@@ -374,6 +374,12 @@ class EmailTicketService
         // 1. Check In-Reply-To and References headers against tickets and email comments.
         $references = $this->messageIdsFromHeaders($message->getReferences(), $message->getInReplyTo());
         $existingTicket = $this->findTicketByMessageIds($references);
+
+        if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
+            Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via message IDs, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
+            $existingTicket = null;
+        }
+
         if ($existingTicket) {
             return $existingTicket;
         }
@@ -381,6 +387,12 @@ class EmailTicketService
         // 2. Fallback: Check subject for Ticket Key (e.g., [TBG-123] or #TBG-123).
         if (preg_match('/\b([A-Z0-9]+-\d+)\b/i', $subject, $matches)) {
             $existingTicket = Ticket::where('ticket_key', strtoupper($matches[1]))->first();
+
+            if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
+                Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via subject key, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
+                $existingTicket = null;
+            }
+
             if ($existingTicket) {
                 return $existingTicket;
             }
@@ -398,6 +410,11 @@ class EmailTicketService
                 ->get()
                 ->first(fn (Ticket $ticket) => $this->normalizeEmailSubject($ticket->title ?? '') === $cleanSubject);
 
+            if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
+                Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via subject fallback, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
+                $existingTicket = null;
+            }
+
             if ($existingTicket) {
                 return $existingTicket;
             }
@@ -405,7 +422,14 @@ class EmailTicketService
 
         // 4. Last resort: same sender + same meaningful cleaned body.
         if ($emailBodyHash) {
-            return $this->findTicketBySenderAndBodyHash($senderEmail, $emailBodyHash);
+            $existingTicket = $this->findTicketBySenderAndBodyHash($senderEmail, $emailBodyHash);
+
+            if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
+                Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via body hash fallback, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
+                $existingTicket = null;
+            }
+
+            return $existingTicket;
         }
 
         return null;
