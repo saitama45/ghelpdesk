@@ -23,7 +23,7 @@ class ProjectTaskController extends Controller
         ]);
 
         $template = ProjectTemplate::with('activities')->findOrFail($request->project_template_id);
-        $activities = $template->activities;
+        $activities = $this->withResolvedMilestoneOrders($template->activities);
 
         if ($activities->isEmpty()) {
             return redirect()->back()->with('info', 'The selected template has no activities.');
@@ -34,7 +34,11 @@ class ProjectTaskController extends Controller
             $reorderedCount = 0;
             $projectTasksByTemplateActivity = [];
 
-            foreach ($activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
+            foreach ($activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))->sortBy([
+                ['milestone_order', 'asc'],
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ]) as $activity) {
                 $task = ProjectTask::where('project_id', $project->id)
                     ->whereNull('parent_task_id')
                     ->where('name', $activity->activity)
@@ -46,6 +50,7 @@ class ProjectTaskController extends Controller
                         'project_id' => $project->id,
                         'name' => $activity->activity,
                         'category' => $activity->milestone,
+                        'milestone_order' => $activity->milestone_order,
                         'asset_item' => $activity->asset_item,
                         'model_specs' => $activity->model_specs,
                         'qty' => $activity->qty,
@@ -57,15 +62,22 @@ class ProjectTaskController extends Controller
                         'order' => $activity->order,
                     ]);
                     $addedCount++;
-                } elseif ((int) $task->order !== (int) $activity->order) {
-                    $task->update(['order' => $activity->order]);
+                } elseif ((int) $task->order !== (int) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
+                    $task->update([
+                        'milestone_order' => $activity->milestone_order,
+                        'order' => $activity->order,
+                    ]);
                     $reorderedCount++;
                 }
 
                 $projectTasksByTemplateActivity[$activity->id] = $task->fresh();
             }
 
-            foreach ($activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))->sortBy('order') as $activity) {
+            foreach ($activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))->sortBy([
+                ['milestone_order', 'asc'],
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ]) as $activity) {
                 $parentTask = $projectTasksByTemplateActivity[$activity->parent_activity_template_id] ?? null;
 
                 if (!$parentTask) {
@@ -83,6 +95,7 @@ class ProjectTaskController extends Controller
                         'parent_task_id' => $parentTask->id,
                         'name' => $activity->activity,
                         'category' => $activity->milestone,
+                        'milestone_order' => $activity->milestone_order,
                         'asset_item' => $activity->asset_item,
                         'model_specs' => $activity->model_specs,
                         'qty' => $activity->qty,
@@ -92,8 +105,11 @@ class ProjectTaskController extends Controller
                         'order' => $activity->order,
                     ]);
                     $addedCount++;
-                } elseif ((int) $task->order !== (int) $activity->order) {
-                    $task->update(['order' => $activity->order]);
+                } elseif ((int) $task->order !== (int) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
+                    $task->update([
+                        'milestone_order' => $activity->milestone_order,
+                        'order' => $activity->order,
+                    ]);
                     $reorderedCount++;
                 }
             }
@@ -114,6 +130,39 @@ class ProjectTaskController extends Controller
         return redirect()->back()->with('info', 'All activities from this template have already been added.');
     }
 
+    private function withResolvedMilestoneOrders($activities)
+    {
+        $ordersByMilestone = [];
+        $nextOrder = 1;
+
+        $activities
+            ->filter(fn ($activity) => empty($activity->parent_activity_template_id))
+            ->sortBy([
+                ['milestone_order', 'asc'],
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ])
+            ->each(function ($activity) use (&$ordersByMilestone, &$nextOrder) {
+                $milestone = $activity->milestone ?: 'General';
+
+                if (!array_key_exists($milestone, $ordersByMilestone)) {
+                    $ordersByMilestone[$milestone] = filled($activity->milestone_order)
+                        ? (int) $activity->milestone_order
+                        : $nextOrder;
+                    $nextOrder = max($nextOrder, $ordersByMilestone[$milestone] + 1);
+                }
+            });
+
+        return $activities->map(function ($activity) use ($ordersByMilestone) {
+            $milestone = $activity->milestone ?: 'General';
+            $activity->milestone_order = filled($activity->milestone_order)
+                ? (int) $activity->milestone_order
+                : ($ordersByMilestone[$milestone] ?? 1);
+
+            return $activity;
+        });
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -121,6 +170,7 @@ class ProjectTaskController extends Controller
             'parent_task_id' => 'nullable|exists:project_tasks,id',
             'name' => 'required|string|max:255',
             'category' => 'nullable|string|max:255',
+            'milestone_order' => 'nullable|integer|min:0',
             'assigned_to' => 'nullable',
             'support_by' => 'nullable',
             'status' => 'required|string',
@@ -152,6 +202,16 @@ class ProjectTaskController extends Controller
             if (blank($validated['category'] ?? null)) {
                 $validated['category'] = $parentTask->category;
             }
+
+            if (blank($validated['milestone_order'] ?? null)) {
+                $validated['milestone_order'] = $parentTask->milestone_order;
+            }
+        }
+
+        if (!$validated['parent_task_id'] && blank($validated['milestone_order'] ?? null)) {
+            $validated['milestone_order'] = ((int) ProjectTask::where('project_id', $validated['project_id'])
+                ->whereNull('parent_task_id')
+                ->max('milestone_order')) + 1;
         }
 
         if (!array_key_exists('order', $validated) || $validated['order'] === null) {
@@ -191,6 +251,7 @@ class ProjectTaskController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'category' => 'sometimes|nullable|string|max:255',
+            'milestone_order' => 'sometimes|nullable|integer|min:0',
             'parent_task_id' => 'sometimes|nullable|exists:project_tasks,id',
             'status' => 'sometimes|required|string',
             'progress' => 'sometimes|integer|min:0|max:100',
@@ -279,6 +340,56 @@ class ProjectTaskController extends Controller
         return redirect()->back()->with('success', 'Task deleted successfully.');
     }
 
+    public function destroyMilestone(Request $request, Project $project)
+    {
+        $validated = $request->validate([
+            'category' => 'required|string|max:255',
+        ]);
+
+        $category = $validated['category'] ?: 'General';
+
+        $deletedCount = DB::transaction(function () use ($request, $project, $category) {
+            $topLevelTasks = ProjectTask::query()
+                ->where('project_id', $project->id)
+                ->whereNull('parent_task_id')
+                ->where(function ($query) use ($category) {
+                    if ($category === 'General') {
+                        $query->whereNull('category')->orWhere('category', 'General');
+                    } else {
+                        $query->where('category', $category);
+                    }
+                })
+                ->with('subTasks:id,parent_task_id')
+                ->get();
+
+            if ($topLevelTasks->isEmpty()) {
+                return 0;
+            }
+
+            $taskIds = $topLevelTasks
+                ->flatMap(fn (ProjectTask $task) => $task->subTasks->pluck('id')->push($task->id))
+                ->values();
+
+            $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
+
+            ProjectTask::query()
+                ->whereIn('parent_task_id', $topLevelTasks->pluck('id'))
+                ->delete();
+
+            ProjectTask::query()
+                ->whereIn('id', $topLevelTasks->pluck('id'))
+                ->delete();
+
+            return $taskIds->count();
+        });
+
+        if ($deletedCount > 0) {
+            $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
+        }
+
+        return redirect()->back()->with('success', 'Milestone deleted successfully.');
+    }
+
     public function updateGantt(Request $request)
     {
         // Specialized endpoint for drag-and-drop updates from Gantt Chart
@@ -288,6 +399,7 @@ class ProjectTaskController extends Controller
             'tasks.*.start_date' => 'nullable|date',
             'tasks.*.end_date' => 'nullable|date',
             'tasks.*.progress' => 'nullable|integer|min:0|max:100',
+            'tasks.*.milestone_order' => 'nullable|integer|min:0',
             'tasks.*.order' => 'nullable|integer|min:0',
         ]);
 
@@ -302,6 +414,9 @@ class ProjectTaskController extends Controller
             }
             if (array_key_exists('progress', $taskData)) {
                 $updates['progress'] = $taskData['progress'] ?? 0;
+            }
+            if (array_key_exists('milestone_order', $taskData)) {
+                $updates['milestone_order'] = $taskData['milestone_order'];
             }
             if (array_key_exists('order', $taskData)) {
                 $updates['order'] = $taskData['order'];

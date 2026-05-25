@@ -287,6 +287,7 @@ Route::middleware('auth')->group(function () {
     Route::post('projects/{project}/duplicate', [\App\Http\Controllers\ProjectController::class, 'duplicate'])->name('projects.duplicate');
     Route::resource('projects', \App\Http\Controllers\ProjectController::class);
     Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->name('projects.apply-templates');
+    Route::delete('projects/{project}/milestone-tasks', [\App\Http\Controllers\ProjectTaskController::class, 'destroyMilestone'])->name('projects.milestones.destroy');
     Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->name('projects.tasks.gantt-update');
     Route::resource('projects-tasks', \App\Http\Controllers\ProjectTaskController::class)->only(['store', 'update', 'destroy']);
     Route::resource('projects-assets', \App\Http\Controllers\ProjectAssetController::class)->only(['store', 'update', 'destroy']);

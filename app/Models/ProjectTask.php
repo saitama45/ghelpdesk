@@ -18,6 +18,7 @@ class ProjectTask extends Model
         'parent_task_id',
         'name',
         'category',
+        'milestone_order',
         'asset_item',
         'model_specs',
         'qty',
@@ -40,6 +41,7 @@ class ProjectTask extends Model
     protected $casts = [
         'project_id' => 'integer',
         'parent_task_id' => 'integer',
+        'milestone_order' => 'integer',
         'assigned_to' => 'integer',
         'support_by' => 'integer',
         'start_date' => 'date:Y-m-d',
@@ -62,7 +64,10 @@ class ProjectTask extends Model
 
     public function subTasks(): HasMany
     {
-        return $this->hasMany(ProjectTask::class, 'parent_task_id')->orderBy('order');
+        return $this->hasMany(ProjectTask::class, 'parent_task_id')
+            ->orderBy('milestone_order')
+            ->orderBy('order')
+            ->orderBy('id');
     }
 
     public function taskCard(): HasOne

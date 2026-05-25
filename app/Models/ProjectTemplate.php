@@ -17,6 +17,10 @@ class ProjectTemplate extends Model
 
     public function activities()
     {
-        return $this->hasMany(ActivityTemplate::class)->orderBy('order');
+        return $this->hasMany(ActivityTemplate::class)
+            ->orderBy('milestone_order')
+            ->orderBy('parent_activity_template_id')
+            ->orderBy('order')
+            ->orderBy('id');
     }
 }

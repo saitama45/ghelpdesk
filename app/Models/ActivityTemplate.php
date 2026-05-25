@@ -14,6 +14,7 @@ class ActivityTemplate extends Model
         'parent_activity_template_id',
         'activity',
         'milestone',
+        'milestone_order',
         'asset_item',
         'model_specs',
         'qty',
@@ -28,6 +29,7 @@ class ActivityTemplate extends Model
         'project_template_id' => 'integer',
         'parent_activity_template_id' => 'integer',
         'default_duration_days' => 'integer',
+        'milestone_order' => 'integer',
         'order' => 'integer',
         'qty' => 'integer',
     ];
@@ -44,6 +46,9 @@ class ActivityTemplate extends Model
 
     public function subActivities()
     {
-        return $this->hasMany(ActivityTemplate::class, 'parent_activity_template_id')->orderBy('order');
+        return $this->hasMany(ActivityTemplate::class, 'parent_activity_template_id')
+            ->orderBy('milestone_order')
+            ->orderBy('order')
+            ->orderBy('id');
     }
 }

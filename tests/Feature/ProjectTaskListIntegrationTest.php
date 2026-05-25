@@ -108,7 +108,7 @@ class ProjectTaskListIntegrationTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('card.checklists.0.items.0.children.0.assigned_to', $teamUsers['SD']->id)
-            ->assertJsonPath('card.checklists.0.items.0.children.0.assignee.sub_unit', 'SD');
+            ->assertJsonPath('card.checklists.0.items.0.children.0.assignee.org_path', 'SD');
 
         $subTask->refresh();
 
@@ -169,6 +169,39 @@ class ProjectTaskListIntegrationTest extends TestCase
         $this->assertSame(1, TaskCard::where('project_id', $project->id)->count());
     }
 
+    public function test_deleting_project_milestone_removes_linked_checklist_items_from_monthly_cards(): void
+    {
+        $project = $this->createProject();
+        $this->createProjectTeamTargets($project, ['DS']);
+        $parentTask = $this->createProjectTask($project, 'Install POS', [
+            'category' => 'POS',
+            'milestone_order' => 1,
+        ]);
+        $subTask = $this->createProjectTask($project, 'Configure menu', [
+            'parent_task_id' => $parentTask->id,
+            'category' => 'POS',
+            'milestone_order' => 1,
+        ]);
+        $networkTask = $this->createProjectTask($project, 'Network Setup', [
+            'category' => 'Network',
+            'milestone_order' => 2,
+        ]);
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('projects.task-board', $project));
+
+        $this->actingAs($user)
+            ->delete(route('projects.milestones.destroy', $project), [
+                'category' => 'POS',
+                'auto_create_monthly_boards' => true,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(0, TaskChecklistItem::whereIn('project_task_id', [$parentTask->id, $subTask->id])->count());
+        $this->assertSame(1, TaskChecklistItem::where('project_task_id', $networkTask->id)->count());
+        $this->assertSame(1, TaskCard::where('project_id', $project->id)->count());
+    }
+
     private function createProject(string $storeName = 'Test Store'): Project
     {
         $store = Store::create([
@@ -198,7 +231,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         foreach ($subUnits as $subUnit) {
             $user = User::factory()->create([
                 'department' => 'TAS',
-                'sub_unit' => $subUnit,
+                'org_path' => $subUnit,
             ]);
 
             ProjectTeamMember::create([

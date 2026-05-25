@@ -283,6 +283,113 @@ class ProjectActivitySubTaskTest extends TestCase
         $this->assertSame(3, ProjectTask::where('project_id', $project->id)->count());
     }
 
+    public function test_applying_template_preserves_milestone_order_when_activity_orders_tie(): void
+    {
+        $project = $this->createProject();
+        $template = ProjectTemplate::create([
+            'name' => 'Tied Milestone Orders',
+            'project_type' => 'NSO',
+            'store_class' => 'Regular',
+        ]);
+
+        $template->activities()->create([
+            'activity' => 'Network Setup',
+            'milestone' => 'Network',
+            'milestone_order' => 1,
+            'qty' => 1,
+            'default_duration_days' => 1,
+            'order' => 1,
+        ]);
+
+        $template->activities()->create([
+            'activity' => 'Install POS',
+            'milestone' => 'POS',
+            'milestone_order' => 2,
+            'qty' => 1,
+            'default_duration_days' => 1,
+            'order' => 1,
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(
+            ['Network', 'POS'],
+            ProjectTask::where('project_id', $project->id)
+                ->whereNull('parent_task_id')
+                ->orderBy('milestone_order')
+                ->orderBy('order')
+                ->pluck('category')
+                ->all()
+        );
+
+        ProjectTask::where('project_id', $project->id)->where('category', 'Network')->update(['milestone_order' => 50]);
+        ProjectTask::where('project_id', $project->id)->where('category', 'POS')->update(['milestone_order' => 10]);
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(1, ProjectTask::where('project_id', $project->id)->where('category', 'Network')->firstOrFail()->milestone_order);
+        $this->assertSame(2, ProjectTask::where('project_id', $project->id)->where('category', 'POS')->firstOrFail()->milestone_order);
+    }
+
+    public function test_deleting_project_milestone_deletes_all_category_tasks_and_sub_tasks(): void
+    {
+        $project = $this->createProject();
+
+        $posTask = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Install POS',
+            'category' => 'POS',
+            'milestone_order' => 1,
+            'status' => 'Pending',
+            'progress' => 0,
+            'order' => 1,
+        ]);
+
+        $subTask = ProjectTask::create([
+            'project_id' => $project->id,
+            'parent_task_id' => $posTask->id,
+            'name' => 'Configure menu',
+            'category' => 'POS',
+            'milestone_order' => 1,
+            'status' => 'Pending',
+            'progress' => 0,
+            'order' => 1,
+        ]);
+
+        $otherTask = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Network Setup',
+            'category' => 'Network',
+            'milestone_order' => 2,
+            'status' => 'Pending',
+            'progress' => 0,
+            'order' => 1,
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->delete(route('projects.milestones.destroy', $project), [
+                'category' => 'POS',
+            ])
+            ->assertRedirect();
+
+        $this->assertSoftDeleted('project_tasks', ['id' => $posTask->id]);
+        $this->assertSoftDeleted('project_tasks', ['id' => $subTask->id]);
+        $this->assertDatabaseHas('project_tasks', [
+            'id' => $otherTask->id,
+            'deleted_at' => null,
+        ]);
+    }
+
     public function test_sub_task_parent_must_belong_to_same_project(): void
     {
         $firstProject = $this->createProject('First Store');

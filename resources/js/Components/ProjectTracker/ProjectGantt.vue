@@ -74,6 +74,7 @@ const form = useForm({
     task_progress: 0,
     start_date: '',
     end_date: '',
+    milestone_order: null,
     order: null,
 });
 
@@ -156,6 +157,7 @@ const resetTaskForm = () => {
     form.task_progress = 0;
     form.start_date = '';
     form.end_date = '';
+    form.milestone_order = null;
     form.order = null;
 };
 
@@ -260,6 +262,25 @@ const getNextOrder = (category, parentTaskId = null) => {
     return Math.max(...siblings.map(task => Number(task.order) || 0)) + 1;
 };
 
+const milestoneOrderFor = (category) => {
+    const normalizedCategory = category || 'General';
+    const existing = localTasks.value
+        .filter(task => !task.parent_task_id && (task.category || 'General') === normalizedCategory)
+        .map(task => Number(task.milestone_order))
+        .filter(Number.isFinite);
+
+    return existing.length ? Math.min(...existing) : getNextMilestoneOrder();
+};
+
+const getNextMilestoneOrder = () => {
+    const orders = localTasks.value
+        .filter(task => !task.parent_task_id)
+        .map(task => Number(task.milestone_order))
+        .filter(Number.isFinite);
+
+    return orders.length ? Math.max(...orders) + 1 : 1;
+};
+
 const openMilestoneForm = () => {
     isEditing.value = false;
     editingTaskId.value = null;
@@ -267,6 +288,7 @@ const openMilestoneForm = () => {
     activeParentTask.value = null;
     activeMilestone.value = '';
     resetTaskForm();
+    form.milestone_order = getNextMilestoneOrder();
     form.order = getNextOrder('', null);
     isAddingTask.value = true;
 };
@@ -279,6 +301,7 @@ const openActivityForm = (category) => {
     activeMilestone.value = category || 'General';
     resetTaskForm();
     form.category = category || 'General';
+    form.milestone_order = milestoneOrderFor(form.category);
     form.order = getNextOrder(form.category, null);
     isAddingTask.value = true;
 };
@@ -292,6 +315,7 @@ const openSubTaskForm = (task) => {
     resetTaskForm();
     form.parent_task_id = task.id;
     form.category = task.category || 'General';
+    form.milestone_order = task.milestone_order ?? milestoneOrderFor(form.category);
     form.assigned_to = task.assigned_to || task.external_assignment || '';
     form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
@@ -313,6 +337,7 @@ const editTask = (task) => {
     form.parent_task_id = task.parent_task_id || null;
     form.name = task.name;
     form.category = task.category;
+    form.milestone_order = task.milestone_order;
     form.assigned_to = task.assigned_to || task.external_assignment || '';
     form.status = task.status;
     form.task_progress = task.progress;
@@ -357,6 +382,29 @@ const deleteTask = async (taskId) => {
 
         useForm({ auto_create_monthly_boards: true }).delete(route('projects-tasks.destroy', { 'projects_task': taskId, tab: 'gantt' }), {
             preserveScroll: true
+        });
+    }
+};
+
+const deleteMilestone = async (category, tasks = []) => {
+    const rowCount = visibleTaskCount(tasks);
+    const ok = await confirmAction({
+        title: 'Delete Milestone',
+        message: `Delete "${category}" and all ${rowCount} task row${rowCount === 1 ? '' : 's'} under it? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        variant: 'danger'
+    });
+
+    if (ok) {
+        useForm({
+            category,
+            auto_create_monthly_boards: false,
+        }).delete(route('projects.milestones.destroy', props.project.id), {
+            preserveState: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                success('Milestone deleted successfully.');
+            }
         });
     }
 };
@@ -508,9 +556,15 @@ const groupedTasks = computed(() => {
     });
 
     const sorted = Object.entries(groups).sort(([, a], [, b]) => {
+        const aMilestoneOrder = Math.min(...a.map(act => Number.isFinite(Number(act.milestone_order)) ? Number(act.milestone_order) : Number.MAX_SAFE_INTEGER));
+        const bMilestoneOrder = Math.min(...b.map(act => Number.isFinite(Number(act.milestone_order)) ? Number(act.milestone_order) : Number.MAX_SAFE_INTEGER));
+        if (aMilestoneOrder !== bMilestoneOrder) return aMilestoneOrder - bMilestoneOrder;
+
         const aMin = Math.min(...a.map(act => Number(act.order) || 0));
         const bMin = Math.min(...b.map(act => Number(act.order) || 0));
-        return aMin - bMin;
+        if (aMin !== bMin) return aMin - bMin;
+
+        return (a[0]?.id || 0) - (b[0]?.id || 0);
     });
 
     return Object.fromEntries(sorted);
@@ -578,6 +632,7 @@ const persistTaskOrder = async () => {
         body: JSON.stringify({
             tasks: localTasks.value.map((task, index) => ({
                 id: task.id,
+                milestone_order: task.milestone_order,
                 order: index,
             })),
             auto_create_monthly_boards: true,
@@ -840,12 +895,20 @@ const isWeekend = (date) => {
                                     <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider">{{ category }}</span>
                                     <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold">{{ visibleTaskCount(tasks) }}</span>
                                 </div>
-                                <button type="button"
-                                        @click.stop="openActivityForm(category)"
-                                        class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors">
-                                    <PlusIcon class="w-3.5 h-3.5 mr-1" />
-                                    Add Activity
-                                </button>
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button"
+                                            @click.stop="openActivityForm(category)"
+                                            class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors">
+                                        <PlusIcon class="w-3.5 h-3.5 mr-1" />
+                                        Add Activity
+                                    </button>
+                                    <button type="button"
+                                            @click.stop="deleteMilestone(category, tasks)"
+                                            class="p-1.5 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                            title="Delete Milestone">
+                                        <TrashIcon class="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
                             </div>
                             <div class="flex-1 h-10 bg-slate-100/30 border-b border-slate-200"></div>
                         </div>

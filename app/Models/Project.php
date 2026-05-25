@@ -47,7 +47,11 @@ class Project extends Model
 
     public function tasks(): HasMany
     {
-        return $this->hasMany(ProjectTask::class)->orderBy('order');
+        return $this->hasMany(ProjectTask::class)
+            ->orderBy('milestone_order')
+            ->orderBy('parent_task_id')
+            ->orderBy('order')
+            ->orderBy('id');
     }
 
     public function taskBoard(): HasOne

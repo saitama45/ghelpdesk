@@ -70,6 +70,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.parent_client_key' => 'nullable|string|max:255',
             'activities.*.activity' => 'required|string|max:255',
             'activities.*.milestone' => 'nullable|string|max:255',
+            'activities.*.milestone_order' => 'nullable|integer|min:0',
             'activities.*.asset_item' => 'nullable|string|max:255',
             'activities.*.model_specs' => 'nullable|string|max:255',
             'activities.*.qty' => 'required|integer|min:1',
@@ -109,6 +110,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.parent_client_key' => 'nullable|string|max:255',
             'activities.*.activity' => 'required|string|max:255',
             'activities.*.milestone' => 'nullable|string|max:255',
+            'activities.*.milestone_order' => 'nullable|integer|min:0',
             'activities.*.asset_item' => 'nullable|string|max:255',
             'activities.*.model_specs' => 'nullable|string|max:255',
             'activities.*.qty' => 'required|integer|min:1',
@@ -152,6 +154,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
                 return $activity;
             });
+        $activities = $this->assignMissingMilestoneOrders($activities);
 
         $this->validateActivityHierarchy($projectTemplate, $activities);
 
@@ -241,12 +244,41 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         }
     }
 
+    private function assignMissingMilestoneOrders($activities)
+    {
+        $ordersByMilestone = [];
+        $nextOrder = 1;
+
+        $activities
+            ->filter(fn ($activity) => empty($activity['parent_client_key']))
+            ->each(function ($activity) use (&$ordersByMilestone, &$nextOrder) {
+                $milestone = $activity['milestone'] ?: 'General';
+
+                if (!array_key_exists($milestone, $ordersByMilestone)) {
+                    $ordersByMilestone[$milestone] = filled($activity['milestone_order'] ?? null)
+                        ? (int) $activity['milestone_order']
+                        : $nextOrder;
+                    $nextOrder = max($nextOrder, $ordersByMilestone[$milestone] + 1);
+                }
+            });
+
+        return $activities->map(function (array $activity) use ($ordersByMilestone) {
+            $milestone = $activity['milestone'] ?: 'General';
+            $activity['milestone_order'] = filled($activity['milestone_order'] ?? null)
+                ? (int) $activity['milestone_order']
+                : ($ordersByMilestone[$milestone] ?? 1);
+
+            return $activity;
+        });
+    }
+
     private function saveActivity(ProjectTemplate $projectTemplate, array $activity, ?int $parentActivityId): ActivityTemplate
     {
         $attributes = [
             'parent_activity_template_id' => $parentActivityId,
             'activity' => $activity['activity'],
             'milestone' => $activity['milestone'] ?? null,
+            'milestone_order' => $activity['milestone_order'] ?? null,
             'asset_item' => $activity['asset_item'] ?? null,
             'model_specs' => $activity['model_specs'] ?? null,
             'qty' => $activity['qty'],

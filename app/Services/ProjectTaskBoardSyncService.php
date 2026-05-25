@@ -465,6 +465,7 @@ class ProjectTaskBoardSyncService
             ->where('project_id', $project->id)
             ->with(['assignedUser', 'subTasks.assignedUser'])
             ->orderBy('parent_task_id')
+            ->orderBy('milestone_order')
             ->orderBy('order')
             ->orderBy('id')
             ->get();
@@ -472,7 +473,12 @@ class ProjectTaskBoardSyncService
         $topLevelTasks = $tasks->whereNull('parent_task_id')->values();
         $validTaskIds = $tasks->pluck('id')->map(fn ($id) => (int) $id)->all();
 
-        foreach ($topLevelTasks->groupBy(fn (ProjectTask $task) => $task->category ?: 'General') as $index => $milestoneTasks) {
+        $milestoneGroups = $topLevelTasks
+            ->groupBy(fn (ProjectTask $task) => $task->category ?: 'General')
+            ->sortBy(fn (Collection $tasks) => $tasks->min('milestone_order') ?? PHP_INT_MAX)
+            ->values();
+
+        foreach ($milestoneGroups as $index => $milestoneTasks) {
             $milestone = (string) ($milestoneTasks->first()->category ?: 'General');
             $checklist = $this->syncChecklist($card, $milestone, (int) $index + 1);
 

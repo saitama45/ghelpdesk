@@ -436,6 +436,7 @@ const createActivityRow = (overrides = {}) => ({
     parent_client_key: null,
     activity: '',
     milestone: 'General',
+    milestone_order: 1,
     asset_item: '',
     model_specs: '',
     qty: 1,
@@ -495,6 +496,8 @@ const closeModal = () => {
 
 const normalizeTemplateActivities = (activities) => {
     const keyById = new Map()
+    const milestoneOrderByName = new Map()
+    let nextMilestoneOrder = 1
 
     activities.forEach(activity => {
         keyById.set(activity.id, makeClientKey())
@@ -504,25 +507,38 @@ const normalizeTemplateActivities = (activities) => {
         .sort((a, b) => {
             const aIsSubTask = a.parent_activity_template_id ? 1 : 0
             const bIsSubTask = b.parent_activity_template_id ? 1 : 0
+            const aMilestoneOrder = Number.isFinite(Number(a.milestone_order)) ? Number(a.milestone_order) : Number.MAX_SAFE_INTEGER
+            const bMilestoneOrder = Number.isFinite(Number(b.milestone_order)) ? Number(b.milestone_order) : Number.MAX_SAFE_INTEGER
 
+            if (aMilestoneOrder !== bMilestoneOrder) return aMilestoneOrder - bMilestoneOrder
             if (aIsSubTask !== bIsSubTask) return aIsSubTask - bIsSubTask
             return (Number(a.order) || 0) - (Number(b.order) || 0)
         })
-        .map(activity => createActivityRow({
-            id: activity.id,
-            client_key: keyById.get(activity.id),
-            parent_client_key: activity.parent_activity_template_id ? keyById.get(activity.parent_activity_template_id) : null,
-            activity: activity.activity,
-            milestone: activity.milestone || 'General',
-            asset_item: activity.asset_item,
-            model_specs: activity.model_specs,
-            qty: activity.qty,
-            responsible: activity.responsible,
-            department: activity.department || '',
-            sub_unit: activity.sub_unit || '',
-            default_duration_days: activity.default_duration_days,
-            order: activity.order
-        }))
+        .map(activity => {
+            const milestone = activity.milestone || 'General'
+            if (!milestoneOrderByName.has(milestone)) {
+                const explicitOrder = Number(activity.milestone_order)
+                milestoneOrderByName.set(milestone, Number.isFinite(explicitOrder) ? explicitOrder : nextMilestoneOrder)
+                nextMilestoneOrder = Math.max(nextMilestoneOrder, milestoneOrderByName.get(milestone) + 1)
+            }
+
+            return createActivityRow({
+                id: activity.id,
+                client_key: keyById.get(activity.id),
+                parent_client_key: activity.parent_activity_template_id ? keyById.get(activity.parent_activity_template_id) : null,
+                activity: activity.activity,
+                milestone,
+                milestone_order: milestoneOrderByName.get(milestone),
+                asset_item: activity.asset_item,
+                model_specs: activity.model_specs,
+                qty: activity.qty,
+                responsible: activity.responsible,
+                department: activity.department || '',
+                sub_unit: activity.sub_unit || '',
+                default_duration_days: activity.default_duration_days,
+                order: activity.order
+            })
+        })
 }
 
 const departmentOptions = computed(() => props.departmentOptions || [])
@@ -560,6 +576,10 @@ const milestoneGroups = computed(() => {
     })
 
     const sorted = Object.entries(groups).sort(([, a], [, b]) => {
+        const aMilestoneOrder = Math.min(...a.map(act => Number.isFinite(Number(act.milestone_order)) ? Number(act.milestone_order) : Number.MAX_SAFE_INTEGER))
+        const bMilestoneOrder = Math.min(...b.map(act => Number.isFinite(Number(act.milestone_order)) ? Number(act.milestone_order) : Number.MAX_SAFE_INTEGER))
+        if (aMilestoneOrder !== bMilestoneOrder) return aMilestoneOrder - bMilestoneOrder
+
         const aMin = Math.min(...a.map(act => Number(act.order) || 0))
         const bMin = Math.min(...b.map(act => Number(act.order) || 0))
         return aMin - bMin
@@ -591,6 +611,25 @@ const nextOrderFor = (milestone, parentClientKey = null) => {
     return Math.max(...siblings.map(activity => Number(activity.order) || 0)) + 1
 }
 
+const milestoneOrderFor = (milestone) => {
+    const normalizedMilestone = milestone || 'General'
+    const existing = form.activities
+        .filter(activity => !activity.parent_client_key && (activity.milestone || 'General') === normalizedMilestone)
+        .map(activity => Number(activity.milestone_order))
+        .filter(Number.isFinite)
+
+    return existing.length ? Math.min(...existing) : nextMilestoneOrder()
+}
+
+const nextMilestoneOrder = () => {
+    const orders = form.activities
+        .filter(activity => !activity.parent_client_key)
+        .map(activity => Number(activity.milestone_order))
+        .filter(Number.isFinite)
+
+    return orders.length ? Math.max(...orders) + 1 : 1
+}
+
 const focusLastActivityInput = () => {
     nextTick(() => {
         const lastInput = activityInputs.value[activityInputs.value.length - 1]
@@ -602,6 +641,7 @@ const addMilestone = () => {
     const milestoneName = `Milestone ${Object.keys(milestoneGroups.value).length + 1}`
     form.activities.push(createActivityRow({
         milestone: milestoneName,
+        milestone_order: nextMilestoneOrder(),
         order: nextOrderFor(milestoneName)
     }))
     focusLastActivityInput()
@@ -612,6 +652,7 @@ const addActivity = (milestone = 'General') => {
 
     form.activities.push(createActivityRow({
         milestone: milestone || 'General',
+        milestone_order: milestoneOrderFor(milestone),
         responsible: lastRow ? lastRow.responsible : null,
         department: lastRow ? lastRow.department : '',
         sub_unit: lastRow ? lastRow.sub_unit : '',
@@ -626,6 +667,7 @@ const addSubActivity = (parentActivity) => {
     form.activities.push(createActivityRow({
         parent_client_key: parentActivity.client_key,
         milestone: parentActivity.milestone || 'General',
+        milestone_order: parentActivity.milestone_order ?? milestoneOrderFor(parentActivity.milestone),
         responsible: parentActivity.responsible,
         department: parentActivity.department || '',
         sub_unit: parentActivity.sub_unit || '',
@@ -637,9 +679,12 @@ const addSubActivity = (parentActivity) => {
 }
 
 const renameMilestone = (currentMilestone, nextMilestone) => {
+    const order = milestoneOrderFor(currentMilestone)
+
     form.activities.forEach(activity => {
         if ((activity.milestone || 'General') === currentMilestone) {
             activity.milestone = nextMilestone || 'General'
+            activity.milestone_order = order
         }
     })
 }
@@ -648,6 +693,7 @@ const syncSubTaskMilestone = (parentActivity) => {
     form.activities.forEach(activity => {
         if (activity.parent_client_key === parentActivity.client_key) {
             activity.milestone = parentActivity.milestone || 'General'
+            activity.milestone_order = parentActivity.milestone_order ?? milestoneOrderFor(parentActivity.milestone)
         }
     })
 }
