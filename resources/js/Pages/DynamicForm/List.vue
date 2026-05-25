@@ -81,6 +81,10 @@ function statusClass(s) {
     return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500 border-gray-200'
 }
 
+const ticketPlaceholder = (record) => {
+    return record.status === 'Approved' ? 'Missing' : 'Pending'
+}
+
 const getDisplayValue = (record) => {
     // Show the first available text field from the data if possible, or just a summary
     const data = record.data || {}
@@ -172,6 +176,7 @@ const getDisplayValue = (record) => {
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Form Type</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Summary</th>
                             <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Submitted By</th>
                             <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Date</th>
@@ -194,6 +199,22 @@ const getDisplayValue = (record) => {
                                         <div class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: #{{ record.id }}</div>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap">
+                                <Link
+                                    v-if="record.ticket"
+                                    :href="route('tickets.edit', record.ticket.id)"
+                                    class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                >
+                                    {{ record.ticket.ticket_key }}
+                                </Link>
+                                <span
+                                    v-else
+                                    class="text-[10px] font-black uppercase italic"
+                                    :class="record.status === 'Approved' ? 'text-rose-400' : 'text-gray-300'"
+                                >
+                                    {{ ticketPlaceholder(record) }}
+                                </span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <div class="text-sm font-bold text-gray-600 truncate max-w-xs">{{ getDisplayValue(record) }}</div>

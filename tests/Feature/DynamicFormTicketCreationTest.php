@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\FormDefinition;
+use App\Models\FormRecordApproval;
 use App\Models\FormRecord;
 use App\Models\RequestType;
 use App\Models\Ticket;
@@ -110,7 +111,7 @@ class DynamicFormTicketCreationTest extends TestCase
         app(DefaultFormService::class)->approve($approveRequest, $formDefinition, $record);
 
         $record->refresh();
-        $this->assertEquals('Open', $record->status);
+        $this->assertEquals('Approved Level 1', $record->status);
         $this->assertEquals(2, $record->current_approval_level);
         $this->assertNull($record->ticket_id);
 
@@ -132,5 +133,215 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertStringContainsString('Approve me twice', $ticket->description);
         $this->assertStringContainsString('Stage 1 Approved by: ' . $approver1->name, $ticket->description);
         $this->assertStringContainsString('Stage 2 Approved by: ' . $approver2->name, $ticket->description);
+    }
+
+    public function test_reapproving_final_record_does_not_create_duplicate_ticket(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $requester = User::factory()->create(['company_id' => $company->id]);
+        $approver = User::factory()->create(['company_id' => $company->id]);
+
+        $formDefinition = FormDefinition::create([
+            'name' => 'One Level Form',
+            'slug' => 'one-level-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 1,
+            'approver_matrix' => [
+                ['level' => 1, 'user_ids' => [$approver->id]],
+            ],
+            'is_active' => true,
+        ]);
+
+        $request = new \Illuminate\Http\Request([
+            'form_data' => ['reason' => 'Only one ticket'],
+        ]);
+
+        $this->actingAs($requester);
+        $record = app(DefaultFormService::class)->store($request, $formDefinition);
+
+        $this->actingAs($approver);
+        app(DefaultFormService::class)->approve(new \Illuminate\Http\Request(), $formDefinition, $record);
+
+        $record->refresh();
+        $firstTicketId = $record->ticket_id;
+
+        app(DefaultFormService::class)->approve(new \Illuminate\Http\Request(), $formDefinition, $record);
+
+        $record->refresh();
+        $this->assertEquals($firstTicketId, $record->ticket_id);
+        $this->assertEquals(1, Ticket::count());
+    }
+
+    public function test_nested_array_values_do_not_break_ticket_description_creation(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $user = User::factory()->create(['company_id' => $company->id]);
+
+        $formDefinition = FormDefinition::create([
+            'name' => 'Nested Array Form',
+            'slug' => 'nested-array-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 0,
+            'form_schema' => [
+                'fields' => [[
+                    'key' => 'nested_payload',
+                    'label' => 'Nested Payload',
+                    'type' => 'text',
+                ]],
+            ],
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user);
+
+        $record = app(DefaultFormService::class)->store(new \Illuminate\Http\Request([
+            'form_data' => [
+                'nested_payload' => [
+                    ['label' => 'first', 'meta' => ['code' => 'A1']],
+                    ['label' => 'second', 'meta' => ['code' => 'B2']],
+                ],
+            ],
+        ]), $formDefinition);
+
+        $ticket = Ticket::find($record->ticket_id);
+
+        $this->assertNotNull($ticket);
+        $this->assertStringContainsString('Nested Payload', $ticket->description);
+        $this->assertStringContainsString('Code: A1', $ticket->description);
+        $this->assertStringContainsString('Code: B2', $ticket->description);
+    }
+
+    public function test_checklist_ticket_is_created_after_all_generated_tasks_are_complete(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $requester = User::factory()->create(['company_id' => $company->id]);
+        $approver = User::factory()->create(['company_id' => $company->id]);
+
+        $formDefinition = FormDefinition::create([
+            'name' => 'Checklist Form',
+            'slug' => 'checklist-form',
+            'workflow_type' => 'checklist',
+            'approval_levels' => 0,
+            'form_schema' => [
+                'fields' => [[
+                    'key' => 'tasks',
+                    'label' => 'Tasks',
+                    'type' => 'checkbox_group',
+                    'checklist_source' => true,
+                    'checklist_assignees' => [$approver->id],
+                    'options' => [
+                        ['value' => 'verify', 'label' => 'Verify'],
+                        ['value' => 'release', 'label' => 'Release'],
+                    ],
+                ]],
+            ],
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($requester);
+        $record = app(DefaultFormService::class)->store(new \Illuminate\Http\Request([
+            'form_data' => ['tasks' => ['verify', 'release']],
+        ]), $formDefinition);
+
+        $this->assertEquals('Open', $record->status);
+        $this->assertCount(2, $record->data['_checklist_tasks']);
+
+        $this->actingAs($approver);
+        app(DefaultFormService::class)->approve(new \Illuminate\Http\Request(['force_level' => 1]), $formDefinition, $record);
+
+        $record->refresh();
+        $this->assertEquals('Open', $record->status);
+        $this->assertNull($record->ticket_id);
+
+        app(DefaultFormService::class)->approve(new \Illuminate\Http\Request(['force_level' => 2]), $formDefinition, $record);
+
+        $record->refresh();
+        $this->assertEquals('Approved', $record->status);
+        $this->assertNotNull($record->ticket_id);
+        $this->assertEquals(1, Ticket::count());
+    }
+
+    public function test_copying_zero_approval_dynamic_record_creates_ticket(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $user = User::factory()->create(['company_id' => $company->id]);
+
+        $formDefinition = FormDefinition::create([
+            'name' => 'Copied Form',
+            'slug' => 'copied-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('copy.transfer'), [
+                'target_type' => 'dynamic',
+                'target_id' => $formDefinition->slug,
+                'payload' => [
+                    'source_user_id' => $user->id,
+                    'form_data' => [
+                        'reason' => 'Copied ticket please',
+                    ],
+                ],
+            ])
+            ->assertOk();
+
+        $record = FormRecord::first();
+
+        $this->assertNotNull($record);
+        $this->assertEquals('Approved', $record->status);
+        $this->assertNotNull($record->ticket_id);
+        $this->assertEquals(1, Ticket::count());
+    }
+
+    public function test_repair_command_finalizes_supplied_stuck_record_and_creates_ticket(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $requester = User::factory()->create(['company_id' => $company->id]);
+        $approver = User::factory()->create(['company_id' => $company->id]);
+
+        $formDefinition = FormDefinition::create([
+            'name' => 'Stuck Form',
+            'slug' => 'stuck-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 1,
+            'is_active' => true,
+        ]);
+
+        $record = FormRecord::create([
+            'form_definition_id' => $formDefinition->id,
+            'data' => ['reason' => 'Repair me'],
+            'status' => 'Approved Level 1',
+            'current_approval_level' => 2,
+            'created_by' => $requester->id,
+        ]);
+
+        FormRecordApproval::create([
+            'form_record_id' => $record->id,
+            'user_id' => $approver->id,
+            'level' => 1,
+            'remarks' => 'Already approved',
+        ]);
+
+        $this->artisan('dynamic-forms:repair-tickets', [
+            'ids' => [$record->id],
+            '--dry-run' => true,
+            '--finalize-stuck' => true,
+        ])->assertSuccessful();
+
+        $record->refresh();
+        $this->assertNull($record->ticket_id);
+
+        $this->artisan('dynamic-forms:repair-tickets', [
+            'ids' => [$record->id],
+            '--finalize-stuck' => true,
+        ])->assertSuccessful();
+
+        $record->refresh();
+        $this->assertEquals('Approved', $record->status);
+        $this->assertEquals(0, $record->current_approval_level);
+        $this->assertNotNull($record->ticket_id);
+        $this->assertEquals(1, Ticket::count());
     }
 }

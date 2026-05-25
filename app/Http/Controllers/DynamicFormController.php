@@ -31,7 +31,7 @@ class DynamicFormController extends Controller
             $query->where('status', $request->status);
         }
 
-        $records = $query->with(['creator', 'definition', 'requestType'])
+        $records = $query->with(['creator', 'definition', 'requestType', 'ticket:id,ticket_key,status'])
             ->latest()
             ->paginate($request->get('per_page', 10))
             ->withQueryString();
@@ -55,7 +55,7 @@ class DynamicFormController extends Controller
             $query->where('data', 'like', "%{$search}%");
         }
 
-        $records = $query->with(['creator', 'updator', 'requestType', 'approvals'])
+        $records = $query->with(['creator', 'updator', 'requestType', 'approvals', 'ticket:id,ticket_key,status'])
                         ->latest()
                         ->paginate($request->get('per_page', 10))
                         ->withQueryString();

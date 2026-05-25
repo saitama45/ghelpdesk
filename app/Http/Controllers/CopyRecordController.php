@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\FormDefinition;
-use App\Models\FormRecord;
 use App\Models\RequestType;
+use App\Services\DynamicForms\FormServiceFactory;
 use App\Services\PosRequestService;
 use App\Services\SapRequestService;
 use Illuminate\Http\Request;
@@ -76,23 +76,22 @@ class CopyRecordController extends Controller
                     $redirectUrl = route('pos-requests.edit', $newRecord->id);
                 } elseif ($type === 'dynamic') {
                     $formDefinition = FormDefinition::where('slug', $targetId)->firstOrFail();
-                    
-                    $saveData = array_merge($payload['form_data'] ?? [], [
-                        'items' => $payload['items'] ?? []
-                    ]);
 
-                    $approvalLevels = $formDefinition->approval_levels;
-                    $status = $approvalLevels > 0 ? 'Open' : 'Approved';
-                    $currentLevel = $approvalLevels > 0 ? 1 : 0;
-
-                    $newRecord = FormRecord::create([
-                        'form_definition_id' => $formDefinition->id,
-                        'request_type_id' => null,
-                        'data' => $saveData,
-                        'status' => $status,
-                        'current_approval_level' => $currentLevel,
-                        'created_by' => $originalUserId,
+                    $dynamicRequest = Request::create('', 'POST', [
+                        'request_type_id' => $payload['request_type_id'] ?? null,
+                        'form_data' => $payload['form_data'] ?? [],
+                        'items' => $payload['items'] ?? [],
                     ]);
+                    $dynamicRequest->setUserResolver(fn () => auth()->user());
+                    $dynamicRequest->attributes->set('created_by', $originalUserId);
+
+                    $dynamicService = app(FormServiceFactory::class)->make($formDefinition->slug);
+                    $newRecord = $dynamicService->store($dynamicRequest, $formDefinition);
+
+                    if (method_exists($dynamicService, 'notifyCurrentApprovers')) {
+                        $dynamicService->notifyCurrentApprovers($formDefinition, $newRecord);
+                    }
+
                     $redirectUrl = route('dynamic-form.show', ['slug' => $targetId, 'id' => $newRecord->id]);
                 }
 

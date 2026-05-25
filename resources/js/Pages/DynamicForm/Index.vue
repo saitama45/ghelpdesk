@@ -299,11 +299,17 @@ function statusClass(s) {
     return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500'
 }
 
-const getStageDisplay = (record) => {
-    const totalLevels = Number(record.request_type ? record.request_type.approval_levels : props.form.approval_levels)
-    if (totalLevels === 0) return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase' }
+const ticketPlaceholder = (record) => {
+    return record.status === 'Approved' ? 'Missing' : 'Pending'
+}
 
+const getStageDisplay = (record) => {
     const isChecklist = (record.request_type?.workflow_type || props.form.workflow_type) === 'checklist'
+    const totalLevels = isChecklist && Array.isArray(record.data?._checklist_tasks)
+        ? record.data._checklist_tasks.length
+        : Number(record.request_type ? record.request_type.approval_levels : props.form.approval_levels)
+
+    if (totalLevels === 0) return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase' }
     
     if (isChecklist) {
         const completed = new Set((record.approvals || []).map(a => Number(a.level))).size
@@ -407,6 +413,7 @@ const getStageDisplay = (record) => {
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">ID#</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Ticket#</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Request Type</th>
                             <th v-for="col in tableColumns" :key="col.key" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">
                                 {{ col.label }}
@@ -424,6 +431,22 @@ const getStageDisplay = (record) => {
                         >
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <span class="text-xs font-black text-gray-500">#{{ record.id }}</span>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap">
+                                <Link
+                                    v-if="record.ticket"
+                                    :href="route('tickets.edit', record.ticket.id)"
+                                    class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                >
+                                    {{ record.ticket.ticket_key }}
+                                </Link>
+                                <span
+                                    v-else
+                                    class="text-[10px] font-black uppercase italic"
+                                    :class="record.status === 'Approved' ? 'text-rose-400' : 'text-gray-300'"
+                                >
+                                    {{ ticketPlaceholder(record) }}
+                                </span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <span v-if="record.request_type" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tight">

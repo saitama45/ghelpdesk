@@ -60,6 +60,53 @@ function ticketStatusClass(status) {
     return map[s] ?? 'bg-gray-100 text-gray-500';
 }
 
+const ticketSlaMetric = computed(() => props.record.ticket?.sla_metric || props.record.ticket?.slaMetric || null)
+
+function slaTargetClass(type) {
+    const metric = ticketSlaMetric.value
+    if (!metric) return 'bg-white border-gray-100'
+
+    if (type === 'response') {
+        if (metric.is_response_breached) return 'bg-red-50 border-red-100'
+        if (metric.first_response_at) return 'bg-green-50 border-green-100'
+        return 'bg-white border-gray-100'
+    }
+
+    if (metric.is_resolution_breached) return 'bg-red-50 border-red-100'
+    if (metric.resolved_at) return 'bg-green-50 border-green-100'
+    return 'bg-white border-gray-100'
+}
+
+function slaStatus(type) {
+    const metric = ticketSlaMetric.value
+    if (!metric) return { label: 'NO TARGET', class: 'text-gray-400' }
+
+    if (type === 'response') {
+        if (metric.is_response_breached) return { label: 'BREACHED', class: 'text-red-600' }
+        if (metric.first_response_at) return { label: 'MET', class: 'text-green-600' }
+        return { label: 'ACTIVE', class: 'text-blue-600' }
+    }
+
+    if (metric.is_resolution_breached) return { label: 'BREACHED', class: 'text-red-600' }
+    if (metric.resolved_at) return { label: 'MET', class: 'text-green-600' }
+    return { label: 'ACTIVE', class: 'text-blue-600' }
+}
+
+function slaTargetDate(type) {
+    const metric = ticketSlaMetric.value
+    if (!metric) return 'No target'
+
+    if (type === 'response') {
+        return metric.first_response_at
+            ? fmt(metric.first_response_at)
+            : (metric.response_target_at ? fmt(metric.response_target_at) : 'No target')
+    }
+
+    return metric.resolved_at
+        ? fmt(metric.resolved_at)
+        : (metric.resolution_target_at ? fmt(metric.resolution_target_at) : 'No target')
+}
+
 const authUserId = computed(() => page.props.auth.user.id)
 
 // Use RequestType schema if available, fallback to FormDefinition
@@ -87,7 +134,19 @@ const activeSchemaItemsColumns = computed(() =>
 const activeItemLabel = computed(() => activeItemsTemplate.value?.label || 'Line Items')
 const hasSchemaItems = computed(() => !!effectiveFormSchema.value?.has_items && activeSchemaItemsColumns.value.length > 0)
 
-const approverMatrix = computed(() => effectiveSchemaSource.value.approver_matrix ?? [])
+const checklistTasks = computed(() => Array.isArray(props.record.data?._checklist_tasks) ? props.record.data._checklist_tasks : [])
+
+const approverMatrix = computed(() => {
+    if (props.form?.workflow_type === 'checklist' && checklistTasks.value.length > 0) {
+        return checklistTasks.value.map(task => ({
+            level: Number(task.level),
+            name: task.name,
+            user_ids: Array.isArray(task.assignees) ? task.assignees : [],
+        }))
+    }
+
+    return effectiveSchemaSource.value.approver_matrix ?? []
+})
 
 const assignedApproversByLevel = computed(() => {
     const users = props.users ?? []
@@ -188,7 +247,13 @@ const toggleChecklistTask = (lvl) => {
     selectedChecklistLevel.value = lvl
 }
 
-const totalLevels = computed(() => Number(effectiveSchemaSource.value.approval_levels ?? 0))
+const totalLevels = computed(() => {
+    if (props.form?.workflow_type === 'checklist' && checklistTasks.value.length > 0) {
+        return checklistTasks.value.length
+    }
+
+    return Number(effectiveSchemaSource.value.approval_levels ?? 0)
+})
 const stages = computed(() => Array.from({ length: totalLevels.value }, (_, i) => i + 1))
 
 function getTaskName(lvl) {
@@ -415,7 +480,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                     </div>
 
                     <!-- Right: Workflow Sidebar -->
-                    <div v-if="totalLevels > 0" class="space-y-8">
+                    <div v-if="totalLevels > 0 || record.ticket" class="space-y-8">
                         <!-- Linked Ticket & SLA Display -->
                         <div v-if="record.ticket" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
                             <div class="flex items-center justify-between mb-4">
@@ -428,22 +493,33 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                 </span>
                             </div>
                             <div class="space-y-4">
-                                <a :href="route('tickets.show', record.ticket.ticket_key)" target="_blank" class="block w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold text-center transition-colors">
+                                <Link :href="route('tickets.edit', record.ticket.id)" class="block w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold text-center transition-colors">
                                     {{ record.ticket.ticket_key }}
-                                </a>
+                                </Link>
 
-                                <div v-if="record.ticket.slaMetric" class="grid grid-cols-2 gap-3 mt-4">
-                                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                                        <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Response Target</p>
-                                        <p class="text-xs font-bold text-gray-800" :class="{ 'text-red-600': record.ticket.slaMetric.first_response_breached }">
-                                            {{ record.ticket.slaMetric.first_response_target_at ? fmt(record.ticket.slaMetric.first_response_target_at) : 'N/A' }}
-                                        </p>
+                                <div v-if="ticketSlaMetric" class="space-y-3">
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Ticket SLA</h4>
+                                    <div class="p-3 rounded-xl border" :class="slaTargetClass('response')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response Target</span>
+                                            <span class="text-[9px] font-black uppercase" :class="slaStatus('response').class">
+                                                {{ slaStatus('response').label }}
+                                            </span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ slaTargetDate('response') }}
+                                        </div>
                                     </div>
-                                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                                        <p class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Resolution Target</p>
-                                        <p class="text-xs font-bold text-gray-800" :class="{ 'text-red-600': record.ticket.slaMetric.resolution_breached }">
-                                            {{ record.ticket.slaMetric.resolution_target_at ? fmt(record.ticket.slaMetric.resolution_target_at) : 'N/A' }}
-                                        </p>
+                                    <div class="p-3 rounded-xl border" :class="slaTargetClass('resolution')">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution Target</span>
+                                            <span class="text-[9px] font-black uppercase" :class="slaStatus('resolution').class">
+                                                {{ slaStatus('resolution').label }}
+                                            </span>
+                                        </div>
+                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                            {{ slaTargetDate('resolution') }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

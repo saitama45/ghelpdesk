@@ -61,7 +61,7 @@ class DefaultFormService implements FormServiceContract
             'data' => $saveData,
             'status' => $status,
             'current_approval_level' => $currentLevel,
-            'created_by' => Auth::id(),
+            'created_by' => $request->attributes->get('created_by', Auth::id()),
         ]);
 
         if ($record->status === 'Approved') {
@@ -97,12 +97,14 @@ class DefaultFormService implements FormServiceContract
         ]);
 
         DB::transaction(function () use ($formDefinition, $record, $request) {
+            if (in_array($record->status, ['Approved', 'Rejected', 'Cancelled'], true) || $record->ticket_id) {
+                return;
+            }
+
             $isChecklist = $formDefinition->workflow_type === 'checklist';
             $levelToApprove = $request->force_level ?? $record->current_approval_level;
             
-            $totalLevels = $record->requestType
-                ? $this->getEffectiveApprovalLevels($record->requestType, $record->data ?? [])
-                : (int) $formDefinition->approval_levels;
+            $totalLevels = $this->getTotalApprovalLevels($formDefinition, $record);
 
             FormRecordApproval::create([
                 'form_record_id' => $record->id,
@@ -132,6 +134,7 @@ class DefaultFormService implements FormServiceContract
                     $this->processApprovedRequest($formDefinition, $record);
                 } else {
                     $record->update([
+                        'status' => 'Approved Level ' . $levelToApprove,
                         'current_approval_level' => $nextLevel,
                     ]);
                 }
@@ -289,6 +292,21 @@ class DefaultFormService implements FormServiceContract
         return count($this->resolveEffectiveApproverMatrix($requestType, $formData));
     }
 
+    private function getTotalApprovalLevels(FormDefinition $formDefinition, FormRecord $record): int
+    {
+        if ($formDefinition->workflow_type === 'checklist') {
+            $tasks = $record->data['_checklist_tasks'] ?? null;
+
+            if (is_array($tasks)) {
+                return count($tasks);
+            }
+        }
+
+        return $record->requestType
+            ? $this->getEffectiveApprovalLevels($record->requestType, $record->data ?? [])
+            : (int) $formDefinition->approval_levels;
+    }
+
     private function resolveEffectiveApproverMatrix(RequestType $requestType, array $formData): array
     {
         $baseMatrix = $this->normalizeApproverMatrix(
@@ -423,6 +441,10 @@ class DefaultFormService implements FormServiceContract
      */
     public function processApprovedRequest(FormDefinition $formDefinition, FormRecord $record): void
     {
+        if ($record->ticket_id) {
+            return;
+        }
+
         $creator = User::with('company')->find($record->created_by);
         $company = null;
         
@@ -572,16 +594,7 @@ class DefaultFormService implements FormServiceContract
             // Multiple files
             $names = [];
             foreach ($value as $val) {
-                if (is_array($val) && isset($val['name'])) {
-                    if (isset($val['path'])) {
-                        $url = route('attachments.download', ['path' => $val['path'], 'name' => $val['name']]);
-                        $names[] = "[{$val['name']}]({$url})";
-                    } else {
-                        $names[] = $val['name'];
-                    }
-                } else {
-                    $names[] = (string)$val;
-                }
+                $names[] = $this->formatNestedValue($val);
             }
             return implode(', ', $names);
         }
@@ -600,5 +613,44 @@ class DefaultFormService implements FormServiceContract
         }
 
         return (string)$value;
+    }
+
+    private function formatNestedValue(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'â€”';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+
+        if (is_scalar($value)) {
+            return (string) $value;
+        }
+
+        if (is_array($value)) {
+            if (isset($value['path'], $value['name'])) {
+                $url = route('attachments.download', ['path' => $value['path'], 'name' => $value['name']]);
+
+                return "[{$value['name']}]({$url})";
+            }
+
+            if (isset($value['name'])) {
+                return (string) $value['name'];
+            }
+
+            $parts = [];
+            foreach ($value as $key => $nestedValue) {
+                $formattedValue = $this->formatNestedValue($nestedValue);
+                $parts[] = is_string($key)
+                    ? ucwords(str_replace('_', ' ', $key)) . ': ' . $formattedValue
+                    : $formattedValue;
+            }
+
+            return implode('; ', array_filter($parts, fn ($part) => $part !== ''));
+        }
+
+        return json_encode($value) ?: '';
     }
 }
