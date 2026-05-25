@@ -161,12 +161,41 @@ class ProjectController extends Controller
         abort_unless(auth()->user()->can('projects.delete'), 403);
 
         DB::transaction(function () use ($project) {
+            // Clean up all task cards associated with the project to prevent constraint conflicts
+            $cardIds = \App\Models\TaskCard::where('project_id', $project->id)->pluck('id')->all();
+            if (!empty($cardIds)) {
+                // Delete many-to-many associations
+                DB::table('task_card_assignees')->whereIn('task_card_id', $cardIds)->delete();
+                DB::table('task_card_label')->whereIn('task_card_id', $cardIds)->delete();
+                DB::table('task_card_watchers')->whereIn('task_card_id', $cardIds)->delete();
+
+                // Delete child models
+                \App\Models\TaskCardAttachment::whereIn('task_card_id', $cardIds)->delete();
+                \App\Models\TaskCardComment::whereIn('task_card_id', $cardIds)->delete();
+
+                // Dissociate or delete activities
+                DB::table('task_card_activities')->whereIn('task_card_id', $cardIds)->update(['task_card_id' => null]);
+
+                // Delete checklist items
+                $checklistIds = \App\Models\TaskChecklist::whereIn('task_card_id', $cardIds)->pluck('id')->all();
+                if (!empty($checklistIds)) {
+                    \App\Models\TaskChecklistItem::whereIn('task_checklist_id', $checklistIds)->delete();
+                    \App\Models\TaskChecklist::whereIn('id', $checklistIds)->delete();
+                }
+
+                // Delete task cards themselves
+                \App\Models\TaskCard::whereIn('id', $cardIds)->forceDelete();
+            }
+
             if ($project->taskBoard) {
                 $project->taskBoard->forceDelete();
             }
             $project->teamMembers()->delete();
             $project->assets()->delete();
-            $project->tasks()->forceDelete();
+            
+            // Delete subtasks first to avoid parent_task_id constraint cycle issues
+            $project->tasks()->whereNotNull('parent_task_id')->forceDelete();
+            $project->tasks()->whereNull('parent_task_id')->forceDelete();
             
             $project->forceDelete();
         });

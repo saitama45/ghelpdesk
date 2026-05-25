@@ -6,6 +6,7 @@ use App\Models\FormDefinition;
 use App\Models\FormRecord;
 use App\Models\FormRecordApproval;
 use App\Models\RequestType;
+use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\DynamicFormApprovalReminder;
 use App\Services\DynamicForms\Contracts\FormServiceContract;
@@ -54,7 +55,7 @@ class DefaultFormService implements FormServiceContract
         $status = $approvalLevels > 0 ? 'Open' : 'Approved';
         $currentLevel = $approvalLevels > 0 ? 1 : 0;
 
-        return FormRecord::create([
+        $record = FormRecord::create([
             'form_definition_id' => $formDefinition->id,
             'request_type_id' => $request->request_type_id,
             'data' => $saveData,
@@ -62,6 +63,12 @@ class DefaultFormService implements FormServiceContract
             'current_approval_level' => $currentLevel,
             'created_by' => Auth::id(),
         ]);
+
+        if ($record->status === 'Approved') {
+            $this->processApprovedRequest($formDefinition, $record);
+        }
+
+        return $record;
     }
 
     public function update(Request $request, FormDefinition $formDefinition, FormRecord $record): FormRecord
@@ -113,6 +120,7 @@ class DefaultFormService implements FormServiceContract
                         'status' => 'Approved',
                         'current_approval_level' => 0,
                     ]);
+                    $this->processApprovedRequest($formDefinition, $record);
                 }
             } else {
                 $nextLevel = $levelToApprove + 1;
@@ -121,6 +129,7 @@ class DefaultFormService implements FormServiceContract
                         'status' => 'Approved',
                         'current_approval_level' => 0,
                     ]);
+                    $this->processApprovedRequest($formDefinition, $record);
                 } else {
                     $record->update([
                         'current_approval_level' => $nextLevel,
@@ -407,5 +416,189 @@ class DefaultFormService implements FormServiceContract
                 ];
             })
             ->all();
+    }
+
+    /**
+     * Process approved dynamic form request to create a ticket automatically.
+     */
+    public function processApprovedRequest(FormDefinition $formDefinition, FormRecord $record): void
+    {
+        $creator = User::with('company')->find($record->created_by);
+        $company = null;
+        
+        // Try getting company from record data first
+        $companyId = $record->data['company_id'] ?? null;
+        if ($companyId) {
+            $company = \App\Models\Company::find($companyId);
+        }
+        if (!$company && $creator) {
+            $company = $creator->company;
+        }
+        
+        $companyCode = $company ? $company->code : 'TKT';
+        $companyId = $company ? $company->id : null;
+
+        $maxNumber = Ticket::withTrashed()
+            ->where('ticket_key', 'LIKE', "{$companyCode}-%")
+            ->get(['ticket_key'])
+            ->map(function ($t) {
+                if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
+                    return (int) $matches[1];
+                }
+                return 0;
+            })
+            ->max();
+
+        $nextNumber = ($maxNumber ?? 0) + 1;
+        $ticketKey = "{$companyCode}-{$nextNumber}";
+
+        $requestTypeName = $record->requestType ? $record->requestType->name : $formDefinition->name;
+        $subject = "{$formDefinition->name} - {$requestTypeName}";
+
+        $schema = $record->requestType ? $record->requestType->form_schema : $formDefinition->form_schema;
+
+        $description = "🆔 Request Record: #{$record->id}\n" .
+            "📋 Type: {$requestTypeName}\n" .
+            "👤 Requester: " . ($creator ? $creator->name : 'N/A') . " (" . ($creator ? $creator->email : 'N/A') . ")\n";
+        
+        if ($company) {
+            $description .= "🏢 Company: {$company->name}\n";
+        }
+        
+        $description .= "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" .
+            "   📝 FORM DETAILS\n" .
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+
+        $formData = $record->data ?? [];
+        $excludeKeys = ['items', '_checklist_tasks', 'approver_data'];
+        
+        if ($schema && !empty($schema['fields'])) {
+            foreach ($schema['fields'] as $field) {
+                $key = $field['key'] ?? null;
+                if (!$key || in_array($key, $excludeKeys)) continue;
+                
+                $value = $formData[$key] ?? null;
+                $displayValue = $this->getLabelFromSchema($schema, $key, $value, false);
+                $description .= " • {$field['label']}: {$displayValue}\n";
+            }
+        } else {
+            foreach ($formData as $key => $value) {
+                if (in_array($key, $excludeKeys)) continue;
+                $label = ucwords(str_replace('_', ' ', $key));
+                $description .= " • {$label}: " . (is_array($value) ? json_encode($value) : $value) . "\n";
+            }
+        }
+
+        // Add items if any
+        $items = $record->data['items'] ?? [];
+        if (!empty($items) && is_array($items)) {
+            $description .= "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" .
+                "   📦 ITEMS\n" .
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+            $itemCols = $schema['items_columns'] ?? [];
+            foreach ($items as $index => $item) {
+                $description .= "【 ITEM #" . ($index + 1) . " 】\n";
+                if (!empty($itemCols)) {
+                    foreach ($itemCols as $col) {
+                        $val = $item[$col['key']] ?? null;
+                        $displayValue = $this->getLabelFromSchema($schema, $col['key'], $val, true);
+                        $description .= " • {$col['label']}: {$displayValue}\n";
+                    }
+                } else {
+                    foreach ($item as $key => $value) {
+                        $label = ucwords(str_replace('_', ' ', $key));
+                        $description .= " • {$label}: " . (is_array($value) ? json_encode($value) : $value) . "\n";
+                    }
+                }
+                $description .= "────────────────────────────────────────\n";
+            }
+        }
+
+        // Add approvals/approver details
+        $approvals = $record->approvals()->with('user')->get();
+        if ($approvals->isNotEmpty()) {
+            $description .= "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" .
+                "   ✅ APPROVER DETAILS\n" .
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+            foreach ($approvals as $approval) {
+                $approverName = $approval->user ? $approval->user->name : 'Unknown';
+                $description .= " • Stage {$approval->level} Approved by: {$approverName}\n";
+                if ($approval->remarks) {
+                    $description .= "   Remarks: {$approval->remarks}\n";
+                }
+                if ($approval->approver_data) {
+                    foreach ($approval->approver_data as $k => $v) {
+                        $label = ucwords(str_replace('_', ' ', $k));
+                        $displayValue = $this->getLabelFromSchema($schema, $k, $v, false);
+                        $description .= "   ➔ {$label}: {$displayValue}\n";
+                    }
+                }
+            }
+        }
+
+        $ticket = Ticket::create([
+            'ticket_key'   => $ticketKey,
+            'title'        => $subject,
+            'description'  => $description,
+            'status'       => 'open',
+            'priority'     => 'medium',
+            'severity'     => 'minor',
+            'reporter_id'  => $record->created_by,
+            'sender_name'  => $creator ? $creator->name : null,
+            'sender_email' => $creator ? $creator->email : null,
+            'company_id'   => $companyId,
+            'type'         => 'task',
+            'created_at'   => now('Asia/Manila'),
+        ]);
+
+        $record->update(['ticket_id' => $ticket->id]);
+    }
+
+    /**
+     * Format raw field values from form schema into readable labels.
+     */
+    private function getLabelFromSchema($schema, $key, $value, $isItem = false): string
+    {
+        if ($value === null) return '—';
+        if (is_bool($value)) return $value ? 'Yes' : 'No';
+
+        // Check if it's a file object or array of file objects
+        if (is_array($value)) {
+            if (isset($value['path']) && isset($value['name'])) {
+                $url = route('attachments.download', ['path' => $value['path'], 'name' => $value['name']]);
+                return "[{$value['name']}]({$url})";
+            }
+            
+            // Multiple files
+            $names = [];
+            foreach ($value as $val) {
+                if (is_array($val) && isset($val['name'])) {
+                    if (isset($val['path'])) {
+                        $url = route('attachments.download', ['path' => $val['path'], 'name' => $val['name']]);
+                        $names[] = "[{$val['name']}]({$url})";
+                    } else {
+                        $names[] = $val['name'];
+                    }
+                } else {
+                    $names[] = (string)$val;
+                }
+            }
+            return implode(', ', $names);
+        }
+
+        if (!$schema) {
+            return (string)$value;
+        }
+
+        $fields = $isItem ? ($schema['items_columns'] ?? []) : ($schema['fields'] ?? []);
+        $field = collect($fields)->firstWhere('key', $key);
+
+        if ($field && isset($field['options']) && !empty($field['options'])) {
+            $options = collect($field['options']);
+            $option = $options->firstWhere('value', $value);
+            return $option ? $option['label'] : (string)$value;
+        }
+
+        return (string)$value;
     }
 }

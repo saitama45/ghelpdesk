@@ -502,6 +502,11 @@ const groupedTasks = computed(() => {
         return groups;
     }, {});
 
+    // Sort the parent tasks within each category explicitly by their order
+    Object.keys(groups).forEach(category => {
+        groups[category] = sortTasks(groups[category]);
+    });
+
     const sorted = Object.entries(groups).sort(([, a], [, b]) => {
         const aMin = Math.min(...a.map(act => Number(act.order) || 0));
         const bMin = Math.min(...b.map(act => Number(act.order) || 0));
