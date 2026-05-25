@@ -506,8 +506,13 @@ const unscheduledUsers = ref([]);
 const openDayModal = (date) => {
     selectedDayDate.value = date;
     selectedDayEvents.value = getEventsForDate(date);
-    const scheduledIds = allEventsByDate.value.get(toDateKey(date)) ?? new Set();
-    unscheduledUsers.value = props.users.filter(u => !scheduledIds.has(u.id));
+    const dateKey = toDateKey(date);
+    const scheduledIds = allEventsByDate.value.get(dateKey) ?? new Set();
+    unscheduledUsers.value = props.users.filter(u => {
+        if (scheduledIds.has(u.id)) return false;
+        if (u.date_hired && u.date_hired > dateKey) return false;
+        return true;
+    });
     showDayModal.value = true;
 };
 

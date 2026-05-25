@@ -34,6 +34,7 @@ class User extends Authenticatable
         'profile_photo',
         'org_sort_order',
         'company_id',
+        'date_hired',
         'created_by',
         'updated_by',
     ];
@@ -127,6 +128,7 @@ class User extends Authenticatable
             'company_id' => 'integer',
             'department_id' => 'integer',
             'department_node_id' => 'integer',
+            'date_hired' => 'date:Y-m-d',
             'created_by' => 'integer',
             'updated_by' => 'integer',
         ];

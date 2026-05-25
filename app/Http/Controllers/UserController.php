@@ -91,6 +91,7 @@ class UserController extends Controller
             'department_id' => 'nullable|integer|exists:departments,id',
             'department_node_id' => 'nullable|integer|exists:department_nodes,id',
             'position' => 'nullable|string|max:255',
+            'date_hired' => 'nullable|date',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
             'store_ids' => 'nullable|array',
@@ -107,6 +108,7 @@ class UserController extends Controller
             'password' => Hash::make($request->password),
             ...$organizationPayload,
             'position' => $request->position,
+            'date_hired' => $request->date_hired,
             'is_active' => $request->input('is_active', true),
             'is_manager' => $request->input('is_manager', false),
             'email_verified_at' => now(),
@@ -136,6 +138,7 @@ class UserController extends Controller
             'department_id' => 'nullable|integer|exists:departments,id',
             'department_node_id' => 'nullable|integer|exists:department_nodes,id',
             'position' => 'nullable|string|max:255',
+            'date_hired' => 'nullable|date',
             'is_active' => 'boolean',
             'is_manager' => 'boolean',
             'store_ids' => 'nullable|array',
@@ -152,6 +155,7 @@ class UserController extends Controller
         $user->email = $request->email;
         $user->forceFill($organizationPayload);
         $user->position = $request->position;
+        $user->date_hired = $request->date_hired;
         $user->is_active = $request->boolean('is_active');
         $user->is_manager = $request->boolean('is_manager');
         $user->updated_by = auth()->id();

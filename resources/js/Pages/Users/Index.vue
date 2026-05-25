@@ -136,6 +136,7 @@ const createForm = useForm({
     department_id: '',
     department_node_id: '',
     position: '',
+    date_hired: '',
     is_active: true,
     is_manager: false,
     store_ids: [],
@@ -149,6 +150,7 @@ const editForm = useForm({
     department_id: '',
     department_node_id: '',
     position: '',
+    date_hired: '',
     is_active: true,
     is_manager: false,
     store_ids: [],
@@ -181,6 +183,7 @@ const editUser = (user) => {
     editForm.department_id = user.department_id || '';
     editForm.department_node_id = user.department_node_id || '';
     editForm.position = user.position || '';
+    editForm.date_hired = user.date_hired ? String(user.date_hired).substring(0, 10) : '';
     editForm.is_active = user.google_id && !user.is_active && !(user.roles?.length) ? true : !!user.is_active;
     editForm.is_manager = !!user.is_manager;
     editForm.store_ids = user.stores?.map(s => s.id) || [];
@@ -659,6 +662,10 @@ const sortRolePermissions = (permissions) => {
                             <input v-model="createForm.position" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                         </div>
                         <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Date Hired</label>
+                            <input v-model="createForm.date_hired" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+                        <div>
                             <div class="flex items-center justify-between mb-1">
                                 <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Stores</label>
                                 <button
@@ -765,6 +772,10 @@ const sortRolePermissions = (permissions) => {
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Position</label>
                             <input v-model="editForm.position" type="text" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Date Hired</label>
+                            <input v-model="editForm.date_hired" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                         </div>
                         <div>
                             <div class="flex items-center justify-between mb-1">

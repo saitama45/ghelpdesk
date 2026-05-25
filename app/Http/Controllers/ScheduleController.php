@@ -222,7 +222,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ];
         });
         
-        $users = User::active()->with(['managers:id', 'departmentReference:id,code,name'])->orderBy('name')->get();
+        $users = User::active()->with(['managers:id', 'departmentReference:id,code,name'])->orderBy('name')->get(['id', 'name', 'is_vacant', 'department_id', 'department_node_id', 'is_manager', 'date_hired']);
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $departmentNodes = \App\Models\DepartmentNode::select('id', 'parent_id', 'department_id', 'name')->get();
         $departments = Department::orderBy('name')->get(['id', 'name', 'is_active']);
