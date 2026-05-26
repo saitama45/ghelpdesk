@@ -63,13 +63,22 @@ class EmailTicketService
             }
 
             // Diagnostic: Count unseen messages only
-            $messages = $inbox->messages()->unseen()->get();
+            $query = $inbox->messages()->unseen();
+            $messages = $query->get();
             $unseenCount = count($messages);
 
             Log::info("EmailTicketService: Inbox stats - Unseen: {$unseenCount}");
 
             $count = 0;
             $errors = [];
+
+            // Log any messages the library could not parse (soft_fail=true means they are skipped, not thrown)
+            if ($query->hasErrors()) {
+                foreach ($query->getErrors() as $uid => $error) {
+                    Log::warning("EmailTicketService: Library skipped UID {$uid} (parse error): " . $error->getMessage());
+                    $errors[] = "UID {$uid} skipped by IMAP library: " . $error->getMessage();
+                }
+            }
             foreach ($messages as $message) {
                 try {
                     Log::debug("EmailTicketService: Checking message: " . $message->getSubject());
