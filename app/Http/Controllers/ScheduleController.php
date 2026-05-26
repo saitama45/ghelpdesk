@@ -30,6 +30,9 @@ use Illuminate\Validation\ValidationException;
 
 class ScheduleController extends Controller implements HasMiddleware
 {
+    private const REQUEST_TYPE_SCHEDULE_CHANGE = 'schedule_change';
+    private const REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT = 'actual_time_adjustment';
+
     public function __construct(
         private \App\Services\OrganizationReferenceService $organizationReferences
     ) {}
@@ -146,6 +149,7 @@ class ScheduleController extends Controller implements HasMiddleware
         foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
             $attendanceLogs = $attendanceLogs->concat(
                 AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                    ->notVoided()
                     ->orderBy('log_time')
                     ->get(['schedule_id', 'schedule_store_id', 'type', 'log_time'])
             );
@@ -156,7 +160,10 @@ class ScheduleController extends Controller implements HasMiddleware
         $scheduleChangeRequests = $this->scheduleChangeRequestRows($request->user());
         $canDirectEditSchedules = $request->user()->can('schedules.edit');
 
-        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $editableUserIds, $canDirectEditSchedules) {
+        $directActualTimeUserIds = $this->directActualTimeUserIds($request->user());
+        $requestableActualTimeUserIds = $this->requestableActualTimeUserIds($request->user());
+
+        $schedules = $rawSchedules->map(function($schedule) use ($logsBySchedule, $editableUserIds, $canDirectEditSchedules, $directActualTimeUserIds, $requestableActualTimeUserIds) {
             $schedLogs     = $logsBySchedule->get($schedule->id, collect());
             $actualTimeIn  = $schedLogs->firstWhere('type', 'time_in')?->log_time?->toIso8601String();
             $actualTimeOut = $schedLogs->filter(fn($l) => $l->type === 'time_out')->last()?->log_time?->toIso8601String();
@@ -181,6 +188,8 @@ class ScheduleController extends Controller implements HasMiddleware
                 'updated_at'      => $schedule->updated_at?->toIso8601String(),
                 'can_edit'        => $canDirectEditSchedules && in_array((int) $schedule->user_id, $editableUserIds, true),
                 'can_request_change' => ! $canDirectEditSchedules && (int) $schedule->user_id === (int) auth()->id(),
+                'can_edit_actual_time' => in_array((int) $schedule->user_id, $directActualTimeUserIds, true),
+                'can_request_actual_time' => in_array((int) $schedule->user_id, $requestableActualTimeUserIds, true),
                 'actual_time_in'  => $actualTimeIn,
                 'actual_time_out' => $actualTimeOut,
                 'actual_times_by_date' => $actualTimesByDate,
@@ -300,6 +309,12 @@ class ScheduleController extends Controller implements HasMiddleware
             'stores.*.store_id.required_unless' => 'Location is required for every schedule entry.',
         ]);
 
+        abort_unless(
+            in_array((int) $request->user_id, $this->editableScheduleUserIds($request->user()), true),
+            403,
+            'You can only create schedules for users under your org chart level.'
+        );
+
         $storeEntries = $request->input('stores');
         $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
@@ -338,7 +353,17 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function update(Request $request, Schedule $schedule)
     {
-        $this->applyScheduleUpdate($request->all(), $schedule, auth()->id());
+        $payload = $this->validateScheduleUpdatePayload($request->all());
+        $editableUserIds = $this->editableScheduleUserIds($request->user());
+
+        abort_unless(
+            in_array((int) $schedule->user_id, $editableUserIds, true)
+                && in_array((int) $payload['user_id'], $editableUserIds, true),
+            403,
+            'You can only edit schedules for users under your org chart level.'
+        );
+
+        $this->applyScheduleUpdate($payload, $schedule, auth()->id());
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
     }
@@ -368,9 +393,11 @@ class ScheduleController extends Controller implements HasMiddleware
             [
                 'schedule_id' => $schedule->id,
                 'requester_id' => $request->user()->id,
+                'request_type' => self::REQUEST_TYPE_SCHEDULE_CHANGE,
                 'status' => 'pending',
             ],
             [
+                'request_type' => self::REQUEST_TYPE_SCHEDULE_CHANGE,
                 'assigned_approver_ids' => $approverIds,
                 'original_payload' => $this->schedulePayload($schedule->fresh(['scheduleStores'])),
                 'requested_payload' => $payload,
@@ -389,6 +416,66 @@ class ScheduleController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Schedule change request submitted for approval.');
     }
 
+    public function updateActualTimes(Request $request, Schedule $schedule)
+    {
+        $payload = $this->validateActualTimePayload($request->all(), $schedule);
+
+        abort_unless(
+            in_array((int) $schedule->user_id, $this->directActualTimeUserIds($request->user()), true),
+            403,
+            'You are not allowed to directly edit these actual times.'
+        );
+
+        $this->applyActualTimeAdjustment($payload, $schedule, $request->user()->id);
+
+        return redirect()->back()->with('success', 'Actual times updated successfully.');
+    }
+
+    public function storeActualTimeRequest(Request $request, Schedule $schedule)
+    {
+        $payload = $this->validateActualTimePayload($request->all(), $schedule);
+
+        abort_unless(
+            in_array((int) $schedule->user_id, $this->requestableActualTimeUserIds($request->user()), true),
+            403,
+            'You can only request actual time adjustments for your own schedule or users under your org chart level.'
+        );
+
+        $approverIds = $this->resolveScheduleChangeApproverIds($request->user());
+
+        if (empty($approverIds)) {
+            return redirect()->back()->withErrors([
+                'approver' => 'No eligible schedule approver is available for this request.',
+            ]);
+        }
+
+        $changeRequest = ScheduleChangeRequest::updateOrCreate(
+            [
+                'schedule_id' => $schedule->id,
+                'requester_id' => $request->user()->id,
+                'request_type' => self::REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT,
+                'status' => 'pending',
+            ],
+            [
+                'request_type' => self::REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT,
+                'assigned_approver_ids' => $approverIds,
+                'original_payload' => $this->actualTimePayload($schedule, $payload),
+                'requested_payload' => $payload,
+                'requester_remarks' => $request->input('requester_remarks'),
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+                'approver_remarks' => null,
+            ]
+        );
+
+        $changeRequest->load(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester']);
+        $this->notifyScheduleChangeApprovers($changeRequest);
+
+        return redirect()->back()->with('success', 'Actual time adjustment submitted for approval.');
+    }
+
     public function approveChangeRequest(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
     {
         $this->authorizeScheduleChangeApprover($scheduleChangeRequest);
@@ -402,7 +489,15 @@ class ScheduleController extends Controller implements HasMiddleware
         ]);
 
         DB::transaction(function () use ($request, $scheduleChangeRequest) {
-            $this->applyScheduleUpdate($scheduleChangeRequest->requested_payload, $scheduleChangeRequest->schedule, auth()->id());
+            if ($scheduleChangeRequest->request_type === self::REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT) {
+                $this->applyActualTimeAdjustment(
+                    $scheduleChangeRequest->requested_payload,
+                    $scheduleChangeRequest->schedule,
+                    auth()->id()
+                );
+            } else {
+                $this->applyScheduleUpdate($scheduleChangeRequest->requested_payload, $scheduleChangeRequest->schedule, auth()->id());
+            }
 
             $scheduleChangeRequest->update([
                 'status' => 'approved',
@@ -415,7 +510,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $scheduleChangeRequest->refresh()->load(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester']);
         $this->notifyScheduleChangeRequester($scheduleChangeRequest, 'approved');
 
-        return redirect()->back()->with('success', 'Schedule change request approved and applied.');
+        return redirect()->back()->with('success', 'Request approved and applied.');
     }
 
     public function rejectChangeRequest(Request $request, ScheduleChangeRequest $scheduleChangeRequest)
@@ -451,6 +546,170 @@ class ScheduleController extends Controller implements HasMiddleware
         $scheduleChangeRequest->update(['status' => 'cancelled']);
 
         return redirect()->back()->with('success', 'Schedule change request cancelled.');
+    }
+
+    private function validateActualTimePayload(array $payload, Schedule $schedule): array
+    {
+        $validated = validator($payload, [
+            'schedule_store_id' => 'nullable|integer|exists:schedule_stores,id',
+            'schedule_date' => 'required|date',
+            'actual_time_in' => 'nullable|date',
+            'actual_time_out' => 'nullable|date',
+            'clear_time_in' => 'nullable|boolean',
+            'clear_time_out' => 'nullable|boolean',
+            'requester_remarks' => 'nullable|string|max:1000',
+        ])->validate();
+
+        $validated['schedule_store_id'] = isset($validated['schedule_store_id']) ? (int) $validated['schedule_store_id'] : null;
+        $validated['schedule_date'] = Carbon::parse($validated['schedule_date'], 'Asia/Manila')->toDateString();
+        $validated['clear_time_in'] = filter_var($validated['clear_time_in'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $validated['clear_time_out'] = filter_var($validated['clear_time_out'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if ($validated['schedule_store_id']) {
+            $belongsToSchedule = ScheduleStore::where('schedule_id', $schedule->id)
+                ->where('id', $validated['schedule_store_id'])
+                ->exists();
+
+            if (!$belongsToSchedule) {
+                throw ValidationException::withMessages([
+                    'schedule_store_id' => 'The selected schedule entry does not belong to this schedule.',
+                ]);
+            }
+        }
+
+        $rangeSource = $validated['schedule_store_id']
+            ? ScheduleStore::find($validated['schedule_store_id'])
+            : $schedule;
+
+        $rangeStart = $rangeSource->start_time->copy()->timezone('Asia/Manila')->toDateString();
+        $rangeEnd = $rangeSource->end_time->copy()->timezone('Asia/Manila')->toDateString();
+
+        if ($validated['schedule_date'] < $rangeStart || $validated['schedule_date'] > $rangeEnd) {
+            throw ValidationException::withMessages([
+                'schedule_date' => 'The selected schedule date is outside this schedule entry.',
+            ]);
+        }
+
+        foreach (['actual_time_in', 'actual_time_out'] as $field) {
+            if (empty($validated[$field])) {
+                $validated[$field] = null;
+                continue;
+            }
+
+            $dateTime = Carbon::parse($validated[$field], 'Asia/Manila');
+
+            if ($dateTime->copy()->timezone('Asia/Manila')->toDateString() !== $validated['schedule_date']) {
+                throw ValidationException::withMessages([
+                    $field => 'Actual times must use the selected schedule date.',
+                ]);
+            }
+
+            $validated[$field] = $dateTime->toIso8601String();
+        }
+
+        if ($validated['actual_time_in'] && $validated['actual_time_out']) {
+            if (Carbon::parse($validated['actual_time_in'])->gt(Carbon::parse($validated['actual_time_out']))) {
+                throw ValidationException::withMessages([
+                    'actual_time_out' => 'Actual Time Out must be after Actual Time In.',
+                ]);
+            }
+        }
+
+        if (
+            !$validated['actual_time_in']
+            && !$validated['actual_time_out']
+            && !$validated['clear_time_in']
+            && !$validated['clear_time_out']
+        ) {
+            throw ValidationException::withMessages([
+                'actual_time_in' => 'Enter or clear at least one actual time.',
+            ]);
+        }
+
+        return $validated;
+    }
+
+    private function actualTimePayload(Schedule $schedule, array $payload): array
+    {
+        $logs = $this->actualTimeLogsForPayload($schedule, $payload)
+            ->orderBy('log_time')
+            ->get(['type', 'log_time']);
+
+        return [
+            'schedule_store_id' => $payload['schedule_store_id'] ?? null,
+            'schedule_date' => $payload['schedule_date'],
+            'actual_time_in' => $logs->firstWhere('type', 'time_in')?->log_time?->toIso8601String(),
+            'actual_time_out' => $logs->where('type', 'time_out')->last()?->log_time?->toIso8601String(),
+            'clear_time_in' => false,
+            'clear_time_out' => false,
+        ];
+    }
+
+    private function applyActualTimeAdjustment(array $payload, Schedule $schedule, int $updaterId): void
+    {
+        $payload = $this->validateActualTimePayload($payload, $schedule);
+
+        DB::transaction(function () use ($payload, $schedule, $updaterId) {
+            foreach ([
+                'time_in' => ['value' => 'actual_time_in', 'clear' => 'clear_time_in'],
+                'time_out' => ['value' => 'actual_time_out', 'clear' => 'clear_time_out'],
+            ] as $type => $fields) {
+                $hasNewValue = !empty($payload[$fields['value']]);
+                $shouldClear = (bool) ($payload[$fields['clear']] ?? false);
+
+                if (!$hasNewValue && !$shouldClear) {
+                    continue;
+                }
+
+                $this->actualTimeLogsForPayload($schedule, $payload)
+                    ->where('type', $type)
+                    ->update([
+                        'voided_at' => now(),
+                        'voided_by' => $updaterId,
+                        'void_reason' => 'Schedule actual time adjustment',
+                    ]);
+
+                if ($hasNewValue) {
+                    AttendanceLog::create([
+                        'user_id' => $schedule->user_id,
+                        'schedule_id' => $schedule->id,
+                        'schedule_store_id' => $payload['schedule_store_id'] ?? null,
+                        'type' => $type,
+                        'log_time' => Carbon::parse($payload[$fields['value']]),
+                        'device_info' => 'Manual schedule actual-time adjustment',
+                        'ip_address' => request()?->ip(),
+                    ]);
+                }
+            }
+        });
+    }
+
+    private function actualTimeLogsForPayload(Schedule $schedule, array $payload)
+    {
+        $dayStart = Carbon::parse($payload['schedule_date'], 'Asia/Manila')->startOfDay();
+        $dayEnd = Carbon::parse($payload['schedule_date'], 'Asia/Manila')->endOfDay();
+
+        $query = AttendanceLog::query()
+            ->notVoided()
+            ->where('user_id', $schedule->user_id)
+            ->where('schedule_id', $schedule->id)
+            ->whereBetween('log_time', [$dayStart, $dayEnd]);
+
+        if (!empty($payload['schedule_store_id'])) {
+            $scheduleStore = ScheduleStore::find($payload['schedule_store_id']);
+
+            if ($scheduleStore) {
+                $windowStart = $scheduleStore->start_time->copy()->subMinutes((int) ($scheduleStore->grace_period_minutes ?? 30));
+                $windowEnd = $scheduleStore->end_time->copy();
+
+                $query->where(function ($logQuery) use ($payload, $windowStart, $windowEnd) {
+                    $logQuery->where('schedule_store_id', $payload['schedule_store_id'])
+                        ->orWhereBetween('log_time', [$windowStart, $windowEnd]);
+                });
+            }
+        }
+
+        return $query;
     }
 
     private function validateScheduleUpdatePayload(array $payload): array
@@ -801,6 +1060,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $scheduleIds = $rows->pluck('schedule_id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
         $scheduleStoreIds = $rows->pluck('schedule_store_id')->filter()->map(fn ($id) => (int) $id)->values();
         $scheduleLogCounts = AttendanceLog::whereIn('schedule_id', $scheduleIds->all())
+            ->notVoided()
             ->select('schedule_id', DB::raw('COUNT(*) as log_count'))
             ->groupBy('schedule_id')
             ->pluck('log_count', 'schedule_id');
@@ -808,6 +1068,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
         if ($scheduleStoreIds->isNotEmpty()) {
             $scheduleStoreLogCounts = AttendanceLog::whereIn('schedule_store_id', $scheduleStoreIds->all())
+                ->notVoided()
                 ->select('schedule_store_id', DB::raw('COUNT(*) as log_count'))
                 ->groupBy('schedule_store_id')
                 ->pluck('log_count', 'schedule_store_id');
@@ -960,7 +1221,7 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function scheduleHasAttendanceLogs(Schedule $schedule): bool
     {
-        return AttendanceLog::where('schedule_id', $schedule->id)->exists();
+        return AttendanceLog::where('schedule_id', $schedule->id)->notVoided()->exists();
     }
 
     private function hasInvalidSubmittedScheduleStoreIds(Schedule $schedule, array $entries): bool
@@ -984,6 +1245,7 @@ class ScheduleController extends Controller implements HasMiddleware
     private function firstAttendanceLogOutsideEntries(Schedule $schedule, array $entries, ?string $scopeDate = null): ?AttendanceLog
     {
         $logs = AttendanceLog::where('schedule_id', $schedule->id)
+            ->notVoided()
             ->orderBy('log_time')
             ->get(['id', 'type', 'log_time'])
             ->when($scopeDate, fn ($logs) => $logs->filter(
@@ -1161,7 +1423,7 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         $staleIds = $staleRows->pluck('id')->map(fn ($id) => (int) $id)->values();
-        $hasLogs = AttendanceLog::whereIn('schedule_store_id', $staleIds)->exists();
+        $hasLogs = AttendanceLog::whereIn('schedule_store_id', $staleIds)->notVoided()->exists();
 
         if ($hasLogs) {
             throw ValidationException::withMessages([
@@ -1882,6 +2144,7 @@ class ScheduleController extends Controller implements HasMiddleware
         foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
             $attendanceLogs = $attendanceLogs->concat(
                 AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                    ->notVoided()
                     ->orderBy('log_time')
                     ->get(['schedule_id', 'type', 'log_time'])
             );
@@ -2115,6 +2378,7 @@ class ScheduleController extends Controller implements HasMiddleware
         foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
             $attendanceLogs = $attendanceLogs->concat(
                 AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                    ->notVoided()
                     ->orderBy('log_time')
                     ->get(['schedule_id', 'type', 'log_time'])
             );
@@ -2438,6 +2702,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'id' => $changeRequest->id,
                 'schedule_id' => $changeRequest->schedule_id,
                 'requester_id' => $changeRequest->requester_id,
+                'request_type' => $changeRequest->request_type ?: self::REQUEST_TYPE_SCHEDULE_CHANGE,
                 'requester_name' => $changeRequest->requester?->name,
                 'schedule_user_name' => $changeRequest->schedule?->user?->name,
                 'assigned_approver_ids' => $changeRequest->assigned_approver_ids ?? [],
@@ -2479,7 +2744,11 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function editableScheduleUserIds(User $user): array
     {
-        if ($user->can('schedules.edit')) {
+        if (!$user->can('schedules.edit')) {
+            return [];
+        }
+
+        if ($user->hasAnyRole(['Admin', 'Solutions Admin'])) {
             return User::query()
                 ->where('is_active', true)
                 ->where('is_vacant', false)
@@ -2488,6 +2757,45 @@ class ScheduleController extends Controller implements HasMiddleware
                 ->all();
         }
 
-        return [];
+        $userIds = collect([(int) $user->id]);
+
+        if ($user->is_manager) {
+            $userIds = $userIds->merge($this->getTransitiveSubordinateIds((int) $user->id));
+        }
+
+        return User::query()
+            ->where('is_active', true)
+            ->where('is_vacant', false)
+            ->whereIn('id', $userIds->map(fn ($id) => (int) $id)->unique()->values()->all())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    private function directActualTimeUserIds(User $user): array
+    {
+        if ($user->can('schedules.edit')) {
+            return $this->editableScheduleUserIds($user);
+        }
+
+        return $user->is_manager ? [(int) $user->id] : [];
+    }
+
+    private function requestableActualTimeUserIds(User $user): array
+    {
+        if ($user->can('schedules.edit')) {
+            return [];
+        }
+
+        $userIds = collect([(int) $user->id]);
+
+        if ($user->is_manager) {
+            $userIds = $userIds->merge($this->getTransitiveSubordinateIds((int) $user->id));
+        }
+
+        return $userIds
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
     }
 }

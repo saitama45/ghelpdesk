@@ -101,7 +101,9 @@ class AttendanceController extends Controller implements HasMiddleware
         $user = auth()->user();
 
         // Base query - load relationships for both segment-based and legacy logs
-        $query = AttendanceLog::with(['user', 'scheduleStore.store', 'schedule.store'])->latest('log_time');
+        $query = AttendanceLog::with(['user', 'scheduleStore.store', 'schedule.store'])
+            ->notVoided()
+            ->latest('log_time');
 
         // Privacy Logic: Show only own logs if not Admin/Dev/Manager
         if (! $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) && ! $user->is_manager) {
@@ -174,6 +176,7 @@ class AttendanceController extends Controller implements HasMiddleware
 
         if ($clientRequestId) {
             $existingLog = AttendanceLog::where('user_id', $user->id)
+                ->notVoided()
                 ->where('client_request_id', $clientRequestId)
                 ->first();
 
@@ -364,6 +367,7 @@ class AttendanceController extends Controller implements HasMiddleware
             Storage::disk('public')->delete($fileName);
 
             $log = AttendanceLog::where('user_id', $user->id)
+                ->notVoided()
                 ->where('client_request_id', $clientRequestId)
                 ->first();
 
@@ -487,6 +491,7 @@ class AttendanceController extends Controller implements HasMiddleware
 
         // --- Actual hours ---
         $logQuery = AttendanceLog::whereBetween('log_time', [$dateFrom.' 00:00:00', $dateTo.' 23:59:59'])
+            ->notVoided()
             ->orderBy('log_time')
             ->select('user_id', 'schedule_id', 'schedule_store_id', 'type', 'log_time');
 
@@ -666,6 +671,7 @@ class AttendanceController extends Controller implements HasMiddleware
         $lateGraceMinutes = 6 * 60;
 
         $lastOpenLog = AttendanceLog::with(['schedule.scheduleStores.store', 'scheduleStore.store'])
+            ->notVoided()
             ->where('user_id', $userId)
             ->where('log_time', '>=', $now->copy()->subHours(24))
             ->where('type', 'time_in')
@@ -711,6 +717,7 @@ class AttendanceController extends Controller implements HasMiddleware
         $lookbackEnd = $schedule->end_time->copy()->addMinutes($lateGraceMinutes);
 
         $query = AttendanceLog::where('user_id', $userId)
+            ->notVoided()
             ->where('schedule_id', $schedule->id)
             ->where('log_time', '>=', $lookbackStart)
             ->where('log_time', '<=', $lookbackEnd);

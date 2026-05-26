@@ -111,6 +111,7 @@ class ScheduleExportController extends Controller
             foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
                 $attendanceLogs = $attendanceLogs->concat(
                     AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
+                        ->notVoided()
                         ->orderBy('log_time')
                         ->get(['schedule_id', 'type', 'log_time'])
                 );
@@ -338,6 +339,7 @@ class ScheduleExportController extends Controller
 
         // Batch-load attendance logs for all matched schedules
         $attendanceLogs = AttendanceLog::whereIn('schedule_id', $schedules->pluck('id'))
+            ->notVoided()
             ->orderBy('log_time')
             ->get();
         

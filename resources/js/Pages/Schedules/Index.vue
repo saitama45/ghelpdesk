@@ -244,6 +244,9 @@
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-black text-gray-900">#{{ request.id }}</div>
                                         <div class="text-[10px] font-bold text-gray-400 uppercase">Schedule #{{ request.schedule_id }} • {{ formatAuditDateTime(request.created_at) }}</div>
+                                        <div class="mt-1 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
+                                            {{ requestTypeLabel(request) }}
+                                        </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-bold text-gray-900">{{ request.requester_name || '-' }}</div>
@@ -251,7 +254,7 @@
                                     </td>
                                     <td class="px-6 py-4">
                                         <div class="text-xs font-bold text-gray-700">
-                                            {{ request.original_payload?.status || '-' }} → {{ request.requested_payload?.status || '-' }}
+                                            {{ requestSummaryTitle(request) }}
                                         </div>
                                         <div class="text-[10px] font-medium text-gray-400 mt-1">
                                             {{ summarizeRequestWindow(request.requested_payload) }}
@@ -1129,6 +1132,60 @@
                                             </div>
                                         </div>
 
+                                        <div v-if="canAdjustActualTimes" class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+                                            <div class="mb-3 flex items-center justify-between gap-3">
+                                                <div>
+                                                    <div class="text-[10px] font-black uppercase tracking-widest text-emerald-600">Actual Times</div>
+                                                    <div class="text-[10px] font-bold text-gray-500">{{ entry.schedule_date || form.scope_date || '-' }}</div>
+                                                </div>
+                                                <div class="flex flex-wrap justify-end gap-2">
+                                                    <span v-if="entry.actual_time_pending_request" class="rounded bg-amber-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700">Pending Request #{{ entry.actual_time_pending_request.id }}</span>
+                                                    <span v-if="selectedScheduleCanRequestActualTime && !selectedScheduleCanEditActualTime" class="rounded bg-blue-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-blue-700">Approval Required</span>
+                                                </div>
+                                            </div>
+                                            <div v-if="entry.actual_time_pending_request" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
+                                                {{ actualTimePendingRequestMessage(entry) }}
+                                            </div>
+                                            <div class="grid gap-3 md:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Actual Time In</label>
+                                                    <input
+                                                        v-model="entry.actual_time_in_input"
+                                                        type="datetime-local"
+                                                        :disabled="entry.clear_time_in || isSubmittingActualTime"
+                                                        class="w-full rounded-lg border-gray-200 text-xs font-bold text-gray-700 focus:border-emerald-500 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                                    >
+                                                    <label class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
+                                                        <input v-model="entry.clear_time_in" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                                                        Clear existing In
+                                                    </label>
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Actual Time Out</label>
+                                                    <input
+                                                        v-model="entry.actual_time_out_input"
+                                                        type="datetime-local"
+                                                        :disabled="entry.clear_time_out || isSubmittingActualTime"
+                                                        class="w-full rounded-lg border-gray-200 text-xs font-bold text-gray-700 focus:border-emerald-500 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                                    >
+                                                    <label class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
+                                                        <input v-model="entry.clear_time_out" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                                                        Clear existing Out
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="mt-3 flex justify-end">
+                                                <button
+                                                    type="button"
+                                                    @click="submitActualTimeAdjustment(entry)"
+                                                    :disabled="isSubmittingActualTime"
+                                                    class="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                                                >
+                                                    {{ actualTimeSubmitLabel(entry) }}
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div>
                                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Grace (m)</label>
@@ -1169,7 +1226,7 @@
                             </div>
                         </div>
 
-                        <div v-if="isRequestingScheduleChange" class="bg-blue-50 rounded-2xl p-5 border border-blue-100">
+                        <div v-if="isRequestingScheduleChange || isRequestingActualTimeAdjustment" class="bg-blue-50 rounded-2xl p-5 border border-blue-100">
                             <label class="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 ml-1">Request Remarks</label>
                             <textarea
                                 v-model="form.requester_remarks"
@@ -2150,8 +2207,11 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const isViewingOnly = ref(false)
 const isDeletingSchedule = ref(false)
+const isSubmittingActualTime = ref(false)
 const canEditSchedule = ref(false)
 const selectedScheduleCanRequestChange = ref(false)
+const selectedScheduleCanEditActualTime = ref(false)
+const selectedScheduleCanRequestActualTime = ref(false)
 const currentScheduleId    = ref(null)
 const currentActualTimeIn  = ref(null)
 const currentActualTimeOut = ref(null)
@@ -2246,6 +2306,12 @@ const canRequestScheduleChange = computed(() => {
 const isRequestingScheduleChange = computed(() => {
     return Boolean(!isViewingOnly.value && canRequestScheduleChange.value)
 })
+const canAdjustActualTimes = computed(() => {
+    return Boolean(isEditing.value && currentScheduleId.value && (selectedScheduleCanEditActualTime.value || selectedScheduleCanRequestActualTime.value))
+})
+const isRequestingActualTimeAdjustment = computed(() => {
+    return Boolean(canAdjustActualTimes.value && selectedScheduleCanRequestActualTime.value && !selectedScheduleCanEditActualTime.value)
+})
 
 const formatTime = (isoString) => {
     if (!isoString) return '-'
@@ -2301,6 +2367,49 @@ const getActualTimesForDate = (source, dateKey) => {
     return getActualTimesForScheduleDate(source, dateKey)
 }
 
+const findPendingActualTimeRequestForSchedule = (scheduleId) => {
+    if (!scheduleId || !authUser.value?.id) return null
+
+    return scheduleChangeRequests.value.find(request => (
+        isActualTimeRequest(request)
+        && request.status === 'pending'
+        && Number(request.schedule_id) === Number(scheduleId)
+        && Number(request.requester_id) === Number(authUser.value.id)
+    )) || null
+}
+
+const actualTimeRequestMatchesEntry = (request, scheduleStoreId, dateKey) => {
+    const payload = request?.requested_payload ?? {}
+    const requestStoreId = payload.schedule_store_id ?? null
+    const entryStoreId = scheduleStoreId ?? null
+
+    return String(payload.schedule_date || '') === String(dateKey || '')
+        && String(requestStoreId ?? '') === String(entryStoreId ?? '')
+}
+
+const actualTimeFieldsForEntry = (actualTimes, dateKey, pendingRequest = null, scheduleStoreId = null) => {
+    const pendingPayload = pendingRequest?.requested_payload ?? {}
+    const usePendingValues = actualTimeRequestMatchesEntry(pendingRequest, scheduleStoreId, dateKey)
+    const actualTimeInInput = usePendingValues
+        ? (pendingPayload.clear_time_in ? '' : (pendingPayload.actual_time_in ? formatDateForInput(new Date(pendingPayload.actual_time_in)) : ''))
+        : (actualTimes.actual_time_in ? formatDateForInput(new Date(actualTimes.actual_time_in)) : '')
+    const actualTimeOutInput = usePendingValues
+        ? (pendingPayload.clear_time_out ? '' : (pendingPayload.actual_time_out ? formatDateForInput(new Date(pendingPayload.actual_time_out)) : ''))
+        : (actualTimes.actual_time_out ? formatDateForInput(new Date(actualTimes.actual_time_out)) : '')
+
+    return {
+        schedule_date: dateKey,
+        actual_time_in: actualTimes.actual_time_in,
+        actual_time_out: actualTimes.actual_time_out,
+        actual_time_in_input: actualTimeInInput,
+        actual_time_out_input: actualTimeOutInput,
+        clear_time_in: usePendingValues ? Boolean(pendingPayload.clear_time_in) : false,
+        clear_time_out: usePendingValues ? Boolean(pendingPayload.clear_time_out) : false,
+        actual_time_pending_request: pendingRequest,
+        actual_time_pending_matches_entry: usePendingValues,
+    }
+}
+
 const isEntryOnDate = (entry, dateKey) => {
     if (!entry || !dateKey) return false
 
@@ -2314,8 +2423,11 @@ const resetScheduleModalState = () => {
     isEditing.value = false
     isViewingOnly.value = false
     isDeletingSchedule.value = false
+    isSubmittingActualTime.value = false
     canEditSchedule.value = false
     selectedScheduleCanRequestChange.value = false
+    selectedScheduleCanEditActualTime.value = false
+    selectedScheduleCanRequestActualTime.value = false
     currentScheduleId.value = null
     currentActualTimeIn.value = null
     currentActualTimeOut.value = null
@@ -2374,6 +2486,8 @@ const handleEventClick = (payload) => {
     isViewingOnly.value = true; // Always start in View mode
     canEditSchedule.value = Boolean(event.can_edit);
     selectedScheduleCanRequestChange.value = Boolean(event.can_request_change);
+    selectedScheduleCanEditActualTime.value = Boolean(event.can_edit_actual_time);
+    selectedScheduleCanRequestActualTime.value = Boolean(event.can_request_actual_time);
     currentScheduleId.value    = event.id
     const eventActualTimes = getActualTimesForDate(event, clickedDateKey)
     currentActualTimeIn.value  = eventActualTimes.actual_time_in
@@ -2391,6 +2505,7 @@ const handleEventClick = (payload) => {
     form.backlogs_start = event.backlogs_start || ''
     form.backlogs_end = event.backlogs_end || ''
     form.requester_remarks = ''
+    const pendingActualTimeRequest = findPendingActualTimeRequestForSchedule(event.id)
 
     // Populate store entries from schedule_stores; fall back to legacy single store+time
     if (event.schedule_stores && event.schedule_stores.length > 0) {
@@ -2411,8 +2526,10 @@ const handleEventClick = (payload) => {
                 end_time: formatDateForInput(new Date(ss.end_time)),
                 grace_period_minutes: ss.grace_period_minutes ?? 30,
                 remarks: ss.remarks || '',
-                actual_time_in: segmentActualTimes.actual_time_in || eventActualTimesFallback.actual_time_in,
-                actual_time_out: segmentActualTimes.actual_time_out || eventActualTimesFallback.actual_time_out,
+                ...actualTimeFieldsForEntry({
+                    actual_time_in: segmentActualTimes.actual_time_in || eventActualTimesFallback.actual_time_in,
+                    actual_time_out: segmentActualTimes.actual_time_out || eventActualTimesFallback.actual_time_out,
+                }, clickedDateKey, pendingActualTimeRequest, ss.id || null),
                 ticket: ss.ticket || null,
             }
         })
@@ -2427,8 +2544,7 @@ const handleEventClick = (payload) => {
             end_time: formatDateForInput(new Date(event.end_time)),
             grace_period_minutes: 30,
             remarks: event.remarks || '',
-            actual_time_in: scheduleActualTimes.actual_time_in,
-            actual_time_out: scheduleActualTimes.actual_time_out,
+            ...actualTimeFieldsForEntry(scheduleActualTimes, clickedDateKey, pendingActualTimeRequest, null),
             ticket: event.ticket || null,
         }]
     }
@@ -2455,6 +2571,7 @@ const addStore = () => {
         end_time: first?.end_time || '',
         grace_period_minutes: 30,
         remarks: '',
+        ...actualTimeFieldsForEntry({ actual_time_in: null, actual_time_out: null }, getManilaDateKey(last?.end_time || first?.end_time)),
     })
 }
 
@@ -2489,15 +2606,73 @@ const submitForm = () => {
     requestMethod(url, form, {
         onSuccess: () => {
             closeModal()
-            if (!isChangeRequest) {
-                showSuccess(isUpdatingSchedule ? 'Schedule updated successfully' : 'Schedule created successfully')
-            }
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
             showError(errorMessage)
         }
     })
+}
+
+const submitActualTimeAdjustment = (entry) => {
+    if (!currentScheduleId.value || isSubmittingActualTime.value) return
+
+    const payload = {
+        schedule_store_id: entry.id || null,
+        schedule_date: entry.schedule_date || form.scope_date || getManilaDateKey(entry.start_time),
+        actual_time_in: entry.clear_time_in ? null : (entry.actual_time_in_input || null),
+        actual_time_out: entry.clear_time_out ? null : (entry.actual_time_out_input || null),
+        clear_time_in: Boolean(entry.clear_time_in),
+        clear_time_out: Boolean(entry.clear_time_out),
+        requester_remarks: form.requester_remarks,
+    }
+
+    if (!payload.actual_time_in && !payload.actual_time_out && !payload.clear_time_in && !payload.clear_time_out) {
+        showError('Enter or clear at least one actual time.')
+        return
+    }
+
+    isSubmittingActualTime.value = true
+    const isRequest = selectedScheduleCanRequestActualTime.value && !selectedScheduleCanEditActualTime.value
+    const url = isRequest
+        ? `/schedules/${currentScheduleId.value}/actual-time-requests`
+        : `/schedules/${currentScheduleId.value}/actual-times`
+
+    post(url, payload, {
+        preserveScroll: true,
+        onSuccess: () => {
+            closeModal()
+        },
+        onError: (errors) => {
+            const errorMessage = Object.values(errors).flat().join(', ') || 'Unable to update actual times'
+            showError(errorMessage)
+        },
+        onFinish: () => {
+            isSubmittingActualTime.value = false
+        },
+    })
+}
+
+const actualTimeSubmitLabel = (entry) => {
+    if (selectedScheduleCanEditActualTime.value) {
+        return 'Save Actual Times'
+    }
+
+    return entry.actual_time_pending_request ? 'Update Pending Request' : 'Submit Actual Request'
+}
+
+const actualTimePendingRequestMessage = (entry) => {
+    const request = entry.actual_time_pending_request
+    if (!request) return ''
+
+    const payload = request.requested_payload ?? {}
+    const scheduleDate = payload.schedule_date || 'another date'
+
+    if (entry.actual_time_pending_matches_entry) {
+        return 'A pending actual-time request already exists for this entry. Editing and submitting will update the same request, not create a duplicate.'
+    }
+
+    return `A pending actual-time request already exists for ${scheduleDate}. Submitting here will replace that same pending request.`
 }
 
 const deleteSchedule = async () => {
@@ -2518,7 +2693,6 @@ const deleteSchedule = async () => {
         preserveScroll: true,
         onSuccess: () => {
             closeModal()
-            showSuccess('Schedule deleted successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'Unable to delete schedule'
@@ -2543,7 +2717,33 @@ const requestStatusClass = (status) => {
     }
 }
 
+const isActualTimeRequest = (request) => request?.request_type === 'actual_time_adjustment'
+
+const requestTypeLabel = (request) => {
+    return isActualTimeRequest(request) ? 'Actual Time' : 'Schedule Change'
+}
+
+const formatActualRequestValue = (value, clear = false) => {
+    if (clear) return 'Clear'
+    return value ? formatAuditDateTime(value) : '-'
+}
+
+const requestSummaryTitle = (request) => {
+    if (isActualTimeRequest(request)) {
+        return [
+            `In: ${formatActualRequestValue(request.requested_payload?.actual_time_in, request.requested_payload?.clear_time_in)}`,
+            `Out: ${formatActualRequestValue(request.requested_payload?.actual_time_out, request.requested_payload?.clear_time_out)}`,
+        ].join(' • ')
+    }
+
+    return `${request.original_payload?.status || '-'} → ${request.requested_payload?.status || '-'}`
+}
+
 const summarizeRequestWindow = (payload) => {
+    if (payload?.schedule_date && ('actual_time_in' in payload || 'actual_time_out' in payload)) {
+        return `Schedule date ${payload.schedule_date}`
+    }
+
     const stores = payload?.stores || []
     if (!stores.length) return 'No deployment entries'
 
@@ -2633,6 +2833,36 @@ const scheduleRequestComparison = (fromValues, toValues, labels) => {
 }
 
 const scheduleRequestEntryRows = computed(() => {
+    if (isActualTimeRequest(selectedScheduleRequest.value)) {
+        const original = selectedScheduleRequest.value?.original_payload ?? {}
+        const requested = selectedScheduleRequest.value?.requested_payload ?? {}
+
+        return [{
+            key: 'actual-times',
+            label: 'Actual Times',
+            ...scheduleRequestComparison(
+                {
+                    scheduleDate: original.schedule_date || '-',
+                    entry: original.schedule_store_id || 'Schedule',
+                    actualIn: formatActualRequestValue(original.actual_time_in),
+                    actualOut: formatActualRequestValue(original.actual_time_out),
+                },
+                {
+                    scheduleDate: requested.schedule_date || '-',
+                    entry: requested.schedule_store_id || 'Schedule',
+                    actualIn: formatActualRequestValue(requested.actual_time_in, requested.clear_time_in),
+                    actualOut: formatActualRequestValue(requested.actual_time_out, requested.clear_time_out),
+                },
+                {
+                    scheduleDate: 'Schedule Date',
+                    entry: 'Entry',
+                    actualIn: 'Actual In',
+                    actualOut: 'Actual Out',
+                },
+            ),
+        }]
+    }
+
     const original = selectedScheduleRequest.value?.original_payload ?? {}
     const requested = selectedScheduleRequest.value?.requested_payload ?? {}
     const scopeDate = requested.scope_date || original.scope_date || null

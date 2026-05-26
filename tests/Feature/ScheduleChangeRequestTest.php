@@ -190,6 +190,248 @@ class ScheduleChangeRequestTest extends TestCase
         );
     }
 
+    public function test_manager_can_directly_update_own_actual_times(): void
+    {
+        $manager = User::factory()->create(['is_manager' => true]);
+        $schedule = $this->createSchedule($manager);
+
+        AttendanceLog::create([
+            'user_id' => $manager->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_in',
+            'log_time' => '2026-05-10 07:15:00',
+        ]);
+
+        $this->actingAs($manager)
+            ->post(route('schedules.actual-times.update', $schedule), [
+                'schedule_date' => '2026-05-10',
+                'actual_time_in' => '2026-05-10T08:00',
+                'actual_time_out' => '2026-05-10T17:30',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, AttendanceLog::where('type', 'time_in')->whereNotNull('voided_at')->count());
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $manager->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_in',
+            'log_time' => '2026-05-10 08:00:00',
+            'voided_at' => null,
+        ]);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $manager->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_out',
+            'log_time' => '2026-05-10 17:30:00',
+            'voided_at' => null,
+        ]);
+    }
+
+    public function test_manager_subordinate_actual_time_adjustment_requires_approval(): void
+    {
+        Mail::fake();
+
+        $subordinate = User::factory()->create();
+        $manager = User::factory()->create(['is_manager' => true]);
+        $approver = User::factory()->create(['is_manager' => true]);
+        $approver->givePermissionTo('schedules.approve');
+        $subordinate->managers()->attach($manager->id);
+        $manager->managers()->attach($approver->id);
+        $schedule = $this->createSchedule($subordinate);
+
+        $this->actingAs($manager)
+            ->post(route('schedules.actual-times.update', $schedule), [
+                'schedule_date' => '2026-05-10',
+                'actual_time_in' => '2026-05-10T08:00',
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($manager)
+            ->post(route('schedules.actual-time-requests.store', $schedule), [
+                'schedule_date' => '2026-05-10',
+                'actual_time_in' => '2026-05-10T08:00',
+                'actual_time_out' => '2026-05-10T17:30',
+                'requester_remarks' => 'Correct subordinate logs.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $changeRequest = ScheduleChangeRequest::first();
+        $this->assertSame('actual_time_adjustment', $changeRequest->request_type);
+        $this->assertSame([$approver->id], $changeRequest->assigned_approver_ids);
+        $this->assertDatabaseMissing('attendance_logs', [
+            'user_id' => $subordinate->id,
+            'schedule_id' => $schedule->id,
+        ]);
+
+        $this->actingAs($approver)
+            ->post(route('schedule-change-requests.approve', $changeRequest), ['remarks' => 'Approved'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('approved', $changeRequest->fresh()->status);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $subordinate->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_in',
+            'log_time' => '2026-05-10 08:00:00',
+            'voided_at' => null,
+        ]);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $subordinate->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_out',
+            'log_time' => '2026-05-10 17:30:00',
+            'voided_at' => null,
+        ]);
+    }
+
+    public function test_non_manager_can_request_own_missing_actual_time_out_for_approval(): void
+    {
+        Mail::fake();
+
+        Permission::firstOrCreate(['name' => 'schedules.view']);
+
+        $user = User::factory()->create();
+        $user->givePermissionTo('schedules.view');
+        $manager = User::factory()->create(['is_manager' => true]);
+        $manager->givePermissionTo('schedules.approve');
+        $user->managers()->attach($manager->id);
+        $schedule = $this->createSchedule($user);
+
+        AttendanceLog::create([
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_in',
+            'log_time' => '2026-05-10 08:00:00',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('schedules.index', [
+                'start' => '2026-05-01',
+                'end' => '2026-05-31',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Schedules/Index')
+                ->where('schedules.0.id', $schedule->id)
+                ->where('schedules.0.can_edit_actual_time', false)
+                ->where('schedules.0.can_request_actual_time', true)
+            );
+
+        $this->actingAs($user)
+            ->post(route('schedules.actual-time-requests.store', $schedule), [
+                'schedule_date' => '2026-05-10',
+                'actual_time_out' => '2026-05-10T17:30',
+                'requester_remarks' => 'Forgot to time out.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $changeRequest = ScheduleChangeRequest::first();
+        $this->assertSame('actual_time_adjustment', $changeRequest->request_type);
+        $this->assertSame([$manager->id], $changeRequest->assigned_approver_ids);
+        $this->assertDatabaseMissing('attendance_logs', [
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_out',
+        ]);
+
+        $this->actingAs($manager)
+            ->post(route('schedule-change-requests.approve', $changeRequest), ['remarks' => 'Approved'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'type' => 'time_out',
+            'log_time' => '2026-05-10 17:30:00',
+            'voided_at' => null,
+        ]);
+    }
+
+    public function test_repeated_actual_time_request_updates_same_pending_request(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+        $manager = User::factory()->create(['is_manager' => true]);
+        $manager->givePermissionTo('schedules.approve');
+        $user->managers()->attach($manager->id);
+        $schedule = $this->createSchedule($user);
+
+        $this->actingAs($user)
+            ->post(route('schedules.actual-time-requests.store', $schedule), [
+                'schedule_date' => '2026-05-10',
+                'actual_time_out' => '2026-05-10T17:30',
+                'requester_remarks' => 'First request.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $firstRequest = ScheduleChangeRequest::first();
+
+        $this->actingAs($user)
+            ->post(route('schedules.actual-time-requests.store', $schedule), [
+                'schedule_date' => '2026-05-10',
+                'actual_time_out' => '2026-05-10T18:00',
+                'requester_remarks' => 'Updated request.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, ScheduleChangeRequest::count());
+        $this->assertSame($firstRequest->id, ScheduleChangeRequest::first()->id);
+        $this->assertSame('2026-05-10T18:00:00+08:00', ScheduleChangeRequest::first()->requested_payload['actual_time_out']);
+        $this->assertSame('Updated request.', ScheduleChangeRequest::first()->requester_remarks);
+    }
+
+    public function test_actual_time_request_email_uses_actual_time_details(): void
+    {
+        $user = User::factory()->create();
+        $manager = User::factory()->create(['is_manager' => true]);
+        $schedule = $this->createSchedule($user);
+
+        $changeRequest = ScheduleChangeRequest::create([
+            'schedule_id' => $schedule->id,
+            'requester_id' => $user->id,
+            'request_type' => 'actual_time_adjustment',
+            'assigned_approver_ids' => [$manager->id],
+            'status' => 'pending',
+            'requester_remarks' => 'Forgot to time out.',
+            'original_payload' => [
+                'schedule_store_id' => null,
+                'schedule_date' => '2026-05-10',
+                'actual_time_in' => '2026-05-10T08:00:00+08:00',
+                'actual_time_out' => null,
+                'clear_time_in' => false,
+                'clear_time_out' => false,
+            ],
+            'requested_payload' => [
+                'schedule_store_id' => null,
+                'schedule_date' => '2026-05-10',
+                'actual_time_in' => null,
+                'actual_time_out' => '2026-05-10T17:30:00+08:00',
+                'clear_time_in' => false,
+                'clear_time_out' => false,
+            ],
+        ]);
+
+        $mail = new ScheduleChangeRequestNotification($changeRequest, 'submitted', true);
+        $html = $mail->render();
+
+        $this->assertStringContainsString('Actual Time Adjustment Approval Required', $mail->envelope()->subject);
+        $this->assertStringContainsString('Actual Time Adjustment Request', $html);
+        $this->assertStringContainsString('Actual Time In', $html);
+        $this->assertStringContainsString('Actual Time Out', $html);
+        $this->assertStringContainsString('May 10, 2026 08:00 AM', $html);
+        $this->assertStringContainsString('May 10, 2026 05:30 PM', $html);
+        $this->assertStringContainsString('Forgot to time out.', $html);
+        $this->assertStringNotContainsString('Deployment Entries', $html);
+    }
+
     public function test_schedule_change_request_email_includes_requested_schedule_details(): void
     {
         $user = User::factory()->create();

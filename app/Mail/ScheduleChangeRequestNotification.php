@@ -24,10 +24,14 @@ class ScheduleChangeRequestNotification extends Mailable
 
     public function envelope(): Envelope
     {
+        $isActualTimeRequest = $this->changeRequest->request_type === 'actual_time_adjustment';
+
         $subject = match ($this->action) {
-            'approved' => 'Schedule Change Approved',
-            'rejected' => 'Schedule Change Rejected',
-            default => $this->isApprover ? 'Schedule Change Approval Required' : 'Schedule Change Request Submitted',
+            'approved' => $isActualTimeRequest ? 'Actual Time Adjustment Approved' : 'Schedule Change Approved',
+            'rejected' => $isActualTimeRequest ? 'Actual Time Adjustment Rejected' : 'Schedule Change Rejected',
+            default => $this->isApprover
+                ? ($isActualTimeRequest ? 'Actual Time Adjustment Approval Required' : 'Schedule Change Approval Required')
+                : ($isActualTimeRequest ? 'Actual Time Adjustment Request Submitted' : 'Schedule Change Request Submitted'),
         };
 
         return new Envelope(

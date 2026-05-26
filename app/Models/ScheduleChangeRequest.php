@@ -10,6 +10,7 @@ class ScheduleChangeRequest extends Model
     protected $fillable = [
         'schedule_id',
         'requester_id',
+        'request_type',
         'assigned_approver_ids',
         'status',
         'original_payload',

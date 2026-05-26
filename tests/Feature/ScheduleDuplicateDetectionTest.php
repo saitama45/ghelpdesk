@@ -217,6 +217,57 @@ class ScheduleDuplicateDetectionTest extends TestCase
         $this->assertSame('On-site', $schedule->fresh()->status);
     }
 
+    public function test_manager_with_schedule_edit_permission_cannot_edit_peer_schedule(): void
+    {
+        [$department, $businessSolutions, $processExcellence] = $this->scheduleDepartmentHierarchy();
+        $yssa = $this->departmentUser('Yssa Dysangco', 'yssa.dysangco@tablegroup.com.ph', $department, null, true, true);
+        $lea = $this->departmentUser('Lea Dizon', 'lea.dizon@tablegroup.com.ph', $department, $businessSolutions, true, true);
+        $patrick = $this->departmentUser('Patrick Lopez', 'patrick.lopez@tablegroup.com.ph', $department, $processExcellence, true, true);
+
+        $lea->givePermissionTo('schedules.view');
+        $lea->givePermissionTo('schedules.edit');
+        $lea->managers()->attach($yssa->id);
+        $patrick->managers()->attach($yssa->id);
+
+        $schedule = $this->createSchedule($patrick, 'WFH', 'patrick schedule');
+
+        $this->actingAs($lea)
+            ->get(route('schedules.index', [
+                'department_id' => $department->id,
+                'start' => '2026-05-01',
+                'end' => '2026-05-31',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Schedules/Index')
+                ->where('schedules.0.id', $schedule->id)
+                ->where('schedules.0.user_id', $patrick->id)
+                ->where('schedules.0.can_edit', false)
+                ->where('editableUserIds', fn ($ids) => ! collect($ids)->map(fn ($id) => (int) $id)->contains($patrick->id))
+            );
+
+        $this->actingAs($lea)
+            ->put(route('schedules.update', $schedule), [
+                'user_id' => $patrick->id,
+                'status' => 'Restday',
+                'stores' => [[
+                    'store_id' => null,
+                    'ticket_id' => null,
+                    'start_time' => '2026-05-10T08:00',
+                    'end_time' => '2026-05-10T17:00',
+                    'grace_period_minutes' => 30,
+                    'remarks' => 'should fail',
+                ]],
+                'pickup_start' => null,
+                'pickup_end' => null,
+                'backlogs_start' => null,
+                'backlogs_end' => null,
+            ])
+            ->assertForbidden();
+
+        $this->assertSame('WFH', $schedule->fresh()->status);
+    }
+
     public function test_user_outside_department_cannot_edit_another_departments_schedule(): void
     {
         [$department, , $processExcellence] = $this->scheduleDepartmentHierarchy();
