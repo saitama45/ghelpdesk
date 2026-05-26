@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Link, Head, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
+import Dropdown from '@/Components/Dropdown.vue'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -39,6 +40,16 @@ const pagination = usePagination(props.records, 'dynamic-form.list', () => ({
 }))
 
 onMounted(() => {
+    const savedCols = localStorage.getItem('ghelpdesk_dynamic_form_list_cols')
+    if (savedCols) {
+        try {
+            const parsed = JSON.parse(savedCols)
+            columnConfig.value.forEach(col => {
+                if (!col.locked && parsed[col.key] !== undefined) col.visible = parsed[col.key]
+            })
+        } catch (e) {}
+    }
+
     pagination.updateData(props.records)
 })
 
@@ -91,6 +102,41 @@ const getDisplayValue = (record) => {
     const firstKey = Object.keys(data).find(k => k !== 'items' && typeof data[k] === 'string' && data[k].length > 0)
     return firstKey ? data[firstKey] : 'No summary available'
 }
+
+const columnConfig = ref([
+    { key: 'form_type',    label: 'Form Type',    visible: true, locked: true  },
+    { key: 'ticket',       label: 'Ticket#',      visible: true, locked: false },
+    { key: 'summary',      label: 'Summary',      visible: true, locked: false },
+    { key: 'submitted_by', label: 'Submitted By', visible: true, locked: false },
+    { key: 'date',         label: 'Date',         visible: true, locked: false },
+    { key: 'status',       label: 'Status',       visible: true, locked: false },
+    { key: 'actions',      label: 'Actions',      visible: true, locked: true  },
+])
+
+const toggleColumn = (col) => {
+    if (col.locked) return
+    col.visible = !col.visible
+    const settings = {}
+    columnConfig.value.forEach(c => { settings[c.key] = c.visible })
+    localStorage.setItem('ghelpdesk_dynamic_form_list_cols', JSON.stringify(settings))
+}
+
+const isColumnVisible = (key) => {
+    const col = columnConfig.value.find(c => c.key === key)
+    return col ? col.visible : true
+}
+
+const toggleableCols = computed(() => columnConfig.value.filter(c => !c.locked))
+const allToggleableVisible = computed(() => toggleableCols.value.every(c => c.visible))
+const someToggleableVisible = computed(() => toggleableCols.value.some(c => c.visible))
+
+const toggleAllColumns = () => {
+    const next = !allToggleableVisible.value
+    columnConfig.value.forEach(col => { if (!col.locked) col.visible = next })
+    const settings = {}
+    columnConfig.value.forEach(c => { settings[c.key] = c.visible })
+    localStorage.setItem('ghelpdesk_dynamic_form_list_cols', JSON.stringify(settings))
+}
 </script>
 
 <template>
@@ -98,8 +144,7 @@ const getDisplayValue = (record) => {
 
     <AppLayout title="Dynamic Forms" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-6 bg-gray-50/50 min-h-screen">
-            <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-                
+
                 <!-- Header with Toggle Button -->
                 <div class="flex items-center justify-between mb-8">
                     <div>
@@ -171,23 +216,57 @@ const getDisplayValue = (record) => {
                             <option value="Rejected">Rejected</option>
                             <option value="Cancelled">Cancelled</option>
                         </select>
+                        <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
+                            <template #trigger>
+                                <button class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                                    </svg>
+                                    <span>Columns</span>
+                                </button>
+                            </template>
+                            <template #content>
+                                <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">Visible Columns</div>
+                                <div class="p-2 border-b border-gray-100">
+                                    <label class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer" @click.stop>
+                                        <input type="checkbox"
+                                            :checked="allToggleableVisible"
+                                            :indeterminate="!allToggleableVisible && someToggleableVisible"
+                                            @change="toggleAllColumns"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                                        <span class="text-sm font-bold text-gray-600">Select All</span>
+                                    </label>
+                                </div>
+                                <div class="p-2 space-y-1">
+                                    <label v-for="col in columnConfig" :key="col.key"
+                                        class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                                        :class="col.locked ? 'opacity-50 cursor-not-allowed' : ''"
+                                        @click.stop>
+                                        <input type="checkbox" :checked="col.visible" :disabled="col.locked"
+                                            @change="toggleColumn(col)"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
+                                        <span class="text-sm font-semibold text-gray-700">{{ col.label }}</span>
+                                    </label>
+                                </div>
+                            </template>
+                        </Dropdown>
                     </template>
 
                     <template #header>
                         <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Form Type</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Summary</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Submitted By</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Date</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
-                            <th class="px-6 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                            <th v-if="isColumnVisible('form_type')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Form Type</th>
+                            <th v-if="isColumnVisible('ticket')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
+                            <th v-if="isColumnVisible('summary')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Summary</th>
+                            <th v-if="isColumnVisible('submitted_by')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Submitted By</th>
+                            <th v-if="isColumnVisible('date')" class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Date</th>
+                            <th v-if="isColumnVisible('status')" class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
+                            <th v-if="isColumnVisible('actions')" class="px-6 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
                         <tr v-for="record in data" :key="record.id" class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/30 transition-all duration-300 border-b border-gray-100 last:border-0">
-                            <td class="px-6 py-5 whitespace-nowrap">
+                            <td v-if="isColumnVisible('form_type')" class="px-6 py-5 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -200,7 +279,7 @@ const getDisplayValue = (record) => {
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap">
+                            <td v-if="isColumnVisible('ticket')" class="px-6 py-5 whitespace-nowrap">
                                 <Link
                                     v-if="record.ticket"
                                     :href="route('tickets.edit', record.ticket.id)"
@@ -216,21 +295,21 @@ const getDisplayValue = (record) => {
                                     {{ ticketPlaceholder(record) }}
                                 </span>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap">
+                            <td v-if="isColumnVisible('summary')" class="px-6 py-5 whitespace-nowrap">
                                 <div class="text-sm font-bold text-gray-600 truncate max-w-xs">{{ getDisplayValue(record) }}</div>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap">
+                            <td v-if="isColumnVisible('submitted_by')" class="px-6 py-5 whitespace-nowrap">
                                 <div class="text-sm font-bold text-gray-900">{{ record.creator?.name || 'System' }}</div>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap text-center">
+                            <td v-if="isColumnVisible('date')" class="px-6 py-5 whitespace-nowrap text-center">
                                 <span class="text-xs font-bold text-gray-500">{{ new Date(record.created_at).toLocaleDateString() }}</span>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap text-center">
+                            <td v-if="isColumnVisible('status')" class="px-6 py-5 whitespace-nowrap text-center">
                                 <span :class="statusClass(record.status)" class="inline-flex items-center px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm">
                                     {{ record.status }}
                                 </span>
                             </td>
-                            <td class="px-6 py-5 whitespace-nowrap text-right">
+                            <td v-if="isColumnVisible('actions')" class="px-6 py-5 whitespace-nowrap text-right">
                                 <div class="flex justify-end space-x-2">
                                     <Link
                                         :href="route('dynamic-form.show', { slug: record.definition.slug, id: record.id })"
@@ -268,7 +347,6 @@ const getDisplayValue = (record) => {
                         </tr>
                     </template>
                 </DataTable>
-            </div>
         </div>
 
         <CopyRecordModal

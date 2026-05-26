@@ -152,16 +152,36 @@ class PosRequestController extends Controller implements HasMiddleware
         
         return Inertia::render('PosRequests/Index', [
             'posRequests' => $posRequests,
-            'companies' => Company::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'companies' => $this->getAccessibleCompanies(),
             'filters' => array_merge($request->only(['search', 'status', 'company_id', 'per_page']), ['status' => $status]),
             'isApprover' => $isApprover,
         ]);
     }
 
+    private function getAccessibleCompanies(): \Illuminate\Support\Collection
+    {
+        $user = auth()->user();
+        $roleCompanies = $user->roles()
+            ->with('companies:id,name')
+            ->get()
+            ->pluck('companies')
+            ->flatten()
+            ->unique('id');
+
+        if ($roleCompanies->isEmpty()) {
+            return Company::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        }
+
+        return Company::whereIn('id', $roleCompanies->pluck('id'))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+    }
+
     public function create()
     {
         return Inertia::render('PosRequests/Create', [
-            'companies' => Company::where('is_active', true)->get(['id', 'name']),
+            'companies' => $this->getAccessibleCompanies(),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
@@ -219,7 +239,7 @@ class PosRequestController extends Controller implements HasMiddleware
 
         return Inertia::render('PosRequests/Create', [
             'posRequest' => $posRequest,
-            'companies' => Company::where('is_active', true)->get(['id', 'name']),
+            'companies' => $this->getAccessibleCompanies(),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'POS')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),

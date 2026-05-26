@@ -2281,9 +2281,28 @@ const postHeaderItem = async (item) => {
     })
 }
 
+const validateSerialNumbers = () => {
+    const seen = new Map()
+    for (let idx = 0; idx < form.entries.length; idx++) {
+        const entry = form.entries[idx]
+        const serial = (entry.serial_no || '').trim()
+        if (!serial || !entry.asset_id) continue
+        const asset = getAssetForEntry(entry)
+        if (!asset || asset.type === 'Consumables') continue
+        const key = `${entry.asset_id}_${serial.toLowerCase()}`
+        if (seen.has(key)) {
+            showError(`Duplicate serial number "${serial}" for the same item in this submission.`)
+            return false
+        }
+        seen.set(key, idx)
+    }
+    return true
+}
+
 const submitForm = async (statusOverride = form.status || 'For Posting') => {
     if (!validateTransferStock()) return
     if (!validateGeneratedCodes()) return
+    if (!validateSerialNumbers()) return
 
     const unitCount = form.entries.length
     const assetCount = [...new Set(form.entries.map(e => e.asset_id).filter(Boolean))].length

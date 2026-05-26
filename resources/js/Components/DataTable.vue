@@ -1,5 +1,5 @@
 <template>
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 relative w-full min-w-fit">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 relative w-full">
         <!-- Loading Overlay -->
         <div v-if="isLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
             <div class="flex flex-col items-center space-y-3">

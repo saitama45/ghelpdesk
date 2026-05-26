@@ -277,6 +277,8 @@ class StockInController extends Controller
             'entries.*.destination_location' => 'nullable|string|max:255',
         ], $this->stockInCodeValidationMessages());
 
+        $this->validateSerialNoDuplicates($validated['entries']);
+
         $originLocation = $this->normalizeStoreCode($validated['origin_location'] ?? null);
         $validated['entries'] = $this->prepareMultiAssetEntriesForSave($originLocation, $validated['entries']);
 
@@ -377,6 +379,8 @@ class StockInController extends Controller
                 'price' => $validated['price'],
                 'destination_location' => $validated['destination_location'] ?? null,
             ]];
+            $this->validateSerialNoDuplicates($entryDetails, $relatedRows->pluck('id')->all());
+
             $validated['entries'] = $this->prepareMultiAssetEntriesForSave(
                 $originLocation,
                 $entryDetails,
@@ -393,6 +397,11 @@ class StockInController extends Controller
 
             return redirect()->back()->with('success', 'Stock In updated successfully');
         }
+
+        $this->validateSerialNoDuplicates([[
+            'asset_id' => $validated['asset_id'] ?? null,
+            'serial_no' => $validated['serial_no'] ?? null,
+        ]], [$stockIn->id]);
 
         $entryPayload = $this->prepareMultiAssetEntriesForSave(
             $originLocation,
@@ -1131,6 +1140,36 @@ class StockInController extends Controller
         }
 
         return $entry;
+    }
+
+    protected function validateSerialNoDuplicates(array $entries, array $excludeIds = []): void
+    {
+        $seen = [];
+        foreach ($entries as $idx => $entry) {
+            $serial = trim($entry['serial_no'] ?? '');
+            $assetId = $entry['asset_id'] ?? null;
+            if ($serial === '' || empty($assetId)) {
+                continue;
+            }
+
+            $key = $assetId . '_' . mb_strtolower($serial);
+            if (isset($seen[$key])) {
+                throw ValidationException::withMessages([
+                    'entries.' . $idx . '.serial_no' => "Serial number \"{$serial}\" is used more than once for the same item in this submission.",
+                ]);
+            }
+            $seen[$key] = true;
+
+            $query = StockIn::where('asset_id', $assetId)->where('serial_no', $serial);
+            if (!empty($excludeIds)) {
+                $query->whereNotIn('id', $excludeIds);
+            }
+            if ($query->exists()) {
+                throw ValidationException::withMessages([
+                    'entries.' . $idx . '.serial_no' => "Serial number \"{$serial}\" already exists for this item.",
+                ]);
+            }
+        }
     }
 
     protected function stockInCodeValidationMessages(): array
