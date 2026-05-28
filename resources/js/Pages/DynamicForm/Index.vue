@@ -610,51 +610,53 @@ const getStageDisplay = (record) => {
             leave-from-class="opacity-100 scale-100"
             leave-to-class="opacity-0 scale-95"
         >
-            <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-center justify-center p-4">
+            <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-start justify-center p-3 sm:p-6">
                 <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
                 
-                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 border border-gray-100 transform transition-all">
-                    <div class="flex justify-between items-center mb-8">
-                        <div>
+                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] border border-gray-100 transform transition-all flex flex-col overflow-hidden">
+                    <div class="flex justify-between items-start gap-4 px-5 py-5 sm:px-8 sm:py-6 border-b border-gray-100 bg-white">
+                        <div class="min-w-0">
                             <h3 class="text-2xl font-black text-gray-900 tracking-tight">
                                 {{ isEditing ? 'Update ' + form.name : 'New ' + (selectedRequestType ? selectedRequestType.name : form.name) }}
                             </h3>
                             <p class="text-sm text-gray-500 mt-1">Please fill in the required information.</p>
                         </div>
-                        <button @click="closeModal" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300">
+                        <button @click="closeModal" class="flex-shrink-0 p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
 
-                    <form @submit.prevent="submitForm" class="space-y-6" novalidate>
-                        <!-- Notice about request type -->
-                        <div v-if="selectedRequestType" class="flex items-center gap-3 p-3 bg-teal-50 border border-teal-100 rounded-2xl mb-4">
-                            <div class="h-8 w-8 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <form @submit.prevent="submitForm" class="min-h-0 flex flex-1 flex-col" novalidate>
+                        <div class="flex-1 overflow-y-auto px-5 py-5 sm:px-8 sm:py-6 space-y-6 custom-scrollbar">
+                            <!-- Notice about request type -->
+                            <div v-if="selectedRequestType" class="flex items-center gap-3 p-3 bg-teal-50 border border-teal-100 rounded-2xl">
+                                <div class="h-8 w-8 bg-teal-100 rounded-lg flex items-center justify-center text-teal-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-black text-teal-800 uppercase tracking-tight">Using {{ selectedRequestType.name }} schema</p>
+                                    <p class="text-[10px] text-teal-600 font-medium">Fields and approvals are defined by the selected request type.</p>
+                                </div>
                             </div>
-                            <div>
-                                <p class="text-xs font-black text-teal-800 uppercase tracking-tight">Using {{ selectedRequestType.name }} schema</p>
-                                <p class="text-[10px] text-teal-600 font-medium">Fields and approvals are defined by the selected request type.</p>
-                            </div>
+
+                            <DynamicFormRenderer
+                                v-if="effectiveSchema"
+                                :fields="effectiveSchema.fields"
+                                v-model="dynamicForm.form_data"
+                                :items-columns="effectiveSchema.items_columns"
+                                :items-template-source="effectiveSchema.items_template_source"
+                                :items-templates="effectiveSchema.items_templates || {}"
+                                :item-label="effectiveSchema.item_label || 'Row'"
+                                v-model:items="dynamicForm.items"
+                                :has-items="effectiveSchema.has_items"
+                                :errors="dynamicForm.errors"
+                                grid-columns="2"
+                            />
                         </div>
 
-                        <DynamicFormRenderer
-                            v-if="effectiveSchema"
-                            :fields="effectiveSchema.fields"
-                            v-model="dynamicForm.form_data"
-                            :items-columns="effectiveSchema.items_columns"
-                            :items-template-source="effectiveSchema.items_template_source"
-                            :items-templates="effectiveSchema.items_templates || {}"
-                            :item-label="effectiveSchema.item_label || 'Row'"
-                            v-model:items="dynamicForm.items"
-                            :has-items="effectiveSchema.has_items"
-                            :errors="dynamicForm.errors"
-                            grid-columns="2"
-                        />
-
-                        <div class="flex space-x-4 pt-6">
+                        <div class="flex space-x-4 px-5 py-5 sm:px-8 sm:py-6 border-t border-gray-100 bg-white">
                             <button type="button" @click="closeModal" 
                                     class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all duration-300">
                                 Cancel
