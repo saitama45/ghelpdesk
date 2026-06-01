@@ -28,12 +28,18 @@ class EmailTicketService
         Log::info("EmailTicketService: Starting email fetch process...");
 
         try {
+            $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', config('imap.accounts.default.username')));
+            if ($supportEmail === '') {
+                Log::warning("EmailTicketService: Fetch skipped - No inbound support email is configured.");
+                return ['status' => 'skipped', 'message' => 'No inbound support email is configured.'];
+            }
+
             // 2. Configure IMAP from Database Settings
             $imapConfig = [
                 'imap.accounts.default.host' => Setting::get('imap_host', config('imap.accounts.default.host')),
                 'imap.accounts.default.port' => Setting::get('imap_port', config('imap.accounts.default.port')),
                 'imap.accounts.default.encryption' => Setting::get('imap_encryption', config('imap.accounts.default.encryption')),
-                'imap.accounts.default.username' => Setting::get('imap_username', config('imap.accounts.default.username')),
+                'imap.accounts.default.username' => $supportEmail,
                 'imap.accounts.default.password' => Setting::get('imap_password', config('imap.accounts.default.password')),
                 'imap.options.fetch_order' => 'desc',
             ];
@@ -180,6 +186,10 @@ class EmailTicketService
         }
 
         $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', ''));
+        if ($supportEmail === '') {
+            Log::warning("EmailTicketService: Skipping message {$messageId} - No inbound support email is configured.");
+            return false;
+        }
 
         // 2. Ignore Bounce Messages
         $bannedSenders = ['mailer-daemon', 'postmaster', 'no-reply', 'noreply'];
@@ -192,42 +202,7 @@ class EmailTicketService
         }
 
         // 3. Recipient Check
-        $isDirectlySent = false;
-        $to = $message->getTo();
-        $cc = $message->getCc();
-        $bcc = $message->getBcc();
-
-        foreach ([$to, $cc, $bcc] as $recipients) {
-            if ($recipients) {
-                foreach ($recipients as $recipient) {
-                    if (isset($recipient->mail) && $this->normalizeEmailAddress($recipient->mail) === $supportEmail) {
-                        $isDirectlySent = true;
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        if (!$isDirectlySent) {
-            Log::debug("EmailTicketService: Message {$messageId} not directly sent to {$supportEmail}. Checking fallback...");
-            
-            // Fallback
-            if ($supportEmail) {
-                $headers = $message->getHeaders();
-                if (str_contains(strtolower((string)$headers->get('to')), $supportEmail) ||
-                    str_contains(strtolower((string)$headers->get('cc')), $supportEmail)) {
-                    $isDirectlySent = true;
-                }
-            }
-            
-            // Final Fallback (If it's in the inbox, we usually want it)
-            if (!$isDirectlySent) {
-                Log::info("EmailTicketService: Message {$messageId} hit final fallback to TRUE.");
-                $isDirectlySent = true; 
-            }
-        }
-
-        if (!$isDirectlySent) {
+        if (!$this->messageIsAddressedToSupportEmail($message, $supportEmail)) {
             Log::info("EmailTicketService: Skipping message {$messageId} - Not for support email {$supportEmail}.");
             $message->setFlag('Seen');
             return false;
@@ -645,6 +620,51 @@ class EmailTicketService
         } while ($subject !== $previous);
 
         return trim($subject);
+    }
+
+    protected function messageIsAddressedToSupportEmail($message, string $supportEmail): bool
+    {
+        foreach ([$message->getTo(), $message->getCc(), $message->getBcc()] as $recipients) {
+            foreach ($recipients ?: [] as $recipient) {
+                if (isset($recipient->mail) && $this->normalizeEmailAddress($recipient->mail) === $supportEmail) {
+                    return true;
+                }
+            }
+        }
+
+        $headers = $message->getHeaders();
+
+        foreach (['to', 'cc', 'bcc'] as $headerName) {
+            if ($this->headerContainsEmailAddress($headers->get($headerName), $supportEmail)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function headerContainsEmailAddress($header, string $expectedEmail): bool
+    {
+        foreach ($this->flattenHeaderValues($header) as $value) {
+            foreach ($this->extractEmailAddresses((string) $value) as $email) {
+                if ($this->normalizeEmailAddress($email) === $expectedEmail) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected function extractEmailAddresses(string $value): array
+    {
+        if (trim($value) === '') {
+            return [];
+        }
+
+        preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $value, $matches);
+
+        return array_values(array_unique($matches[0] ?? []));
     }
 
     protected function extractCleanMessageBody($message): string

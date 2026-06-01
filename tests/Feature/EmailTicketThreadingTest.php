@@ -239,6 +239,75 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertTrue($ticket->is(Ticket::first()));
     }
 
+    public function test_email_bccd_to_support_address_is_processed(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<bcc-support@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Back office internet concern',
+            body: 'The back office internet connection keeps disconnecting during lunch operations.',
+            toRecipients: ['manager@example.test'],
+            bccRecipients: [' SUPPORT@example.test '],
+        ));
+
+        $ticket = Ticket::firstOrFail();
+
+        $this->assertSame('Back office internet concern', $ticket->title);
+    }
+
+    public function test_email_not_addressed_to_support_address_is_skipped_and_marked_seen(): void
+    {
+        $message = new FakeEmailMessage(
+            messageId: '<not-support@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Wrong mailbox concern',
+            body: 'This message landed in the inbox but was sent to a different address.',
+            toRecipients: ['other@example.test'],
+            ccRecipients: ['manager@example.test'],
+        );
+
+        $processed = $this->service->processFake($message);
+
+        $this->assertFalse($processed);
+        $this->assertTrue($message->seen);
+        $this->assertSame(0, Ticket::count());
+        $this->assertSame(0, TicketComment::count());
+    }
+
+    public function test_header_fallback_requires_exact_support_email_match(): void
+    {
+        $message = new FakeEmailMessage(
+            messageId: '<substring-support@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Lookalike address concern',
+            body: 'This should not become a ticket because the recipient is only a lookalike address.',
+            toRecipients: ['other-support@example.test'],
+            headerToRecipients: ['other-support@example.test'],
+        );
+
+        $processed = $this->service->processFake($message);
+
+        $this->assertFalse($processed);
+        $this->assertTrue($message->seen);
+        $this->assertSame(0, Ticket::count());
+    }
+
+    public function test_header_fallback_processes_exact_support_email_match(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<header-support@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Header recipient concern',
+            body: 'This should become a ticket because the raw header contains the support address.',
+            toRecipients: ['undisclosed-recipients:;'],
+            headerToRecipients: ['Support Desk <support@example.test>'],
+        ));
+
+        $ticket = Ticket::firstOrFail();
+
+        $this->assertSame('Header recipient concern', $ticket->title);
+    }
+
     public function test_html_reply_history_is_preserved_when_plain_text_is_shorter(): void
     {
         $this->service->processFake(new FakeEmailMessage(
@@ -406,6 +475,9 @@ class FakeEmailMessage
         private array $toRecipients = [],
         private array $ccRecipients = [],
         private array $bccRecipients = [],
+        private ?array $headerToRecipients = null,
+        private ?array $headerCcRecipients = null,
+        private ?array $headerBccRecipients = null,
     ) {}
 
     public function getMessageId(): string
@@ -456,8 +528,9 @@ class FakeEmailMessage
     public function getHeaders(): FakeEmailHeaders
     {
         return new FakeEmailHeaders(
-            $this->toRecipients ?: [$this->supportEmail],
-            $this->ccRecipients,
+            $this->headerToRecipients ?? ($this->toRecipients ?: [$this->supportEmail]),
+            $this->headerCcRecipients ?? $this->ccRecipients,
+            $this->headerBccRecipients ?? $this->bccRecipients,
         );
     }
 
@@ -486,13 +559,14 @@ class FakeEmailMessage
 
 class FakeEmailHeaders
 {
-    public function __construct(private array $toRecipients, private array $ccRecipients) {}
+    public function __construct(private array $toRecipients, private array $ccRecipients, private array $bccRecipients = []) {}
 
     public function get(string $key): string
     {
         return match (strtolower($key)) {
             'to' => implode(', ', $this->toRecipients),
             'cc' => implode(', ', $this->ccRecipients),
+            'bcc' => implode(', ', $this->bccRecipients),
             default => '',
         };
     }
