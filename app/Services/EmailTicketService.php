@@ -632,15 +632,43 @@ class EmailTicketService
             }
         }
 
-        $headers = $message->getHeaders();
+        $headers = $this->messageHeaders($message);
+        if (!$headers) {
+            return false;
+        }
 
-        foreach (['to', 'cc', 'bcc'] as $headerName) {
+        foreach ($this->supportRecipientHeaderNames() as $headerName) {
             if ($this->headerContainsEmailAddress($headers->get($headerName), $supportEmail)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    protected function messageHeaders($message)
+    {
+        if (method_exists($message, 'getHeader')) {
+            return $message->getHeader();
+        }
+
+        return $message->getHeaders();
+    }
+
+    protected function supportRecipientHeaderNames(): array
+    {
+        return [
+            'to',
+            'cc',
+            'bcc',
+            'toaddress',
+            'ccaddress',
+            'bccaddress',
+            'delivered_to',
+            'x_original_to',
+            'envelope_to',
+            'original_to',
+        ];
     }
 
     protected function headerContainsEmailAddress($header, string $expectedEmail): bool

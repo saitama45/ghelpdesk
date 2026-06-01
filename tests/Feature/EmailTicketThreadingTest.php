@@ -308,6 +308,45 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertSame('Header recipient concern', $ticket->title);
     }
 
+    public function test_delivery_header_fallback_processes_gmail_style_to_me_delivery(): void
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<delivered-to-support@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'SBD_DRIVE THRU POS ERROR',
+            body: 'Need assistance with our DT pos. Please see the attached images.',
+            toRecipients: ['me'],
+            extraHeaders: [
+                'delivered_to' => ['Support Desk <support@example.test>'],
+            ],
+        ));
+
+        $ticket = Ticket::firstOrFail();
+
+        $this->assertSame('SBD_DRIVE THRU POS ERROR', $ticket->title);
+    }
+
+    public function test_delivery_header_fallback_still_requires_exact_support_email_match(): void
+    {
+        $message = new FakeEmailMessage(
+            messageId: '<wrong-delivered-to@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Wrong delivered recipient',
+            body: 'This should not become a ticket because delivery was for a different mailbox.',
+            toRecipients: ['me'],
+            extraHeaders: [
+                'delivered_to' => ['other-support@example.test'],
+                'x_original_to' => ['other-support@example.test'],
+            ],
+        );
+
+        $processed = $this->service->processFake($message);
+
+        $this->assertFalse($processed);
+        $this->assertTrue($message->seen);
+        $this->assertSame(0, Ticket::count());
+    }
+
     public function test_html_reply_history_is_preserved_when_plain_text_is_shorter(): void
     {
         $this->service->processFake(new FakeEmailMessage(
@@ -478,6 +517,7 @@ class FakeEmailMessage
         private ?array $headerToRecipients = null,
         private ?array $headerCcRecipients = null,
         private ?array $headerBccRecipients = null,
+        private array $extraHeaders = [],
     ) {}
 
     public function getMessageId(): string
@@ -527,10 +567,21 @@ class FakeEmailMessage
 
     public function getHeaders(): FakeEmailHeaders
     {
+        return $this->buildHeaders();
+    }
+
+    public function getHeader(): FakeEmailHeaders
+    {
+        return $this->buildHeaders();
+    }
+
+    private function buildHeaders(): FakeEmailHeaders
+    {
         return new FakeEmailHeaders(
             $this->headerToRecipients ?? ($this->toRecipients ?: [$this->supportEmail]),
             $this->headerCcRecipients ?? $this->ccRecipients,
             $this->headerBccRecipients ?? $this->bccRecipients,
+            $this->extraHeaders,
         );
     }
 
@@ -559,11 +610,22 @@ class FakeEmailMessage
 
 class FakeEmailHeaders
 {
-    public function __construct(private array $toRecipients, private array $ccRecipients, private array $bccRecipients = []) {}
+    public function __construct(
+        private array $toRecipients,
+        private array $ccRecipients,
+        private array $bccRecipients = [],
+        private array $extraHeaders = [],
+    ) {}
 
     public function get(string $key): string
     {
-        return match (strtolower($key)) {
+        $normalizedKey = strtolower(str_replace(['-', ' '], '_', $key));
+
+        if (array_key_exists($normalizedKey, $this->extraHeaders)) {
+            return implode(', ', $this->extraHeaders[$normalizedKey]);
+        }
+
+        return match ($normalizedKey) {
             'to' => implode(', ', $this->toRecipients),
             'cc' => implode(', ', $this->ccRecipients),
             'bcc' => implode(', ', $this->bccRecipients),
