@@ -20,7 +20,14 @@
                 >
                     <template #actions>
                         <div class="flex items-center space-x-2">
-                            <button 
+                            <select
+                                v-model="filterSector"
+                                class="border-gray-300 rounded-lg shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500 h-[38px] pl-3 pr-8"
+                            >
+                                <option value="">All Sectors</option>
+                                <option v-for="n in 9" :key="n" :value="n - 1">Sector {{ n - 1 }}</option>
+                            </select>
+                            <button
                                 @click="openImportModal"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                             >
@@ -46,6 +53,7 @@
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classification</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sector</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Team</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geofencing</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -83,6 +91,11 @@
                                         </span>
                                     </div>
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-gray-50 text-gray-700 border border-gray-200">
+                                    Sector {{ store.sector }}
+                                </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <button v-if="store.users.length > 0" 
@@ -187,7 +200,7 @@
 
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector</label>
-                                <input v-model="form.sector" type="number" required min="1" max="8"
+                                <input v-model="form.sector" type="number" required min="0" max="8"
                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                             </div>
 
@@ -406,7 +419,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
@@ -427,8 +440,17 @@ const props = defineProps({
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy } = useErrorHandler()
-const pagination = usePagination(props.stores, 'stores.index')
 const { hasPermission } = usePermission()
+
+const filterSector = ref('')
+const pagination = usePagination(props.stores, 'stores.index', () => ({
+    sector: filterSector.value || undefined,
+}))
+
+watch(filterSector, () => {
+    pagination.currentPage.value = 1
+    pagination.performSearch()
+})
 
 const showModal = ref(false)
 const showImportModal = ref(false)

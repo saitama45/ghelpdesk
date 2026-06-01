@@ -5,8 +5,8 @@ namespace App\Services;
 use App\Models\DepartmentNode;
 use App\Models\Setting;
 use App\Models\Ticket;
+use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class StoreReportService
 {
@@ -18,6 +18,7 @@ class StoreReportService
         $departmentId = $filters['department_id'] ?? null;
         $departmentNodeId = $filters['department_node_id'] ?? null;
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
+        $isCtMode = $this->isCorporateTechnologyFilter($departmentNodeId, $subUnit);
 
         // Query active tickets. Sector summaries intentionally stay based on
         // the ticket's configured store sector, not the assignee hierarchy.
@@ -48,19 +49,32 @@ class StoreReportService
             });
         }
 
-        // Apply user filter to report data
         $displayTicketsQuery = clone $ticketsQuery;
-        if ($userId && $userId !== 'all') {
-            $displayTicketsQuery->where('assignee_id', $userId);
-        }
+        $sectorAssignments = $this->sectorAssignments();
+        $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])
+            ->get()
+            ->filter(fn ($ticket) => !$isCtMode || (int) $ticket->store?->sector === 0)
+            ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
+            ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
-        $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])->get();
+        $reportData = $activeTickets->groupBy(function ($ticket) use ($sectorAssignments) {
+            $sector = (int) $ticket->store->sector;
 
-        $reportData = $activeTickets->groupBy('assignee_id')->map(function ($tickets, $assigneeId) {
-            $assignee = $tickets->first()->assignee;
+            if (!empty($sectorAssignments['users_by_sector'][$sector])) {
+                return "sector-{$sector}";
+            }
+
+            return $ticket->assignee_id ? "assignee-{$ticket->assignee_id}" : 'unassigned';
+        })->map(function ($tickets, $groupKey) use ($sectorAssignments) {
+            $firstTicket = $tickets->first();
+            $sector = (int) $firstTicket->store->sector;
+            $assignee = $firstTicket->assignee;
+
             $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
                 $store = $storeTickets->first()->store;
                 if (!$store) return null;
+                if (!$store->is_active) return null;
+
                 return [
                     'id' => $store->id,
                     'code' => $store->code,
@@ -69,31 +83,64 @@ class StoreReportService
                     'area' => $store->area,
                     'ticket_count' => $storeTickets->count(),
                 ];
-            })->filter()->values();
+            })->filter()
+                ->sortBy([
+                    ['sector', 'asc'],
+                    ['area', 'asc'],
+                    ['code', 'asc'],
+                    ['name', 'asc'],
+                ])
+                ->values();
+
+            $sectorUsers = $sectorAssignments['users_by_sector'][$sector] ?? [];
 
             return [
-                'id' => $assigneeId ?? 'unassigned',
-                'name' => $assignee?->name ?? 'Unassigned',
+                'id' => $groupKey,
+                'name' => !empty($sectorUsers) ? implode(', ', $sectorUsers) : ($assignee?->name ?? 'Unassigned'),
                 'sub_unit' => $assignee?->org_path,
+                'sector' => !empty($sectorUsers) ? $sector : $stores->min('sector'),
                 'stores' => $stores,
             ];
         })->filter(function($u) {
             return count($u['stores']) > 0;
-        })->values();
+        })->sortBy([
+            ['sector', 'asc'],
+            ['name', 'asc'],
+        ])->values();
+
+        // Thresholds
+        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
 
         // Summary logic
         $summary = [
             'north' => [],
-            'south' => []
+            'south' => [],
+            'ct' => [],
+            'is_ct_mode' => $isCtMode,
         ];
 
-        $summaryCounts = (clone $baseTicketsQuery)
-            ->join('stores', 'tickets.store_id', '=', 'stores.id')
-            ->where('stores.is_active', true)
-            ->whereNotNull('stores.sector')
-            ->select('stores.sector', DB::raw('COUNT(*) as total_tickets'))
-            ->groupBy('stores.sector')
-            ->pluck('total_tickets', 'sector');
+        $summaryTicketsQuery = clone $ticketsQuery;
+        $summaryTickets = $summaryTicketsQuery
+            ->with(['assignee', 'store'])
+            ->get()
+            ->filter(fn ($ticket) => !$isCtMode || (int) $ticket->store?->sector === 0)
+            ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
+            ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
+
+        if ($isCtMode) {
+            $summary['ct'] = $this->buildCtSummary($summaryTickets, $thresholds);
+
+            return [
+                'reportData' => $reportData,
+                'summary' => $summary,
+                'thresholds' => $thresholds,
+            ];
+        }
+
+        $ticketCountsBySectorStore = $summaryTickets
+            ->groupBy(fn ($ticket) => (int) $ticket->store->sector)
+            ->map(fn ($sectorTickets) => $sectorTickets->groupBy('store_id')->map->count());
 
         $northArea = DepartmentNode::where('name', 'North Area')->first();
         $southArea = DepartmentNode::where('name', 'South Area')->first();
@@ -101,7 +148,20 @@ class StoreReportService
         $southNodes = $southArea ? DepartmentNode::where('parent_id', $southArea->id)->with('users')->get() : collect();
 
         for ($i = 1; $i <= 8; $i++) {
-            $totalTickets = (int) ($summaryCounts[$i] ?? 0);
+            $sectorStoreTicketCounts = $ticketCountsBySectorStore->get($i, collect());
+            $healthCounts = [
+                'green' => 0,
+                'yellow' => 0,
+                'orange' => 0,
+                'red' => 0,
+            ];
+            $totalTickets = 0;
+
+            foreach ($sectorStoreTicketCounts as $ticketCount) {
+                $ticketCount = (int) $ticketCount;
+                $totalTickets += $ticketCount;
+                $healthCounts[$this->healthBucket($ticketCount, $thresholds)] += $ticketCount;
+            }
 
             $nodeName = "Sector $i";
             if ($i <= 4) {
@@ -110,13 +170,15 @@ class StoreReportService
                 $node = $southNodes->where('name', $nodeName)->first();
             }
 
-            $assignedUsers = $node ? $node->users->pluck('name')->toArray() : [];
+            $assignedUsers = $sectorAssignments['users_by_sector'][$i] ?? ($node ? $node->users->pluck('name')->toArray() : []);
             $assignedUserDisplay = empty($assignedUsers) ? 'Unassigned' : implode(', ', $assignedUsers);
 
             $sectorData = [
                 'sector' => $i,
                 'user' => $assignedUserDisplay,
-                'total_tickets' => $totalTickets
+                'store_count' => $sectorStoreTicketCounts->count(),
+                'total_tickets' => $totalTickets,
+                'health_counts' => $healthCounts,
             ];
 
             if ($i <= 4) {
@@ -125,10 +187,6 @@ class StoreReportService
                 $summary['south'][] = $sectorData;
             }
         }
-
-        // Thresholds
-        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
-        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
 
         return [
             'reportData' => $reportData,
@@ -173,5 +231,160 @@ class StoreReportService
         }
 
         return $thresholds;
+    }
+
+    private function healthBucket(int $ticketCount, array $thresholds): string
+    {
+        $redMin = (int) ($thresholds['threshold_red_min'] ?? 5);
+        $orangeMin = (int) ($thresholds['threshold_orange_min'] ?? 4);
+        $yellowMin = (int) ($thresholds['threshold_yellow_min'] ?? 3);
+        $greenMax = (int) ($thresholds['threshold_green_max'] ?? 2);
+
+        if ($ticketCount >= $redMin) {
+            return 'red';
+        }
+
+        if ($ticketCount >= $orangeMin) {
+            return 'orange';
+        }
+
+        if ($ticketCount >= $yellowMin) {
+            return 'yellow';
+        }
+
+        if ($ticketCount <= $greenMax) {
+            return 'green';
+        }
+
+        return 'green';
+    }
+
+    private function sectorAssignments(): array
+    {
+        $sectorNodes = DepartmentNode::query()
+            ->where('name', 'like', 'Sector %')
+            ->get();
+
+        $byUserId = [];
+        $usersBySector = [];
+
+        foreach ($sectorNodes as $node) {
+            if (!preg_match('/^Sector\s+(\d+)$/i', $node->name, $matches)) {
+                continue;
+            }
+
+            $sector = (int) $matches[1];
+            $nodeIds = array_merge([$node->id], DepartmentNode::getAllDescendantIds($node->id));
+            $users = User::query()
+                ->whereIn('department_node_id', $nodeIds)
+                ->orderBy('name')
+                ->get(['id', 'name']);
+
+            $usersBySector[$sector] = array_values(array_unique(array_merge(
+                $usersBySector[$sector] ?? [],
+                $users->pluck('name')->all()
+            )));
+
+            foreach ($users as $user) {
+                $byUserId[$user->id] ??= [];
+                $byUserId[$user->id][] = $sector;
+            }
+        }
+
+        foreach ($byUserId as $userId => $sectors) {
+            $byUserId[$userId] = array_values(array_unique($sectors));
+        }
+
+        return [
+            'by_user_id' => $byUserId,
+            'users_by_sector' => $usersBySector,
+        ];
+    }
+
+    private function ticketMatchesAssigneeSector(Ticket $ticket, array $sectorAssignments): bool
+    {
+        if (!$ticket->store || !$ticket->store->is_active || $ticket->store->sector === null) {
+            return false;
+        }
+
+        $assignedSectors = $sectorAssignments['by_user_id'][$ticket->assignee?->id] ?? [];
+
+        if (empty($assignedSectors)) {
+            return true;
+        }
+
+        return in_array((int) $ticket->store->sector, $assignedSectors, true);
+    }
+
+    private function ticketMatchesDisplayUser(Ticket $ticket, $userId, array $sectorAssignments): bool
+    {
+        if (!$userId || $userId === 'all') {
+            return true;
+        }
+
+        $ownedSectors = $sectorAssignments['by_user_id'][(int) $userId] ?? [];
+
+        if (!empty($ownedSectors)) {
+            return in_array((int) $ticket->store->sector, $ownedSectors, true);
+        }
+
+        return (int) $ticket->assignee_id === (int) $userId;
+    }
+
+    private function isCorporateTechnologyFilter($departmentNodeId, $subUnit): bool
+    {
+        if ($departmentNodeId) {
+            $node = DepartmentNode::find((int) $departmentNodeId);
+
+            while ($node) {
+                if (strcasecmp((string) $node->code, 'CT') === 0 || strcasecmp((string) $node->name, 'Corporate Technology') === 0) {
+                    return true;
+                }
+
+                $node = $node->parent_id ? DepartmentNode::find($node->parent_id) : null;
+            }
+        }
+
+        $label = strtolower((string) $subUnit);
+
+        return str_contains($label, 'corporate technology') || preg_match('/(^|[\s\/>-])ct($|[\s\/<-])/i', (string) $subUnit) === 1;
+    }
+
+
+
+    private function buildCtSummary($tickets, array $thresholds): array
+    {
+        return $tickets
+            ->groupBy('store_id')
+            ->map(function ($storeTickets) use ($thresholds) {
+                $store = $storeTickets->first()->store;
+
+                if (!$store || !$store->is_active) {
+                    return null;
+                }
+
+                $ticketCount = $storeTickets->count();
+                $healthCounts = [
+                    'green' => 0,
+                    'yellow' => 0,
+                    'orange' => 0,
+                    'red' => 0,
+                ];
+                $healthCounts[$this->healthBucket($ticketCount, $thresholds)] = $ticketCount;
+
+                return [
+                    'store_id' => $store->id,
+                    'store_code' => $store->code,
+                    'store_name' => $store->name,
+                    'area' => $store->area,
+                    'store_count' => 1,
+                    'total_tickets' => $ticketCount,
+                    'health_counts' => $healthCounts,
+                ];
+            })
+            ->filter()
+            ->sortBy('store_code')
+            ->values()
+            ->all();
     }
 }

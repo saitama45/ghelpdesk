@@ -56,12 +56,19 @@
             height: 30px;
         }
         .color-cell {
-            height: 50px;
+            height: 75px;
             text-align: center;
             vertical-align: middle;
             font-size: 14pt;
             font-weight: bold;
             border: 1px solid #e2e8f0;
+        }
+        .health-breakdown {
+            width: 100%;
+            margin-top: 6px;
+            font-size: 7pt;
+            font-weight: bold;
+            color: #4a5568;
         }
         .report-section {
             margin-top: 30px;
@@ -116,24 +123,6 @@
 </head>
 <body>
     @php
-        function getBoxStyle($maxTickets, $thresholds) {
-            if ($maxTickets == 0) return ['bg' => '#ffffff', 'text' => '#333'];
-            
-            $th = [
-                'green_max' => (int)($thresholds['threshold_green_max'] ?? 2),
-                'yellow_min' => (int)($thresholds['threshold_yellow_min'] ?? 3),
-                'orange_min' => (int)($thresholds['threshold_orange_min'] ?? 4),
-                'red_min' => (int)($thresholds['threshold_red_min'] ?? 5),
-            ];
-
-            if ($maxTickets >= $th['red_min']) return ['bg' => '#ef4444', 'text' => '#ffffff'];
-            if ($maxTickets >= $th['orange_min']) return ['bg' => '#f97316', 'text' => '#ffffff'];
-            if ($maxTickets >= $th['yellow_min']) return ['bg' => '#eab308', 'text' => '#1a202c'];
-            if ($maxTickets >= 1) return ['bg' => '#22c55e', 'text' => '#ffffff'];
-            
-            return ['bg' => '#ffffff', 'text' => '#333'];
-        }
-
         function getHealthColor($count, $thresholds) {
             $th = [
                 'green_max' => (int)($thresholds['threshold_green_max'] ?? 2),
@@ -154,7 +143,7 @@
         <h1>Store Health Report</h1>
         <p>As of {{ $asOfDate }}</p>
         <div style="font-size: 8pt; color: #4a5568; margin-top: 5px;">
-            @if($filters['sub_unit'] !== 'all') Sub-Unit: {{ $filters['sub_unit'] }} | @endif
+            @if($filters['sub_unit'] !== 'all') Department: {{ $filters['sub_unit'] }} | @endif
             @if($filters['user_id'] !== 'all') User: {{ $reportData->first()->name ?? 'N/A' }} | @endif
             @if($filters['store_id'] !== 'all') Store: {{ $filters['store_id'] }} @endif
         </div>
@@ -206,63 +195,129 @@
         </table>
     </div>
 
-    <!-- North Area Summary -->
-    <table class="summary-table">
-        <thead>
-            <tr>
-                <th colspan="4" class="summary-header">N O R T H &nbsp;&nbsp; A R E A</th>
-            </tr>
-            <tr>
-                @foreach($summary['north'] as $item)
-                    <th class="sector-header">Sector {{ $item->sector }}</th>
-                @endforeach
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                @foreach($summary['north'] as $item)
-                    <td class="user-cell">{{ $item->user }}</td>
-                @endforeach
-            </tr>
-            <tr>
-                @foreach($summary['north'] as $item)
-                    @php $style = getBoxStyle($item->max_tickets, $thresholds); @endphp
-                    <td class="color-cell" style="background-color: {{ $style['bg'] }}; color: {{ $style['text'] }}">
-                        {{ $item->max_tickets }}
-                    </td>
-                @endforeach
-            </tr>
-        </tbody>
-    </table>
+    @if(empty($summary['is_ct_mode']))
+        <!-- North Area Summary -->
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th colspan="4" class="summary-header">N O R T H &nbsp;&nbsp; A R E A</th>
+                </tr>
+                <tr>
+                    @foreach($summary['north'] as $item)
+                        <th class="sector-header">Sector {{ $item->sector }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    @foreach($summary['north'] as $item)
+                        <td class="user-cell">{{ $item->user }}</td>
+                    @endforeach
+                </tr>
+                <tr>
+                    @foreach($summary['north'] as $item)
+                        <td class="color-cell" style="background-color: #ffffff; color: #1a202c">
+                            <div style="font-size: 8pt; color: #718096; text-transform: uppercase;">Affected Stores</div>
+                            <div>{{ $item->store_count ?? 0 }}</div>
+                            <div style="font-size: 7pt; color: #718096;">{{ $item->total_tickets ?? 0 }} tickets</div>
+                            <table class="health-breakdown">
+                                <tr>
+                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_counts.green', 0) }}</td>
+                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_counts.yellow', 0) }}</td>
+                                </tr>
+                                <tr>
+                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_counts.orange', 0) }}</td>
+                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_counts.red', 0) }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    @endforeach
+                </tr>
+            </tbody>
+        </table>
 
-    <!-- South Area Summary -->
-    <table class="summary-table">
-        <thead>
-            <tr>
-                <th colspan="4" class="summary-header">S O U T H &nbsp;&nbsp; A R E A</th>
-            </tr>
-            <tr>
-                @foreach($summary['south'] as $item)
-                    <th class="sector-header">Sector {{ $item->sector }}</th>
-                @endforeach
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                @foreach($summary['south'] as $item)
-                    <td class="user-cell">{{ $item->user }}</td>
-                @endforeach
-            </tr>
-            <tr>
-                @foreach($summary['south'] as $item)
-                    @php $style = getBoxStyle($item->max_tickets, $thresholds); @endphp
-                    <td class="color-cell" style="background-color: {{ $style['bg'] }}; color: {{ $style['text'] }}">
-                        {{ $item->max_tickets }}
-                    </td>
-                @endforeach
-            </tr>
-        </tbody>
-    </table>
+        <!-- South Area Summary -->
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th colspan="4" class="summary-header">S O U T H &nbsp;&nbsp; A R E A</th>
+                </tr>
+                <tr>
+                    @foreach($summary['south'] as $item)
+                        <th class="sector-header">Sector {{ $item->sector }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    @foreach($summary['south'] as $item)
+                        <td class="user-cell">{{ $item->user }}</td>
+                    @endforeach
+                </tr>
+                <tr>
+                    @foreach($summary['south'] as $item)
+                        <td class="color-cell" style="background-color: #ffffff; color: #1a202c">
+                            <div style="font-size: 8pt; color: #718096; text-transform: uppercase;">Affected Stores</div>
+                            <div>{{ $item->store_count ?? 0 }}</div>
+                            <div style="font-size: 7pt; color: #718096;">{{ $item->total_tickets ?? 0 }} tickets</div>
+                            <table class="health-breakdown">
+                                <tr>
+                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_counts.green', 0) }}</td>
+                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_counts.yellow', 0) }}</td>
+                                </tr>
+                                <tr>
+                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_counts.orange', 0) }}</td>
+                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_counts.red', 0) }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    @endforeach
+                </tr>
+            </tbody>
+        </table>
+    @else
+        @if(count($summary['ct']) > 0)
+        <!-- CT Area Summary -->
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th colspan="{{ count($summary['ct']) }}" class="summary-header">C O R P O R A T E &nbsp;&nbsp; T E C H N O L O G Y</th>
+                </tr>
+                <tr>
+                    @foreach($summary['ct'] as $item)
+                        <th class="sector-header">{{ $item->store_code }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    @foreach($summary['ct'] as $item)
+                        <td class="user-cell">{{ $item->store_name }}</td>
+                    @endforeach
+                </tr>
+                <tr>
+                    @foreach($summary['ct'] as $item)
+                        <td class="color-cell" style="background-color: #ffffff; color: #1a202c">
+                            <div style="font-size: 8pt; color: #718096; text-transform: uppercase;">Affected Stores</div>
+                            <div>{{ $item->store_count ?? 0 }}</div>
+                            <div style="font-size: 7pt; color: #718096;">{{ $item->total_tickets ?? 0 }} tickets</div>
+                            <table class="health-breakdown">
+                                <tr>
+                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_counts.green', 0) }}</td>
+                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_counts.yellow', 0) }}</td>
+                                </tr>
+                                <tr>
+                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_counts.orange', 0) }}</td>
+                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_counts.red', 0) }}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    @endforeach
+                </tr>
+            </tbody>
+        </table>
+        @endif
+    @endif
 
     <!-- Detailed Report -->
     <div style="margin-top: 40px;"></div>

@@ -37,6 +37,10 @@ class StoreController extends Controller implements HasMiddleware
                 $q->where('tickets.status', 'open');
             }]);
 
+        if ($request->filled('sector')) {
+            $query->where('sector', (int) $request->sector);
+        }
+
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")
@@ -72,7 +76,7 @@ class StoreController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'code' => 'required|string|max:50|unique:stores,code',
             'name' => 'required|string|max:255|unique:stores,name',
-            'sector' => 'required|numeric|min:1|max:8',
+            'sector' => 'required|numeric|min:0|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'nullable|in:Regular,Kitchen,Office',
@@ -109,7 +113,7 @@ class StoreController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'code' => 'required|string|max:50|unique:stores,code,' . $store->id,
             'name' => 'required|string|max:255|unique:stores,name,' . $store->id,
-            'sector' => 'required|numeric|min:1|max:8',
+            'sector' => 'required|numeric|min:0|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'nullable|in:Regular,Kitchen,Office',
@@ -244,7 +248,7 @@ class StoreController extends Controller implements HasMiddleware
                 'code'          => 'required|string|max:50|unique:stores,code',
                 'name'          => 'required|string|max:255',
                 'email'         => 'nullable|email|max:255',
-                'sector'        => 'required|integer|min:1|max:8',
+                'sector'        => 'required|integer|min:0|max:8',
                 'area'          => 'required|string|max:255',
                 'brand'         => 'required|string|max:255',
                 'class'         => 'required|in:Regular,Kitchen,Office',

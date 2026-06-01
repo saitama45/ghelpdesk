@@ -9,6 +9,7 @@ const props = defineProps({
     users: Array,
     stores: Array,
     subUnits: Array,
+    hierarchicalDepartments: Array,
     thresholds: Object,
     filters: Object
 });
@@ -24,7 +25,7 @@ const handleFilter = (filterData) => {
 <template>
     <Head title="Store Health Report" />
 
-    <AppLayout>
+    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6 min-w-fit" main-class="overflow-auto">
         <template #header>
             Store Health Report
         </template>
@@ -36,6 +37,7 @@ const handleFilter = (filterData) => {
             :users="users"
             :stores="stores"
             :sub-units="subUnits"
+            :hierarchical-departments="hierarchicalDepartments"
             :filters="filters"
             @filter="handleFilter"
         />

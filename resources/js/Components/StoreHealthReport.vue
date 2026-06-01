@@ -1,7 +1,9 @@
 <script setup>
-import { ref } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
 import Modal from '@/Components/Modal.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import { FunnelIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/vue/24/outline';
 import axios from 'axios';
 
@@ -17,52 +19,96 @@ const props = defineProps({
     users: Array,
     stores: Array,
     subUnits: Array,
+    hierarchicalDepartments: {
+        type: Array,
+        default: () => []
+    },
     filters: Object
 });
 
 const emit = defineEmits(['filter']);
+const page = usePage();
+
+const filterNodeId = ref(
+    props.filters?.department_node_id
+        ? props.filters.department_node_id
+        : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
+);
 
 const filterForm = ref({
     user_id: props.filters?.user_id || 'all',
     store_id: props.filters?.store_id || 'all',
-    sub_unit: props.filters?.sub_unit || 'all',
     as_of_date: props.filters?.as_of_date || new Date().toISOString().split('T')[0]
 });
 
-const getSummaryBoxColor = (totalTickets) => {
-    if (totalTickets === 0) return { class: 'bg-white border-gray-200 text-gray-400', style: 'background-color: #ffffff' };
-    
-    const s = props.thresholds || {};
-    const th = {
-        green_max: parseInt(s.threshold_green_max) || 2,
-        yellow_min: parseInt(s.threshold_yellow_min) || 3,
-        orange_min: parseInt(s.threshold_orange_min) || 4,
-        red_min: parseInt(s.threshold_red_min) || 5,
-    };
+const rawHierarchicalDepartments = computed(() => {
+    if (props.hierarchicalDepartments?.length) {
+        return props.hierarchicalDepartments;
+    }
 
-    if (totalTickets >= th.red_min) return { class: 'bg-red-500 border-red-600 text-white', style: 'background-color: #ef4444' };
-    if (totalTickets >= th.orange_min) return { class: 'bg-orange-500 border-orange-600 text-white', style: 'background-color: #f97316' };
-    if (totalTickets >= th.yellow_min) return { class: 'bg-yellow-500 border-yellow-600 text-gray-900', style: 'background-color: #eab308' };
-    if (totalTickets >= 1) return { class: 'bg-green-500 border-green-600 text-white', style: 'background-color: #22c55e' };
-    
-    return { class: 'bg-white border-gray-200 text-gray-400', style: 'background-color: #ffffff' };
-};
+    return page.props.hierarchicalDepartments || [];
+});
+
+const hierarchicalOptions = computed(() =>
+    rawHierarchicalDepartments.value.map(dept => ({
+        ...dept,
+        id: String(dept.id).startsWith('dept-') ? dept.id : `dept-${dept.id}`,
+        children: dept.children || dept.nodes || [],
+    }))
+);
+
+const deptFilterParams = computed(() => {
+    const nodeId = filterNodeId.value;
+
+    if (!nodeId) {
+        return {};
+    }
+
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        return { department_id: nodeId.replace('dept-', '') };
+    }
+
+    return { department_node_id: nodeId };
+});
+
+const filterPayload = () => ({
+    ...filterForm.value,
+    ...deptFilterParams.value,
+    ...(filterNodeId.value === '' ? { skip_default_department: 1 } : {}),
+});
+
+const usersWithLabel = computed(() => {
+    const list = (props.users || []).map(user => ({
+        ...user,
+        display_name: user.name,
+    }));
+
+    return [{ id: 'all', display_name: 'All Users' }, ...list];
+});
+
+const storesWithLabel = computed(() => {
+    const list = (props.stores || []).map(store => ({
+        ...store,
+        display_name: `[${store.code}] ${store.name}`,
+    }));
+
+    return [{ id: 'all', display_name: 'All Stores' }, ...list];
+});
 
 const showTicketsModal = ref(false);
 const modalLoading = ref(false);
 const selectedStoreTickets = ref([]);
 const selectedStoreName = ref('');
 
-const fetchTickets = async (storeId, userId) => {
+const fetchTickets = async (storeId) => {
     modalLoading.value = true;
     showTicketsModal.value = true;
     try {
         const response = await axios.get(route('reports.store-health.tickets', storeId, false), {
             params: { 
                 as_of_date: filterForm.value.as_of_date,
-                user_id: userId,
-                department_id: props.filters?.department_id,
-                department_node_id: props.filters?.department_node_id
+                user_id: filterForm.value.user_id,
+                ...deptFilterParams.value,
             }
         });
         selectedStoreTickets.value = response.data.tickets;
@@ -81,7 +127,9 @@ const fetchSectorTickets = async (sector) => {
         const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), {
             params: { 
                 as_of_date: filterForm.value.as_of_date,
-                store_id: filterForm.value.store_id
+                store_id: filterForm.value.store_id,
+                user_id: filterForm.value.user_id,
+                ...deptFilterParams.value,
             }
         });
         selectedStoreTickets.value = response.data.tickets;
@@ -94,7 +142,7 @@ const fetchSectorTickets = async (sector) => {
 };
 
 const applyFilters = () => {
-    emit('filter', filterForm.value);
+    emit('filter', filterPayload());
 };
 
 const getHealthStatus = (ticketCount) => {
@@ -124,8 +172,87 @@ const getStatusLabel = (status) => {
 };
 
 const exportPDF = () => {
-    const params = new URLSearchParams(filterForm.value).toString();
+    const params = new URLSearchParams(filterPayload()).toString();
     window.open(route('reports.store-health.pdf') + '?' + params, '_blank');
+};
+
+const healthSummaryItems = computed(() => [
+    {
+        key: 'green',
+        label: props.thresholds?.threshold_green_label || 'Healthy',
+        class: 'bg-green-500',
+    },
+    {
+        key: 'yellow',
+        label: props.thresholds?.threshold_yellow_label || 'Warning',
+        class: 'bg-yellow-500',
+    },
+    {
+        key: 'orange',
+        label: props.thresholds?.threshold_orange_label || 'At-risk',
+        class: 'bg-orange-500',
+    },
+    {
+        key: 'red',
+        label: props.thresholds?.threshold_red_label || 'Critical',
+        class: 'bg-red-500',
+    },
+]);
+
+const healthCount = (item, key) => item.health_counts?.[key] ?? 0;
+const isCtMode = computed(() => Boolean(props.summary?.is_ct_mode));
+
+const shouldCenterBoxes = computed(() => {
+    if (!filterNodeId.value) return true;
+    
+    let code = null;
+    const findNode = (nodes) => {
+        for (const node of nodes) {
+            const nodeId = String(node.id).startsWith('dept-') ? String(node.id) : `dept-${node.id}`;
+            if (nodeId === String(filterNodeId.value)) {
+                code = node.code;
+                return true;
+            }
+            if (node.children && findNode(node.children)) return true;
+            if (node.nodes && findNode(node.nodes)) return true;
+        }
+        return false;
+    };
+    findNode(hierarchicalOptions.value);
+    
+    return !['SD', 'SO'].includes(code);
+});
+
+const reportGridClass = computed(() => {
+    const baseClass = 'gap-6 items-start';
+    const count = props.reportData.length;
+    
+    if (!shouldCenterBoxes.value || count >= 4) {
+        return `grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 ${baseClass}`;
+    }
+    
+    if (count === 1) return `grid grid-cols-1 ${baseClass} max-w-2xl mx-auto w-full`;
+    if (count === 2) return `grid grid-cols-1 lg:grid-cols-2 ${baseClass} max-w-5xl mx-auto w-full`;
+    if (count === 3) return `grid grid-cols-1 lg:grid-cols-3 ${baseClass} max-w-7xl mx-auto w-full`;
+    
+    return `grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 ${baseClass}`;
+});
+
+const getAreaGridClass = (count, maxCols) => {
+    if (!shouldCenterBoxes.value || count === 0 || count >= maxCols) {
+        if (maxCols === 6) return 'grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-6 divide-x divide-y border-t border-gray-200';
+        return 'grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border-t border-gray-200';
+    }
+    return 'flex flex-wrap justify-center border-t border-gray-200 divide-x divide-y sm:divide-y-0';
+};
+
+const getAreaItemClass = (count, maxCols) => {
+    if (!shouldCenterBoxes.value || count === 0 || count >= maxCols) {
+        return 'flex flex-col';
+    }
+    return maxCols === 6 
+        ? 'flex flex-col w-1/2 sm:w-1/4 xl:w-1/6' 
+        : 'flex flex-col w-1/2 sm:w-1/4';
 };
 </script>
 
@@ -135,25 +262,32 @@ const exportPDF = () => {
         <div v-if="showFilters" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Sub-Unit</label>
-                    <select v-model="filterForm.sub_unit" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                        <option value="all">All Sub-Units</option>
-                        <option v-for="unit in subUnits" :key="unit" :value="unit">{{ unit }}</option>
-                    </select>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Department</label>
+                    <HierarchySelector
+                        v-model="filterNodeId"
+                        :nodes="hierarchicalOptions"
+                        placeholder="All Departments"
+                    />
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-700 uppercase mb-1">User</label>
-                    <select v-model="filterForm.user_id" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                        <option value="all">All Users</option>
-                        <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterForm.user_id"
+                        :options="usersWithLabel"
+                        label-key="display_name"
+                        value-key="id"
+                        placeholder="All Users"
+                    />
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Store</label>
-                    <select v-model="filterForm.store_id" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                        <option value="all">All Stores</option>
-                        <option v-for="store in stores" :key="store.id" :value="store.id">[{{ store.code }}] {{ store.name }}</option>
-                    </select>
+                    <Autocomplete
+                        v-model="filterForm.store_id"
+                        :options="storesWithLabel"
+                        label-key="display_name"
+                        value-key="id"
+                        placeholder="All Stores"
+                    />
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-700 uppercase mb-1">As of Date</label>
@@ -224,13 +358,56 @@ const exportPDF = () => {
 
         <!-- Area Summary Section -->
         <div class="space-y-6 sm:space-y-8 mb-8">
+            <!-- Corporate Technology -->
+            <div v-if="isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div class="bg-gray-800 py-2.5 text-center">
+                    <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">C O R P O R A T E &nbsp;&nbsp; T E C H N O L O G Y</span>
+                </div>
+                <div v-if="summary.ct?.length" :class="getAreaGridClass(summary.ct.length, 6)">
+                    <div v-for="item in summary.ct" :key="item.store_id" :class="getAreaItemClass(summary.ct.length, 6)">
+                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
+                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">{{ item.store_code }}</span>
+                        </div>
+                        <div class="p-2 text-center h-10 flex items-center justify-center">
+                            <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.store_name">{{ item.store_name }}</span>
+                        </div>
+                        <button
+                            @click="item.total_tickets > 0 ? fetchTickets(item.store_id) : null"
+                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
+                            :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
+                        >
+                            <span class="block text-[10px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
+                            <span class="block text-xl sm:text-2xl font-black">{{ item.store_count ?? 0 }}</span>
+                            <span class="block text-[10px] font-bold text-gray-500 mt-0.5">{{ item.total_tickets ?? 0 }} tickets</span>
+                            <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
+                                <span
+                                    v-for="health in healthSummaryItems"
+                                    :key="health.key"
+                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1"
+                                    :title="health.label"
+                                >
+                                    <span class="flex items-center gap-1 min-w-0">
+                                        <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
+                                        <span class="truncate text-[9px] font-bold text-gray-500">{{ health.label }}</span>
+                                    </span>
+                                    <span class="text-[10px] font-black text-gray-900">{{ healthCount(item, health.key) }}</span>
+                                </span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                <div v-else class="border-t border-gray-200 py-8 text-center text-sm italic text-gray-500">
+                    No Corporate Technology store tickets found for this period.
+                </div>
+            </div>
+
             <!-- North Area -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">N O R T H &nbsp;&nbsp; A R E A</span>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border-t border-gray-200">
-                    <div v-for="item in summary.north" :key="item.sector" class="flex flex-col">
+                <div :class="getAreaGridClass(summary.north?.length || 0, 4)">
+                    <div v-for="item in summary.north" :key="item.sector" :class="getAreaItemClass(summary.north?.length || 0, 4)">
                         <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
                             <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">Sector {{ item.sector }}</span>
                         </div>
@@ -239,23 +416,38 @@ const exportPDF = () => {
                         </div>
                         <button 
                             @click="item.total_tickets > 0 ? fetchSectorTickets(item.sector) : null"
-                            class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center w-full"
-                            :class="[getSummaryBoxColor(item.total_tickets).class, item.total_tickets > 0 ? 'hover:opacity-90 cursor-pointer' : 'cursor-default']"
-                            :style="getSummaryBoxColor(item.total_tickets).style"
+                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
+                            :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
-                            {{ item.total_tickets }}
+                            <span class="block text-[10px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
+                            <span class="block text-xl sm:text-2xl font-black">{{ item.store_count ?? 0 }}</span>
+                            <span class="block text-[10px] font-bold text-gray-500 mt-0.5">{{ item.total_tickets ?? 0 }} tickets</span>
+                            <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
+                                <span
+                                    v-for="health in healthSummaryItems"
+                                    :key="health.key"
+                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1"
+                                    :title="health.label"
+                                >
+                                    <span class="flex items-center gap-1 min-w-0">
+                                        <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
+                                        <span class="truncate text-[9px] font-bold text-gray-500">{{ health.label }}</span>
+                                    </span>
+                                    <span class="text-[10px] font-black text-gray-900">{{ healthCount(item, health.key) }}</span>
+                                </span>
+                            </span>
                         </button>
                     </div>
                 </div>
             </div>
 
             <!-- South Area -->
-            <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">S O U T H &nbsp;&nbsp; A R E A</span>
                 </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 border-t border-gray-200">
-                    <div v-for="item in summary.south" :key="item.sector" class="flex flex-col">
+                <div :class="getAreaGridClass(summary.south?.length || 0, 4)">
+                    <div v-for="item in summary.south" :key="item.sector" :class="getAreaItemClass(summary.south?.length || 0, 4)">
                         <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
                             <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">Sector {{ item.sector }}</span>
                         </div>
@@ -264,11 +456,26 @@ const exportPDF = () => {
                         </div>
                         <button 
                             @click="item.total_tickets > 0 ? fetchSectorTickets(item.sector) : null"
-                            class="py-4 sm:py-6 text-xl sm:text-2xl font-black transition-all shadow-inner text-center w-full"
-                            :class="[getSummaryBoxColor(item.total_tickets).class, item.total_tickets > 0 ? 'hover:opacity-90 cursor-pointer' : 'cursor-default']"
-                            :style="getSummaryBoxColor(item.total_tickets).style"
+                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
+                            :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
-                            {{ item.total_tickets }}
+                            <span class="block text-[10px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
+                            <span class="block text-xl sm:text-2xl font-black">{{ item.store_count ?? 0 }}</span>
+                            <span class="block text-[10px] font-bold text-gray-500 mt-0.5">{{ item.total_tickets ?? 0 }} tickets</span>
+                            <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
+                                <span
+                                    v-for="health in healthSummaryItems"
+                                    :key="health.key"
+                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1"
+                                    :title="health.label"
+                                >
+                                    <span class="flex items-center gap-1 min-w-0">
+                                        <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
+                                        <span class="truncate text-[9px] font-bold text-gray-500">{{ health.label }}</span>
+                                    </span>
+                                    <span class="text-[10px] font-black text-gray-900">{{ healthCount(item, health.key) }}</span>
+                                </span>
+                            </span>
                         </button>
                     </div>
                 </div>
@@ -276,7 +483,7 @@ const exportPDF = () => {
         </div>
 
         <!-- Report Content -->
-        <div v-if="reportData.length > 0" class="space-y-8">
+        <div v-if="reportData.length > 0" :class="reportGridClass">
             <div v-for="userData in reportData" :key="userData.id" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden break-inside-avoid">
                 <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
                     <h3 class="text-lg font-bold text-gray-900">{{ userData.name }}</h3>
@@ -286,7 +493,6 @@ const exportPDF = () => {
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Store Code</th>
-                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Section #</th>
                                 <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">IT Area</th>
                                 <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket Count</th>
                                 <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/3">Status</th>
@@ -295,12 +501,11 @@ const exportPDF = () => {
                         <tbody class="bg-white divide-y divide-gray-200">
                             <tr v-for="store in userData.stores" :key="store.id" class="hover:bg-gray-50 transition-colors">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{{ store.code }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">Sector {{ store.sector }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ store.area }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-center">
                                     <button 
                                         v-if="store.ticket_count > 0"
-                                        @click="fetchTickets(store.id, userData.id)"
+                                        @click="fetchTickets(store.id)"
                                         class="text-blue-600 hover:text-blue-800 hover:underline px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                                     >
                                         {{ store.ticket_count }}
