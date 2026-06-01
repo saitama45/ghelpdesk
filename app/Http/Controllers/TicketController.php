@@ -87,6 +87,10 @@ class TicketController extends Controller
             }
         }
 
+        // Snapshot before any filters — used for dept stat box counts so they are never
+        // distorted by the user's current status/date/search selection.
+        $deptStatsBase = clone $query;
+
         // Apply status filters — User role defaults to 'all' so they see all their own tickets
         $normalizeFilterValues = function ($value) {
             return collect(is_array($value) ? $value : [$value])
@@ -127,27 +131,13 @@ class TicketController extends Controller
             });
         }
 
-        // Apply Department / Team filter
         $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
         $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
         $skipDefaultDepartmentScope = $request->boolean('skip_default_department');
+        $assignedDepartmentOnly = $request->boolean('assigned_department_only');
 
         if (!$skipDefaultDepartmentScope && !$filterDeptId && !$filterNodeId) {
             $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
-        }
-
-        if ($filterNodeId) {
-            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
-            $nodeIds = array_merge([$filterNodeId], $descendantIds);
-            $query->where(function ($departmentQuery) use ($nodeIds) {
-                $departmentQuery->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds))
-                    ->orWhereNull('assignee_id');
-            });
-        } elseif ($filterDeptId) {
-            $query->where(function ($departmentQuery) use ($filterDeptId) {
-                $departmentQuery->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId))
-                    ->orWhereNull('assignee_id');
-            });
         }
 
         // Apply Assignee filter
@@ -190,6 +180,31 @@ class TicketController extends Controller
             });
         }
 
+        $queryBeforeDept = clone $query;
+
+        // Apply Department / Team filter
+        if ($filterNodeId) {
+            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
+            $nodeIds = array_merge([$filterNodeId], $descendantIds);
+            if ($assignedDepartmentOnly) {
+                $query->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
+            } else {
+                $query->where(function ($departmentQuery) use ($nodeIds) {
+                    $departmentQuery->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds))
+                        ->orWhereNull('assignee_id');
+                });
+            }
+        } elseif ($filterDeptId) {
+            if ($assignedDepartmentOnly) {
+                $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+            } else {
+                $query->where(function ($departmentQuery) use ($filterDeptId) {
+                    $departmentQuery->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId))
+                        ->orWhereNull('assignee_id');
+                });
+            }
+        }
+
         $summaryQuery = clone $query;
         $summaryStats = [
             'new' => (clone $summaryQuery)
@@ -227,6 +242,67 @@ class TicketController extends Controller
             'in_progress' => (clone $summaryQuery)->where('status', 'in_progress')->count(),
         ];
 
+        // Per-department stat breakdown for SO / CS tabs
+        $nodes = \App\Models\DepartmentNode::whereIn('code', ['SO', 'CS'])->get()->keyBy('code');
+        $summaryStatsByDept = [];
+        foreach ($nodes as $code => $node) {
+            $base = clone $queryBeforeDept;
+            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($node->id);
+            $nodeIds = array_merge([$node->id], $descendantIds);
+            
+            $base->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
+
+            // Unfiltered dept base — not affected by the current status/date/search selection
+            $deptStatBase = clone $deptStatsBase;
+            $deptStatBase->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
+
+            $now  = now();
+            $soon = $now->copy()->addHour();
+
+            $summaryStatsByDept[$code] = [
+                'id'   => $node->id,
+                'name' => $node->name,
+                'stats' => [
+                    'new' => (clone $base)
+                        ->where('status', 'open')
+                        ->whereNull('category_id')
+                        ->whereNull('sub_category_id')
+                        ->whereNull('item_id')
+                        ->count(),
+                    'open' => (clone $deptStatBase)->where('status', 'open')->count(),
+                    'breached' => (clone $base)->whereHas('slaMetric', fn($q) =>
+                        $q->where('is_response_breached', true)->orWhere('is_resolution_breached', true)
+                    )->count(),
+                    'due_soon' => (clone $base)->whereHas('slaMetric', function ($q) use ($now, $soon) {
+                        $q->where(function ($sq) use ($now, $soon) {
+                            $sq->whereNotNull('response_target_at')
+                               ->whereNull('first_response_at')
+                               ->where('is_response_breached', false)
+                               ->whereBetween('response_target_at', [$now, $soon]);
+                        })->orWhere(function ($sq) use ($now, $soon) {
+                            $sq->whereNotNull('resolution_target_at')
+                               ->whereNull('resolved_at')
+                               ->where('is_resolution_breached', false)
+                               ->whereBetween('resolution_target_at', [$now, $soon]);
+                        });
+                    })->count(),
+                    'in_progress' => (clone $base)->where('status', 'in_progress')->count(),
+                    'total'       => (clone $deptStatBase)->count(),
+                    'waiting'     => (clone $deptStatBase)
+                        ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+                        ->count(),
+                    'urgent'      => (clone $deptStatBase)
+                        ->where(function ($q) {
+                            $q->where('priority', 'urgent')
+                              ->orWhereHas('item', fn($iq) => $iq->where('priority', 'Urgent'));
+                        })
+                        ->where('status', '!=', 'closed')
+                        ->count(),
+                    'closed'      => (clone $deptStatBase)->where('status', 'closed')->count(),
+                ],
+            ];
+        }
+
         match ($request->input('dashboard_filter')) {
             'new' => $query->where('status', 'open')
                 ->whereNull('category_id')
@@ -255,6 +331,13 @@ class TicketController extends Controller
                 });
             }),
             'in_progress' => $query->where('status', 'in_progress'),
+            'open'        => $query->where('status', 'open'),
+            'waiting'     => $query->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback']),
+            'urgent'      => $query->where(function ($q) {
+                    $q->where('priority', 'urgent')
+                      ->orWhereHas('item', fn($iq) => $iq->where('priority', 'Urgent'));
+                })->where('status', '!=', 'closed'),
+            'closed'      => $query->where('status', 'closed'),
             default => null,
         };
         
@@ -281,11 +364,13 @@ class TicketController extends Controller
             'departments' => $departments,
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'summaryStats' => $summaryStats,
+            'summaryStatsByDept' => $summaryStatsByDept,
             'filters' => [
                 'status' => $statusFilters->all(),
                 'search' => $request->search,
                 'department_id' => $filterDeptId,
                 'department_node_id' => $filterNodeId,
+                'assigned_department_only' => $assignedDepartmentOnly,
                 'assignee_id' => $assigneeFilters->all(),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,

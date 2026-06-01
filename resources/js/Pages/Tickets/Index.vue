@@ -26,6 +26,7 @@ const props = defineProps({
     departments: Array,
     hierarchicalDepartments: Array,
     summaryStats: Object,
+    summaryStatsByDept: { type: Object, default: () => ({}) },
 });
 
 const page = usePage();
@@ -106,6 +107,7 @@ onMounted(() => {
     timer = setInterval(() => {
         currentTime.value = new Date();
     }, 60000); // Update every minute
+
 });
 
 import { onUnmounted } from 'vue';
@@ -192,6 +194,7 @@ const filterNodeId = ref(
 const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [], normalizeAssigneeFilterValue));
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
+const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
 
 const filterOptions = [
     { value: 'all', label: 'All' },
@@ -238,6 +241,7 @@ const ticketFilterParams = () => ({
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
     dashboard_filter: activeDashboardFilter.value,
+    assigned_department_only: assignedDepartmentOnly.value ? 1 : undefined,
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
@@ -308,6 +312,7 @@ const clearFilters = () => {
     filterStartDate.value = '';
     filterEndDate.value = '';
     activeDashboardFilter.value = 'all';
+    assignedDepartmentOnly.value = false;
     pagination.search.value = '';
     applyFilter();
 };
@@ -394,6 +399,61 @@ watch(defaultCompanyId, (newId) => {
 // ── Bulk Selection ────────────────────────────────────────────────────────
 const selectedIds = ref([])
 const activeDashboardFilter = ref(props.filters?.dashboard_filter || 'all')
+
+// ── SO / CS Dept Stat Tabs ────────────────────────────────────────────────
+const DEPT_TAB_CODES = ['SO', 'CS']
+
+const initialStatDeptTab = () => {
+    const selectedNodeId = props.filters?.department_node_id;
+    const matchingCode = DEPT_TAB_CODES.find(code =>
+        String(props.summaryStatsByDept?.[code]?.id ?? '') === String(selectedNodeId ?? '')
+    );
+
+    return matchingCode || 'all';
+};
+
+const statDeptTab = ref(initialStatDeptTab())
+
+const deptTabs = computed(() => [
+    { key: 'all', label: 'All' },
+    ...DEPT_TAB_CODES.map(code => ({
+        key: code,
+        label: props.summaryStatsByDept?.[code]?.name ?? code,
+    })),
+])
+
+const EMPTY_STATS = { new: 0, open: 0, unassigned: 0, breached: 0, due_soon: 0, in_progress: 0, total: 0, waiting: 0, urgent: 0, closed: 0 }
+
+const activeStats = computed(() =>
+    statDeptTab.value === 'all'
+        ? (props.summaryStats ?? {})
+        : (props.summaryStatsByDept?.[statDeptTab.value]?.stats ?? EMPTY_STATS)
+)
+
+const selectDeptTab = (tabKey) => {
+    if (tabKey === 'all') {
+        router.get(route('tickets.index'), {
+            status: ['all'],
+            dashboard_filter: 'all',
+            skip_default_department: true,
+        }, { preserveScroll: false });
+        return;
+    }
+
+    const deptId = props.summaryStatsByDept?.[tabKey]?.id;
+    if (!deptId) {
+        statDeptTab.value = tabKey;
+        return;
+    }
+
+    router.get(route('tickets.index'), {
+        status: ['all'],
+        department_node_id: deptId,
+        dashboard_filter: 'all',
+        skip_default_department: true,
+        assigned_department_only: 1,
+    }, { preserveScroll: false });
+};
 
 const allSelected = computed(() =>
     displayedTickets.value.length > 0 &&
@@ -947,7 +1007,52 @@ const isNewTicket = (ticket) => {
 };
 
 const summaryCards = computed(() => {
-    const stats = props.summaryStats || {};
+    const stats = activeStats.value || {};
+
+    if (statDeptTab.value !== 'all') {
+        return [
+            {
+                key: 'new', filterKey: 'new', label: 'New',
+                value: stats.new ?? 0,
+                hint: 'Open, uncategorized, and assigned',
+                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+                valueClass: 'text-white', labelClass: 'text-blue-300', hintClass: 'text-slate-400',
+                accentClass: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]',
+            },
+            {
+                key: 'open', filterKey: 'open', label: 'Open',
+                value: stats.open ?? 0,
+                hint: 'Assigned open tickets',
+                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+                valueClass: 'text-white', labelClass: 'text-emerald-300', hintClass: 'text-slate-400',
+                accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
+            },
+            {
+                key: 'waiting', filterKey: 'waiting', label: 'Waiting',
+                value: stats.waiting ?? 0,
+                hint: 'Awaiting service provider or client feedback',
+                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+                valueClass: 'text-white', labelClass: 'text-amber-400', hintClass: 'text-slate-400',
+                accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
+            },
+            {
+                key: 'urgent', filterKey: 'urgent', label: 'Urgent (P1)',
+                value: stats.urgent ?? 0,
+                hint: 'Critical priority tickets',
+                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+                valueClass: 'text-white', labelClass: 'text-red-400', hintClass: 'text-slate-400',
+                accentClass: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
+            },
+            {
+                key: 'closed', filterKey: 'closed', label: 'Closed',
+                value: stats.closed ?? 0,
+                hint: 'Resolved and closed tickets',
+                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+                valueClass: 'text-white', labelClass: 'text-slate-300', hintClass: 'text-slate-400',
+                accentClass: 'bg-slate-400',
+            },
+        ];
+    }
 
     return [
         {
@@ -956,9 +1061,11 @@ const summaryCards = computed(() => {
             label: 'New',
             value: stats.new ?? 0,
             hint: 'Open, uncategorized, and unassigned',
-            shellClass: 'border-purple-200 bg-purple-50/80',
-            valueClass: 'text-purple-900',
-            accentClass: 'bg-purple-600',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-blue-300',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]',
         },
         {
             key: 'unassigned',
@@ -966,9 +1073,11 @@ const summaryCards = computed(() => {
             label: 'Unassigned',
             value: stats.unassigned ?? 0,
             hint: 'Tickets waiting for ownership',
-            shellClass: 'border-blue-200 bg-blue-50/80',
-            valueClass: 'text-blue-900',
-            accentClass: 'bg-blue-600',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-slate-300',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-slate-400',
         },
         {
             key: 'breached',
@@ -976,9 +1085,11 @@ const summaryCards = computed(() => {
             label: 'SLA Breached',
             value: stats.breached ?? 0,
             hint: 'Immediate follow-up required',
-            shellClass: 'border-red-200 bg-red-50/80',
-            valueClass: 'text-red-900',
-            accentClass: 'bg-red-600',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-red-400',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
         },
         {
             key: 'nearly_due',
@@ -986,9 +1097,11 @@ const summaryCards = computed(() => {
             label: 'Due Soon',
             value: stats.due_soon ?? 0,
             hint: 'Targets due within one hour',
-            shellClass: 'border-amber-200 bg-amber-50/80',
-            valueClass: 'text-amber-900',
-            accentClass: 'bg-amber-500',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-amber-400',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
         },
         {
             key: 'in_progress',
@@ -996,9 +1109,11 @@ const summaryCards = computed(() => {
             label: 'In Progress',
             value: stats.in_progress ?? 0,
             hint: 'Actively being worked on',
-            shellClass: 'border-violet-200 bg-violet-50/80',
-            valueClass: 'text-violet-900',
-            accentClass: 'bg-violet-600',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-emerald-400',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
         },
     ];
 });
@@ -1017,6 +1132,16 @@ const displayedTickets = computed(() => {
             return data.filter(isTicketNearlyDue);
         case 'in_progress':
             return data.filter(ticket => ticket.status === 'in_progress');
+        case 'open':
+            return data.filter(ticket => ticket.status === 'open');
+        case 'total':
+            return data;
+        case 'waiting':
+            return data.filter(t => ['waiting_service_provider', 'waiting_client_feedback'].includes(t.status));
+        case 'urgent':
+            return data.filter(t => t.priority === 'urgent' || t.item?.priority === 'Urgent');
+        case 'closed':
+            return data.filter(t => t.status === 'closed');
         case 'all':
         default:
             return data;
@@ -1030,11 +1155,37 @@ const getDashboardFilterLabel = (filterKey) => {
         case 'breached': return 'Quick Filter: SLA Breached';
         case 'due_soon': return 'Quick Filter: Due Soon';
         case 'in_progress': return 'Quick Filter: In Progress';
+        case 'open':        return 'Quick Filter: Open';
+        case 'total':       return 'Quick Filter: Total';
+        case 'waiting':     return 'Quick Filter: Waiting';
+        case 'urgent':      return 'Quick Filter: Urgent (P1)';
+        case 'closed':      return 'Quick Filter: Closed';
         default: return '';
     }
 };
 
+const DEPT_UNFILTERED_KEYS = ['waiting', 'urgent', 'closed'];
+
 const toggleDashboardFilter = (filterKey) => {
+    if (statDeptTab.value !== 'all') {
+        const deptId = props.summaryStatsByDept?.[statDeptTab.value]?.id;
+        if (deptId) {
+            const isActive = activeDashboardFilter.value === filterKey;
+            const params = {
+                department_node_id: deptId,
+                dashboard_filter: isActive ? 'all' : filterKey,
+                skip_default_department: true,
+                assigned_department_only: 1,
+            };
+            // These boxes count against an unfiltered base (no default status=open),
+            // so pass status=all to prevent the backend from pre-excluding statuses.
+            if (!isActive && DEPT_UNFILTERED_KEYS.includes(filterKey)) {
+                params.status = ['all'];
+            }
+            router.get(route('tickets.index'), params, { preserveScroll: false });
+            return;
+        }
+    }
     activeDashboardFilter.value = activeDashboardFilter.value === filterKey ? 'all' : filterKey;
     pagination.currentPage.value = 1;
     applyFilter();
@@ -1264,42 +1415,95 @@ const requesterTabs = computed(() => {
                             </div>
                         </div>
                         <div class="grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-                            <div class="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Monitoring Focus</div>
-                                <div class="mt-2 text-lg font-bold text-white">Live queue triage</div>
-                                <div class="mt-1 text-xs text-slate-300">Prioritize breached, due soon, and unassigned tickets first.</div>
+                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md transition-colors hover:bg-white/10">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Monitoring Focus</div>
+                                <div class="mt-2 text-lg font-light text-white">Live queue triage</div>
+                                <div class="mt-1 text-xs text-slate-400">Prioritize breached, due soon, and unassigned.</div>
                             </div>
-                            <div class="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Current Scope</div>
-                                <div class="mt-2 text-lg font-bold text-white">{{ pagination.showingText.value }}</div>
-                                <div class="mt-1 text-xs text-slate-300">Metrics below reflect all matching tickets in the current filter scope.</div>
+                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md transition-colors hover:bg-white/10">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Scope</div>
+                                <div class="mt-2 text-lg font-light text-white">{{ pagination.showingText.value }}</div>
+                                <div class="mt-1 text-xs text-slate-400">Metrics below reflect all matching tickets.</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                        <button
-                            v-for="card in summaryCards"
-                            :key="card.key"
-                            type="button"
-                            class="rounded-2xl border px-4 py-4 text-left shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:shadow-md"
-                            :class="[
-                                card.shellClass,
-                                activeDashboardFilter === card.filterKey ? 'ring-2 ring-offset-2 ring-blue-500 ring-offset-slate-950' : ''
-                            ]"
-                            @click="toggleDashboardFilter(card.filterKey)"
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <div class="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{{ card.label }}</div>
-                                    <div class="mt-3 text-3xl font-black tracking-tight" :class="card.valueClass">{{ card.value }}</div>
-                                    <div class="mt-2 text-xs text-slate-500">
-                                        {{ activeDashboardFilter === card.filterKey ? 'Showing matching tickets below' : card.hint }}
-                                    </div>
+                    <!-- Department view selector + stat cards -->
+                    <div class="space-y-3">
+                        <!-- Dept tab label -->
+                        <div class="flex items-center gap-3">
+                            <span class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">View by Department</span>
+                            <span class="h-px flex-1 bg-white/10"></span>
+                        </div>
+
+                        <!-- Dept tabs — 3 equal cards -->
+                        <div class="grid grid-cols-3 gap-2">
+                            <button
+                                v-for="tab in deptTabs"
+                                :key="tab.key"
+                                type="button"
+                                @click="selectDeptTab(tab.key)"
+                                class="relative overflow-hidden rounded-2xl border px-5 py-4 text-left transition-all duration-300 focus:outline-none"
+                                :class="statDeptTab === tab.key
+                                    ? 'border-white/20 bg-white/10 shadow-lg shadow-black/20 scale-[1.02] ring-1 ring-white/10'
+                                    : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/15 hover:scale-[1.01]'"
+                            >
+                                <!-- Colored top accent stripe -->
+                                <div class="absolute inset-x-0 top-0 h-1.5 rounded-t-2xl opacity-80"
+                                    :class="{
+                                        'bg-gradient-to-r from-blue-400 to-indigo-500': tab.key === 'all' && statDeptTab === tab.key,
+                                        'bg-gradient-to-r from-blue-500 to-sky-400': tab.key === 'SO' && statDeptTab === tab.key,
+                                        'bg-gradient-to-r from-emerald-500 to-teal-400': tab.key === 'CS' && statDeptTab === tab.key,
+                                        'bg-transparent': statDeptTab !== tab.key,
+                                    }"
+                                ></div>
+
+                                <div class="text-[10px] font-bold uppercase tracking-widest"
+                                    :class="statDeptTab === tab.key ? 'text-slate-300' : 'text-slate-500'">
+                                    {{ tab.key === 'all' ? 'All Departments' : tab.key }}
                                 </div>
-                                <span class="mt-1 h-3 w-3 rounded-full shadow-sm" :class="card.accentClass"></span>
-                            </div>
-                        </button>
+                                <div class="mt-1 text-lg font-light leading-tight text-white">
+                                    {{ tab.label }}
+                                </div>
+                                <div class="mt-3 flex items-center gap-2">
+                                    <span class="h-1.5 w-1.5 rounded-full transition-all"
+                                        :class="statDeptTab === tab.key
+                                            ? (tab.key === 'SO' ? 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]' : tab.key === 'CS' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]')
+                                            : 'bg-white/20'"
+                                    ></span>
+                                    <span class="text-[10px] font-medium"
+                                        :class="statDeptTab === tab.key ? 'text-slate-300' : 'text-slate-500'">
+                                        {{ statDeptTab === tab.key ? 'Currently viewing' : 'Click to view' }}
+                                    </span>
+                                </div>
+                            </button>
+                        </div>
+
+                        <!-- Stat cards for the active dept -->
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" :class="statDeptTab === 'all' ? 'xl:grid-cols-5' : 'xl:grid-cols-5'">
+                            <button
+                                v-for="card in summaryCards"
+                                :key="card.key"
+                                type="button"
+                                class="rounded-2xl border px-4 py-4 text-left shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                                :class="[
+                                    card.shellClass,
+                                    activeDashboardFilter === card.filterKey ? 'ring-1 ring-white/30 border-white/30 bg-white/10' : ''
+                                ]"
+                                @click="toggleDashboardFilter(card.filterKey)"
+                            >
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <div class="text-[10px] font-bold uppercase tracking-widest" :class="card.labelClass">{{ card.label }}</div>
+                                        <div class="mt-3 text-3xl font-light tracking-tight" :class="card.valueClass">{{ card.value }}</div>
+                                        <div class="mt-2 text-xs font-medium" :class="card.hintClass">
+                                            {{ activeDashboardFilter === card.filterKey ? 'Showing matching tickets below' : card.hint }}
+                                        </div>
+                                    </div>
+                                    <span class="mt-1 h-2 w-2 rounded-full" :class="card.accentClass"></span>
+                                </div>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
