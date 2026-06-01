@@ -31,7 +31,8 @@ class TicketController extends Controller
 {
     public function __construct(
         private \App\Services\OrganizationReferenceService $organizationReferences,
-        private TicketKnowledgeBaseService $ticketKnowledgeBaseService
+        private TicketKnowledgeBaseService $ticketKnowledgeBaseService,
+        private \App\Services\AutoAssigneeService $autoAssignee
     ) {}
 
     /**
@@ -524,6 +525,19 @@ class TicketController extends Controller
             }
 
             $ticket = Ticket::create($data);
+
+            // Auto-assign when no assignee was explicitly provided
+            if (!$ticket->assignee_id) {
+                $lookupEmail = $isSelfRequester
+                    ? (auth()->user()->email ?? '')
+                    : ($data['sender_email'] ?? '');
+                if ($lookupEmail) {
+                    $assigneeId = $this->autoAssignee->resolveAssignee($lookupEmail);
+                    if ($assigneeId && User::where('id', $assigneeId)->exists()) {
+                        $ticket->update(['assignee_id' => $assigneeId]);
+                    }
+                }
+            }
 
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {

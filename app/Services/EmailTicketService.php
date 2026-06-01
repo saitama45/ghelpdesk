@@ -258,6 +258,12 @@ class EmailTicketService
                 'company_id' => $companyId,
             ]);
 
+            // Auto-assign based on sender email rules
+            $assigneeId = app(\App\Services\AutoAssigneeService::class)->resolveAssignee($senderEmail);
+            if ($assigneeId && \App\Models\User::where('id', $assigneeId)->exists()) {
+                $ticket->update(['assignee_id' => $assigneeId]);
+            }
+
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket) {
                 $originalName = $this->decodeMimeHeader((string) $attachment->getName()) ?: 'attachment';

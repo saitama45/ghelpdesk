@@ -25,11 +25,13 @@ import {
     Bars3BottomLeftIcon,
     ChevronDownIcon,
     ChevronRightIcon,
+    UserGroupIcon,
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     settings: Object,
-    subUnits: Array
+    subUnits: Array,
+    assignableStaff: Array,
 });
 
 const requestedTab = new URLSearchParams(window.location.search).get('tab');
@@ -45,6 +47,7 @@ const tabs = [
     { id: 'integrations', name: 'Integrations', icon: MapIcon, description: 'External API keys and third-party services.' },
     { id: 'thresholds', name: 'Health Thresholds', icon: ChartBarIcon, description: 'Ticket count limits and status labels.' },
     { id: 'sidebar_layout', name: 'Sidebar Layout', icon: Bars3BottomLeftIcon, description: 'Drag to reorder sidebar sections and sub-menu items.' },
+    { id: 'auto_assignee', name: 'Auto Assignee', icon: UserGroupIcon, description: 'Automatically assign incoming tickets based on requester email rules and round-robin.' },
 ];
 
 // Sidebar layout drag state
@@ -137,6 +140,127 @@ const resetSidebarLayout = () => {
 onMounted(() => {
     ensureDynamicFormChildren(dynamicForms.value);
 });
+
+// ---- Auto Assignee state ----
+const parseJsonSetting = (key, fallback) => {
+    const raw = props.settings[key];
+    if (!raw) return fallback;
+    try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return fallback; }
+};
+
+const autoRules = ref(
+    parseJsonSetting('auto_assignee_rules', []).map(r => ({
+        email: r.email ?? '',
+        assignee_ids: Array.isArray(r.assignee_ids) ? r.assignee_ids.map(Number) : [],
+    }))
+);
+const autoDefaults = ref(parseJsonSetting('auto_assignee_defaults', []).map(Number));
+const autoAssigneeSaved = ref(false);
+const autoAssigneeProcessing = ref(false);
+
+// Rules table: filter + inline-edit state
+const rulesListSearch = ref('');
+const editingRuleIndex = ref(null);
+const ruleSearchQueries = ref(autoRules.value.map(() => ''));
+const defaultSearchQuery = ref('');
+const activeDropdown = ref(null); // null | 'default' | `rule-${index}`
+
+const filteredRuleIndexes = computed(() => {
+    const q = rulesListSearch.value.toLowerCase().trim();
+    if (!q) return autoRules.value.map((_, i) => i);
+    return autoRules.value.reduce((acc, r, i) => {
+        if (r.email.toLowerCase().includes(q)) acc.push(i);
+        return acc;
+    }, []);
+});
+
+const getAgent = (id) => props.assignableStaff?.find(a => a.id === id) ?? null;
+const getAgentInitials = (id) => {
+    const name = getAgent(id)?.name ?? '';
+    return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?';
+};
+
+const filteredStaffForIds = (assigneeIds, query) => {
+    const q = (query || '').toLowerCase();
+    return (props.assignableStaff || []).filter(a =>
+        !assigneeIds.includes(a.id) &&
+        (q === '' || a.name.toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q))
+    );
+};
+
+const filteredDefaultStaff = computed(() => {
+    const q = defaultSearchQuery.value.toLowerCase();
+    return (props.assignableStaff || []).filter(a =>
+        !autoDefaults.value.includes(a.id) &&
+        (q === '' || a.name.toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q))
+    );
+});
+
+const openDropdown = (key) => { activeDropdown.value = key; };
+const closeDropdown = () => { setTimeout(() => { activeDropdown.value = null; }, 150); };
+
+const addAutoRule = () => {
+    autoRules.value.unshift({ email: '', assignee_ids: [] });
+    ruleSearchQueries.value.unshift('');
+    editingRuleIndex.value = 0;
+    rulesListSearch.value = '';
+};
+
+const removeAutoRule = (index) => {
+    autoRules.value.splice(index, 1);
+    ruleSearchQueries.value.splice(index, 1);
+    if (editingRuleIndex.value === index) editingRuleIndex.value = null;
+    else if (editingRuleIndex.value > index) editingRuleIndex.value--;
+};
+
+const toggleEditRule = (index) => {
+    editingRuleIndex.value = editingRuleIndex.value === index ? null : index;
+};
+
+const selectRuleAssignee = (rule, index, agentId) => {
+    if (!rule.assignee_ids.includes(agentId)) rule.assignee_ids.push(agentId);
+    ruleSearchQueries.value[index] = '';
+};
+
+const removeRuleAssignee = (rule, agentId) => {
+    const idx = rule.assignee_ids.indexOf(agentId);
+    if (idx !== -1) rule.assignee_ids.splice(idx, 1);
+};
+
+const selectDefaultAssignee = (agentId) => {
+    if (!autoDefaults.value.includes(agentId)) autoDefaults.value.push(agentId);
+    defaultSearchQuery.value = '';
+};
+
+const removeDefaultAssignee = (agentId) => {
+    const idx = autoDefaults.value.indexOf(agentId);
+    if (idx !== -1) autoDefaults.value.splice(idx, 1);
+};
+
+// Draggable helpers — convert ID arrays to/from [{id}] objects
+const getRuleAssigneeObjects = (rule) => rule.assignee_ids.map(id => ({ id }));
+const setRuleAssigneeObjects = (rule, items) => {
+    rule.assignee_ids.splice(0, rule.assignee_ids.length, ...items.map(o => o.id));
+};
+const getDefaultAssigneeObjects = computed(() => autoDefaults.value.map(id => ({ id })));
+const setDefaultAssigneeObjects = (items) => {
+    autoDefaults.value.splice(0, autoDefaults.value.length, ...items.map(o => o.id));
+};
+
+const saveAutoAssignee = () => {
+    autoAssigneeProcessing.value = true;
+    router.put(route('settings.update'), {
+        auto_assignee_rules: JSON.stringify(autoRules.value),
+        auto_assignee_defaults: JSON.stringify(autoDefaults.value),
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            autoAssigneeSaved.value = true;
+            setTimeout(() => { autoAssigneeSaved.value = false; }, 2500);
+        },
+        onFinish: () => { autoAssigneeProcessing.value = false; },
+    });
+};
 
 const currentTab = computed(() => tabs.find(t => t.id === activeTab.value) || tabs[0]);
 
@@ -998,10 +1122,353 @@ const syncEmails = () => {
                                 </div>
                             </div>
 
+                            <!-- Auto Assignee Tab -->
+                            <div v-if="activeTab === 'auto_assignee'" class="space-y-6">
+
+                                <!-- Info banner -->
+                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
+                                    <UserGroupIcon class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p class="text-sm font-black text-blue-900">Automatic Ticket Assignment</p>
+                                        <p class="text-xs text-blue-600 mt-0.5 leading-relaxed">
+                                            Match incoming tickets to agents by requester email. If no rule matches, the global default agents receive the ticket via round-robin.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Email Rules Section -->
+                                <section>
+                                    <!-- Section toolbar -->
+                                    <div class="flex items-center gap-3 mb-3">
+                                        <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center flex-shrink-0">
+                                            <UserGroupIcon class="w-4 h-4 mr-1.5" />
+                                            Email Rules
+                                            <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold tabular-nums">{{ autoRules.length }}</span>
+                                        </h3>
+                                        <div class="relative flex-1">
+                                            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                v-model="rulesListSearch"
+                                                placeholder="Filter rules by email…"
+                                                class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            @click="addAutoRule"
+                                            class="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                            Add Rule
+                                        </button>
+                                    </div>
+
+                                    <!-- Rules table -->
+                                    <div class="border border-gray-200 rounded-xl overflow-hidden">
+                                        <!-- Column headers -->
+                                        <div class="grid grid-cols-[1fr_140px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2">
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Requester Email</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Assignees</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider text-right">Actions</span>
+                                        </div>
+
+                                        <!-- Empty state -->
+                                        <div v-if="autoRules.length === 0" class="py-10 flex flex-col items-center gap-2 text-gray-400">
+                                            <UserGroupIcon class="w-8 h-8 opacity-30" />
+                                            <p class="text-sm italic">No rules yet. Click "+ Add Rule" to get started.</p>
+                                        </div>
+
+                                        <!-- No search results -->
+                                        <div v-else-if="filteredRuleIndexes.length === 0" class="py-8 text-center text-sm text-gray-400 italic">
+                                            No rules match "<span class="font-semibold">{{ rulesListSearch }}</span>".
+                                        </div>
+
+                                        <!-- Rule rows -->
+                                        <div v-else>
+                                            <div v-for="i in filteredRuleIndexes" :key="i" class="border-b border-gray-100 last:border-b-0">
+                                                <!-- Collapsed row -->
+                                                <div
+                                                    :class="[
+                                                        'grid grid-cols-[1fr_140px_72px] items-center px-4 py-3 gap-3 cursor-pointer transition-colors select-none',
+                                                        editingRuleIndex === i ? 'bg-blue-50' : 'hover:bg-gray-50'
+                                                    ]"
+                                                    @click="toggleEditRule(i)"
+                                                >
+                                                    <!-- Email -->
+                                                    <div class="min-w-0 flex items-center gap-2">
+                                                        <div :class="['w-1.5 h-1.5 rounded-full flex-shrink-0', autoRules[i].assignee_ids.length > 0 ? 'bg-green-400' : 'bg-orange-400']"></div>
+                                                        <span v-if="autoRules[i].email" class="text-sm font-medium text-gray-800 truncate">{{ autoRules[i].email }}</span>
+                                                        <span v-else class="text-sm italic text-gray-400">No email set</span>
+                                                    </div>
+
+                                                    <!-- Assignee avatars -->
+                                                    <div class="flex items-center gap-1">
+                                                        <template v-if="autoRules[i].assignee_ids.length === 0">
+                                                            <span class="text-[10px] font-semibold text-orange-500 flex items-center gap-1">
+                                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"/></svg>
+                                                                No agents
+                                                            </span>
+                                                        </template>
+                                                        <template v-else>
+                                                            <div
+                                                                v-for="id in autoRules[i].assignee_ids.slice(0, 4)"
+                                                                :key="id"
+                                                                :title="getAgent(id)?.name ?? `User #${id}`"
+                                                                class="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-[9px] font-black -ml-1 first:ml-0 ring-2 ring-white"
+                                                            >{{ getAgentInitials(id) }}</div>
+                                                            <span v-if="autoRules[i].assignee_ids.length > 4" class="ml-1 text-[10px] font-bold text-gray-500">+{{ autoRules[i].assignee_ids.length - 4 }}</span>
+                                                        </template>
+                                                    </div>
+
+                                                    <!-- Actions -->
+                                                    <div class="flex items-center justify-end gap-1">
+                                                        <span :class="['p-1.5 rounded-md transition-colors', editingRuleIndex === i ? 'bg-blue-600 text-white' : 'text-gray-400']">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path v-if="editingRuleIndex === i" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                                                <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                            </svg>
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            @click.stop="removeAutoRule(i)"
+                                                            class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                            title="Delete rule"
+                                                        >
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Inline editor (expanded) -->
+                                                <div v-if="editingRuleIndex === i" class="bg-blue-50/60 border-t border-blue-100 px-5 py-4 space-y-4">
+                                                    <!-- Email input -->
+                                                    <div class="max-w-sm">
+                                                        <InputLabel :for="`rule_email_${i}`" value="Requester Email (exact match)" class="!text-[10px] uppercase text-gray-500" />
+                                                        <TextInput
+                                                            :id="`rule_email_${i}`"
+                                                            type="email"
+                                                            class="mt-1 block w-full"
+                                                            v-model="autoRules[i].email"
+                                                            placeholder="customer@company.com"
+                                                        />
+                                                    </div>
+
+                                                    <!-- Assignee picker with drag-to-reorder -->
+                                                    <div>
+                                                        <InputLabel value="Round-Robin Assignees" class="!text-[10px] uppercase text-gray-500" />
+                                                        <p class="text-[10px] text-gray-400 mt-0.5 mb-2">Add agents below, then drag <svg class="inline w-3 h-3 mb-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg> to set the rotation order.</p>
+
+                                                        <!-- Search to add -->
+                                                        <div class="relative max-w-lg">
+                                                            <div class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+                                                                <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                                                                <input
+                                                                    type="text"
+                                                                    v-model="ruleSearchQueries[i]"
+                                                                    @focus="openDropdown(`rule-${i}`)"
+                                                                    @blur="closeDropdown"
+                                                                    placeholder="Search and add agents by name or email…"
+                                                                    class="flex-1 border-0 outline-none text-xs text-gray-700 bg-transparent placeholder-gray-400"
+                                                                />
+                                                            </div>
+                                                            <!-- Dropdown -->
+                                                            <div v-if="activeDropdown === `rule-${i}`" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                                                                <div class="max-h-52 overflow-y-auto">
+                                                                    <button
+                                                                        v-for="agent in filteredStaffForIds(autoRules[i].assignee_ids, ruleSearchQueries[i])"
+                                                                        :key="agent.id"
+                                                                        type="button"
+                                                                        @mousedown.prevent="selectRuleAssignee(autoRules[i], i, agent.id)"
+                                                                        class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                                                                    >
+                                                                        <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                                                            {{ agent.name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) }}
+                                                                        </div>
+                                                                        <div class="flex-1 min-w-0">
+                                                                            <p class="text-xs font-semibold text-gray-900 truncate">{{ agent.name }}</p>
+                                                                            <p class="text-[10px] text-gray-400 truncate">{{ agent.email }}</p>
+                                                                        </div>
+                                                                        <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                                                    </button>
+                                                                    <div v-if="filteredStaffForIds(autoRules[i].assignee_ids, ruleSearchQueries[i]).length === 0" class="px-4 py-5 text-center text-xs text-gray-400 italic">
+                                                                        {{ ruleSearchQueries[i] ? `No agents match "${ruleSearchQueries[i]}"` : 'All assignable agents are already added.' }}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Draggable rotation queue -->
+                                                        <div v-if="autoRules[i].assignee_ids.length > 0" class="mt-2 border border-gray-200 rounded-lg overflow-hidden max-w-lg">
+                                                            <div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                                                                <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Rotation Order</span>
+                                                                <span class="text-[9px] text-gray-400">{{ autoRules[i].assignee_ids.length }} agent{{ autoRules[i].assignee_ids.length !== 1 ? 's' : '' }}</span>
+                                                            </div>
+                                                            <draggable
+                                                                :modelValue="getRuleAssigneeObjects(autoRules[i])"
+                                                                @update:modelValue="items => setRuleAssigneeObjects(autoRules[i], items)"
+                                                                item-key="id"
+                                                                handle=".rule-assignee-drag-handle"
+                                                                class="divide-y divide-gray-100"
+                                                            >
+                                                                <template #item="{ element, index: pos }">
+                                                                    <div class="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-gray-50 transition-colors">
+                                                                        <span class="rule-assignee-drag-handle cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0" title="Drag to reorder">
+                                                                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+                                                                        </span>
+                                                                        <span class="w-5 text-[10px] font-black text-gray-300 text-center flex-shrink-0">{{ pos + 1 }}</span>
+                                                                        <div class="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                                                            {{ getAgentInitials(element.id) }}
+                                                                        </div>
+                                                                        <div class="flex-1 min-w-0">
+                                                                            <p class="text-xs font-semibold text-gray-800 truncate">{{ getAgent(element.id)?.name ?? `User #${element.id}` }}</p>
+                                                                            <p class="text-[10px] text-gray-400 truncate">{{ getAgent(element.id)?.email }}</p>
+                                                                        </div>
+                                                                        <button type="button" @click="removeRuleAssignee(autoRules[i], element.id)" class="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0" title="Remove">
+                                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                                        </button>
+                                                                    </div>
+                                                                </template>
+                                                            </draggable>
+                                                        </div>
+
+                                                        <p v-if="autoRules[i].assignee_ids.length === 0" class="mt-2 text-[10px] text-orange-500 italic flex items-center gap-1">
+                                                            <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z"/></svg>
+                                                            No agents added — this rule will be skipped during assignment.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Row count -->
+                                    <p v-if="autoRules.length > 0" class="mt-1.5 text-[10px] text-gray-400 text-right tabular-nums">
+                                        {{ filteredRuleIndexes.length }} of {{ autoRules.length }} {{ autoRules.length === 1 ? 'rule' : 'rules' }}
+                                        <span v-if="rulesListSearch"> matching "{{ rulesListSearch }}"</span>
+                                    </p>
+                                </section>
+
+                                <div class="border-t border-gray-100"></div>
+
+                                <!-- Global Default Assignees Section -->
+                                <section>
+                                    <h3 class="text-xs font-black text-purple-600 uppercase tracking-widest mb-1 flex items-center">
+                                        <UserGroupIcon class="w-4 h-4 mr-1.5" />
+                                        Global Default Assignees
+                                    </h3>
+                                    <p class="text-xs text-gray-500 mb-3 leading-relaxed">
+                                        Tickets with no matching rule are round-robin distributed among these agents. Leave empty to keep unmatched tickets unassigned.
+                                    </p>
+
+                                    <!-- Search to add default agents -->
+                                    <div class="relative max-w-lg">
+                                        <div class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500 transition-all">
+                                            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                                            <input
+                                                type="text"
+                                                v-model="defaultSearchQuery"
+                                                @focus="openDropdown('default')"
+                                                @blur="closeDropdown"
+                                                placeholder="Search and add agents by name or email…"
+                                                class="flex-1 border-0 outline-none text-xs text-gray-700 bg-transparent placeholder-gray-400"
+                                            />
+                                        </div>
+                                        <!-- Dropdown -->
+                                        <div v-if="activeDropdown === 'default'" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                                            <div class="max-h-52 overflow-y-auto">
+                                                <button
+                                                    v-for="agent in filteredDefaultStaff"
+                                                    :key="agent.id"
+                                                    type="button"
+                                                    @mousedown.prevent="selectDefaultAssignee(agent.id)"
+                                                    class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors border-b border-gray-50 last:border-0"
+                                                >
+                                                    <div class="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                                        {{ agent.name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) }}
+                                                    </div>
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-xs font-semibold text-gray-900 truncate">{{ agent.name }}</p>
+                                                        <p class="text-[10px] text-gray-400 truncate">{{ agent.email }}</p>
+                                                    </div>
+                                                    <svg class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                                </button>
+                                                <div v-if="filteredDefaultStaff.length === 0" class="px-4 py-5 text-center text-xs text-gray-400 italic">
+                                                    {{ defaultSearchQuery ? `No agents match "${defaultSearchQuery}"` : 'All assignable agents are already added.' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Draggable default rotation queue -->
+                                    <div v-if="autoDefaults.length > 0" class="mt-2 border border-gray-200 rounded-lg overflow-hidden max-w-lg">
+                                        <div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Rotation Order</span>
+                                            <span class="text-[9px] text-gray-400">{{ autoDefaults.length }} agent{{ autoDefaults.length !== 1 ? 's' : '' }}</span>
+                                        </div>
+                                        <draggable
+                                            :modelValue="getDefaultAssigneeObjects"
+                                            @update:modelValue="setDefaultAssigneeObjects"
+                                            item-key="id"
+                                            handle=".default-assignee-drag-handle"
+                                            class="divide-y divide-gray-100"
+                                        >
+                                            <template #item="{ element, index: pos }">
+                                                <div class="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-gray-50 transition-colors">
+                                                    <span class="default-assignee-drag-handle cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0" title="Drag to reorder">
+                                                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
+                                                    </span>
+                                                    <span class="w-5 text-[10px] font-black text-gray-300 text-center flex-shrink-0">{{ pos + 1 }}</span>
+                                                    <div class="w-7 h-7 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                                                        {{ getAgentInitials(element.id) }}
+                                                    </div>
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-xs font-semibold text-gray-800 truncate">{{ getAgent(element.id)?.name ?? `User #${element.id}` }}</p>
+                                                        <p class="text-[10px] text-gray-400 truncate">{{ getAgent(element.id)?.email }}</p>
+                                                    </div>
+                                                    <button type="button" @click="removeDefaultAssignee(element.id)" class="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0" title="Remove">
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </draggable>
+                                    </div>
+
+                                    <p v-if="!assignableStaff || assignableStaff.length === 0" class="mt-2 text-[10px] text-gray-400 italic">
+                                        No assignable staff found. Enable "Is Assignable" on a role first.
+                                    </p>
+                                    <p v-else-if="autoDefaults.length === 0" class="mt-2 text-[10px] text-gray-400 italic">
+                                        No default agents added — unmatched tickets will remain unassigned.
+                                    </p>
+                                </section>
+
+                                <!-- Save button -->
+                                <div class="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        @click="saveAutoAssignee"
+                                        :disabled="autoAssigneeProcessing"
+                                        class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+                                    >
+                                        <span v-if="autoAssigneeProcessing">Saving…</span>
+                                        <span v-else>Save Auto Assignee Rules</span>
+                                    </button>
+                                    <Transition enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0" leave-active-class="transition ease-in-out duration-300" leave-to-class="opacity-0">
+                                        <span v-if="autoAssigneeSaved" class="text-sm font-bold text-green-600 flex items-center gap-1">
+                                            <CheckCircleIcon class="w-4 h-4" /> Rules saved!
+                                        </span>
+                                    </Transition>
+                                </div>
+                            </div>
+
                         </div>
 
                         <!-- Sticky Footer -->
-                        <div v-if="activeTab !== 'sidebar_layout'" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <div v-if="activeTab !== 'sidebar_layout' && activeTab !== 'auto_assignee'" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
                             <div>
                                 <Transition enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0" leave-active-class="transition ease-in-out duration-300" leave-to-class="opacity-0">
                                     <div v-if="form.recentlySuccessful" class="text-sm font-bold text-green-600 flex items-center">

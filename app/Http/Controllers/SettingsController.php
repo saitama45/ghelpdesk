@@ -24,9 +24,15 @@ class SettingsController extends Controller implements HasMiddleware
         $settings = Setting::all()->pluck('value', 'key');
         $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
         
+        $assignableStaff = \App\Models\User::whereHas('roles', fn($q) => $q->where('is_assignable', true))
+            ->select('id', 'name', 'email')
+            ->orderBy('name')
+            ->get();
+
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
-            'subUnits' => $subUnits
+            'subUnits' => $subUnits,
+            'assignableStaff' => $assignableStaff,
         ]);
     }
 
@@ -49,6 +55,8 @@ class SettingsController extends Controller implements HasMiddleware
                 $group = 'business_hours';
             } elseif (str_starts_with($key, 'sla_')) {
                 $group = 'sla_targets';
+            } elseif (str_starts_with($key, 'auto_assignee_')) {
+                $group = 'auto_assignee';
             }
 
             if ($key === 'ticket_retention_value') {
