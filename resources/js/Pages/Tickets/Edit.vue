@@ -798,8 +798,9 @@ const descriptionInput = ref(null);
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'for_schedule', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
-const slaWaitingStatuses = new Set(['waiting_service_provider', 'waiting_client_feedback']);
+const slaWaitingStatuses = new Set(['waiting_service_provider', 'waiting_client_feedback', 'for_schedule']);
 const slaStopStatuses = new Set(['resolved', 'closed']);
+const localSlaPausedAt = ref(null);
 
 const normalizeTicketStatus = (status) => String(status || '').trim().toLowerCase();
 
@@ -808,16 +809,50 @@ const getValidTicketDate = (value) => {
     return date instanceof Date && !Number.isNaN(date.getTime()) && date.getTime() > 0 ? date : null;
 };
 
-const getWorkingMilliseconds = (start, end, config) => {
+watch(
+    () => normalizeTicketStatus(editForm.status || props.ticket.status),
+    (status) => {
+        const backendPausedAt = getValidTicketDate(props.ticket.sla_metric?.paused_at);
+
+        if (slaWaitingStatuses.has(status)) {
+            localSlaPausedAt.value = backendPausedAt || localSlaPausedAt.value || new Date();
+            return;
+        }
+
+        localSlaPausedAt.value = null;
+    },
+    { immediate: true }
+);
+
+const normalizeBusinessHours = (config) => {
+    const start = typeof config?.start === 'string' && config.start.includes(':') ? config.start : '08:00';
+    const end = typeof config?.end === 'string' && config.end.includes(':') ? config.end : '17:00';
+    const days = Array.isArray(config?.days)
+        ? config.days.map(day => Number(day)).filter(day => Number.isInteger(day) && day >= 1 && day <= 7)
+        : [];
+
+    return {
+        start,
+        end,
+        days: days.length ? days : [1, 2, 3, 4, 5],
+    };
+};
+
+const getWorkingMilliseconds = (start, end, config = props.businessHours) => {
     if (!start || !end || start >= end) return 0;
-    
-    // Fallback if no config or invalid days
-    if (!config || !config.days || !config.days.length) {
+
+    const businessHours = normalizeBusinessHours(config);
+    const [startH, startM] = businessHours.start.split(':').map(Number);
+    const [endH, endM] = businessHours.end.split(':').map(Number);
+
+    if (
+        !Number.isFinite(startH) || !Number.isFinite(startM)
+        || !Number.isFinite(endH) || !Number.isFinite(endM)
+        || startH > 23 || endH > 23 || startM > 59 || endM > 59
+        || (startH * 60 + startM) >= (endH * 60 + endM)
+    ) {
         return end.getTime() - start.getTime();
     }
-
-    const [startH, startM] = config.start.split(':').map(Number);
-    const [endH, endM] = config.end.split(':').map(Number);
 
     let totalMs = 0;
     let cursor = new Date(start.getTime());
@@ -825,7 +860,7 @@ const getWorkingMilliseconds = (start, end, config) => {
     while (cursor < end) {
         const dayOfWeek = cursor.getDay() === 0 ? 7 : cursor.getDay(); // 1=Mon, 7=Sun
         
-        if (config.days.includes(dayOfWeek)) {
+        if (businessHours.days.includes(dayOfWeek)) {
             const dayStart = new Date(cursor.getTime());
             dayStart.setHours(startH, startM, 0, 0);
 
@@ -846,6 +881,11 @@ const getWorkingMilliseconds = (start, end, config) => {
     }
 
     return totalMs;
+};
+
+const getElapsedMilliseconds = (start, end) => {
+    if (!start || !end || start >= end) return 0;
+    return end.getTime() - start.getTime();
 };
 
 const getStatusHistoryEvents = () => {
@@ -910,7 +950,7 @@ const slaRuntime = computed(() => {
 
         if (eventTime < cursorTime) continue;
 
-        const intervalMilliseconds = getWorkingMilliseconds(cursor, event.changedAt, props.businessHours);
+        const intervalMilliseconds = getElapsedMilliseconds(cursor, event.changedAt);
         if (slaWaitingStatuses.has(currentStatus)) {
             pausedMilliseconds += intervalMilliseconds;
         } else {
@@ -944,7 +984,7 @@ const slaRuntime = computed(() => {
             endAt = cursor;
         }
 
-        const intervalMilliseconds = getWorkingMilliseconds(cursor, endAt, props.businessHours);
+        const intervalMilliseconds = getElapsedMilliseconds(cursor, endAt);
         const intervalStatus = currentStatus || liveStatus;
 
         if (slaWaitingStatuses.has(intervalStatus) || slaWaitingStatuses.has(liveStatus)) {
@@ -984,19 +1024,20 @@ const calculateCountdown = (targetAt, pausedAt) => {
 
     const now = slaNow.value;
     const isPaused = slaRuntime.value?.state === 'paused';
+    const pausedDate = getValidTicketDate(pausedAt) || localSlaPausedAt.value;
+    const comparisonDate = isPaused && pausedDate ? pausedDate : now;
     
     let diffMs;
     let isBreached = false;
 
-    if (now > targetDate) {
+    if (comparisonDate > targetDate) {
         isBreached = true;
-        diffMs = getWorkingMilliseconds(targetDate, now, props.businessHours);
+        diffMs = getElapsedMilliseconds(targetDate, comparisonDate);
     } else {
-        if (isPaused && pausedAt) {
-            const pAt = getValidTicketDate(pausedAt);
-            diffMs = getWorkingMilliseconds(pAt || now, targetDate, props.businessHours);
+        if (isPaused) {
+            diffMs = getElapsedMilliseconds(comparisonDate, targetDate);
         } else {
-            diffMs = getWorkingMilliseconds(now, targetDate, props.businessHours);
+            diffMs = getElapsedMilliseconds(now, targetDate);
         }
     }
 
@@ -1900,10 +1941,10 @@ const linkify = (text) => {
                                 <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Ticket SLA</h3>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                                     <!-- Response SLA -->
-                                    <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                    <div class="p-3 rounded-lg border" :class="(ticket.sla_metric.is_response_breached || responseSLA?.isBreached) ? 'bg-red-50 border-red-100' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
                                         <div class="flex justify-between items-center mb-1">
                                             <span class="text-[9px] font-black text-gray-500 uppercase">Response</span>
-                                            <span v-if="ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-if="ticket.sla_metric.is_response_breached || responseSLA?.isBreached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
                                             <span v-else-if="ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
                                             <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
                                         </div>
@@ -1919,10 +1960,10 @@ const linkify = (text) => {
                                     </div>
 
                                     <!-- Resolution SLA -->
-                                    <div class="p-3 rounded-lg border" :class="ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                    <div class="p-3 rounded-lg border" :class="(ticket.sla_metric.is_resolution_breached || resolutionSLA?.isBreached) ? 'bg-red-50 border-red-100' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
                                         <div class="flex justify-between items-center mb-1">
                                             <span class="text-[9px] font-black text-gray-500 uppercase">Resolution</span>
-                                            <span v-if="ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
+                                            <span v-if="ticket.sla_metric.is_resolution_breached || resolutionSLA?.isBreached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
                                             <span v-else-if="ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
                                             <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
                                         </div>
