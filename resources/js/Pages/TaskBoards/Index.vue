@@ -30,6 +30,7 @@ const showCreateModal = ref(false);
 const showGenerateMonthlyModal = ref(false);
 const isSubmitting = ref(false);
 const isGeneratingMonthly = ref(false);
+const expandedMonthlyPreviewId = ref(null);
 const search = ref('');
 const showClosed = ref(!!props.filters?.closed);
 const now = new Date();
@@ -367,18 +368,47 @@ const collectNodeIds = (node) => {
 const usersForNodeIds = (nodeIds) => {
     const allowedIds = new Set(nodeIds.map((id) => Number(id)));
 
-    return (props.users || []).filter((user) => allowedIds.has(Number(user.department_node_id)));
+    return activePreviewUsers.value.filter((user) => allowedIds.has(Number(user.department_node_id)));
 };
 
-const directUsersForNode = (nodeId) => {
-    return (props.users || []).filter((user) => Number(user.department_node_id) === Number(nodeId));
+const activePreviewUsers = computed(() => {
+    return (props.users || []).filter((user) => user.is_active !== false && !user.is_vacant);
+});
+
+const activePreviewUsersById = computed(() => {
+    return new Map(activePreviewUsers.value.map((user) => [Number(user.id), user]));
+});
+
+const usersForDepartment = (departmentId) => {
+    return activePreviewUsers.value.filter((user) => Number(user.department_id) === Number(departmentId));
 };
 
-const directUsersForDepartment = (departmentId) => {
-    return (props.users || []).filter((user) =>
-        Number(user.department_id) === Number(departmentId) &&
-        !user.department_node_id
-    );
+const withManagerChain = (users) => {
+    const selected = new Map(users.map((user) => [Number(user.id), user]));
+    const queue = [...users];
+    const processed = new Set();
+
+    while (queue.length) {
+        const user = queue.shift();
+        const userId = Number(user.id);
+        if (processed.has(userId)) continue;
+
+        processed.add(userId);
+
+        for (const managerId of user.manager_ids || []) {
+            const manager = activePreviewUsersById.value.get(Number(managerId));
+            if (!manager || selected.has(Number(manager.id))) continue;
+
+            selected.set(Number(manager.id), manager);
+            queue.push(manager);
+        }
+    }
+
+    return [...selected.values()];
+};
+
+const toggleMonthlyPreviewUsers = (boardId) => {
+    expandedMonthlyPreviewId.value = expandedMonthlyPreviewId.value === boardId ? null : boardId;
 };
 
 const monthlySelectionParams = computed(() => {
@@ -401,8 +431,9 @@ const monthlyBoardPreview = computed(() => {
         ? Number(String(selected.id).replace('dept-', ''))
         : Number(selected.department_id);
 
-    const pushTarget = (node, users, pathOverride = null) => {
-        if (!users.length) return;
+    const pushTarget = (node, users, pathOverride = null, includeManagerChain = false) => {
+        const targetUsers = includeManagerChain ? withManagerChain(users) : users;
+        if (!targetUsers.length) return;
 
         const path = pathOverride || findNodePath(hierarchicalOptions.value, node.id).join(' > ') || node.name;
 
@@ -410,25 +441,26 @@ const monthlyBoardPreview = computed(() => {
             id: node.id,
             name: node.name,
             path,
-            user_count: users.length,
+            user_count: targetUsers.length,
+            users: targetUsers,
             title: `${node.name} ${selectedMonthLabel.value} ${monthlyForm.year}`,
         });
     };
 
     if (isDepartmentRoot) {
-        pushTarget(selected, directUsersForDepartment(selectedDepartmentId), selected.name);
+        pushTarget(selected, usersForDepartment(selectedDepartmentId), selected.name);
 
         for (const child of selected.children || []) {
-            pushTarget(child, usersForNodeIds(collectNodeIds(child)));
+            pushTarget(child, usersForNodeIds(collectNodeIds(child)), null, true);
         }
 
         return rows;
     }
 
-    pushTarget(selected, directUsersForNode(selected.id));
+    pushTarget(selected, usersForNodeIds(collectNodeIds(selected)), null, true);
 
     for (const child of selected.children || []) {
-        pushTarget(child, usersForNodeIds(collectNodeIds(child)));
+        pushTarget(child, usersForNodeIds(collectNodeIds(child)), null, true);
     }
 
     return rows;
@@ -718,16 +750,33 @@ const boardPeriodLabel = (board) => {
                         <div v-if="monthlyBoardPreview.length" class="max-h-72 space-y-2 overflow-y-auto pr-1">
                             <div
                                 v-for="board in monthlyBoardPreview"
-                                :key="board.name"
-                                class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+                                :key="board.id"
+                                class="rounded-lg border border-gray-200 bg-white px-3 py-2"
                             >
-                                <div class="min-w-0">
-                                    <p class="truncate text-sm font-bold text-gray-900">{{ board.title }}</p>
-                                    <p class="text-xs font-medium text-gray-500">{{ board.path }}</p>
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="truncate text-sm font-bold text-gray-900">{{ board.title }}</p>
+                                        <p class="text-xs font-medium text-gray-500">{{ board.path }}</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        @click="toggleMonthlyPreviewUsers(board.id)"
+                                        class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-800"
+                                    >
+                                        {{ board.user_count }} user{{ board.user_count === 1 ? '' : 's' }}
+                                    </button>
                                 </div>
-                                <span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                                    {{ board.user_count }} user{{ board.user_count === 1 ? '' : 's' }}
-                                </span>
+                                <div v-if="expandedMonthlyPreviewId === board.id" class="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/40 p-2">
+                                    <div class="max-h-44 space-y-1 overflow-y-auto pr-1">
+                                        <div
+                                            v-for="user in board.users"
+                                            :key="user.id"
+                                            class="rounded-md bg-white px-2 py-1.5 text-xs"
+                                        >
+                                            <p class="truncate font-bold text-gray-800">{{ user.name }}</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <p v-else class="py-8 text-center text-sm font-semibold text-gray-500">No active sub-units found.</p>

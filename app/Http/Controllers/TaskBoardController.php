@@ -772,6 +772,7 @@ class TaskBoardController extends Controller implements HasMiddleware
     private function monthlyDepartmentOptions(): array
     {
         $rows = User::active()
+            ->where('is_vacant', false)
             ->whereNotNull('department')
             ->where('department', '!=', '')
             ->whereNotNull('org_path')
@@ -847,12 +848,12 @@ class TaskBoardController extends Controller implements HasMiddleware
             ]);
         }
 
-        $users = $this->activeUsersForDepartmentId($department->id);
+        $allUsers = $this->activeMonthlyUsers();
+        $users = $allUsers->filter(fn (User $user) => (int) $user->department_id === (int) $department->id)->values();
         $targets = collect();
 
-        $directUsers = $users->filter(fn (User $user) => empty($user->department_node_id))->values();
-        if ($directUsers->isNotEmpty()) {
-            $targets->push($this->monthlyTarget($department->name, $department->name, $department->name, $directUsers));
+        if ($users->isNotEmpty()) {
+            $targets->push($this->monthlyTarget($department->name, $department->name, $department->name, $users->values()));
         }
 
         $children = DepartmentNode::query()
@@ -869,7 +870,7 @@ class TaskBoardController extends Controller implements HasMiddleware
 
             if ($childUsers->isNotEmpty()) {
                 $path = $this->nodeOrgPath($child);
-                $targets->push($this->monthlyTarget($department->name, $child->name, $path, $childUsers));
+                $targets->push($this->monthlyTarget($department->name, $child->name, $path, $this->withManagerChain($childUsers, $allUsers)));
             }
         }
 
@@ -889,13 +890,9 @@ class TaskBoardController extends Controller implements HasMiddleware
             ]);
         }
 
-        $users = $this->activeUsersForDepartmentId($node->department_id);
+        $allUsers = $this->activeMonthlyUsers();
+        $users = $allUsers->filter(fn (User $user) => (int) $user->department_id === (int) $node->department_id)->values();
         $targets = collect();
-
-        $directUsers = $users->filter(fn (User $user) => (int) $user->department_node_id === (int) $node->id)->values();
-        if ($directUsers->isNotEmpty()) {
-            $targets->push($this->monthlyTarget($node->department->name, $node->name, $this->nodeOrgPath($node), $directUsers));
-        }
 
         $children = DepartmentNode::query()
             ->where('parent_id', $node->id)
@@ -904,14 +901,24 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->orderBy('name')
             ->get();
 
+        $childTargets = collect();
+
         foreach ($children as $child) {
             $nodeIds = array_merge([$child->id], DepartmentNode::getAllDescendantIds($child->id));
             $childUsers = $users->filter(fn (User $user) => in_array((int) $user->department_node_id, $nodeIds, true))->values();
 
             if ($childUsers->isNotEmpty()) {
-                $targets->push($this->monthlyTarget($node->department->name, $child->name, $this->nodeOrgPath($child), $childUsers));
+                $childTargets->push($this->monthlyTarget($node->department->name, $child->name, $this->nodeOrgPath($child), $this->withManagerChain($childUsers, $allUsers)));
             }
         }
+
+        $selectedNodeIds = array_merge([$node->id], DepartmentNode::getAllDescendantIds($node->id));
+        $selectedUsers = $users->filter(fn (User $user) => in_array((int) $user->department_node_id, $selectedNodeIds, true))->values();
+        if ($selectedUsers->isNotEmpty()) {
+            $targets->push($this->monthlyTarget($node->department->name, $node->name, $this->nodeOrgPath($node), $this->withManagerChain($selectedUsers, $allUsers)));
+        }
+
+        $targets = $targets->merge($childTargets);
 
         return $this->validateMonthlyTargets($targets, 'No active users found for this department level.');
     }
@@ -921,6 +928,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         $departmentKey = $this->normalizeOrgKey($department);
 
         $targets = User::active()
+            ->where('is_vacant', false)
             ->whereNotNull('department')
             ->where('department', '!=', '')
             ->whereNotNull('org_path')
@@ -940,11 +948,57 @@ class TaskBoardController extends Controller implements HasMiddleware
 
     private function activeUsersForDepartmentId(int $departmentId)
     {
-        return User::active()
-            ->where('department_id', $departmentId)
+        return $this->activeMonthlyUsers()
+            ->filter(fn (User $user) => (int) $user->department_id === (int) $departmentId)
+            ->values();
+    }
+
+    private function activeMonthlyUsers()
+    {
+        return User::with(['managers' => fn ($query) => $query
+                ->where('is_active', true)
+                ->where('is_vacant', false)
+                ->select('users.id', 'users.name')
+            ])
+            ->active()
+            ->where('is_vacant', false)
             ->orderBy('org_path')
             ->orderBy('name')
             ->get(['id', 'name', 'department', 'department_id', 'department_node_id', 'org_path']);
+    }
+
+    private function withManagerChain($users, $allUsers)
+    {
+        $allUsersById = collect($allUsers)->keyBy(fn (User $user) => (int) $user->id);
+        $selected = collect($users)->keyBy(fn (User $user) => (int) $user->id);
+        $queue = collect($users)->values();
+        $processed = [];
+
+        while ($queue->isNotEmpty()) {
+            /** @var User $user */
+            $user = $queue->shift();
+            $userId = (int) $user->id;
+
+            if (isset($processed[$userId])) {
+                continue;
+            }
+
+            $processed[$userId] = true;
+
+            foreach ($user->managers ?? [] as $manager) {
+                $managerId = (int) $manager->id;
+                $activeManager = $allUsersById->get($managerId);
+
+                if (! $activeManager || $selected->has($managerId)) {
+                    continue;
+                }
+
+                $selected->put($managerId, $activeManager);
+                $queue->push($activeManager);
+            }
+        }
+
+        return $selected->values();
     }
 
     private function monthlyTarget(string $department, string $subUnit, string $path, $users): array
@@ -1001,9 +1055,17 @@ class TaskBoardController extends Controller implements HasMiddleware
 
     private function activeUsers()
     {
-        return User::active()
+        return User::with(['managers:id'])
+            ->active()
+            ->where('is_vacant', false)
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'department_id', 'department_node_id', 'org_path']);
+            ->get(['id', 'name', 'email', 'profile_photo', 'department', 'department_id', 'department_node_id', 'org_path', 'is_active', 'is_vacant'])
+            ->map(function (User $user) {
+                $user->manager_ids = $user->managers->pluck('id')->map(fn ($id) => (int) $id)->values();
+                unset($user->managers);
+
+                return $user;
+            });
     }
 
     private function defaultLabels(): array
