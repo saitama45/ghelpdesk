@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { ChevronLeftIcon, ChevronRightIcon, InformationCircleIcon } from '@heroicons/vue/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     events: {
@@ -22,6 +22,14 @@ const props = defineProps({
     users: {
         type: Array,
         default: () => []
+    },
+    compact: {
+        type: Boolean,
+        default: false
+    },
+    heightClass: {
+        type: String,
+        default: 'h-[850px]'
     }
 });
 
@@ -294,12 +302,12 @@ const calendarDays = computed(() => {
     
     const daysArray = [];
     
-    // Previous month filler days
-    const prevMonthLastDay = new Date(currentYear.value, currentMonth.value, 0).getDate();
-    for (let i = startDay - 1; i >= 0; i--) {
+    // Previous month blank cells keep weekday alignment without showing other months.
+    for (let i = 0; i < startDay; i++) {
         daysArray.push({
-            date: new Date(currentYear.value, currentMonth.value - 1, prevMonthLastDay - i),
-            isCurrentMonth: false
+            date: null,
+            isCurrentMonth: false,
+            isBlank: true
         });
     }
     
@@ -307,16 +315,18 @@ const calendarDays = computed(() => {
     for (let i = 1; i <= totalDays; i++) {
         daysArray.push({
             date: new Date(currentYear.value, currentMonth.value, i),
-            isCurrentMonth: true
+            isCurrentMonth: true,
+            isBlank: false
         });
     }
     
-    // Next month filler days
+    // Next month blank cells keep a stable six-row month grid.
     const remainingSlots = 42 - daysArray.length;
     for (let i = 1; i <= remainingSlots; i++) {
         daysArray.push({
-            date: new Date(currentYear.value, currentMonth.value + 1, i),
-            isCurrentMonth: false
+            date: null,
+            isCurrentMonth: false,
+            isBlank: true
         });
     }
     
@@ -530,17 +540,23 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
 </script>
 
 <template>
-    <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col h-[850px]">
+    <div
+        class="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col"
+        :class="heightClass"
+    >
         <!-- Calendar Header -->
-        <div class="p-6 border-b border-gray-200 flex items-center justify-between bg-white">
-            <div class="flex items-center space-x-6">
+        <div
+            class="border-b border-gray-200 flex flex-col gap-3 bg-white lg:flex-row lg:items-center lg:justify-between"
+            :class="compact ? 'p-3 lg:p-4' : 'p-6'"
+        >
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center" :class="compact ? 'sm:gap-4' : 'sm:gap-6'">
                 <!-- Title -->
-                <h2 class="text-2xl font-black text-gray-900 tracking-tight">
+                <h2 class="font-black text-gray-900 tracking-tight" :class="compact ? 'text-xl' : 'text-2xl'">
                     <template v-if="calendarView === 'month'">
                         {{ monthName }} <span class="text-gray-400 font-light">{{ currentYear }}</span>
                     </template>
                     <template v-else>
-                        <span class="text-xl">{{ dayHeaderLabel }}</span>
+                        <span :class="compact ? 'text-lg' : 'text-xl'">{{ dayHeaderLabel }}</span>
                     </template>
                 </h2>
                 <!-- Navigation -->
@@ -557,7 +573,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                 </div>
             </div>
 
-            <div class="flex items-center space-x-3">
+            <div class="flex flex-wrap items-center gap-2" :class="compact ? 'lg:justify-end' : 'lg:gap-3'">
                 <!-- Go-to-date input -->
                 <div class="flex items-center gap-1">
                     <input
@@ -590,113 +606,41 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
             </div>
         </div>
 
-        <!-- Filter Guide Note -->
-        <div class="px-4 py-1.5 bg-blue-50/30 border-b border-gray-100 flex items-center gap-2">
-            <InformationCircleIcon class="w-4 h-4 text-blue-500" />
-            <span class="text-[10px] text-blue-700 font-medium italic">
-                Tip: Toggle buttons to filter events. Unselect <strong class="font-black uppercase">"No Priority"</strong> to show only schedules with ticket numbers.
-            </span>
-        </div>
-
-        <!-- Status Filter Strip -->
-        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/40 flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Status:</span>
-            <button
-                v-for="s in STATUS_FILTERS"
-                :key="s.status"
-                @click="toggleStatus(s.status)"
-                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
-                :class="statusFilter.includes(s.status)
-                    ? [s.bg, 'text-white border-transparent shadow-sm']
-                    : 'bg-white text-gray-400 border-gray-200'"
-            >{{ s.label }}</button>
-            <button
-                @click="toggleAllStatuses"
-                class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
-            >{{ allStatusSelected ? 'Clear all' : 'Select all' }}</button>
-        </div>
-
-        <!-- Concern Type Filter Strip -->
-        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/30 flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Concern Type:</span>
-            <button
-                v-for="c in CONCERN_TYPE_FILTERS"
-                :key="c.key"
-                @click="toggleConcernType(c.key)"
-                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
-                :class="concernTypeFilter.includes(c.key)
-                    ? [c.bg, 'text-white border-transparent shadow-sm']
-                    : 'bg-white text-gray-400 border-gray-200'"
-            >{{ c.label }}</button>
-
-            <!-- None Option (for schedules without a ticket/concern type) -->
-            <button
-                @click="toggleConcernType('none')"
-                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
-                :class="concernTypeFilter.includes('none')
-                    ? ['bg-slate-500', 'text-white border-transparent shadow-sm']
-                    : 'bg-white text-gray-400 border-gray-200'"
-            >No Ticket</button>
-
-            <button
-                @click="toggleAllConcernTypes"
-                class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
-            >{{ allConcernTypeSelected ? 'Clear all' : 'Select all' }}</button>
-        </div>
-
-        <!-- Priority Filter Strip -->
-        <div class="px-4 py-2 border-b border-gray-100 bg-gray-50/20 flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0 mr-1">Priority:</span>
-            <button
-                v-for="p in PRIORITY_FILTERS"
-                :key="p.key"
-                @click="togglePriority(p.key)"
-                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
-                :class="priorityFilter.includes(p.key)
-                    ? [p.bg, 'text-white border-transparent shadow-sm']
-                    : 'bg-white text-gray-400 border-gray-200'"
-            >{{ p.label }}</button>
-            
-            <!-- None Option (for events without priority) -->
-            <button
-                @click="togglePriority('none')"
-                class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
-                :class="priorityFilter.includes('none')
-                    ? ['bg-slate-500', 'text-white border-transparent shadow-sm']
-                    : 'bg-white text-gray-400 border-gray-200'"
-            >No Priority</button>
-
-            <button
-                @click="toggleAllPriorities"
-                class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
-            >{{ allPrioritySelected ? 'Clear all' : 'Select all' }}</button>
-        </div>
-
         <!-- Days of Week Header (month view only) -->
         <div v-if="calendarView === 'month'" class="grid grid-cols-7 border-b border-gray-100 bg-gray-50/50">
-            <div v-for="day in days" :key="day" class="py-3 text-center text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+            <div v-for="day in days" :key="day" class="text-center text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]" :class="compact ? 'py-2' : 'py-3'">
                 {{ day }}
             </div>
         </div>
 
         <!-- Calendar Grid (month view only) -->
-        <div v-if="calendarView === 'month'" class="flex-1 overflow-y-auto custom-scrollbar bg-gray-100/30">
-            <div v-for="(week, wIndex) in weeks" :key="wIndex" class="grid grid-cols-7 border-b border-gray-100 min-h-[140px] bg-white">
+        <div
+            v-if="calendarView === 'month'"
+            class="flex-1 min-h-0 bg-gray-100/30"
+            :class="compact ? 'grid grid-rows-6 overflow-hidden' : 'overflow-y-auto custom-scrollbar'"
+        >
+            <div
+                v-for="(week, wIndex) in weeks"
+                :key="wIndex"
+                class="grid grid-cols-7 border-b border-gray-100 bg-white min-h-0"
+                :class="compact ? '' : 'min-h-[140px]'"
+            >
                 <div 
                     v-for="(day, dIndex) in week" 
-                    :key="dIndex"
-                    @click="emit('date-click', day.date)"
-                    class="relative p-2 transition-colors hover:bg-gray-50/80 cursor-pointer border-r border-gray-50 last:border-r-0"
-                    :class="[!day.isCurrentMonth ? 'opacity-40 bg-gray-50/30' : '']"
+                    :key="day.date ? toDateKey(day.date) : `blank-${wIndex}-${dIndex}`"
+                    @click="day.date && emit('date-click', day.date)"
+                    class="relative transition-colors hover:bg-gray-50/80 cursor-pointer border-r border-gray-50 last:border-r-0"
+                    :class="[
+                        compact ? 'p-1.5' : 'p-2',
+                        day.isBlank ? 'bg-gray-50/30 cursor-default hover:bg-gray-50/30' : ''
+                    ]"
                 >
                     <!-- Date Number -->
-                    <div class="flex justify-start mb-2">
+                    <div v-if="!day.isBlank" class="flex justify-start" :class="compact ? 'mb-1' : 'mb-2'">
                         <span
                             @click.stop="switchToDay(day.date)"
-                            class="text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full transition-all duration-300 hover:ring-2 hover:ring-blue-300"
-                            :class="[
-                                isToday(day.date) ? 'bg-blue-600 text-white shadow-lg scale-110' : 'text-gray-500'
-                            ]"
+                            class="text-xs font-bold flex items-center justify-center rounded-full transition-all duration-300 hover:ring-2 hover:ring-blue-300"
+                            :class="[compact ? 'w-6 h-6' : 'w-7 h-7', isToday(day.date) ? 'bg-blue-600 text-white shadow-lg scale-110' : 'text-gray-500']"
                             title="Open day view"
                         >
                             {{ day.date.getDate() }}
@@ -704,13 +648,15 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                     </div>
 
                     <!-- Events List -->
-                    <div class="space-y-1.5 relative z-10">
+                    <div v-if="!day.isBlank" class="relative z-10">
+                        <div class="overflow-hidden" :class="compact ? 'space-y-1 max-h-16' : 'space-y-1.5'">
                         <div 
                             v-for="event in getEventsForDate(day.date).slice(0, 2)" 
                             :key="event.id"
                             @click.stop="emit('event-click', { event, date: day.date })"
-                            class="group relative py-1 px-2 text-[10px] leading-none shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 border"
+                            class="group relative text-[10px] leading-none shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 border"
                             :class="[
+                                compact ? 'py-0.5 px-1.5' : 'py-1 px-2',
                                 getChipColor(event),
                                 getEventStatus(event, day.date).isStart ? 'rounded-l-lg ml-1 border-l-2' : '-ml-2 border-l-0',
                                 getEventStatus(event, day.date).isEnd ? 'rounded-r-lg mr-1 border-r-2' : '-mr-2 border-r-0',
@@ -729,12 +675,19 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                     <span v-if="event.ticket" class="opacity-75 font-normal">[{{ event.ticket.ticket_key }}]</span>
                                     {{ event.user?.name }}
                                 </div>
-                                <div v-if="getEventStatus(event, day.date).isStart" class="opacity-90 font-medium truncate flex justify-between">
+                                <div
+                                    v-if="compact && shouldShowTime(event.status) && (getActualTimesForDate(event, day.date).actual_time_in || getActualTimesForDate(event, day.date).actual_time_out)"
+                                    class="truncate text-[8px] font-bold leading-tight opacity-95"
+                                >
+                                    <span v-if="getActualTimesForDate(event, day.date).actual_time_in">Time In {{ formatTime(getActualTimesForDate(event, day.date).actual_time_in) }}</span>
+                                    <span v-if="getActualTimesForDate(event, day.date).actual_time_out" class="ml-1">Out {{ formatTime(getActualTimesForDate(event, day.date).actual_time_out) }}</span>
+                                </div>
+                                <div v-if="!compact && getEventStatus(event, day.date).isStart" class="opacity-90 font-medium truncate flex justify-between">
                                     <span>{{ event.status }}</span>
                                     <span v-if="shouldShowTime(event.status)" class="text-[9px]">{{ formatTime(event.start_time) }}</span>
                                 </div>
                                 <div
-                                    v-if="shouldShowTime(event.status) && (getActualTimesForDate(event, day.date).actual_time_in || getActualTimesForDate(event, day.date).actual_time_out)"
+                                    v-if="!compact && shouldShowTime(event.status) && (getActualTimesForDate(event, day.date).actual_time_in || getActualTimesForDate(event, day.date).actual_time_out)"
                                     class="flex flex-wrap gap-x-2 gap-y-0.5 text-[8px] font-bold opacity-95 leading-tight"
                                 >
                                     <span v-if="getActualTimesForDate(event, day.date).actual_time_in">
@@ -747,11 +700,14 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                             </div>
                         </div>
 
+                        </div>
+
                         <!-- More Indicator -->
-                        <div 
+                        <div
                             v-if="getEventsForDate(day.date).length > 2"
                             @click.stop="openDayModal(day.date)"
-                            class="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors px-2 py-1"
+                            class="mt-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors px-2 leading-tight"
+                            :class="compact ? 'py-0' : 'py-1'"
                         >
                             +{{ getEventsForDate(day.date).length - 2 }} more
                         </div>

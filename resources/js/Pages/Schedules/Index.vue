@@ -1,10 +1,10 @@
 <template>
     <AppLayout title="Scheduling">
-        <div class="py-12">
+        <div :class="currentView === 'calendar' ? 'py-3 sm:py-4' : 'py-12'">
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
                 
                 <!-- View Toggle & Actions Header -->
-                <div class="mb-8 space-y-4">
+                <div :class="currentView === 'calendar' ? 'mb-3 space-y-3' : 'mb-8 space-y-4'">
                     <!-- Top Bar: View Tabs & Primary Actions -->
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <!-- Modern Segmented Control / Tabs -->
@@ -58,11 +58,25 @@
                         </div>
 
                         <!-- Action Buttons Group -->
-                        <div class="flex flex-wrap items-center gap-3">
+                        <div class="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+                            <button
+                                v-if="currentView === 'calendar'"
+                                @click="showPageFilters = !showPageFilters"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border rounded-lg text-xs font-bold shadow-sm transition-all duration-200 whitespace-nowrap"
+                                :class="showPageFilters
+                                    ? 'border-blue-200 text-blue-700 bg-blue-50'
+                                    : 'border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300'"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                <span>Filters</span>
+                            </button>
+
                             <button
                                 v-if="currentView !== 'complete-schedules' && currentView !== 'pending-requests'"
                                 @click="exportPdf"
-                                class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 group"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 group whitespace-nowrap"
                             >
                                 <svg class="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -70,12 +84,12 @@
                                 <span>{{ currentView === 'report' ? 'Export Report' : (currentView === 'missing-schedules' ? 'Export Missing' : 'Export PDF') }}</span>
                             </button>
 
-                            <div class="h-8 w-[1px] bg-gray-200 mx-1 hidden lg:block"></div>
+                            <div class="h-7 w-[1px] bg-gray-200 mx-0.5 hidden lg:block"></div>
 
                             <button
                                 v-if="hasPermission('schedules.create')"
                                 @click="openImportModal"
-                                class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-sm font-bold hover:bg-emerald-100 hover:border-emerald-200 transition-all duration-200"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-xs font-bold hover:bg-emerald-100 hover:border-emerald-200 transition-all duration-200 whitespace-nowrap"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -86,7 +100,7 @@
                             <button
                                 v-if="hasPermission('schedules.create')"
                                 @click="openCreateModal"
-                                class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-blue-300 transform active:scale-95 transition-all duration-200"
+                                class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-md shadow-blue-200 hover:bg-blue-700 hover:shadow-blue-300 transform active:scale-95 transition-all duration-200 whitespace-nowrap"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -97,7 +111,7 @@
                             <button
                                 v-if="hasPermission('schedules.delete')"
                                 @click="openDuplicateModal"
-                                class="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                                class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
                                 title="Find Duplicates"
                             >
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +122,11 @@
                     </div>
 
                     <!-- Filter Bar -->
-                    <div class="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <div
+                        v-if="currentView !== 'calendar' || showPageFilters"
+                        class="flex flex-wrap items-center bg-white rounded-2xl border border-gray-100 shadow-sm"
+                        :class="currentView === 'calendar' ? 'gap-2 p-2.5' : 'gap-4 p-4'"
+                    >
                         <div class="flex items-center gap-2 text-gray-400 mr-2">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -165,6 +183,73 @@
                             />
                         </div>
 
+                        <div v-if="currentView === 'calendar'" class="w-full border-t border-gray-100 pt-2 space-y-2">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</span>
+                                <button
+                                    v-for="status in statusFilterOptions"
+                                    :key="status.status"
+                                    @click="toggleStatusFilter(status.status)"
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                                    :class="filterStatus.includes(status.status)
+                                        ? [status.bg, 'text-white border-transparent shadow-sm']
+                                        : 'bg-white text-gray-400 border-gray-200'"
+                                >{{ status.label }}</button>
+                                <button
+                                    @click="toggleAllStatuses"
+                                    class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
+                                >{{ allStatusSelected ? 'Clear all' : 'Select all' }}</button>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest">Concern</span>
+                                <button
+                                    v-for="concernType in concernTypeFilterOptions"
+                                    :key="concernType.key"
+                                    @click="toggleConcernTypeFilter(concernType.key)"
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                                    :class="filterConcernType.includes(concernType.key)
+                                        ? [concernType.bg, 'text-white border-transparent shadow-sm']
+                                        : 'bg-white text-gray-400 border-gray-200'"
+                                >{{ concernType.label }}</button>
+                                <button
+                                    @click="toggleConcernTypeFilter('none')"
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                                    :class="filterConcernType.includes('none')
+                                        ? ['bg-slate-500', 'text-white border-transparent shadow-sm']
+                                        : 'bg-white text-gray-400 border-gray-200'"
+                                >No Ticket</button>
+                                <button
+                                    @click="toggleAllConcernTypes"
+                                    class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
+                                >{{ allConcernTypeSelected ? 'Clear all' : 'Select all' }}</button>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest">Priority</span>
+                                <button
+                                    v-for="priority in priorityFilterOptions"
+                                    :key="priority.key"
+                                    @click="togglePriorityFilter(priority.key)"
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                                    :class="filterPriority.includes(priority.key)
+                                        ? [priority.bg, 'text-white border-transparent shadow-sm']
+                                        : 'bg-white text-gray-400 border-gray-200'"
+                                >{{ priority.label }}</button>
+                                <button
+                                    @click="togglePriorityFilter('none')"
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all duration-150 select-none"
+                                    :class="filterPriority.includes('none')
+                                        ? ['bg-slate-500', 'text-white border-transparent shadow-sm']
+                                        : 'bg-white text-gray-400 border-gray-200'"
+                                >No Priority</button>
+                                <button
+                                    @click="toggleAllPriorities"
+                                    class="ml-auto text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors shrink-0"
+                                >{{ allPrioritySelected ? 'Clear all' : 'Select all' }}</button>
+                            </div>
+                        </div>
+
                         <!-- Date Range filter -->
                         <div v-if="currentView === 'missing-schedules' || currentView === 'complete-schedules'" class="flex items-center gap-2">
                             <div class="relative">
@@ -205,7 +290,16 @@
                                 </button>
                             </div>
                         </div>
+
+                        <button
+                            v-if="currentView === 'calendar'"
+                            @click="showPageFilters = false"
+                            class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:border-blue-200 hover:text-blue-600 transition-all"
+                        >
+                            Hide
+                        </button>
                     </div>
+
                 </div>
 
                 <!-- Calendar View -->
@@ -213,6 +307,8 @@
                     <Calendar
                         :events="calendarSchedules"
                         :users="calendarUsers"
+                        compact
+                        height-class="h-[calc(100vh-10rem)] min-h-[580px]"
                         v-model:statusFilter="filterStatus"
                         v-model:concernTypeFilter="filterConcernType"
                         v-model:priorityFilter="filterPriority"
@@ -1431,6 +1527,31 @@ const filterNodeId = useRemember(
 )
 const filterSubUnit = useRemember(props.filters?.sub_unit || '', 'schedules.filterSubUnit')
 const filterStore = useRemember(props.filters?.store_id || '', 'schedules.filterStore')
+const showPageFilters = ref(false)
+
+const statusFilterOptions = [
+    { status: 'On-site', label: 'On-site', bg: 'bg-blue-600' },
+    { status: 'Off-site', label: 'Off-site', bg: 'bg-purple-600' },
+    { status: 'WFH', label: 'WFH', bg: 'bg-emerald-600' },
+    { status: 'SL', label: 'SL', bg: 'bg-rose-600' },
+    { status: 'VL', label: 'VL', bg: 'bg-amber-500' },
+    { status: 'Restday', label: 'Rest Day', bg: 'bg-slate-400' },
+    { status: 'Holiday', label: 'Holiday', bg: 'bg-yellow-500' },
+    { status: 'Offset', label: 'Offset', bg: 'bg-cyan-600' },
+    { status: 'N/A', label: 'N/A', bg: 'bg-gray-500' },
+]
+
+const concernTypeFilterOptions = [
+    { key: 'Incident', label: 'Incident', bg: 'bg-amber-500' },
+    { key: 'Service Request', label: 'Service Request', bg: 'bg-cyan-600' },
+]
+
+const priorityFilterOptions = [
+    { key: 'urgent', label: 'P1 - Urgent', bg: 'bg-red-600' },
+    { key: 'high', label: 'P2 - High', bg: 'bg-orange-500' },
+    { key: 'medium', label: 'P3 - Medium', bg: 'bg-yellow-500' },
+    { key: 'low', label: 'P4 - Low', bg: 'bg-green-600' },
+]
 
 watch(filterDepartment, () => {
     filterUser.value = ''
@@ -1464,6 +1585,40 @@ const filterPriority = useRemember(
     props.filters?.priority ? (Array.isArray(props.filters.priority) ? props.filters.priority : [props.filters.priority]) : ['none', 'urgent', 'high', 'medium', 'low'],
     'schedules.filterPriority'
 )
+
+const allStatusSelected = computed(() => filterStatus.value.length === statusFilterOptions.length)
+const allConcernTypeSelected = computed(() => filterConcernType.value.length === (concernTypeFilterOptions.length + 1))
+const allPrioritySelected = computed(() => filterPriority.value.length === (priorityFilterOptions.length + 1))
+
+const toggleStatusFilter = (status) => {
+    filterStatus.value = filterStatus.value.includes(status)
+        ? filterStatus.value.filter(item => item !== status)
+        : [...filterStatus.value, status]
+}
+
+const toggleConcernTypeFilter = (concernType) => {
+    filterConcernType.value = filterConcernType.value.includes(concernType)
+        ? filterConcernType.value.filter(item => item !== concernType)
+        : [...filterConcernType.value, concernType]
+}
+
+const togglePriorityFilter = (priority) => {
+    filterPriority.value = filterPriority.value.includes(priority)
+        ? filterPriority.value.filter(item => item !== priority)
+        : [...filterPriority.value, priority]
+}
+
+const toggleAllStatuses = () => {
+    filterStatus.value = allStatusSelected.value ? [] : statusFilterOptions.map(status => status.status)
+}
+
+const toggleAllConcernTypes = () => {
+    filterConcernType.value = allConcernTypeSelected.value ? [] : ['none', ...concernTypeFilterOptions.map(type => type.key)]
+}
+
+const toggleAllPriorities = () => {
+    filterPriority.value = allPrioritySelected.value ? [] : ['none', ...priorityFilterOptions.map(priority => priority.key)]
+}
 
 const selectedReportYears = useRemember(
     props.filters?.report_years ? (Array.isArray(props.filters.report_years) ? props.filters.report_years.map(Number) : [Number(props.filters.report_years)]) : [...props.pivotYears],
