@@ -6,6 +6,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
 import draggable from 'vuedraggable';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import {
@@ -31,6 +32,7 @@ import {
 const props = defineProps({
     settings: Object,
     subUnits: Array,
+    departmentReferences: Array,
     assignableStaff: Array,
 });
 
@@ -279,6 +281,93 @@ const slugify = (text) => {
         .replace(/-+$/, '');            // Trim - from end of text
 };
 
+const normalizedSlug = (text) => {
+    return text.toString().toLowerCase()
+        .replace(/[^\w\s-]+/g, '')
+        .replace(/[\s_-]+/g, '_')
+        .replace(/^_+/, '')
+        .replace(/_+$/, '');
+};
+
+const legacySlugCandidates = (text) => {
+    if (!text) return [];
+    return [...new Set([normalizedSlug(text), slugify(text)].filter(Boolean))];
+};
+
+const scopedSettingKey = (baseKey, scopeId) => {
+    return !scopeId || scopeId === 'global' ? baseKey : `${baseKey}_${scopeId}`;
+};
+
+const buildSettingsScopeOptions = () => {
+    const options = [{ id: 'global', name: 'Global Default' }];
+
+    const mapNode = (node, path = []) => {
+        const nodePath = [...path, node.name].filter(Boolean);
+        const id = `node_${node.id}`;
+
+        options.push({
+            id,
+            name: nodePath.join(' > ') || node.name,
+            legacyPath: nodePath.join(' > '),
+        });
+
+        return {
+            id,
+            name: node.name,
+            code: node.code,
+            children: (node.children || []).map(child => mapNode(child, nodePath)),
+        };
+    };
+
+    const nodes = (props.departmentReferences || [])
+        .filter(department => department?.id && department?.name)
+        .map(department => {
+            const id = `department_${department.id}`;
+            options.push({
+                id,
+                name: department.name,
+                legacyPath: department.name,
+            });
+
+            return {
+                id,
+                name: department.name,
+                code: department.code,
+                children: (department.nodes || []).map(node => mapNode(node)),
+            };
+        });
+
+    return { options, nodes: [{ id: 'global', name: 'Global Default', children: [] }, ...nodes] };
+};
+
+const settingsScopeData = computed(buildSettingsScopeOptions);
+const settingsScopeOptions = computed(() => settingsScopeData.value.options);
+const settingsScopeNodes = computed(() => settingsScopeData.value.nodes);
+
+const getScopeLabel = (scopeId) => {
+    return settingsScopeOptions.value.find(option => option.id === scopeId)?.name || 'Global Default';
+};
+
+const firstSettingValue = (keys, fallback) => {
+    for (const key of keys) {
+        const value = props.settings[key];
+        if (value !== undefined && value !== null && value !== '') return value;
+    }
+    return fallback;
+};
+
+const scopedSettingValue = (baseKey, scope, fallback) => {
+    if (scope.id === 'global') {
+        return props.settings[baseKey] || fallback;
+    }
+
+    const keys = [scopedSettingKey(baseKey, scope.id)];
+    legacySlugCandidates(scope.legacyPath).forEach(slug => keys.push(`${baseKey}_${slug}`));
+    keys.push(baseKey);
+
+    return firstSettingValue(keys, fallback);
+};
+
 const parseWorkingDays = (days) => {
     if (!days) return [1, 2, 3, 4, 5];
     try {
@@ -337,61 +426,54 @@ const getInitialFormData = () => {
         sidebar_layout: props.settings.sidebar_layout || null,
     };
 
-    // Add sub-unit specific settings
-    props.subUnits.forEach(unit => {
-        const slug = slugify(unit);
-        data[`business_start_time_${slug}`] = props.settings[`business_start_time_${slug}`] || props.settings.business_start_time || '08:00';
-        data[`business_end_time_${slug}`] = props.settings[`business_end_time_${slug}`] || props.settings.business_end_time || '17:00';
-        data[`working_days_${slug}`] = parseWorkingDays(props.settings[`working_days_${slug}`] || props.settings.working_days);
-    });
-
-    // Add sub-unit specific threshold settings
-    props.subUnits.forEach(unit => {
-        const slug = slugify(unit);
-        const defaults = {
-            green_min: 1, green_max: 2, green_label: 'Healthy',
-            yellow_min: 3, yellow_max: 3, yellow_label: 'Warning',
-            orange_min: 4, orange_max: 4, orange_label: 'At-risk',
-            red_min: 5, red_label: 'Critical',
-        };
-        Object.entries(defaults).forEach(([field, fallback]) => {
-            const parts = field.split('_');
-            const color = parts[0];
-            const suffix = parts.slice(1).join('_');
-            const key = `threshold_${color}_${suffix}_${slug}`;
-            const globalKey = `threshold_${color}_${suffix}`;
-            data[key] = props.settings[key] || props.settings[globalKey] || fallback;
+    // Add hierarchy-scoped business hour settings.
+    buildSettingsScopeOptions().options
+        .filter(scope => scope.id !== 'global')
+        .forEach(scope => {
+            data[scopedSettingKey('business_start_time', scope.id)] = scopedSettingValue('business_start_time', scope, props.settings.business_start_time || '08:00');
+            data[scopedSettingKey('business_end_time', scope.id)] = scopedSettingValue('business_end_time', scope, props.settings.business_end_time || '17:00');
+            data[scopedSettingKey('working_days', scope.id)] = parseWorkingDays(scopedSettingValue('working_days', scope, props.settings.working_days));
         });
-    });
+
+    // Add hierarchy-scoped threshold settings.
+    buildSettingsScopeOptions().options
+        .filter(scope => scope.id !== 'global')
+        .forEach(scope => {
+            const defaults = {
+                green_min: 1, green_max: 2, green_label: 'Healthy',
+                yellow_min: 3, yellow_max: 3, yellow_label: 'Warning',
+                orange_min: 4, orange_max: 4, orange_label: 'At-risk',
+                red_min: 5, red_label: 'Critical',
+            };
+            Object.entries(defaults).forEach(([field, fallback]) => {
+                const parts = field.split('_');
+                const color = parts[0];
+                const suffix = parts.slice(1).join('_');
+                const key = scopedSettingKey(`threshold_${color}_${suffix}`, scope.id);
+                const globalKey = `threshold_${color}_${suffix}`;
+                data[key] = scopedSettingValue(globalKey, scope, props.settings[globalKey] || fallback);
+            });
+        });
 
     return data;
 };
 
 const form = useForm(getInitialFormData());
 
-const subUnitOptions = computed(() => {
-    return [
-        { id: 'global', name: 'Global Default' },
-        ...props.subUnits.map(unit => ({ id: slugify(unit), name: unit }))
-    ];
-});
-
 const currentStartTimeKey = computed(() => {
-    return selectedSubUnit.value === 'global' ? 'business_start_time' : `business_start_time_${selectedSubUnit.value}`;
+    return scopedSettingKey('business_start_time', selectedSubUnit.value);
 });
 
 const currentEndTimeKey = computed(() => {
-    return selectedSubUnit.value === 'global' ? 'business_end_time' : `business_end_time_${selectedSubUnit.value}`;
+    return scopedSettingKey('business_end_time', selectedSubUnit.value);
 });
 
 const currentWorkingDaysKey = computed(() => {
-    return selectedSubUnit.value === 'global' ? 'working_days' : `working_days_${selectedSubUnit.value}`;
+    return scopedSettingKey('working_days', selectedSubUnit.value);
 });
 
 const thresholdKey = (color, field) => {
-    return selectedThresholdSubUnit.value === 'global'
-        ? `threshold_${color}_${field}`
-        : `threshold_${color}_${field}_${selectedThresholdSubUnit.value}`;
+    return scopedSettingKey(`threshold_${color}_${field}`, selectedThresholdSubUnit.value);
 };
 
 const submit = () => {
@@ -656,30 +738,29 @@ const syncEmails = () => {
 
                             <!-- Business Hours Tab -->
                             <div v-if="activeTab === 'business_hours'" class="space-y-8">
-                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between mb-6">
+                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
                                     <div class="flex items-center space-x-3">
                                         <div class="p-2 bg-blue-600 rounded-lg">
                                             <AdjustmentsHorizontalIcon class="w-5 h-5 text-white" />
                                         </div>
                                         <div>
                                             <h4 class="text-sm font-black text-blue-900 uppercase tracking-tight">Configure Hours For:</h4>
-                                            <p class="text-[10px] text-blue-600 font-bold">Select "Global Default" or a specific Sub-Unit</p>
+                                            <p class="text-[10px] text-blue-600 font-bold">Select "Global Default" or a department hierarchy level</p>
                                         </div>
                                     </div>
-                                    <select 
-                                        v-model="selectedSubUnit"
-                                        class="border-blue-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg text-sm font-black text-blue-700 bg-white shadow-sm"
-                                    >
-                                        <option v-for="option in subUnitOptions" :key="option.id" :value="option.id">
-                                            {{ option.name }}
-                                        </option>
-                                    </select>
+                                    <div class="w-full max-w-xs">
+                                        <HierarchySelector
+                                            v-model="selectedSubUnit"
+                                            :nodes="settingsScopeNodes"
+                                            placeholder="Select scope"
+                                        />
+                                    </div>
                                 </div>
 
                                 <section>
                                     <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
                                         <ClockIcon class="w-4 h-4 mr-2" />
-                                        Operational Time ({{ subUnitOptions.find(o => o.id === selectedSubUnit)?.name }})
+                                        Operational Time ({{ getScopeLabel(selectedSubUnit) }})
                                     </h3>
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-xl">
                                         <div>
@@ -700,7 +781,7 @@ const syncEmails = () => {
                                 <section>
                                     <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
                                         <AdjustmentsHorizontalIcon class="w-4 h-4 mr-2" />
-                                        Working Days ({{ subUnitOptions.find(o => o.id === selectedSubUnit)?.name }})
+                                        Working Days ({{ getScopeLabel(selectedSubUnit) }})
                                     </h3>
                                     <div class="flex flex-wrap gap-3">
                                         <label v-for="(day, index) in dayNames" :key="index" 
@@ -710,7 +791,7 @@ const syncEmails = () => {
                                             {{ day }}
                                         </label>
                                     </div>
-                                    <p class="mt-4 text-[10px] text-gray-400 italic">These days are used to calculate SLA deadlines and response times for {{ selectedSubUnit === 'global' ? 'all tickets by default' : 'tickets assigned to this sub-unit' }}.</p>
+                                    <p class="mt-4 text-[10px] text-gray-400 italic">These days are used to calculate SLA deadlines and response times for {{ selectedSubUnit === 'global' ? 'all tickets by default' : `tickets assigned to ${getScopeLabel(selectedSubUnit)}` }}.</p>
                                     <InputError class="mt-2" :message="form.errors[currentWorkingDaysKey]" />
                                 </section>
                             </div>
@@ -904,24 +985,23 @@ const syncEmails = () => {
 
                             <!-- Thresholds Tab -->
                             <div v-if="activeTab === 'thresholds'" class="space-y-6">
-                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-center justify-between mb-2">
+                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-2">
                                     <div class="flex items-center space-x-3">
                                         <div class="p-2 bg-blue-600 rounded-lg">
                                             <AdjustmentsHorizontalIcon class="w-5 h-5 text-white" />
                                         </div>
                                         <div>
                                             <p class="text-sm font-black text-blue-900">Threshold Configuration</p>
-                                            <p class="text-xs text-blue-600">Configure per sub-unit or set a global default.</p>
+                                            <p class="text-xs text-blue-600">Configure per department hierarchy level or set a global default.</p>
                                         </div>
                                     </div>
-                                    <select
-                                        v-model="selectedThresholdSubUnit"
-                                        class="border-blue-200 focus:ring-blue-500 focus:border-blue-500 rounded-lg text-sm font-black text-blue-700 bg-white shadow-sm"
-                                    >
-                                        <option v-for="option in subUnitOptions" :key="option.id" :value="option.id">
-                                            {{ option.name }}
-                                        </option>
-                                    </select>
+                                    <div class="w-full max-w-xs">
+                                        <HierarchySelector
+                                            v-model="selectedThresholdSubUnit"
+                                            :nodes="settingsScopeNodes"
+                                            placeholder="Select scope"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start mb-8">

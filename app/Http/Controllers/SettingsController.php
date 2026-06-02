@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Models\User;
+use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
@@ -11,6 +13,10 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class SettingsController extends Controller implements HasMiddleware
 {
+    public function __construct(private OrganizationReferenceService $organizationReferences)
+    {
+    }
+
     public static function middleware(): array
     {
         return [
@@ -22,9 +28,9 @@ class SettingsController extends Controller implements HasMiddleware
     public function index()
     {
         $settings = Setting::all()->pluck('value', 'key');
-        $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
+        $subUnits = User::whereNotNull('org_path')->distinct()->pluck('org_path');
         
-        $assignableStaff = \App\Models\User::whereHas('roles', fn($q) => $q->where('is_assignable', true))
+        $assignableStaff = User::whereHas('roles', fn($q) => $q->where('is_assignable', true))
             ->select('id', 'name', 'email')
             ->orderBy('name')
             ->get();
@@ -32,6 +38,7 @@ class SettingsController extends Controller implements HasMiddleware
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'subUnits' => $subUnits,
+            'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'assignableStaff' => $assignableStaff,
         ]);
     }

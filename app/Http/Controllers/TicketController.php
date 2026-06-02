@@ -774,9 +774,10 @@ class TicketController extends Controller
         }
 
         if (!$ticket->slaMetric) {
+            $assignee = $ticket->assignee;
             $ticket->slaMetric()->create([
-                'response_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response'),
-                'resolution_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution'),
+                'response_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $assignee?->org_path, $assignee?->department_id, $assignee?->department_node_id),
+                'resolution_target_at' => \App\Services\SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $assignee?->org_path, $assignee?->department_id, $assignee?->department_node_id),
             ]);
             $ticket->load('slaMetric');
         }
@@ -791,11 +792,12 @@ class TicketController extends Controller
         $vendors = collect([['id' => null, 'name' => 'None']])
             ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
 
-        $subUnit = $ticket->assignee?->org_path;
+        $assignee = $ticket->assignee;
+        $subUnit = $assignee?->org_path;
         $businessHours = [
-            'start' => \App\Models\Setting::get($subUnit ? "business_start_time_" . \Illuminate\Support\Str::slug($subUnit, '_') : "business_start_time", \App\Models\Setting::get("business_start_time", "08:00")),
-            'end' => \App\Models\Setting::get($subUnit ? "business_end_time_" . \Illuminate\Support\Str::slug($subUnit, '_') : "business_end_time", \App\Models\Setting::get("business_end_time", "17:00")),
-            'days' => json_decode(\App\Models\Setting::get($subUnit ? "working_days_" . \Illuminate\Support\Str::slug($subUnit, '_') : "working_days", \App\Models\Setting::get("working_days", "[1,2,3,4,5]")), true),
+            'start' => \App\Models\Setting::getScoped('business_start_time', '08:00', $assignee?->department_id, $assignee?->department_node_id, $subUnit),
+            'end' => \App\Models\Setting::getScoped('business_end_time', '17:00', $assignee?->department_id, $assignee?->department_node_id, $subUnit),
+            'days' => json_decode(\App\Models\Setting::getScoped('working_days', '[1,2,3,4,5]', $assignee?->department_id, $assignee?->department_node_id, $subUnit), true),
         ];
 
         return Inertia::render('Tickets/Edit', [

@@ -11,25 +11,31 @@ class SlaService
     /**
      * Get a setting with optional sub-unit override.
      */
-    private static function getSetting($key, $subUnit = null, $default = null)
+    private static function getSetting(
+        $key,
+        $subUnit = null,
+        $default = null,
+        ?int $departmentId = null,
+        ?int $departmentNodeId = null
+    )
     {
-        if ($subUnit) {
-            $slug = \Illuminate\Support\Str::slug($subUnit, '_');
-            $overrideKey = "{$key}_{$slug}";
-            $value = Setting::get($overrideKey);
-            if ($value !== null) return $value;
-        }
-        return Setting::get($key, $default);
+        return Setting::getScoped(
+            $key,
+            $default,
+            $departmentId,
+            $departmentNodeId,
+            $subUnit
+        );
     }
 
     /**
      * Parse and validate business hours settings. Returns safe Carbon instances.
      */
-    private static function parseWorkHours($subUnit): array
+    private static function parseWorkHours($subUnit, ?int $departmentId = null, ?int $departmentNodeId = null): array
     {
-        $startTime      = self::getSetting('business_start_time', $subUnit, '08:00:00');
-        $endTime        = self::getSetting('business_end_time',   $subUnit, '17:00:00');
-        $workingDaysRaw = self::getSetting('working_days',        $subUnit);
+        $startTime      = self::getSetting('business_start_time', $subUnit, '08:00:00', $departmentId, $departmentNodeId);
+        $endTime        = self::getSetting('business_end_time',   $subUnit, '17:00:00', $departmentId, $departmentNodeId);
+        $workingDaysRaw = self::getSetting('working_days',        $subUnit, null, $departmentId, $departmentNodeId);
 
         $workingDays = [];
         if ($workingDaysRaw) {
@@ -71,7 +77,14 @@ class SlaService
      * Calculate the target datetime based on business hours.
      * Uses a mathematical day-skip approach — O(working_days) not O(hours).
      */
-    public static function calculateTarget(Carbon $startDate, $itemId, string $type = 'response', $subUnit = null)
+    public static function calculateTarget(
+        Carbon $startDate,
+        $itemId,
+        string $type = 'response',
+        $subUnit = null,
+        ?int $departmentId = null,
+        ?int $departmentNodeId = null
+    )
     {
         $item     = \App\Models\Item::find($itemId);
         $priority = $item ? strtolower($item->priority) : 'medium';
@@ -81,7 +94,7 @@ class SlaService
             $hours = $default;
         }
 
-        [$workStart, $workEnd, $workingDays] = self::parseWorkHours($subUnit);
+        [$workStart, $workEnd, $workingDays] = self::parseWorkHours($subUnit, $departmentId, $departmentNodeId);
 
         $secondsPerWorkDay = (int) $workStart->diffInSeconds($workEnd); // e.g. 32400 for 9-hour day
         $secondsToAdd      = $hours * 3600;
@@ -149,11 +162,18 @@ class SlaService
     /**
      * Simply add seconds while respecting business hours (for resuming from pause).
      */
-    public static function addSecondsRespectingBusinessHours(Carbon $startDate, int $secondsToAdd, Category $category = null, $subUnit = null)
+    public static function addSecondsRespectingBusinessHours(
+        Carbon $startDate,
+        int $secondsToAdd,
+        Category $category = null,
+        $subUnit = null,
+        ?int $departmentId = null,
+        ?int $departmentNodeId = null
+    )
     {
         $newTarget = $startDate->copy()->addSeconds($secondsToAdd);
 
-        [$workStart, $workEnd, $workingDays] = self::parseWorkHours($subUnit);
+        [$workStart, $workEnd, $workingDays] = self::parseWorkHours($subUnit, $departmentId, $departmentNodeId);
 
         // Adjust the landing time to be within business hours.
         // Hard-capped at 365 iterations to prevent infinite loops from bad data.

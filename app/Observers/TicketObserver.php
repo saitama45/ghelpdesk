@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Models\Ticket;
 use App\Models\TicketSlaMetric;
 use App\Models\Company;
+use App\Models\User;
 use App\Services\SlaService;
 use App\Services\LeadershipPointService;
 use App\Models\PosRequest;
@@ -74,12 +75,12 @@ class TicketObserver
     public function created(Ticket $ticket): void
     {
         $now = Carbon::now();
-        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->org_path : null;
+        $assignee = $ticket->assignee_id ? User::find($ticket->assignee_id) : null;
 
         $metric = TicketSlaMetric::create([
             'ticket_id' => $ticket->id,
-            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $subUnit),
-            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $subUnit),
+            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $assignee?->org_path, $assignee?->department_id, $assignee?->department_node_id),
+            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $assignee?->org_path, $assignee?->department_id, $assignee?->department_node_id),
         ]);
 
         if (in_array($ticket->status, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule'])) {
@@ -93,14 +94,17 @@ class TicketObserver
     public function updated(Ticket $ticket): void
     {
         $metric = $ticket->slaMetric;
-        $subUnit = $ticket->assignee_id ? \App\Models\User::find($ticket->assignee_id)?->org_path : null;
+        $assignee = $ticket->assignee_id ? User::find($ticket->assignee_id) : null;
+        $subUnit = $assignee?->org_path;
+        $departmentId = $assignee?->department_id;
+        $departmentNodeId = $assignee?->department_node_id;
 
         if (!$metric) {
             // Try to create it if it doesn't exist
             $metric = TicketSlaMetric::create([
                 'ticket_id' => $ticket->id,
-                'response_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit),
-                'resolution_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit),
+                'response_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit, $departmentId, $departmentNodeId),
+                'resolution_target_at' => SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit, $departmentId, $departmentNodeId),
             ]);
         }
 
@@ -138,7 +142,9 @@ class TicketObserver
                         $metric->response_target_at, 
                         $pausedSeconds,
                         null,
-                        $subUnit
+                        $subUnit,
+                        $departmentId,
+                        $departmentNodeId
                     );
                 }
                 
@@ -147,7 +153,9 @@ class TicketObserver
                         $metric->resolution_target_at, 
                         $pausedSeconds,
                         null,
-                        $subUnit
+                        $subUnit,
+                        $departmentId,
+                        $departmentNodeId
                     );
                 }
 
@@ -187,10 +195,10 @@ class TicketObserver
         if ($ticket->wasChanged('assignee_id') && $metric) {
             $updates = [];
             if (!$metric->first_response_at) {
-                $updates['response_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit);
+                $updates['response_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit, $departmentId, $departmentNodeId);
             }
             if (!$metric->resolved_at) {
-                $updates['resolution_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit);
+                $updates['resolution_target_at'] = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit, $departmentId, $departmentNodeId);
             }
 
             if (!empty($updates)) {
@@ -202,9 +210,9 @@ class TicketObserver
         if ($ticket->wasChanged('item_id') && $metric) {
             $updates = [];
 
-            $newResponseTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit);
+            $newResponseTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit, $departmentId, $departmentNodeId);
             if ((int) $metric->total_paused_seconds > 0) {
-                $newResponseTarget = SlaService::addSecondsRespectingBusinessHours($newResponseTarget, (int) $metric->total_paused_seconds, null, $subUnit);
+                $newResponseTarget = SlaService::addSecondsRespectingBusinessHours($newResponseTarget, (int) $metric->total_paused_seconds, null, $subUnit, $departmentId, $departmentNodeId);
             }
             $updates['response_target_at'] = $newResponseTarget;
 
@@ -213,9 +221,9 @@ class TicketObserver
                 $updates['is_response_breached'] = $metric->first_response_at->gt($newResponseTarget);
             }
 
-            $newResolutionTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit);
+            $newResolutionTarget = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'resolution', $subUnit, $departmentId, $departmentNodeId);
             if ((int) $metric->total_paused_seconds > 0) {
-                $newResolutionTarget = SlaService::addSecondsRespectingBusinessHours($newResolutionTarget, (int) $metric->total_paused_seconds, null, $subUnit);
+                $newResolutionTarget = SlaService::addSecondsRespectingBusinessHours($newResolutionTarget, (int) $metric->total_paused_seconds, null, $subUnit, $departmentId, $departmentNodeId);
             }
             $updates['resolution_target_at'] = $newResolutionTarget;
 

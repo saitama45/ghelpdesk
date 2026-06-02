@@ -16,6 +16,10 @@ const props = defineProps({
     inline: {
         type: Boolean,
         default: false
+    },
+    disabled: {
+        type: Boolean,
+        default: false
     }
 });
 
@@ -26,6 +30,7 @@ const expandedStates = ref({});
 const container = ref(null);
 
 const toggleDropdown = () => {
+    if (props.disabled) return;
     if (!props.inline) isOpen.value = !isOpen.value;
 };
 
@@ -39,12 +44,14 @@ const toggleNode = (id, event) => {
 };
 
 const selectNode = (id) => {
+    if (props.disabled) return;
     emit('update:modelValue', id);
     if (!props.inline) closeDropdown();
 };
 
 const clearSelection = (event) => {
     event.stopPropagation();
+    if (props.disabled) return;
     emit('update:modelValue', '');
 };
 
@@ -168,7 +175,10 @@ import { h } from 'vue';
         <!-- Dropdown Trigger (only if not inline) -->
         <div v-if="!inline" @click="toggleDropdown" 
             class="flex items-center justify-between w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-all"
-            :class="{'ring-2 ring-blue-500 border-blue-500': isOpen}"
+            :class="{
+                'ring-2 ring-blue-500 border-blue-500': isOpen,
+                'opacity-60 cursor-not-allowed bg-gray-50 hover:border-gray-200': disabled
+            }"
         >
             <div class="flex items-center gap-2 truncate">
                 <FolderIcon v-if="selectedNode" class="w-4 h-4 text-blue-500 shrink-0" />
@@ -177,7 +187,7 @@ import { h } from 'vue';
                 </span>
             </div>
             <div class="flex items-center gap-1">
-                <XMarkIcon v-if="modelValue" @click="clearSelection" class="w-4 h-4 text-gray-400 hover:text-gray-600 p-0.5" />
+                <XMarkIcon v-if="modelValue && !disabled" @click="clearSelection" class="w-4 h-4 text-gray-400 hover:text-gray-600 p-0.5" />
                 <ChevronRightIcon class="w-3.5 h-3.5 text-gray-400 transition-transform" :class="{'rotate-90': isOpen}" />
             </div>
         </div>

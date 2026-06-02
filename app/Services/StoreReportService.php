@@ -34,14 +34,14 @@ class StoreReportService
 
         $ticketsQuery = clone $baseTicketsQuery;
 
-        if ($departmentId) {
-            $ticketsQuery->whereHas('assignee', function($q) use ($departmentId) {
-                $q->where('department_id', $departmentId);
-            });
-        } elseif ($departmentNodeId) {
+        if ($departmentNodeId) {
             $nodeIds = array_merge([(int) $departmentNodeId], DepartmentNode::getAllDescendantIds((int) $departmentNodeId));
             $ticketsQuery->whereHas('assignee', function($q) use ($nodeIds) {
                 $q->whereIn('department_node_id', $nodeIds);
+            });
+        } elseif ($departmentId) {
+            $ticketsQuery->whereHas('assignee', function($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
             });
         } elseif ($subUnit && $subUnit !== 'all') {
             $ticketsQuery->whereHas('assignee', function($q) use ($subUnit) {
@@ -57,7 +57,11 @@ class StoreReportService
             ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
-        $reportData = $activeTickets->groupBy(function ($ticket) use ($sectorAssignments) {
+        $reportData = $activeTickets->groupBy(function ($ticket) use ($sectorAssignments, $isCtMode) {
+            if ($isCtMode) {
+                return $ticket->store_id ? "store-{$ticket->store_id}" : 'unassigned-store';
+            }
+
             $sector = (int) $ticket->store->sector;
 
             if (!empty($sectorAssignments['users_by_sector'][$sector])) {
@@ -65,10 +69,11 @@ class StoreReportService
             }
 
             return $ticket->assignee_id ? "assignee-{$ticket->assignee_id}" : 'unassigned';
-        })->map(function ($tickets, $groupKey) use ($sectorAssignments) {
+        })->map(function ($tickets, $groupKey) use ($sectorAssignments, $isCtMode) {
             $firstTicket = $tickets->first();
             $sector = (int) $firstTicket->store->sector;
             $assignee = $firstTicket->assignee;
+            $firstStore = $firstTicket->store;
 
             $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
                 $store = $storeTickets->first()->store;
@@ -96,7 +101,9 @@ class StoreReportService
 
             return [
                 'id' => $groupKey,
-                'name' => !empty($sectorUsers) ? implode(', ', $sectorUsers) : ($assignee?->name ?? 'Unassigned'),
+                'name' => $isCtMode
+                    ? ($firstStore?->code ?? 'Unassigned Store')
+                    : (!empty($sectorUsers) ? implode(', ', $sectorUsers) : ($assignee?->name ?? 'Unassigned')),
                 'sub_unit' => $assignee?->org_path,
                 'sector' => !empty($sectorUsers) ? $sector : $stores->min('sector'),
                 'stores' => $stores,
@@ -110,7 +117,7 @@ class StoreReportService
 
         // Thresholds
         $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
-        $thresholds = $this->getThresholdsForSubUnit($subUnit, $allThresholds);
+        $thresholds = $this->getThresholdsForScope($subUnit, $allThresholds, $departmentId, $departmentNodeId);
 
         // Summary logic
         $summary = [
@@ -195,19 +202,24 @@ class StoreReportService
         ];
     }
 
-    private function getThresholdsForSubUnit($subUnit, $allThresholds)
+    private function getThresholdsForScope($subUnit, $allThresholds, $departmentId = null, $departmentNodeId = null)
     {
         $colors = ['green', 'yellow', 'orange', 'red'];
         $suffixes = ['min', 'max', 'label'];
         $thresholds = [];
 
-        $subUnitSlug = null;
+        $subUnitSlugs = [];
         if ($subUnit && $subUnit !== 'all') {
-            $subUnitSlug = strtolower((string)$subUnit);
-            $subUnitSlug = preg_replace('/\s+/', '_', $subUnitSlug);
-            $subUnitSlug = preg_replace('/[^\w-]+/', '', $subUnitSlug);
-            $subUnitSlug = preg_replace('/--+/', '_', $subUnitSlug);
-            $subUnitSlug = trim($subUnitSlug, '-');
+            $frontendSlug = strtolower((string)$subUnit);
+            $frontendSlug = preg_replace('/\s+/', '_', $frontendSlug);
+            $frontendSlug = preg_replace('/[^\w-]+/', '', $frontendSlug);
+            $frontendSlug = preg_replace('/--+/', '_', $frontendSlug);
+            $frontendSlug = trim($frontendSlug, '-');
+
+            $subUnitSlugs = array_values(array_unique(array_filter([
+                \Illuminate\Support\Str::slug($subUnit, '_'),
+                $frontendSlug,
+            ])));
         }
 
         foreach ($colors as $color) {
@@ -215,11 +227,30 @@ class StoreReportService
                 if ($color === 'red' && $suffix === 'max') continue;
                 
                 $globalKey = "threshold_{$color}_{$suffix}";
-                $subUnitKey = $subUnitSlug ? "threshold_{$color}_{$suffix}_{$subUnitSlug}" : null;
+                $nodeKey = $departmentNodeId ? "threshold_{$color}_{$suffix}_node_{$departmentNodeId}" : null;
+                $departmentKey = $departmentId ? "threshold_{$color}_{$suffix}_department_{$departmentId}" : null;
+                $subUnitKeys = array_map(
+                    fn ($slug) => "threshold_{$color}_{$suffix}_{$slug}",
+                    $subUnitSlugs
+                );
                 
                 $val = null;
-                if ($subUnitKey && isset($allThresholds[$subUnitKey])) {
-                    $val = $allThresholds[$subUnitKey];
+                if ($nodeKey && isset($allThresholds[$nodeKey])) {
+                    $val = $allThresholds[$nodeKey];
+                }
+
+                if ($val === null && $departmentKey && isset($allThresholds[$departmentKey])) {
+                    $val = $allThresholds[$departmentKey];
+                }
+
+                foreach ($subUnitKeys as $subUnitKey) {
+                    if ($val !== null) {
+                        break;
+                    }
+
+                    if (isset($allThresholds[$subUnitKey])) {
+                        $val = $allThresholds[$subUnitKey];
+                    }
                 }
                 
                 if ($val === null && isset($allThresholds[$globalKey])) {
