@@ -376,9 +376,16 @@ const getAreaItemClass = (count, maxCols) => {
                             class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
                             :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
-                            <span class="block text-[10px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
-                            <span class="block text-xl sm:text-2xl font-black">{{ item.store_count ?? 0 }}</span>
-                            <span class="block text-[10px] font-bold text-gray-500 mt-0.5">{{ item.total_tickets ?? 0 }} tickets</span>
+                            <span class="grid grid-cols-2 gap-2 text-center">
+                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
+                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight">{{ item.store_count ?? 0 }}</span>
+                                </span>
+                                <span class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 shadow-sm">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
+                                    <span class="block text-2xl sm:text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
+                                </span>
+                            </span>
                             <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
                                 <span
                                     v-for="health in healthSummaryItems"
@@ -419,9 +426,16 @@ const getAreaItemClass = (count, maxCols) => {
                             class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
                             :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
-                            <span class="block text-[10px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
-                            <span class="block text-xl sm:text-2xl font-black">{{ item.store_count ?? 0 }}</span>
-                            <span class="block text-[10px] font-bold text-gray-500 mt-0.5">{{ item.total_tickets ?? 0 }} tickets</span>
+                            <span class="grid grid-cols-2 gap-2 text-center">
+                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
+                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight">{{ item.store_count ?? 0 }}</span>
+                                </span>
+                                <span class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 shadow-sm">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
+                                    <span class="block text-2xl sm:text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
+                                </span>
+                            </span>
                             <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
                                 <span
                                     v-for="health in healthSummaryItems"
@@ -459,9 +473,16 @@ const getAreaItemClass = (count, maxCols) => {
                             class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
                             :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
-                            <span class="block text-[10px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
-                            <span class="block text-xl sm:text-2xl font-black">{{ item.store_count ?? 0 }}</span>
-                            <span class="block text-[10px] font-bold text-gray-500 mt-0.5">{{ item.total_tickets ?? 0 }} tickets</span>
+                            <span class="grid grid-cols-2 gap-2 text-center">
+                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
+                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight">{{ item.store_count ?? 0 }}</span>
+                                </span>
+                                <span class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 shadow-sm">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
+                                    <span class="block text-2xl sm:text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
+                                </span>
+                            </span>
                             <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
                                 <span
                                     v-for="health in healthSummaryItems"
