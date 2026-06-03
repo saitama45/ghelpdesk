@@ -630,6 +630,170 @@ const fetchItems = async () => {
     }
 };
 
+// ---- Affected Assets (ticket ↔ inventory asset tagging) ----
+const assetTransactionTypes = ['PM', 'Repair', 'Stock Out', 'Stock In', 'Deployment'];
+const quantityRelevantTypes = new Set(['Stock Out', 'Stock In', 'Deployment']);
+const quantityRelevant = (type) => quantityRelevantTypes.has(type);
+
+const assetTypeBadgeClass = (type) => {
+    switch (type) {
+        case 'PM': return 'bg-blue-100 text-blue-800 border border-blue-200';
+        case 'Repair': return 'bg-orange-100 text-orange-800 border border-orange-200';
+        case 'Stock Out': return 'bg-red-100 text-red-800 border border-red-200';
+        case 'Stock In': return 'bg-green-100 text-green-800 border border-green-200';
+        case 'Deployment': return 'bg-purple-100 text-purple-800 border border-purple-200';
+        default: return 'bg-gray-100 text-gray-700 border border-gray-200';
+    }
+};
+
+const taggedAssets = ref([]);
+const assetQuery = ref('');
+const assetResults = ref([]);
+const assetSearchLoading = ref(false);
+const showAssetDropdown = ref(false);
+const showAddAssetForm = ref(false);
+const pendingAsset = ref(null);
+const assetSubmitting = ref(false);
+const editingAssetId = ref(null);
+
+const addAssetForm = reactive({ transaction_type: 'PM', quantity: 1, notes: '' });
+const editAssetForm = reactive({ transaction_type: 'PM', quantity: 1, notes: '' });
+
+const loadTaggedAssets = async () => {
+    try {
+        const response = await axios.get(route('tickets.assets.index', props.ticket.id));
+        taggedAssets.value = response.data.ticket_assets || [];
+    } catch (error) {
+        console.error('Failed to load tagged assets:', error);
+    }
+};
+
+const searchAssets = async () => {
+    if (!editForm.store_id) {
+        assetResults.value = [];
+        return;
+    }
+    const term = assetQuery.value.trim();
+    assetSearchLoading.value = true;
+    try {
+        const response = await axios.get(route('reports.inventory.assets-search'), {
+            params: { q: term, store_id: editForm.store_id },
+        });
+        assetResults.value = response.data.results || [];
+    } catch (error) {
+        console.error('Asset search failed:', error);
+        assetResults.value = [];
+    } finally {
+        assetSearchLoading.value = false;
+    }
+};
+
+const unitSerialLabel = (item) => item?.serial_no || item?.barcode || 'NO SERIAL';
+
+let assetSearchTimer = null;
+const debouncedAssetSearch = () => {
+    clearTimeout(assetSearchTimer);
+    assetSearchTimer = setTimeout(searchAssets, 400);
+};
+
+watch(assetQuery, (val) => {
+    if (val.trim().length === 0) {
+        assetResults.value = [];
+        return;
+    }
+    debouncedAssetSearch();
+});
+
+const hideAssetDropdownSoon = () => {
+    setTimeout(() => { showAssetDropdown.value = false; }, 150);
+};
+
+const selectAssetToAdd = (asset) => {
+    pendingAsset.value = asset;
+    addAssetForm.transaction_type = 'PM';
+    addAssetForm.quantity = 1;
+    addAssetForm.notes = '';
+    showAddAssetForm.value = true;
+    showAssetDropdown.value = false;
+    assetQuery.value = '';
+    assetResults.value = [];
+};
+
+const cancelAddAsset = () => {
+    showAddAssetForm.value = false;
+    pendingAsset.value = null;
+};
+
+const submitAddAsset = async () => {
+    if (!pendingAsset.value || assetSubmitting.value) return;
+    assetSubmitting.value = true;
+    try {
+        const response = await axios.post(route('tickets.assets.store', props.ticket.id), {
+            asset_id: pendingAsset.value.asset_id,
+            stock_in_id: pendingAsset.value.stock_in_id || null,
+            transaction_type: addAssetForm.transaction_type,
+            quantity: quantityRelevant(addAssetForm.transaction_type) ? (addAssetForm.quantity || 1) : 1,
+            notes: addAssetForm.notes || null,
+        });
+        taggedAssets.value.unshift(response.data.ticket_asset);
+        showSuccess('Asset tagged to ticket.');
+        cancelAddAsset();
+    } catch (error) {
+        showError(error.response?.data?.message || 'Failed to tag asset.');
+    } finally {
+        assetSubmitting.value = false;
+    }
+};
+
+const startEditAsset = (link) => {
+    editingAssetId.value = link.id;
+    editAssetForm.transaction_type = link.transaction_type;
+    editAssetForm.quantity = link.quantity || 1;
+    editAssetForm.notes = link.notes || '';
+};
+
+const cancelEditAsset = () => {
+    editingAssetId.value = null;
+};
+
+const submitEditAsset = async (link) => {
+    if (assetSubmitting.value) return;
+    assetSubmitting.value = true;
+    try {
+        const response = await axios.put(route('tickets.assets.update', [props.ticket.id, link.id]), {
+            transaction_type: editAssetForm.transaction_type,
+            quantity: quantityRelevant(editAssetForm.transaction_type) ? (editAssetForm.quantity || 1) : 1,
+            notes: editAssetForm.notes || null,
+        });
+        const index = taggedAssets.value.findIndex(a => a.id === link.id);
+        if (index !== -1) taggedAssets.value[index] = response.data.ticket_asset;
+        showSuccess('Asset updated.');
+        editingAssetId.value = null;
+    } catch (error) {
+        showError(error.response?.data?.message || 'Failed to update asset.');
+    } finally {
+        assetSubmitting.value = false;
+    }
+};
+
+const removeTaggedAsset = async (link) => {
+    const confirmed = await confirm({
+        title: 'Remove Asset',
+        message: `Remove ${link.asset?.item_code || 'this asset'} from the ticket? This also removes it from the asset's ticket activity log.`,
+        confirmLabel: 'Remove',
+        cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+
+    try {
+        await axios.delete(route('tickets.assets.destroy', [props.ticket.id, link.id]));
+        taggedAssets.value = taggedAssets.value.filter(a => a.id !== link.id);
+        showSuccess('Asset removed.');
+    } catch (error) {
+        showError(error.response?.data?.message || 'Failed to remove asset.');
+    }
+};
+
 onMounted(async () => {
     slaTimerInterval = window.setInterval(() => {
         slaNow.value = new Date();
@@ -645,6 +809,7 @@ onMounted(async () => {
         }
     }
     window.addEventListener('keydown', handleKeydown);
+    loadTaggedAssets();
 });
 
 onUnmounted(() => {
@@ -2133,6 +2298,139 @@ const linkify = (text) => {
                                 placeholder="Unassigned"
                                 :disabled="!isClassificationComplete"
                             />
+                        </div>
+
+                        <!-- Affected Assets -->
+                        <div class="pt-6 border-t">
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Affected Assets</label>
+                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">{{ taggedAssets.length }} tagged</span>
+                            </div>
+                            <p class="text-[10px] text-gray-400 mb-2">Tag the specific physical unit (serial/barcode) concerned by this ticket. The action you log (PM, repair, deployment, etc.) appears in that unit's inventory history.</p>
+
+                            <!-- Store required hint -->
+                            <div v-if="hasPermission('tickets.edit') && !editForm.store_id" class="mb-3 text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2 border border-amber-100">
+                                Select a <span class="font-bold">Store</span> above to tag units located there.
+                            </div>
+
+                            <!-- Search to add -->
+                            <div v-else-if="hasPermission('tickets.edit')" class="relative mb-3">
+                                <input
+                                    v-model="assetQuery"
+                                    @focus="showAssetDropdown = true"
+                                    @blur="hideAssetDropdownSoon"
+                                    type="text"
+                                    placeholder="Search by serial, barcode, code, brand..."
+                                    class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                <div v-if="showAssetDropdown && (assetResults.length > 0 || assetSearchLoading)" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                                    <div v-if="assetSearchLoading" class="px-3 py-2 text-[10px] text-gray-400">Searching...</div>
+                                    <button
+                                        v-for="result in assetResults"
+                                        :key="result.result_type + '-' + (result.stock_in_id || result.asset_id)"
+                                        type="button"
+                                        @mousedown.prevent="selectAssetToAdd(result)"
+                                        class="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                    >
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span v-if="result.result_type === 'unit'" class="text-xs font-bold text-blue-700 font-mono truncate">{{ unitSerialLabel(result) }}</span>
+                                            <span v-else class="text-xs font-bold text-blue-600 font-mono truncate">{{ result.item_code }}</span>
+                                            <span v-if="result.result_type === 'unit'" class="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">Fixed</span>
+                                            <span v-else class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 shrink-0">SOH: {{ result.soh_at_store }}</span>
+                                        </div>
+                                        <div class="text-[10px] text-gray-600 truncate">
+                                            <span v-if="result.result_type === 'unit'" class="font-semibold text-gray-500">{{ result.item_code }} · </span>{{ result.brand }} {{ result.model }}
+                                        </div>
+                                        <div v-if="result.result_type === 'unit' && result.barcode" class="text-[9px] text-gray-400 truncate">Barcode: {{ result.barcode }}</div>
+                                    </button>
+                                    <div v-if="!assetSearchLoading && assetResults.length === 0" class="px-3 py-2 text-[10px] text-gray-400">No units found at this store.</div>
+                                </div>
+                            </div>
+
+                            <!-- Add form (after selecting a unit) -->
+                            <div v-if="showAddAssetForm && pendingAsset" class="mb-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div v-if="pendingAsset.result_type === 'unit'" class="text-xs font-bold text-blue-700 font-mono truncate">{{ unitSerialLabel(pendingAsset) }}</div>
+                                        <div class="text-[11px] font-bold text-gray-700 font-mono truncate">{{ pendingAsset.item_code }}</div>
+                                        <div class="text-[10px] text-gray-600 truncate">{{ pendingAsset.brand }} {{ pendingAsset.model }}</div>
+                                        <div v-if="pendingAsset.result_type === 'unit' && pendingAsset.barcode" class="text-[9px] text-gray-400 truncate">Barcode: {{ pendingAsset.barcode }}</div>
+                                    </div>
+                                    <button type="button" @click="cancelAddAsset" class="text-gray-400 hover:text-red-600 shrink-0">
+                                        <XMarkIcon class="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Action / Transaction</label>
+                                    <CustomSelect v-model="addAssetForm.transaction_type" :options="assetTransactionTypes" placeholder="Select type" />
+                                </div>
+                                <div v-if="quantityRelevant(addAssetForm.transaction_type)">
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Quantity</label>
+                                    <input v-model.number="addAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+                                    <textarea v-model="addAssetForm.notes" rows="2" placeholder="e.g. PM performed, replaced thermal paste, done 2026-06-03" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs"></textarea>
+                                </div>
+                                <button type="button" @click="submitAddAsset" :disabled="assetSubmitting" class="w-full px-3 py-1.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 uppercase tracking-widest disabled:opacity-60">
+                                    {{ assetSubmitting ? 'Tagging...' : 'Tag Asset' }}
+                                </button>
+                            </div>
+
+                            <!-- Tagged list -->
+                            <div v-if="taggedAssets.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200">
+                                No assets tagged yet.
+                            </div>
+                            <div v-else class="space-y-2">
+                                <div v-for="link in taggedAssets" :key="link.id" class="rounded-lg border border-gray-200 bg-white p-2.5">
+                                    <!-- Inline edit mode -->
+                                    <div v-if="editingAssetId === link.id" class="space-y-2">
+                                        <div v-if="link.serial_no || link.barcode" class="text-xs font-bold text-blue-700 font-mono truncate">{{ link.serial_no || link.barcode }}</div>
+                                        <div class="text-[11px] font-bold text-gray-700 font-mono">{{ link.asset?.item_code }}</div>
+                                        <div>
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Action / Transaction</label>
+                                            <CustomSelect v-model="editAssetForm.transaction_type" :options="assetTransactionTypes" placeholder="Select type" />
+                                        </div>
+                                        <div v-if="quantityRelevant(editAssetForm.transaction_type)">
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Quantity</label>
+                                            <input v-model.number="editAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+                                            <textarea v-model="editAssetForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs"></textarea>
+                                        </div>
+                                        <div class="flex gap-1.5">
+                                            <button type="button" @click="submitEditAsset(link)" :disabled="assetSubmitting" class="flex-1 px-3 py-1.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 uppercase tracking-widest disabled:opacity-60">Save</button>
+                                            <button type="button" @click="cancelEditAsset" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+                                        </div>
+                                    </div>
+                                    <!-- Display mode -->
+                                    <div v-else class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <span v-if="link.serial_no || link.barcode" class="text-xs font-bold text-blue-700 font-mono truncate">{{ link.serial_no || link.barcode }}</span>
+                                                <span v-else class="text-xs font-bold text-blue-600 font-mono">{{ link.asset?.item_code }}</span>
+                                                <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider" :class="assetTypeBadgeClass(link.transaction_type)">
+                                                    {{ link.transaction_type }}
+                                                </span>
+                                                <span v-if="quantityRelevant(link.transaction_type)" class="text-[9px] font-bold text-gray-500">×{{ link.quantity }}</span>
+                                            </div>
+                                            <div class="text-[10px] text-gray-600 truncate">
+                                                <span v-if="link.serial_no || link.barcode" class="font-semibold text-gray-500">{{ link.asset?.item_code }} · </span>{{ link.asset?.brand }} {{ link.asset?.model }}
+                                            </div>
+                                            <div v-if="link.notes" class="mt-1 text-[10px] text-gray-700 whitespace-pre-wrap">{{ link.notes }}</div>
+                                        </div>
+                                        <div v-if="hasPermission('tickets.edit')" class="flex items-center gap-1 shrink-0">
+                                            <button type="button" @click="startEditAsset(link)" class="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                            </button>
+                                            <button type="button" @click="removeTaggedAsset(link)" class="p-1 text-red-600 hover:bg-red-50 rounded" title="Remove">
+                                                <XMarkIcon class="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- CC Recipients -->

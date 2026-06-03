@@ -211,6 +211,10 @@ Route::middleware('auth')->group(function () {
     Route::post('tickets/{ticket}/duplicate', [\App\Http\Controllers\TicketController::class, 'duplicate'])->name('tickets.duplicate');
     Route::post('tickets/{ticket}/comments', [\App\Http\Controllers\TicketController::class, 'storeComment'])->name('tickets.comments.store');
     Route::post('tickets/{ticket}/attachments', [\App\Http\Controllers\TicketController::class, 'storeAttachment'])->name('tickets.attachments.store');
+    Route::get('tickets/{ticket}/assets', [\App\Http\Controllers\TicketAssetController::class, 'index'])->name('tickets.assets.index');
+    Route::post('tickets/{ticket}/assets', [\App\Http\Controllers\TicketAssetController::class, 'store'])->name('tickets.assets.store');
+    Route::put('tickets/{ticket}/assets/{ticketAsset}', [\App\Http\Controllers\TicketAssetController::class, 'update'])->name('tickets.assets.update');
+    Route::delete('tickets/{ticket}/assets/{ticketAsset}', [\App\Http\Controllers\TicketAssetController::class, 'destroy'])->name('tickets.assets.destroy');
     Route::get('attachments/{attachment}/download', [\App\Http\Controllers\TicketController::class, 'downloadAttachment'])->name('tickets.attachments.download');
     
     Route::get('settings', [\App\Http\Controllers\SettingsController::class, 'index'])->name('settings.index');
@@ -251,7 +255,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('reports/inventory', [\App\Http\Controllers\InventoryReportController::class, 'index'])->name('reports.inventory');
     Route::get('reports/inventory/movement', [\App\Http\Controllers\InventoryReportController::class, 'movement'])->name('reports.inventory.movement');
+    Route::get('reports/inventory/assets/search', [\App\Http\Controllers\InventoryReportController::class, 'assetsSearch'])->name('reports.inventory.assets-search');
     Route::get('reports/inventory/{asset}/history', [\App\Http\Controllers\InventoryReportController::class, 'history'])->name('reports.inventory.history');
+    Route::get('reports/inventory/{asset}/ticket-activity', [\App\Http\Controllers\InventoryReportController::class, 'ticketActivity'])->name('reports.inventory.ticket-activity');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

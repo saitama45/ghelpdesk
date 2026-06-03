@@ -44,4 +44,9 @@ class Asset extends Model
     {
         return $this->hasMany(StockIn::class);
     }
+
+    public function ticketAssets()
+    {
+        return $this->hasMany(TicketAsset::class);
+    }
 }

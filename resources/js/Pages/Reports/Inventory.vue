@@ -392,6 +392,24 @@
                     </button>
                 </div>
 
+                <!-- Tab switcher -->
+                <div class="mb-6 bg-gray-50 rounded-xl border border-gray-100 p-1 inline-flex">
+                    <button
+                        type="button"
+                        @click="setHistoryTab('transactions')"
+                        class="px-4 py-1.5 text-xs font-bold rounded-lg transition-colors"
+                        :class="activeHistoryTab === 'transactions' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
+                    >Stock Transactions</button>
+                    <button
+                        type="button"
+                        @click="setHistoryTab('ticket')"
+                        class="px-4 py-1.5 text-xs font-bold rounded-lg transition-colors"
+                        :class="activeHistoryTab === 'ticket' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'"
+                    >Ticket Activity</button>
+                </div>
+
+                <!-- Stock Transactions tab -->
+                <template v-if="activeHistoryTab === 'transactions'">
                 <div v-if="isLoadingHistory" class="py-12 flex flex-col items-center justify-center space-y-4">
                     <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -490,6 +508,75 @@
                         <p class="text-sm font-bold text-gray-400 uppercase tracking-widest">No History Records</p>
                     </div>
                 </div>
+                </template>
+
+                <!-- Ticket Activity tab -->
+                <template v-else-if="activeHistoryTab === 'ticket'">
+                <div v-if="isLoadingTicketActivity" class="py-12 flex flex-col items-center justify-center space-y-4">
+                    <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="text-sm font-bold text-gray-500 uppercase tracking-widest">Loading Ticket Activity...</p>
+                </div>
+
+                <div v-else class="max-h-[60vh] overflow-y-auto pr-2">
+                    <div v-if="ticketActivity.length === 0" class="py-12 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-2xl">
+                        <svg class="w-12 h-12 text-gray-200 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        <p class="text-sm font-bold text-gray-400 uppercase tracking-widest">No Ticket Activity</p>
+                        <p class="text-xs text-gray-400 mt-1">No tickets have tagged this asset.</p>
+                    </div>
+
+                    <div v-else class="overflow-hidden rounded-xl border border-gray-100 shadow-sm bg-white">
+                        <table class="min-w-full divide-y divide-gray-100">
+                            <thead class="bg-gray-50/50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Date</th>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Serial / Barcode</th>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Location</th>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Ticket</th>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Action</th>
+                                    <th class="px-4 py-2 text-center text-[9px] font-black text-gray-400 uppercase tracking-widest">Qty</th>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Action Taken / Notes</th>
+                                    <th class="px-4 py-2 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Assignee</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr v-for="row in ticketActivity" :key="row.id" class="hover:bg-gray-50/50 transition-colors">
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{{ formatDateTime(row.created_at) }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs">
+                                        <span v-if="row.serial_no || row.barcode" class="font-bold text-blue-700 font-mono">{{ row.serial_no || row.barcode }}</span>
+                                        <span v-else class="text-gray-400 italic">Type-level</span>
+                                        <div v-if="row.serial_no && row.barcode" class="text-[9px] text-gray-400">Barcode: {{ row.barcode }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{{ row.store_code || row.store_name || '—' }}</td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs">
+                                        <a :href="ticketEditHref(row.ticket_id)" target="_blank" rel="noopener noreferrer" class="font-bold text-blue-600 underline underline-offset-2 hover:text-blue-700">
+                                            {{ row.ticket_key }}
+                                        </a>
+                                        <div class="text-[10px] text-gray-500 max-w-[180px] truncate">{{ row.title }}</div>
+                                        <span class="mt-0.5 inline-block px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider" :class="ticketStatusBadgeClass(row.status)">
+                                            {{ formatTicketStatus(row.status) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider" :class="ticketActivityTypeClass(row.transaction_type)">
+                                            {{ row.transaction_type }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-center text-xs font-bold text-gray-700">{{ row.quantity }}</td>
+                                    <td class="px-4 py-3 text-xs text-gray-600">
+                                        <div v-if="row.action_taken" class="text-gray-700"><span class="font-bold">Action Taken:</span> {{ row.action_taken }}</div>
+                                        <div v-if="row.notes" class="text-[10px] text-gray-500 mt-0.5">{{ row.notes }}</div>
+                                        <span v-if="!row.action_taken && !row.notes" class="text-gray-300 italic">—</span>
+                                    </td>
+                                    <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-600 font-medium">{{ row.assignee_name || 'Unassigned' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </template>
             </div>
         </Modal>
     </AppLayout>
@@ -668,6 +755,12 @@ const historyLocation = ref('')
 const selectedHistorySoh = ref(null)
 const transactionHistory = ref([])
 
+// Ticket Activity tab state
+const activeHistoryTab = ref('transactions')
+const isLoadingTicketActivity = ref(false)
+const ticketActivity = ref([])
+const ticketActivityLoaded = ref(false)
+
 const groupedHistory = computed(() => {
     const groups = new Map()
 
@@ -756,6 +849,9 @@ const viewHistory = async (row) => {
     showHistoryModal.value = true
     isLoadingHistory.value = true
     transactionHistory.value = []
+    activeHistoryTab.value = 'transactions'
+    ticketActivity.value = []
+    ticketActivityLoaded.value = false
 
     try {
         const response = await axios.get(route('reports.inventory.history', row.asset_id), {
@@ -766,6 +862,58 @@ const viewHistory = async (row) => {
         console.error('Failed to fetch history:', error)
     } finally {
         isLoadingHistory.value = false
+    }
+}
+
+const setHistoryTab = (tab) => {
+    activeHistoryTab.value = tab
+    if (tab === 'ticket' && !ticketActivityLoaded.value) {
+        loadTicketActivity()
+    }
+}
+
+const loadTicketActivity = async () => {
+    if (!selectedAssetForHistory.value) return
+    isLoadingTicketActivity.value = true
+    try {
+        const response = await axios.get(route('reports.inventory.ticket-activity', selectedAssetForHistory.value.id))
+        ticketActivity.value = response.data.activity || []
+        ticketActivityLoaded.value = true
+    } catch (error) {
+        console.error('Failed to fetch ticket activity:', error)
+    } finally {
+        isLoadingTicketActivity.value = false
+    }
+}
+
+const ticketEditHref = (ticketId) => route('tickets.edit', ticketId)
+
+const formatTicketStatus = (status) => {
+    if (!status) return ''
+    return String(status).replace(/_/g, ' ')
+}
+
+const ticketStatusBadgeClass = (status) => {
+    switch (status) {
+        case 'open': return 'bg-blue-100 text-blue-800'
+        case 'for_schedule': return 'bg-teal-100 text-teal-800'
+        case 'in_progress': return 'bg-purple-100 text-purple-800'
+        case 'resolved': return 'bg-green-100 text-green-800'
+        case 'closed': return 'bg-gray-200 text-gray-600'
+        case 'waiting_service_provider': return 'bg-orange-100 text-orange-800'
+        case 'waiting_client_feedback': return 'bg-blue-100 text-blue-800'
+        default: return 'bg-gray-100 text-gray-700'
+    }
+}
+
+const ticketActivityTypeClass = (type) => {
+    switch (type) {
+        case 'PM': return 'bg-blue-100 text-blue-800 border border-blue-200'
+        case 'Repair': return 'bg-orange-100 text-orange-800 border border-orange-200'
+        case 'Stock Out': return 'bg-red-100 text-red-800 border border-red-200'
+        case 'Stock In': return 'bg-green-100 text-green-800 border border-green-200'
+        case 'Deployment': return 'bg-purple-100 text-purple-800 border border-purple-200'
+        default: return 'bg-gray-100 text-gray-700 border border-gray-200'
     }
 }
 

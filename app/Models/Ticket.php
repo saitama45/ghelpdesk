@@ -122,6 +122,11 @@ class Ticket extends Model
         return $this->hasMany(TicketAttachment::class);
     }
 
+    public function taggedAssets()
+    {
+        return $this->hasMany(TicketAsset::class);
+    }
+
     protected $casts = [
         'reporter_id' => 'integer',
         'assignee_id' => 'integer',

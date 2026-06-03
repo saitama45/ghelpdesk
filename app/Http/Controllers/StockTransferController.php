@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\LocatesInventoryUnits;
 use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
@@ -18,6 +19,8 @@ use Inertia\Inertia;
 
 class StockTransferController extends Controller
 {
+    use LocatesInventoryUnits;
+
     public function index(Request $request)
     {
         $search     = trim((string) $request->input('search', ''));
@@ -484,42 +487,4 @@ class StockTransferController extends Controller
         return $query->orderBy('id');
     }
 
-    protected function locationVariants(?string $code): array
-    {
-        if (! $code) {
-            return [];
-        }
-
-        $variants = [$code];
-
-        $store = Store::query()
-            ->where('code', $code)
-            ->orWhere('name', $code)
-            ->first(['code', 'name']);
-
-        if ($store) {
-            if ($store->code && ! in_array($store->code, $variants)) {
-                $variants[] = $store->code;
-            }
-            if ($store->name && ! in_array($store->name, $variants)) {
-                $variants[] = $store->name;
-            }
-        }
-
-        return $variants;
-    }
-
-    protected function normalizeStoreCode(?string $value): ?string
-    {
-        if (! $value) {
-            return $value;
-        }
-
-        $store = Store::query()
-            ->where('code', $value)
-            ->orWhere('name', $value)
-            ->first(['code']);
-
-        return $store?->code ?? $value;
-    }
 }

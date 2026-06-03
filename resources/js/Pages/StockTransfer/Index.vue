@@ -109,6 +109,7 @@
                                 label-key="label"
                                 value-key="value"
                                 placeholder="All statuses..."
+                                @update:modelValue="updateStatusFilter"
                             />
                         </div>
                         <div class="md:col-span-1">
@@ -564,7 +565,9 @@ const { showError } = useToast()
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()
 
-const statusFilter = ref([])
+const toArray = (value) => Array.isArray(value) ? value : (value ? [value] : [])
+
+const statusFilter = ref(toArray(props.filters?.statuses))
 const statusOptions = [
     { value: 'For Posting', label: 'For Posting' },
     { value: 'Posted', label: 'Posted' },
@@ -607,6 +610,11 @@ const applyFilters = () => {
 
 const updateFilter = (key, value) => {
     filterForm[key] = value
+    applyFilters()
+}
+
+const updateStatusFilter = (value) => {
+    statusFilter.value = toArray(value)
     applyFilters()
 }
 

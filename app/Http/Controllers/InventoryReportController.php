@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\LocatesInventoryUnits;
 use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
@@ -9,6 +10,8 @@ use App\Models\StockIn;
 use App\Models\StockReceiving;
 use App\Models\StockTransfer;
 use App\Models\Store;
+use App\Models\TicketAsset;
+use App\Models\TicketComment;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +20,8 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class InventoryReportController extends Controller implements HasMiddleware
 {
+    use LocatesInventoryUnits;
+
     private const EXCLUDED_REPORT_LOCATIONS = ['SUPPLIER'];
 
     public static function middleware(): array
@@ -140,6 +145,147 @@ class InventoryReportController extends Controller implements HasMiddleware
             'asset' => $asset,
             'location' => $location,
             'history' => $history
+        ]);
+    }
+
+    /**
+     * Search physical units (Fixed) and consumable types currently at the ticket's store,
+     * for tagging on a ticket.
+     */
+    public function assetsSearch(Request $request)
+    {
+        $search = trim((string) $request->input('q', ''));
+
+        $storeCode = $request->filled('store_id')
+            ? Store::where('id', $request->store_id)->value('code')
+            : null;
+
+        if (! $storeCode) {
+            return response()->json([
+                'results' => [],
+                'store_code' => null,
+                'requires_store' => true,
+            ]);
+        }
+
+        $variants = $this->locationVariants($storeCode);
+        $like = '%' . $search . '%';
+
+        // Fixed serialized units currently located at this store.
+        $fixedUnits = $this->fixedUnitsCurrentlyAt($variants, function ($query) use ($search, $like) {
+            $query->with('asset:id,item_code,brand,model,type')
+                ->whereHas('asset', fn ($q) => $q->where('type', 'Fixed'));
+
+            if ($search !== '') {
+                $query->where(function ($q) use ($like) {
+                    $q->where('stock_ins.serial_no', 'like', $like)
+                        ->orWhere('stock_ins.barcode', 'like', $like)
+                        ->orWhere('stock_ins.qrcode', 'like', $like)
+                        ->orWhereHas('asset', function ($a) use ($like) {
+                            $a->where('item_code', 'like', $like)
+                                ->orWhere('brand', 'like', $like)
+                                ->orWhere('model', 'like', $like)
+                                ->orWhere('description', 'like', $like);
+                        });
+                });
+            }
+        })
+            ->take(20)
+            ->map(fn (StockIn $unit) => [
+                'result_type' => 'unit',
+                'stock_in_id' => $unit->id,
+                'asset_id' => $unit->asset_id,
+                'serial_no' => $unit->serial_no,
+                'barcode' => $unit->barcode,
+                'qrcode' => $unit->qrcode,
+                'item_code' => $unit->asset?->item_code,
+                'brand' => $unit->asset?->brand,
+                'model' => $unit->asset?->model,
+                'type' => 'Fixed',
+                'current_location' => $storeCode,
+            ])
+            ->values();
+
+        // Consumable asset types with positive SOH at this store.
+        $consumables = Asset::query()
+            ->where('type', 'Consumables')
+            ->when($search !== '', function ($query) use ($like) {
+                $query->where(function ($query) use ($like) {
+                    $query->where('item_code', 'like', $like)
+                        ->orWhere('brand', 'like', $like)
+                        ->orWhere('model', 'like', $like)
+                        ->orWhere('description', 'like', $like);
+                });
+            })
+            ->orderBy('item_code')
+            ->limit(20)
+            ->get(['id', 'item_code', 'brand', 'model', 'description', 'type'])
+            ->map(fn (Asset $asset) => [
+                'result_type' => 'consumable',
+                'stock_in_id' => null,
+                'asset_id' => $asset->id,
+                'serial_no' => null,
+                'barcode' => null,
+                'item_code' => $asset->item_code,
+                'brand' => $asset->brand,
+                'model' => $asset->model,
+                'type' => 'Consumables',
+                'soh_at_store' => $this->stockOnHandAt($asset->id, $storeCode),
+            ])
+            ->filter(fn ($row) => $row['soh_at_store'] > 0)
+            ->values();
+
+        return response()->json([
+            'results' => $fixedUnits->concat($consumables)->values(),
+            'store_code' => $storeCode,
+            'requires_store' => false,
+        ]);
+    }
+
+    /**
+     * Service activity (tickets) recorded against an asset across all locations,
+     * including the specific unit serial/barcode tagged.
+     */
+    public function ticketActivity(Asset $asset, Request $request)
+    {
+        $actionTakenSub = TicketComment::query()
+            ->select('action_taken')
+            ->whereColumn('ticket_comments.ticket_id', 'tickets.id')
+            ->whereNotNull('action_taken')
+            ->where('action_taken', '!=', '')
+            ->orderByDesc('created_at')
+            ->limit(1);
+
+        $rows = TicketAsset::query()
+            ->where('ticket_assets.asset_id', $asset->id)
+            ->join('tickets', 'ticket_assets.ticket_id', '=', 'tickets.id')
+            ->leftJoin('stores', 'tickets.store_id', '=', 'stores.id')
+            ->leftJoin('users', 'tickets.assignee_id', '=', 'users.id')
+            ->whereNull('tickets.deleted_at')
+            ->orderByDesc('ticket_assets.created_at')
+            ->select([
+                'ticket_assets.id',
+                'ticket_assets.transaction_type',
+                'ticket_assets.quantity',
+                'ticket_assets.notes',
+                'ticket_assets.serial_no',
+                'ticket_assets.barcode',
+                'ticket_assets.stock_in_id',
+                'ticket_assets.created_at',
+                'tickets.id as ticket_id',
+                'tickets.ticket_key',
+                'tickets.title',
+                'tickets.status',
+                'stores.code as store_code',
+                'stores.name as store_name',
+                'users.name as assignee_name',
+            ])
+            ->addSelect(['action_taken' => $actionTakenSub])
+            ->get();
+
+        return response()->json([
+            'asset' => $asset,
+            'activity' => $rows,
         ]);
     }
 
@@ -312,5 +458,17 @@ class InventoryReportController extends Controller implements HasMiddleware
         return InventoryTransaction::query()
             ->validInventoryLedger('inventory_transactions', 'report_valid')
             ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS);
+    }
+
+    /**
+     * Sum the valid inventory ledger quantity for an asset at a store code.
+     */
+    private function stockOnHandAt(int $assetId, string $storeCode): int
+    {
+        return (int) InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'asset_search_soh')
+            ->where('inventory_transactions.asset_id', $assetId)
+            ->whereIn('inventory_transactions.location', $this->locationVariants($storeCode))
+            ->sum('inventory_transactions.quantity');
     }
 }
