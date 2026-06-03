@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Stock Transfer">
+    <AppLayout title="Stock Transfer" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            <div class="space-y-6">
 
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -64,20 +64,42 @@
 
                 <!-- Filters Panel -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div class="md:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Origin Location</label>
-                            <select v-model="filterForm.location" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Locations</option>
-                                <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.location"
+                                :options="locationFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Locations"
+                                size="sm"
+                                @update:modelValue="updateFilter('location', $event)"
+                            />
+                        </div>
+                        <div class="md:col-span-1">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination Location</label>
+                            <Autocomplete
+                                :model-value="filterForm.destination_location"
+                                :options="destinationLocationFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Destinations"
+                                size="sm"
+                                @update:modelValue="updateFilter('destination_location', $event)"
+                            />
                         </div>
                         <div class="md:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
-                            <select v-model="filterForm.category_id" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Categories</option>
-                                <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.category_id"
+                                :options="categoryFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Categories"
+                                size="sm"
+                                @update:modelValue="updateFilter('category_id', $event)"
+                            />
                         </div>
                         <div class="md:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
@@ -533,6 +555,7 @@ const props = defineProps({
     stores: Array,
     categories: Array,
     locations: Array,
+    destinationLocations: Array,
     summary: Object,
     filters: Object,
 })
@@ -552,12 +575,29 @@ const statusOptions = [
 const filterForm = reactive({
     category_id: props.filters?.category_id || null,
     location: props.filters?.location || null,
+    destination_location: props.filters?.destination_location || null,
 })
+
+const locationFilterOptions = computed(() => [
+    { id: null, name: 'All Locations' },
+    ...(props.locations || []).map(location => ({ id: location, name: location })),
+])
+
+const destinationLocationFilterOptions = computed(() => [
+    { id: null, name: 'All Destinations' },
+    ...(props.destinationLocations || []).map(location => ({ id: location, name: location })),
+])
+
+const categoryFilterOptions = computed(() => [
+    { id: null, name: 'All Categories' },
+    ...(props.categories || []).map(category => ({ id: category.id, name: category.name })),
+])
 
 const pagination = usePagination(props.stockTransfers, 'stock-transfers.index', () => ({
     statuses: statusFilter.value,
     category_id: filterForm.category_id,
     location: filterForm.location,
+    destination_location: filterForm.destination_location,
 }))
 
 const applyFilters = () => {
@@ -565,8 +605,13 @@ const applyFilters = () => {
     pagination.performSearch()
 }
 
+const updateFilter = (key, value) => {
+    filterForm[key] = value
+    applyFilters()
+}
+
 const resetFilters = () => {
-    Object.assign(filterForm, { category_id: null, location: null })
+    Object.assign(filterForm, { category_id: null, location: null, destination_location: null })
     statusFilter.value = []
     pagination.search.value = ''
     applyFilters()

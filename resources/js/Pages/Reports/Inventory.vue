@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Inventory Report">
+    <AppLayout title="Inventory Report" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            <div class="space-y-6">
 
                 <!-- Tab switcher -->
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-1 inline-flex">
@@ -180,40 +180,63 @@
                     <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
-                            <select v-model="filterForm.category_id" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Categories</option>
-                                <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.category_id"
+                                :options="categoryFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Categories"
+                                size="sm"
+                                @update:modelValue="updateFilter('category_id', $event)"
+                            />
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location</label>
-                            <select v-model="filterForm.location" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Locations</option>
-                                <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.location"
+                                :options="locationFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Locations"
+                                size="sm"
+                                @update:modelValue="updateFilter('location', $event)"
+                            />
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
-                            <select v-model="filterForm.brand" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Brands</option>
-                                <option v-for="brand in brands" :key="brand" :value="brand">{{ brand }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.brand"
+                                :options="brandFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Brands"
+                                size="sm"
+                                @update:modelValue="updateFilter('brand', $event)"
+                            />
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type</label>
-                            <select v-model="filterForm.type" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Types</option>
-                                <option value="Fixed">Fixed</option>
-                                <option value="Consumables">Consumables</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.type"
+                                :options="typeFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Types"
+                                size="sm"
+                                @update:modelValue="updateFilter('type', $event)"
+                            />
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Stock Status</label>
-                            <select v-model="filterForm.stock_status" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Statuses</option>
-                                <option value="in_stock">In Stock</option>
-                                <option value="out_of_stock">Out of Stock</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.stock_status"
+                                :options="stockStatusFilterOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Statuses"
+                                size="sm"
+                                @update:modelValue="updateFilter('stock_status', $event)"
+                            />
                         </div>
                         <div class="flex items-end">
                             <button @click="resetFilters" class="w-full px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">
@@ -237,7 +260,7 @@
                     :is-loading="pagination.isLoading.value"
                     @update:search="pagination.search.value = $event"
                     @go-to-page="pagination.goToPage"
-                    @change-per-page="pagination.changePerPage"
+                    @change-per-page="changePerPage"
                 >
                     <template #header>
                         <tr>
@@ -478,6 +501,7 @@ import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import { usePagination } from '@/Composables/usePagination'
 import axios from 'axios'
 
@@ -540,7 +564,35 @@ const filterForm = reactive({
     stock_status: props.filters.stock_status || null,
 })
 
+const categoryFilterOptions = computed(() => [
+    { id: null, name: 'All Categories' },
+    ...(props.categories || []).map(category => ({ id: category.id, name: category.name })),
+])
+
+const locationFilterOptions = computed(() => [
+    { id: null, name: 'All Locations' },
+    ...(props.locations || []).map(location => ({ id: location, name: location })),
+])
+
+const brandFilterOptions = computed(() => [
+    { id: null, name: 'All Brands' },
+    ...(props.brands || []).map(brand => ({ id: brand, name: brand })),
+])
+
+const typeFilterOptions = [
+    { id: null, name: 'All Types' },
+    { id: 'Fixed', name: 'Fixed' },
+    { id: 'Consumables', name: 'Consumables' },
+]
+
+const stockStatusFilterOptions = [
+    { id: null, name: 'All Statuses' },
+    { id: 'in_stock', name: 'In Stock' },
+    { id: 'out_of_stock', name: 'Out of Stock' },
+]
+
 const pagination = usePagination(props.assets, 'reports.inventory', () => ({ ...filterForm }))
+pagination.perPage.value = Number(props.assets?.per_page || pagination.perPage.value || 10)
 
 const collapsedLocations = ref(new Set())
 
@@ -743,6 +795,13 @@ const getTransactionTypeClass = (type) => {
     }
 }
 
+const selectedLocationPerPage = () => {
+    if (!filterForm.location) return pagination.perPage.value
+
+    const summary = locationSummaryByName.value.get(normalizeLocation(filterForm.location))
+    return Math.max(pagination.perPage.value, Number(summary?.item_count || 0), 10)
+}
+
 const padDatePart = (value) => String(value).padStart(2, '0')
 
 const toDateKey = (value) => {
@@ -879,19 +938,31 @@ const formatCurrency = (value) => {
     }).format(value)
 }
 
+const updateFilter = (key, value) => {
+    filterForm[key] = value
+    applyFilters()
+}
+
 const applyFilters = () => {
     pagination.currentPage.value = 1
+    const perPage = selectedLocationPerPage()
+    pagination.perPage.value = perPage
 
     router.get(route('reports.inventory'), {
         ...filterForm,
         search: pagination.search.value,
-        per_page: pagination.perPage.value,
+        per_page: perPage,
         page: 1,
     }, {
         preserveState: true,
         preserveScroll: true,
         only: ['assets', 'summary', 'locationSummaries', 'locations']
     })
+}
+
+const changePerPage = (perPage) => {
+    pagination.perPage.value = perPage
+    applyFilters()
 }
 
 const resetFilters = () => {
@@ -909,6 +980,9 @@ const resetFilters = () => {
 
 onMounted(() => {
     pagination.updateData(props.assets)
+    if (filterForm.location && selectedLocationPerPage() > Number(props.assets?.per_page || 0)) {
+        applyFilters()
+    }
     if (activeTab.value === 'movement') loadMovement()
 })
 

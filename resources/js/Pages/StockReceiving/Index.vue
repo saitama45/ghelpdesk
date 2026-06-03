@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Receiving Stock">
+    <AppLayout title="Receiving Stock" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            <div class="space-y-6">
 
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -67,17 +67,27 @@
                     <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div class="md:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination</label>
-                            <select v-model="filterForm.destination_location" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Destinations</option>
-                                <option v-for="loc in destinations" :key="loc" :value="loc">{{ loc }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.destination_location"
+                                :options="destinationOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Destinations"
+                                size="sm"
+                                @update:modelValue="updateFilter('destination_location', $event)"
+                            />
                         </div>
                         <div class="md:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
-                            <select v-model="filterForm.category_id" @change="applyFilters" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option :value="null">All Categories</option>
-                                <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-                            </select>
+                            <Autocomplete
+                                :model-value="filterForm.category_id"
+                                :options="categoryOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="All Categories"
+                                size="sm"
+                                @update:modelValue="updateFilter('category_id', $event)"
+                            />
                         </div>
                         <div class="md:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
@@ -428,6 +438,7 @@ import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
@@ -460,6 +471,16 @@ const filterForm = reactive({
     destination_location: props.filters?.destination_location || null,
 })
 
+const destinationOptions = computed(() => [
+    { id: null, name: 'All Destinations' },
+    ...(props.destinations || []).map(destination => ({ id: destination, name: destination })),
+])
+
+const categoryOptions = computed(() => [
+    { id: null, name: 'All Categories' },
+    ...(props.categories || []).map(category => ({ id: category.id, name: category.name })),
+])
+
 const pagination = usePagination(props.stockReceivings, 'stock-receivings.index', () => ({
     statuses: statusFilter.value,
     category_id: filterForm.category_id,
@@ -469,6 +490,11 @@ const pagination = usePagination(props.stockReceivings, 'stock-receivings.index'
 const applyFilters = () => {
     pagination.currentPage.value = 1
     pagination.performSearch()
+}
+
+const updateFilter = (key, value) => {
+    filterForm[key] = value
+    applyFilters()
 }
 
 const resetFilters = () => {

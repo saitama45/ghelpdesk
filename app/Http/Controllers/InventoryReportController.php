@@ -88,7 +88,9 @@ class InventoryReportController extends Controller implements HasMiddleware
     {
         $location = $request->location;
 
-        $history = InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
+        $history = InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'history_valid')
+            ->where('inventory_transactions.asset_id', $asset->id)
             ->where('inventory_transactions.location', $location)
             ->leftJoin('stock_ins as stock_in_history', function ($join) {
                 $join->on('inventory_transactions.reference_id', '=', 'stock_in_history.id')
@@ -103,10 +105,6 @@ class InventoryReportController extends Controller implements HasMiddleware
                     ->where('inventory_transactions.reference_type', '=', StockReceiving::class);
             })
             ->leftJoin('stock_transfers as receiving_transfer_history', 'stock_receiving_history.stock_transfer_id', '=', 'receiving_transfer_history.id')
-            ->where(function ($q) {
-                $q->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                  ->orWhere('stock_in_history.status', 'Posted');
-            })
             ->leftJoin('users', 'inventory_transactions.created_by', '=', 'users.id')
             ->select(
                 'inventory_transactions.transaction_type',
@@ -312,14 +310,7 @@ class InventoryReportController extends Controller implements HasMiddleware
     private function reportLedgerQuery()
     {
         return InventoryTransaction::query()
-            ->leftJoin('stock_ins as report_stock_ins', function ($join) {
-                $join->on('inventory_transactions.reference_id', '=', 'report_stock_ins.id')
-                    ->where('inventory_transactions.reference_type', '=', StockIn::class);
-            })
-            ->where(function ($query) {
-                $query->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                    ->orWhere('report_stock_ins.status', 'Posted');
-            })
+            ->validInventoryLedger('inventory_transactions', 'report_valid')
             ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS);
     }
 }

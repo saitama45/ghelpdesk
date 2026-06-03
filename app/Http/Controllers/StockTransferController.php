@@ -25,8 +25,9 @@ class StockTransferController extends Controller
         $statuses   = array_values(array_filter((array) $request->input('statuses', [])));
         $categoryId = $request->input('category_id');
         $location   = $request->input('location');
+        $destinationLocation = $request->input('destination_location');
 
-        $applyFilters = function ($query) use ($search, $statuses, $categoryId, $location) {
+        $applyFilters = function ($query) use ($search, $statuses, $categoryId, $location, $destinationLocation) {
             if ($search !== '') {
                 $query->where(function ($q) use ($search) {
                     $q->where('transfer_no', 'like', "%{$search}%")
@@ -41,6 +42,9 @@ class StockTransferController extends Controller
             }
             if ($location) {
                 $query->where('origin_location', $location);
+            }
+            if ($destinationLocation) {
+                $query->where('destination_location', $destinationLocation);
             }
         };
 
@@ -97,8 +101,12 @@ class StockTransferController extends Controller
                 ->distinct()
                 ->orderBy('origin_location')
                 ->pluck('origin_location'),
+            'destinationLocations' => StockTransfer::whereNotNull('destination_location')
+                ->distinct()
+                ->orderBy('destination_location')
+                ->pluck('destination_location'),
             'summary'        => $summary,
-            'filters'        => $request->only(['category_id', 'location', 'statuses', 'search']),
+            'filters'        => $request->only(['category_id', 'location', 'destination_location', 'statuses', 'search']),
         ]);
     }
 
@@ -112,17 +120,16 @@ class StockTransferController extends Controller
     public function assetsWithStock(Request $request)
     {
         $location = $this->normalizeStoreCode($request->input('location'));
-
         if (! $location) {
             return response()->json([]);
         }
 
         $locationVariants = $this->locationVariants($location);
 
-        // Only show assets formally received here via a Posted StockIn — matches StockIn/Index.vue
-        $validAssetIds = StockIn::whereIn('destination_location', $locationVariants)
-            ->where('status', 'Posted')
-            ->pluck('asset_id')
+        $validAssetIds = InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'stock_transfer_list_valid')
+            ->whereIn('inventory_transactions.location', $locationVariants)
+            ->pluck('inventory_transactions.asset_id')
             ->unique()
             ->values();
 
@@ -130,40 +137,14 @@ class StockTransferController extends Controller
             return response()->json([]);
         }
 
-        // Part 1: units received here — use StockIn directly (bypasses IT.location backfill errors)
-        $stockInQty = StockIn::whereIn('destination_location', $locationVariants)
-            ->where('status', 'Posted')
-            ->whereIn('asset_id', $validAssetIds)
-            ->groupBy('asset_id')
-            ->selectRaw('asset_id, SUM(quantity) as total')
-            ->pluck('total', 'asset_id');
-
-        // Part 2: net transfer movements (StockTransfer Transfer Out, StockReceiving Transfer In)
-        $transferQty = InventoryTransaction::whereIn('inventory_transactions.location', $locationVariants)
+        $sohData = InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'stock_transfer_soh_valid')
+            ->whereIn('inventory_transactions.location', $locationVariants)
             ->whereIn('inventory_transactions.asset_id', $validAssetIds)
-            ->where('inventory_transactions.reference_type', '!=', StockIn::class)
             ->groupBy('inventory_transactions.asset_id')
             ->selectRaw('inventory_transactions.asset_id, SUM(inventory_transactions.quantity) as total')
-            ->pluck('total', 'asset_id');
-
-        // Part 3: internal-StockIn Transfer Out deductions (origin=store, not SUPPLIER)
-        $internalOutQty = InventoryTransaction::from('inventory_transactions as it')
-            ->whereIn('it.location', $locationVariants)
-            ->whereIn('it.asset_id', $validAssetIds)
-            ->where('it.reference_type', '=', StockIn::class)
-            ->where('it.transaction_type', 'Transfer Out')
-            ->join('stock_ins as si_out', 'it.reference_id', '=', 'si_out.id')
-            ->where('si_out.status', 'Posted')
-            ->groupBy('it.asset_id')
-            ->selectRaw('it.asset_id, SUM(it.quantity) as total')
-            ->pluck('total', 'asset_id');
-
-        $sohData = $validAssetIds->mapWithKeys(function ($assetId) use ($stockInQty, $transferQty, $internalOutQty) {
-            $soh = ($stockInQty->get($assetId) ?? 0)
-                 + ($transferQty->get($assetId) ?? 0)
-                 + ($internalOutQty->get($assetId) ?? 0);
-            return [$assetId => $soh];
-        })->filter(fn ($soh) => $soh > 0);
+            ->pluck('total', 'asset_id')
+            ->filter(fn ($soh) => $soh > 0);
 
         $pendingData = StockTransfer::whereIn('origin_location', $locationVariants)
             ->where('status', 'For Posting')
@@ -200,22 +181,11 @@ class StockTransferController extends Controller
         $originLocation = $this->normalizeStoreCode($validated['origin_location']);
         $locationVariants = $this->locationVariants($originLocation);
 
-        $soh = (int) StockIn::whereIn('destination_location', $locationVariants)
-                ->where('status', 'Posted')
-                ->where('asset_id', $asset->id)
-                ->sum('quantity')
-            + (int) InventoryTransaction::where('inventory_transactions.asset_id', $asset->id)
-                ->whereIn('inventory_transactions.location', $locationVariants)
-                ->where('inventory_transactions.reference_type', '!=', StockIn::class)
-                ->sum('inventory_transactions.quantity')
-            + (int) InventoryTransaction::from('inventory_transactions as it')
-                ->where('it.asset_id', $asset->id)
-                ->whereIn('it.location', $locationVariants)
-                ->where('it.reference_type', '=', StockIn::class)
-                ->where('it.transaction_type', 'Transfer Out')
-                ->join('stock_ins as si_out', 'it.reference_id', '=', 'si_out.id')
-                ->where('si_out.status', 'Posted')
-                ->sum('it.quantity');
+        $soh = (int) InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'stock_transfer_available_valid')
+            ->where('inventory_transactions.asset_id', $asset->id)
+            ->whereIn('inventory_transactions.location', $locationVariants)
+            ->sum('inventory_transactions.quantity');
 
         $excludeTransferIds = array_filter(
             (array) $request->input('exclude_transfer_ids', []),
