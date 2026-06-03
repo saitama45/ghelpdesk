@@ -175,6 +175,51 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
+    public function test_ticket_index_includes_assignee_department_node_for_sector_display(): void
+    {
+        $company = Company::create([
+            'name' => 'Test Company',
+            'code' => 'TC',
+            'is_active' => true,
+        ]);
+
+        $department = Department::create([
+            'name' => 'Operations',
+            'is_active' => true,
+        ]);
+
+        $sector = DepartmentNode::create([
+            'department_id' => $department->id,
+            'name' => 'Sector 1',
+            'is_active' => true,
+        ]);
+
+        $viewer = User::factory()->create([
+            'company_id' => $company->id,
+            'department_id' => $department->id,
+        ]);
+
+        $assignee = User::factory()->create([
+            'company_id' => $company->id,
+            'department_id' => $department->id,
+            'department_node_id' => $sector->id,
+        ]);
+
+        $ticket = $this->ticket($company, [
+            'assignee_id' => $assignee->id,
+        ]);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', ['status' => ['all'], 'skip_default_department' => true]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Index')
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $ticket->id)
+                ->where('tickets.data.0.assignee.department_node_id', $sector->id)
+            );
+    }
+
     private function ticket(Company $company, array $overrides = []): Ticket
     {
         return Ticket::create(array_merge([

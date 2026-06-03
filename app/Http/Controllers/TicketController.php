@@ -43,7 +43,7 @@ class TicketController extends Controller
         $user = $request->user();
         $query = Ticket::with([
             'reporter:id,name,profile_photo', 
-            'assignee:id,name,profile_photo', 
+            'assignee:id,name,profile_photo,department_node_id',
             'company:id,name',
             'store:id,name', 
             'item:id,name,priority,category_id,sub_category_id',

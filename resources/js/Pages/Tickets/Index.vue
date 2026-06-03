@@ -221,6 +221,37 @@ const hierarchicalOptions = computed(() =>
     }))
 )
 
+const assigneeSectorByNodeId = computed(() => {
+    const sectors = new Map()
+
+    const mapSectorToNodeTree = (node, label) => {
+        sectors.set(Number(node.id), label)
+        ;(node.children || []).forEach(child => mapSectorToNodeTree(child, label))
+    }
+
+    const visitNode = (node) => {
+        const sectorMatch = String(node.name || '').match(/^Sector\s+(\d+)$/i)
+
+        if (sectorMatch) {
+            mapSectorToNodeTree(node, `Sector ${sectorMatch[1]}`)
+            return
+        }
+
+        ;(node.children || []).forEach(visitNode)
+    }
+
+    ;(props.hierarchicalDepartments || []).forEach(dept => {
+        ;(dept.nodes || []).forEach(visitNode)
+    })
+
+    return sectors
+})
+
+const assigneeSectorLabel = (assignee) => {
+    if (!assignee?.department_node_id) return ''
+    return assigneeSectorByNodeId.value.get(Number(assignee.department_node_id)) || ''
+}
+
 const deptFilterParams = computed(() => {
     const nodeId = filterNodeId.value
     if (!nodeId) return {}
@@ -1923,7 +1954,9 @@ const requesterTabs = computed(() => {
                                     </div>
                                     <div>
                                         <div class="font-semibold text-black">{{ ticket.assignee.name }}</div>
-                                        <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assigned</div>
+                                        <div v-if="assigneeSectorLabel(ticket.assignee)" class="text-[10px] font-black text-slate-400">
+                                            {{ assigneeSectorLabel(ticket.assignee) }}
+                                        </div>
                                     </div>
                                 </div>
                                 <button
