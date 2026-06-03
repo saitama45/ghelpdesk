@@ -118,9 +118,8 @@ function getStageDisplay(request) {
 </script>
 
 <template>
-    <AppLayout title="SAP Requests">
-        <div class="py-10 bg-gray-50 min-h-screen">
-            <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+    <AppLayout title="SAP Requests" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-6 bg-gray-50/50 min-h-screen">
 
                 <!-- Header -->
                 <div class="flex items-center justify-between mb-8">
@@ -291,7 +290,6 @@ function getStageDisplay(request) {
                         </div>
                     </div>
                 </div>
-            </div>
         </div>
 
         <CopyRecordModal
