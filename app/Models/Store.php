@@ -20,6 +20,10 @@ class Store extends Model
         'brand',
         'class',
         'email',
+        'contact_person',
+        'contact_details',
+        'opening_date',
+        'hookup',
         'latitude',
         'longitude',
         'radius_meters',
@@ -35,6 +39,7 @@ class Store extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'sector' => 'integer',
+        'opening_date' => 'date:Y-m-d',
         'latitude' => 'float',
         'longitude' => 'float',
         'radius_meters' => 'integer',
@@ -73,6 +78,16 @@ class Store extends Model
         return $this->belongsToMany(NpcStatus::class, 'npc_status_store')
             ->withPivot('year')
             ->withTimestamps();
+    }
+
+    public function options(): HasMany
+    {
+        return $this->hasMany(StoreOption::class);
+    }
+
+    public function blueprints(): HasMany
+    {
+        return $this->hasMany(StoreBlueprint::class)->latest();
     }
 
     public function getClusterNameAttribute(): string

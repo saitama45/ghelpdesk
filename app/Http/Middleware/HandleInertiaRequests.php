@@ -70,6 +70,7 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
                 'info' => $request->session()->get('info'),
+                'created_store_id' => $request->session()->get('created_store_id'),
             ],
         ]);
     }

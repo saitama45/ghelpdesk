@@ -32,6 +32,15 @@ class TicketAsset extends Model
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
+    /**
+     * Serialize dates in Asia/Manila so the frontend shows local time
+     * (matches the Ticket model; app stores wall-clock in Asia/Manila).
+     */
+    protected function serializeDate(\DateTimeInterface $date): string
+    {
+        return $date->setTimezone(new \DateTimeZone('Asia/Manila'))->format('Y-m-d H:i:s');
+    }
+
     public function ticket()
     {
         return $this->belongsTo(Ticket::class);

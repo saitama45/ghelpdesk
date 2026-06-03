@@ -165,6 +165,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('task-card-attachments/{taskCardAttachment}', [\App\Http\Controllers\TaskCardController::class, 'destroyAttachment'])->name('task-card-attachments.destroy');
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');
+    Route::post('stores/{store}/blueprints', [\App\Http\Controllers\StoreController::class, 'uploadBlueprint'])->name('stores.blueprints.store');
+    Route::get('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'downloadBlueprint'])->name('stores.blueprints.download');
+    Route::delete('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'destroyBlueprint'])->name('stores.blueprints.destroy');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
     Route::resource('activity-templates', \App\Http\Controllers\ActivityTemplateController::class)->except(['show', 'create', 'edit']);

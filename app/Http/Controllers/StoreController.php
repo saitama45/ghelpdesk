@@ -3,13 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cluster;
+use App\Models\ReferenceOption;
 use App\Models\Store;
+use App\Models\StoreBlueprint;
+use App\Models\StoreOption;
 use App\Models\User;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -23,16 +28,16 @@ class StoreController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:stores.view', only: ['index']),
+            new Middleware('can:stores.view', only: ['index', 'downloadBlueprint']),
             new Middleware('can:stores.create', only: ['store']),
-            new Middleware('can:stores.edit', only: ['update']),
+            new Middleware('can:stores.edit', only: ['update', 'uploadBlueprint', 'destroyBlueprint']),
             new Middleware('can:stores.delete', only: ['destroy']),
         ];
     }
 
     public function index(Request $request)
     {
-        $query = Store::with(['users:id,name,email', 'clusters:id,code,name'])
+        $query = Store::with(['users:id,name,email', 'clusters:id,code,name', 'options', 'blueprints'])
             ->withCount(['tickets' => function($q) {
                 $q->where('tickets.status', 'open');
             }]);
@@ -68,83 +73,153 @@ class StoreController extends Controller implements HasMiddleware
             'users' => $users,
             'clusters' => $clusters,
             'settings' => $settings,
+            'classOptions' => ReferenceOption::ofType('store_class'),
+            'hookupOptions' => ReferenceOption::ofType('store_hookup'),
+            'systemOptions' => ReferenceOption::ofType('store_system'),
+            'telcoOptions' => ReferenceOption::ofType('store_telco'),
+            'connectivityOptions' => ReferenceOption::ofType('store_connectivity_type'),
+            'remoteAppOptions' => ReferenceOption::ofType('store_remote_app'),
         ]);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'code' => 'required|string|max:50|unique:stores,code',
-            'name' => 'required|string|max:255|unique:stores,name',
-            'sector' => 'required|numeric|min:0|max:8',
-            'area' => 'required|string|max:255',
-            'brand' => 'required|string|max:255',
-            'class' => 'nullable|in:Regular,Kitchen,Office',
-            'cluster' => 'nullable|required_without:cluster_ids|string|max:255',
-            'cluster_ids' => 'nullable|required_without:cluster|array',
-            'cluster_ids.*' => 'exists:clusters,id',
-            'email' => 'nullable|email|max:255',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
-            'radius_meters' => 'nullable|integer|min:10|max:5000',
-            'is_active' => 'boolean',
-            'user_ids' => 'nullable|array',
-            'user_ids.*' => 'exists:users,id',
-        ]);
+        $request->merge(['opening_date' => $request->input('opening_date') ?: null]);
+
+        $validated = $request->validate(
+            $this->storeValidationRules('required|string|max:50|unique:stores,code', 'required|string|max:255|unique:stores,name')
+        );
 
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
         $validated['class'] = $validated['class'] ?? 'Regular';
         $clusterIds = $this->resolveClusterIds($validated);
-        unset($validated['cluster'], $validated['cluster_ids'], $validated['user_ids']);
 
-        $store = Store::create($validated);
+        $store = DB::transaction(function () use ($validated, $clusterIds, $request) {
+            $store = Store::create($this->scalarStoreAttributes($validated));
+            $store->clusters()->sync($clusterIds);
 
-        $store->clusters()->sync($clusterIds);
+            if ($request->has('user_ids')) {
+                $store->users()->sync($request->user_ids);
+            }
 
-        if ($request->has('user_ids')) {
-            $store->users()->sync($request->user_ids);
-        }
+            $this->syncStoreOptions($store, $request);
 
-        return redirect()->back()->with('success', 'Store created successfully');
+            return $store;
+        });
+
+        return redirect()->back()
+            ->with('success', 'Store created successfully')
+            ->with('created_store_id', $store->id);
     }
 
     public function update(Request $request, Store $store)
     {
-        $validated = $request->validate([
-            'code' => 'required|string|max:50|unique:stores,code,' . $store->id,
-            'name' => 'required|string|max:255|unique:stores,name,' . $store->id,
+        $request->merge(['opening_date' => $request->input('opening_date') ?: null]);
+
+        $validated = $request->validate(
+            $this->storeValidationRules(
+                'required|string|max:50|unique:stores,code,' . $store->id,
+                'required|string|max:255|unique:stores,name,' . $store->id
+            )
+        );
+
+        $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
+        $validated['class'] = $validated['class'] ?? 'Regular';
+        $clusterIds = $this->resolveClusterIds($validated);
+
+        DB::transaction(function () use ($store, $validated, $clusterIds, $request) {
+            $store->update($this->scalarStoreAttributes($validated));
+            $store->clusters()->sync($clusterIds);
+
+            if ($request->has('user_ids')) {
+                $store->users()->sync($request->user_ids);
+            } else {
+                $store->users()->detach();
+            }
+
+            $this->syncStoreOptions($store, $request);
+        });
+
+        return redirect()->back()->with('success', 'Store updated successfully');
+    }
+
+    /**
+     * Shared validation rules for store create/update.
+     */
+    private function storeValidationRules(string $codeRule, string $nameRule): array
+    {
+        return [
+            'code' => $codeRule,
+            'name' => $nameRule,
             'sector' => 'required|numeric|min:0|max:8',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
-            'class' => 'nullable|in:Regular,Kitchen,Office',
+            'class' => 'nullable|string|max:100',
             'cluster' => 'nullable|required_without:cluster_ids|string|max:255',
             'cluster_ids' => 'nullable|required_without:cluster|array',
             'cluster_ids.*' => 'exists:clusters,id',
             'email' => 'nullable|email|max:255',
+            'contact_person' => 'nullable|string|max:255',
+            'contact_details' => 'nullable|string|max:255',
+            'opening_date' => 'nullable|date',
+            'hookup' => 'nullable|string|max:100',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
             'radius_meters' => 'nullable|integer|min:10|max:5000',
             'is_active' => 'boolean',
             'user_ids' => 'nullable|array',
             'user_ids.*' => 'exists:users,id',
-        ]);
+            'systems' => 'nullable|array',
+            'systems.*' => 'string|max:100',
+            'telcos' => 'nullable|array',
+            'telcos.*' => 'string|max:100',
+            'connectivity_types' => 'nullable|array',
+            'connectivity_types.*' => 'string|max:100',
+            'remote_apps' => 'nullable|array',
+            'remote_apps.*.app' => 'required_with:remote_apps|string|max:100',
+            'remote_apps.*.id' => 'nullable|string|max:255',
+        ];
+    }
 
-        $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
-        $validated['class'] = $validated['class'] ?? 'Regular';
-        $clusterIds = $this->resolveClusterIds($validated);
-        unset($validated['cluster'], $validated['cluster_ids'], $validated['user_ids']);
+    /**
+     * Pluck only the persistable scalar store columns from validated data.
+     */
+    private function scalarStoreAttributes(array $validated): array
+    {
+        return collect($validated)->only([
+            'code', 'name', 'sector', 'area', 'brand', 'class', 'email',
+            'contact_person', 'contact_details', 'opening_date', 'hookup',
+            'latitude', 'longitude', 'radius_meters', 'is_active',
+        ])->all();
+    }
 
-        $store->update($validated);
+    /**
+     * Replace-all sync of the multi-value store options (systems, telcos,
+     * connectivity types, and remote apps) from the request.
+     */
+    private function syncStoreOptions(Store $store, Request $request): void
+    {
+        $store->options()->whereIn('type', ['system', 'telco', 'connectivity_type', 'remote_app'])->delete();
 
-        $store->clusters()->sync($clusterIds);
+        $rows = [];
 
-        if ($request->has('user_ids')) {
-            $store->users()->sync($request->user_ids);
-        } else {
-            $store->users()->detach();
+        foreach (['system' => 'systems', 'telco' => 'telcos', 'connectivity_type' => 'connectivity_types'] as $type => $key) {
+            foreach (array_filter((array) $request->input($key, []), fn ($v) => filled($v)) as $value) {
+                $rows[] = ['type' => $type, 'value' => (string) $value, 'meta' => null];
+            }
         }
 
-        return redirect()->back()->with('success', 'Store updated successfully');
+        foreach ((array) $request->input('remote_apps', []) as $remote) {
+            $app = trim((string) ($remote['app'] ?? ''));
+            if ($app === '') {
+                continue;
+            }
+            $rows[] = ['type' => 'remote_app', 'value' => $app, 'meta' => trim((string) ($remote['id'] ?? '')) ?: null];
+        }
+
+        if ($rows) {
+            $store->options()->createMany($rows);
+        }
     }
 
     private function resolveClusterIds(array $data): array
@@ -185,6 +260,53 @@ class StoreController extends Controller implements HasMiddleware
     {
         $store->delete();
         return redirect()->back()->with('success', 'Store deleted successfully');
+    }
+
+    public function uploadBlueprint(Request $request, Store $store)
+    {
+        $request->validate([
+            'files' => 'required|array|min:1',
+            'files.*' => 'file|mimes:pdf,jpg,jpeg,png,webp|max:25600',
+        ]);
+
+        foreach ($request->file('files') as $file) {
+            $fileName = now('Asia/Manila')->format('YmdHis') . '_' . Str::uuid() . '_' . $file->getClientOriginalName();
+            $path = str_replace('\\', '/', $file->storeAs("store-blueprints/{$store->id}", $fileName, 'public'));
+
+            $store->blueprints()->create([
+                'file_name' => $file->getClientOriginalName(),
+                'file_storage_path' => $path,
+                'file_size_bytes' => $file->getSize(),
+                'mime_type' => $file->getClientMimeType(),
+                'uploaded_by' => $request->user()->id,
+                'uploaded_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Blueprint uploaded.',
+            'blueprints' => $store->blueprints()->get(),
+        ], 201);
+    }
+
+    public function downloadBlueprint(Store $store, StoreBlueprint $blueprint)
+    {
+        abort_unless($blueprint->store_id === $store->id, 404);
+
+        $fullPath = storage_path('app/public/' . str_replace('/', DIRECTORY_SEPARATOR, $blueprint->file_storage_path));
+        abort_unless(is_file($fullPath), 404);
+
+        return response()->download($fullPath, $blueprint->file_name);
+    }
+
+    public function destroyBlueprint(Store $store, StoreBlueprint $blueprint)
+    {
+        abort_unless($blueprint->store_id === $store->id, 404);
+
+        Storage::disk('public')->delete($blueprint->file_storage_path);
+        $blueprint->delete();
+
+        return response()->json(['message' => 'Blueprint deleted.']);
     }
 
     public function import(Request $request)

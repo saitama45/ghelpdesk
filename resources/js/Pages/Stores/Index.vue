@@ -160,8 +160,8 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all">
-                    <div class="flex justify-between items-center mb-6">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl p-6 border border-gray-100 transform transition-all">
+                    <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-bold text-gray-900">
                             {{ isEditing ? 'Edit Store' : 'Create Store' }}
                         </h3>
@@ -172,134 +172,298 @@
                         </button>
                     </div>
 
+                    <!-- Tabs -->
+                    <div class="flex flex-wrap gap-1 border-b border-gray-200 mb-5">
+                        <button
+                            v-for="tab in storeTabs"
+                            :key="tab.key"
+                            type="button"
+                            @click="activeTab = tab.key"
+                            class="px-3 py-2 text-xs font-bold rounded-t-lg transition-colors -mb-px border-b-2"
+                            :class="activeTab === tab.key ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        >{{ tab.label }}</button>
+                    </div>
+
                     <form @submit.prevent="submitForm" class="space-y-5">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Code</label>
-                                <input v-model="form.code" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
+                        <div class="max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
 
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Name</label>
-                                <input v-model="form.name" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
-                                <input v-model="form.brand" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Area</label>
-                                <input v-model="form.area" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector</label>
-                                <input v-model="form.sector" type="number" required min="0" max="8"
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Class</label>
-                                <select v-model="form.class" required
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                                    <option value="Regular">Regular</option>
-                                    <option value="Kitchen">Kitchen</option>
-                                    <option value="Office">Office</option>
-                                </select>
-                            </div>
-
-                            <div class="md:col-span-2">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Clusters</label>
-                                <MultiAutocomplete
-                                    v-model="form.cluster_ids"
-                                    :options="clusters"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select one or more clusters..."
-                                />
-                            </div>
-
-                            <div class="md:col-span-2">
-                                <div class="flex items-center justify-between mb-1">
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Team members</label>
-                                    <button 
-                                        type="button" 
-                                        @click="toggleAllTeamMembers"
-                                        class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
-                                    >
-                                        {{ form.user_ids.length === props.users.length ? 'Deselect All' : 'Select All' }}
-                                    </button>
-                                </div>
-                                <MultiAutocomplete
-                                    v-model="form.user_ids"
-                                    :options="users"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select one or more team members..."
-                                />
-                            </div>
-
-                            <div class="md:col-span-2">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Email Address</label>
-                                <input v-model="form.email" type="email"
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-
-                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 md:col-span-2 space-y-4">
-                                <div class="flex items-center justify-between">
-                                    <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Geofencing (Optional)</h4>
-                                    <button 
-                                        type="button" 
-                                        @click="getCurrentLocation"
-                                        class="inline-flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
-                                    >
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                        <span>Get Current Location</span>
-                                    </button>
-                                </div>
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Latitude</label>
-                                        <input v-model="form.latitude" type="number" step="any"
-                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Longitude</label>
-                                        <input v-model="form.longitude" type="number" step="any"
-                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
-                                    </div>
+                            <!-- ── General ── -->
+                            <div v-show="activeTab === 'general'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Code</label>
+                                    <input v-model="form.code" type="text" required
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Radius (Meters)</label>
-                                    <input v-model="form.radius_meters" type="number"
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
-                                           placeholder="Default: 150">
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Name</label>
+                                    <input v-model="form.name" type="text" required
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
+                                    <input v-model="form.brand" type="text" required
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Area</label>
+                                    <input v-model="form.area" type="text" required
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector</label>
+                                    <input v-model="form.sector" type="number" required min="0" max="8"
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Class</label>
+                                    <ManageableAutocomplete
+                                        v-model="form.class"
+                                        :options="classOptionsLocal"
+                                        option-type="store_class"
+                                        placeholder="Select class..."
+                                        :can-create="canCreateOption"
+                                        :can-edit="canEditOption"
+                                        :can-delete="canDeleteOption"
+                                        @options-changed="classOptionsLocal = $event"
+                                    />
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Clusters</label>
+                                    <MultiAutocomplete
+                                        v-model="form.cluster_ids"
+                                        :options="clusters"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select one or more clusters..."
+                                    />
+                                </div>
+                                <div class="md:col-span-2">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Team members</label>
+                                        <button type="button" @click="toggleAllTeamMembers"
+                                            class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
+                                            {{ form.user_ids.length === props.users.length ? 'Deselect All' : 'Select All' }}
+                                        </button>
+                                    </div>
+                                    <MultiAutocomplete
+                                        v-model="form.user_ids"
+                                        :options="users"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select one or more team members..."
+                                    />
+                                </div>
+                                <div class="md:col-span-2 flex items-center space-x-2">
+                                    <input v-model="form.is_active" type="checkbox" id="is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                    <label for="is_active" class="text-sm text-gray-700 font-medium">Active Store</label>
+                                </div>
+                            </div>
+
+                            <!-- ── Contact ── -->
+                            <div v-show="activeTab === 'contact'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Contact Person (AOM)</label>
+                                    <input v-model="form.contact_person" type="text" placeholder="Area Operations Manager name"
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Contact Details</label>
+                                    <input v-model="form.contact_details" type="text" placeholder="Mobile / phone number"
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Email Address</label>
+                                    <input v-model="form.email" type="email"
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                </div>
+                            </div>
+
+                            <!-- ── Connectivity & Systems ── -->
+                            <div v-show="activeTab === 'connectivity'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Hookup</label>
+                                    <ManageableAutocomplete
+                                        v-model="form.hookup"
+                                        :options="hookupOptionsLocal"
+                                        option-type="store_hookup"
+                                        placeholder="Select hookup..."
+                                        :can-create="canCreateOption"
+                                        :can-edit="canEditOption"
+                                        :can-delete="canDeleteOption"
+                                        @options-changed="hookupOptionsLocal = $event"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Telco</label>
+                                    <ManageableMultiAutocomplete
+                                        v-model="form.telcos"
+                                        :options="telcoOptionsLocal"
+                                        option-type="store_telco"
+                                        placeholder="Select telco(s)..."
+                                        :can-create="canCreateOption"
+                                        :can-edit="canEditOption"
+                                        :can-delete="canDeleteOption"
+                                        @options-changed="telcoOptionsLocal = $event"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Connectivity Type</label>
+                                    <ManageableMultiAutocomplete
+                                        v-model="form.connectivity_types"
+                                        :options="connectivityOptionsLocal"
+                                        option-type="store_connectivity_type"
+                                        placeholder="Select connectivity type(s)..."
+                                        :can-create="canCreateOption"
+                                        :can-edit="canEditOption"
+                                        :can-delete="canDeleteOption"
+                                        @options-changed="connectivityOptionsLocal = $event"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Systems Deployed</label>
+                                    <ManageableMultiAutocomplete
+                                        v-model="form.systems"
+                                        :options="systemOptionsLocal"
+                                        option-type="store_system"
+                                        placeholder="Select system(s)..."
+                                        :can-create="canCreateOption"
+                                        :can-edit="canEditOption"
+                                        :can-delete="canDeleteOption"
+                                        @options-changed="systemOptionsLocal = $event"
+                                    />
+                                </div>
+                                <div class="md:col-span-2">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Remote Apps</label>
+                                        <button type="button" @click="addRemoteApp"
+                                            class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
+                                            + Add Remote App
+                                        </button>
+                                    </div>
+                                    <div v-if="form.remote_apps.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200">
+                                        No remote apps. Add Teamviewer/Anydesk/etc. with their ID.
+                                    </div>
+                                    <div v-else class="space-y-2">
+                                        <div v-for="(remote, idx) in form.remote_apps" :key="idx" class="flex items-start gap-2">
+                                            <div class="w-2/5 shrink-0">
+                                                <ManageableAutocomplete
+                                                    v-model="remote.app"
+                                                    :options="remoteAppOptionsLocal"
+                                                    option-type="store_remote_app"
+                                                    placeholder="App..."
+                                                    :can-create="canCreateOption"
+                                                    :can-edit="canEditOption"
+                                                    :can-delete="canDeleteOption"
+                                                    @options-changed="remoteAppOptionsLocal = $event"
+                                                />
+                                            </div>
+                                            <input v-model="remote.id" type="text" placeholder="ID value"
+                                                   class="flex-1 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                            <button type="button" @click="removeRemoteApp(idx)"
+                                                class="p-2 text-red-500 hover:bg-red-50 rounded-lg shrink-0" title="Remove">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ── Files & Location ── -->
+                            <div v-show="activeTab === 'files'" class="space-y-5">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Opening Date</label>
+                                        <input v-model="form.opening_date" type="date"
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    </div>
+                                </div>
+
+                                <!-- Blueprint -->
+                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Blueprints (PDF / Image)</h4>
+                                        <label class="inline-flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 cursor-pointer">
+                                            <input ref="blueprintInput" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" class="hidden" @change="handleBlueprintSelect">
+                                            <span>+ Add Files</span>
+                                        </label>
+                                    </div>
+
+                                    <!-- Existing (uploaded) -->
+                                    <div v-if="existingBlueprints.length" class="space-y-1.5">
+                                        <div v-for="bp in existingBlueprints" :key="bp.id" class="flex items-center justify-between gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2">
+                                            <a :href="blueprintDownloadUrl(bp)" target="_blank" rel="noopener noreferrer" class="text-xs font-bold text-blue-600 hover:underline truncate">
+                                                {{ bp.file_name }}
+                                            </a>
+                                            <div class="flex items-center gap-2 shrink-0">
+                                                <span class="text-[10px] text-gray-400">{{ formatBytes(bp.file_size_bytes) }}</span>
+                                                <button type="button" @click="deleteExistingBlueprint(bp)" class="p-1 text-red-500 hover:bg-red-50 rounded" title="Delete">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Staged (pending upload) -->
+                                    <div v-if="stagedBlueprints.length" class="space-y-1.5">
+                                        <div v-for="(file, idx) in stagedBlueprints" :key="idx" class="flex items-center justify-between gap-2 bg-blue-50/50 rounded-lg border border-blue-100 px-3 py-2">
+                                            <span class="text-xs font-semibold text-gray-700 truncate">{{ file.name }}</span>
+                                            <div class="flex items-center gap-2 shrink-0">
+                                                <span class="text-[10px] text-gray-400">{{ formatBytes(file.size) }} · pending</span>
+                                                <button type="button" @click="removeStagedBlueprint(idx)" class="p-1 text-red-500 hover:bg-red-50 rounded" title="Remove">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p v-if="!existingBlueprints.length && !stagedBlueprints.length" class="text-[11px] text-gray-400 italic">
+                                        No blueprint files yet. Max 25MB per file.
+                                    </p>
+                                </div>
+
+                                <!-- Geofencing -->
+                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-4">
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Geofencing (Optional)</h4>
+                                        <button type="button" @click="getCurrentLocation"
+                                            class="inline-flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                            <span>Get Current Location</span>
+                                        </button>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Latitude</label>
+                                            <input v-model="form.latitude" type="number" step="any"
+                                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Longitude</label>
+                                            <input v-model="form.longitude" type="number" step="any"
+                                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Radius (Meters)</label>
+                                        <input v-model="form.radius_meters" type="number"
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                               placeholder="Default: 150">
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="flex items-center space-x-2">
-                            <input v-model="form.is_active" type="checkbox" id="is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <label for="is_active" class="text-sm text-gray-700 font-medium">Active Store</label>
-                        </div>
-
-                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-                            <button type="button" @click="closeModal" 
+                        <div class="flex justify-end space-x-3 pt-4 border-t">
+                            <button type="button" @click="closeModal"
                                     class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
                                 Cancel
                             </button>
-                            <button type="submit" 
-                                    class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all">
-                                {{ isEditing ? 'Update Store' : 'Create Store' }}
+                            <button type="submit" :disabled="blueprintUploading"
+                                    class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all disabled:opacity-60">
+                                {{ blueprintUploading ? 'Saving...' : (isEditing ? 'Update Store' : 'Create Store') }}
                             </button>
                         </div>
                     </form>
@@ -420,9 +584,12 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
+import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
+import ManageableMultiAutocomplete from '@/Components/ManageableMultiAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -434,8 +601,16 @@ const props = defineProps({
     stores: Object,
     users: Array,
     clusters: Array,
-    settings: Object
+    settings: Object,
+    classOptions: { type: Array, default: () => [] },
+    hookupOptions: { type: Array, default: () => [] },
+    systemOptions: { type: Array, default: () => [] },
+    telcoOptions: { type: Array, default: () => [] },
+    connectivityOptions: { type: Array, default: () => [] },
+    remoteAppOptions: { type: Array, default: () => [] },
 })
+
+const page = usePage()
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
@@ -470,11 +645,47 @@ const form = reactive({
     cluster_ids: [],
     user_ids: [],
     email: '',
+    contact_person: '',
+    contact_details: '',
+    opening_date: '',
+    hookup: '',
+    systems: [],
+    telcos: [],
+    connectivity_types: [],
+    remote_apps: [],
     latitude: '',
     longitude: '',
     radius_meters: '',
     is_active: true
 })
+
+// Modal tabs
+const activeTab = ref('general')
+const storeTabs = [
+    { key: 'general', label: 'General' },
+    { key: 'contact', label: 'Contact' },
+    { key: 'connectivity', label: 'Connectivity & Systems' },
+    { key: 'files', label: 'Files & Location' },
+]
+
+// Local copies of managed reference-option lists (kept in sync via @options-changed)
+const classOptionsLocal = ref([...props.classOptions])
+const hookupOptionsLocal = ref([...props.hookupOptions])
+const systemOptionsLocal = ref([...props.systemOptions])
+const telcoOptionsLocal = ref([...props.telcoOptions])
+const connectivityOptionsLocal = ref([...props.connectivityOptions])
+const remoteAppOptionsLocal = ref([...props.remoteAppOptions])
+
+// Reference-option management permissions
+const canCreateOption = computed(() => hasPermission('reference_options.create'))
+const canEditOption = computed(() => hasPermission('reference_options.edit'))
+const canDeleteOption = computed(() => hasPermission('reference_options.delete'))
+
+// Blueprint state
+const blueprintInput = ref(null)
+const stagedBlueprints = ref([])      // newly selected files awaiting upload
+const existingBlueprints = ref([])    // already-uploaded blueprints (edit mode)
+const blueprintUploading = ref(false)
 
 const showTeamModal = ref(false)
 const selectedTeamStore = ref(null)
@@ -496,8 +707,12 @@ const openCreateModal = () => {
     isEditing.value = false
     currentStore.value = null
     resetForm()
+    activeTab.value = 'general'
     showModal.value = true
 }
+
+const groupStoreOptions = (options = [], type) =>
+    options.filter(o => o.type === type).map(o => o.value)
 
 const editStore = (store) => {
     isEditing.value = true
@@ -507,14 +722,28 @@ const editStore = (store) => {
     form.brand = store.brand
     form.area = store.area
     form.sector = store.sector
-    form.class = store.class
+    form.class = store.class || ''
     form.cluster_ids = store.clusters ? store.clusters.map(c => c.id) : []
     form.user_ids = store.users ? store.users.map(u => u.id) : []
     form.email = store.email || ''
+    form.contact_person = store.contact_person || ''
+    form.contact_details = store.contact_details || ''
+    form.opening_date = store.opening_date || ''
+    form.hookup = store.hookup || ''
+    form.systems = groupStoreOptions(store.options, 'system')
+    form.telcos = groupStoreOptions(store.options, 'telco')
+    form.connectivity_types = groupStoreOptions(store.options, 'connectivity_type')
+    form.remote_apps = (store.options || [])
+        .filter(o => o.type === 'remote_app')
+        .map(o => ({ app: o.value, id: o.meta || '' }))
     form.latitude = store.latitude || ''
     form.longitude = store.longitude || ''
     form.radius_meters = store.radius_meters || ''
     form.is_active = !!store.is_active
+
+    existingBlueprints.value = store.blueprints ? [...store.blueprints] : []
+    stagedBlueprints.value = []
+    activeTab.value = 'general'
     showModal.value = true
 }
 
@@ -528,14 +757,94 @@ const resetForm = () => {
     form.cluster_ids = []
     form.user_ids = []
     form.email = ''
+    form.contact_person = ''
+    form.contact_details = ''
+    form.opening_date = ''
+    form.hookup = ''
+    form.systems = []
+    form.telcos = []
+    form.connectivity_types = []
+    form.remote_apps = []
     form.latitude = ''
     form.longitude = ''
     form.radius_meters = ''
     form.is_active = true
+    existingBlueprints.value = []
+    stagedBlueprints.value = []
 }
 
 const closeModal = () => {
     showModal.value = false
+}
+
+// ── Remote apps (repeatable app + id rows) ──────────────────────────────
+const addRemoteApp = () => {
+    form.remote_apps.push({ app: '', id: '' })
+}
+const removeRemoteApp = (index) => {
+    form.remote_apps.splice(index, 1)
+}
+
+// ── Blueprint files ─────────────────────────────────────────────────────
+const handleBlueprintSelect = (e) => {
+    const files = Array.from(e.target.files || [])
+    const maxSize = 25 * 1024 * 1024 // 25MB
+    files.forEach(file => {
+        if (file.size > maxSize) {
+            showError(`${file.name} exceeds the 25MB limit.`)
+            return
+        }
+        stagedBlueprints.value.push(file)
+    })
+    if (blueprintInput.value) blueprintInput.value.value = ''
+}
+
+const removeStagedBlueprint = (index) => {
+    stagedBlueprints.value.splice(index, 1)
+}
+
+const blueprintDownloadUrl = (bp) =>
+    route('stores.blueprints.download', [currentStore.value.id, bp.id])
+
+const uploadStagedBlueprints = async (storeId) => {
+    if (!stagedBlueprints.value.length) return
+    blueprintUploading.value = true
+    const formData = new FormData()
+    stagedBlueprints.value.forEach(file => formData.append('files[]', file))
+    try {
+        const { data } = await axios.post(route('stores.blueprints.store', storeId), formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        existingBlueprints.value = data.blueprints || []
+        stagedBlueprints.value = []
+    } catch (err) {
+        showError(err.response?.data?.message || 'Failed to upload blueprint(s).')
+    } finally {
+        blueprintUploading.value = false
+    }
+}
+
+const deleteExistingBlueprint = async (bp) => {
+    const confirmed = await confirm({
+        title: 'Delete Blueprint',
+        message: `Delete "${bp.file_name}"? This cannot be undone.`
+    })
+    if (!confirmed) return
+    try {
+        await axios.delete(route('stores.blueprints.destroy', [currentStore.value.id, bp.id]))
+        existingBlueprints.value = existingBlueprints.value.filter(b => b.id !== bp.id)
+        showSuccess('Blueprint deleted.')
+    } catch (err) {
+        showError(err.response?.data?.message || 'Failed to delete blueprint.')
+    }
+}
+
+const formatBytes = (bytes) => {
+    if (!bytes) return ''
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 const toggleAllTeamMembers = () => {
@@ -568,13 +877,25 @@ const getCurrentLocation = () => {
 };
 
 const submitForm = () => {
-    const url = isEditing.value ? `/stores/${currentStore.value.id}` : '/stores'
-    const requestMethod = isEditing.value ? put : post
+    const editing = isEditing.value
+    const url = editing ? `/stores/${currentStore.value.id}` : '/stores'
+    const requestMethod = editing ? put : post
+    const hasStaged = stagedBlueprints.value.length > 0
 
     requestMethod(url, form, {
-        onSuccess: () => {
+        preserveScroll: true,
+        onSuccess: async () => {
+            // Upload any staged blueprints to the (possibly newly created) store.
+            if (hasStaged) {
+                const storeId = editing
+                    ? currentStore.value.id
+                    : page.props.flash?.created_store_id
+                if (storeId) {
+                    await uploadStagedBlueprints(storeId)
+                }
+            }
             closeModal()
-            showSuccess(isEditing.value ? 'Store updated successfully' : 'Store created successfully')
+            showSuccess(editing ? 'Store updated successfully' : 'Store created successfully')
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'

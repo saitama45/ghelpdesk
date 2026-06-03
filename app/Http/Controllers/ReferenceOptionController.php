@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\ProjectTemplate;
 use App\Models\ReferenceOption;
+use App\Models\Store;
+use App\Models\StoreOption;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -11,7 +13,23 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class ReferenceOptionController extends Controller implements HasMiddleware
 {
-    private const ALLOWED_TYPES = ['project_type', 'store_class'];
+    private const ALLOWED_TYPES = [
+        'project_type',
+        'store_class',
+        'store_hookup',
+        'store_system',
+        'store_telco',
+        'store_connectivity_type',
+        'store_remote_app',
+    ];
+
+    // Maps store_options reference types to the store_options.type they populate.
+    private const STORE_OPTION_TYPE_MAP = [
+        'store_system' => 'system',
+        'store_telco' => 'telco',
+        'store_connectivity_type' => 'connectivity_type',
+        'store_remote_app' => 'remote_app',
+    ];
 
     public static function middleware(): array
     {
@@ -64,16 +82,49 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 
     public function destroy(ReferenceOption $referenceOption): JsonResponse
     {
-        $inUse = ProjectTemplate::where($referenceOption->type, $referenceOption->value)->exists();
+        [$inUse, $usedByLabel] = $this->dependencyUsage($referenceOption);
 
         if ($inUse) {
             return response()->json([
-                'message' => "Cannot delete \"{$referenceOption->label}\" — it is used by one or more project templates.",
+                'message' => "Cannot delete \"{$referenceOption->label}\" — it is used by one or more {$usedByLabel}.",
             ], 422);
         }
 
         $referenceOption->delete();
 
         return response()->json(['message' => 'Deleted successfully.']);
+    }
+
+    /**
+     * Determine whether a reference option is currently referenced elsewhere.
+     *
+     * @return array{0: bool, 1: string}
+     */
+    private function dependencyUsage(ReferenceOption $referenceOption): array
+    {
+        $type = $referenceOption->type;
+        $value = $referenceOption->value;
+
+        if ($type === 'project_type') {
+            return [ProjectTemplate::where('project_type', $value)->exists(), 'project templates'];
+        }
+
+        if ($type === 'store_class') {
+            return [Store::where('class', $value)->exists(), 'stores'];
+        }
+
+        if ($type === 'store_hookup') {
+            return [Store::where('hookup', $value)->exists(), 'stores'];
+        }
+
+        if (isset(self::STORE_OPTION_TYPE_MAP[$type])) {
+            $storeOptionType = self::STORE_OPTION_TYPE_MAP[$type];
+            return [
+                StoreOption::where('type', $storeOptionType)->where('value', $value)->exists(),
+                'stores',
+            ];
+        }
+
+        return [false, 'records'];
     }
 }
