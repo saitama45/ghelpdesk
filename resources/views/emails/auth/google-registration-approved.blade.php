@@ -22,7 +22,7 @@
 
         <div class="content">
             <p>Hello {{ $user->name }},</p>
-            <p>Your TAS Service Center account has been approved. You can now sign in using Google.</p>
+            <p>Your Account has been approved. You can now sign in using Google.</p>
 
             <p>
                 <a href="{{ route('login') }}" class="button">Sign In</a>

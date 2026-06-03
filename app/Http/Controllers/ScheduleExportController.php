@@ -123,6 +123,7 @@ class ScheduleExportController extends Controller
             $userMissingLocationEntries = [];
             $userMissingActualTimeInEntries = [];
             $userMissingActualTimeOutEntries = [];
+            $locationOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
             $actualTimeOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
 
             foreach ($schedules as $s) {
@@ -153,7 +154,7 @@ class ScheduleExportController extends Controller
                     $curr->addDay();
                 }
 
-                if (in_array($s->status, ['Restday', 'Holiday', 'N/A'], true)) {
+                if (in_array($s->status, $locationOptionalStatuses, true)) {
                     continue;
                 }
 

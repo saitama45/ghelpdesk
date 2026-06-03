@@ -18,7 +18,7 @@ class GoogleRegistrationApproved extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your TAS Service Center account has been approved',
+            subject: 'Your Account has been approved',
         );
     }
 

@@ -2389,6 +2389,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $userMissingLocationEntries = [];
         $userMissingActualTimeInEntries = [];
         $userMissingActualTimeOutEntries = [];
+        $locationOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
         $actualTimeOptionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
         foreach ($schedules as $s) {
             $sStart = $s->start_time->copy()->timezone('Asia/Manila');
@@ -2418,7 +2419,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 $curr->addDay();
             }
 
-            if (in_array($s->status, ['Restday', 'Holiday', 'N/A'])) {
+            if (in_array($s->status, $locationOptionalStatuses, true)) {
                 continue;
             }
 
