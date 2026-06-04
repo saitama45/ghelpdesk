@@ -21,12 +21,26 @@ class ProjectController extends Controller
 
     public function index(Request $request)
     {
+        $search = trim((string) $request->input('search', ''));
+
         $projects = Project::with(['store', 'tasks'])
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhereHas('store', function ($query) use ($search) {
+                            $query->where('name', 'like', "%{$search}%");
+                        });
+                });
+            })
             ->orderBy('target_go_live', 'desc')
-            ->paginate(10);
+            ->paginate(12)
+            ->withQueryString();
 
         return Inertia::render('Projects/Index', [
             'projects' => $projects,
+            'filters' => [
+                'search' => $search,
+            ],
         ]);
     }
 

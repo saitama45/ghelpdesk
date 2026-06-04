@@ -4,14 +4,14 @@ import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import {
     PlusIcon,
-    CalendarIcon,
     BuildingStorefrontIcon,
     ChevronRightIcon,
     MagnifyingGlassIcon,
     DocumentDuplicateIcon,
     TrashIcon,
+    ClipboardDocumentListIcon,
 } from '@heroicons/vue/24/outline';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 
@@ -51,17 +51,28 @@ const duplicateProject = async (project) => {
 }
 
 const props = defineProps({
-    projects: Object
+    projects: Object,
+    filters: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
-const searchQuery = ref('');
+const searchQuery = ref(props.filters?.search || '');
+let searchTimeout = null;
 
-const filteredProjects = computed(() => {
-    if (!searchQuery.value) return props.projects.data;
-    return props.projects.data.filter(project => 
-        project.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-        project.store?.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-    );
+const visibleProjects = computed(() => props.projects?.data || []);
+const hasPagination = computed(() => Number(props.projects?.last_page || 1) > 1);
+
+watch(searchQuery, (value) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        router.get(route('projects.index'), { search: value || undefined }, {
+            preserveState: true,
+            replace: true,
+            preserveScroll: true,
+        });
+    }, 300);
 });
 
 const getStatusColor = (status) => {
@@ -116,8 +127,8 @@ const formatDate = (dateString) => {
             </div>
 
             <!-- Projects Grid -->
-            <div v-if="filteredProjects.length > 0" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <div v-for="project in filteredProjects" :key="project.id" class="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
+            <div v-if="visibleProjects.length > 0" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div v-for="project in visibleProjects" :key="project.id" class="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
                     <div class="p-5">
                         <div class="flex items-center justify-between mb-4">
                             <span :class="['inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border', getStatusColor(project.status)]">
@@ -191,9 +202,45 @@ const formatDate = (dateString) => {
                 </div>
             </div>
 
-            <!-- Pagination (if needed) -->
-            <div v-if="projects.links.length > 3" class="mt-6">
-                <!-- Standard pagination links could go here -->
+            <div v-if="hasPagination" class="mt-6 flex flex-col gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="text-sm text-gray-600">
+                    Showing {{ projects.from || 0 }} to {{ projects.to || 0 }} of {{ projects.total || 0 }} projects
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Link
+                        v-if="projects.prev_page_url"
+                        :href="projects.prev_page_url"
+                        preserve-scroll
+                        class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                    >
+                        Previous
+                    </Link>
+                    <span
+                        v-else
+                        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-400"
+                    >
+                        Previous
+                    </span>
+
+                    <span class="min-w-[110px] text-center text-sm font-semibold text-gray-700">
+                        Page {{ projects.current_page || 1 }} of {{ projects.last_page || 1 }}
+                    </span>
+
+                    <Link
+                        v-if="projects.next_page_url"
+                        :href="projects.next_page_url"
+                        preserve-scroll
+                        class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                    >
+                        Next
+                    </Link>
+                    <span
+                        v-else
+                        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-400"
+                    >
+                        Next
+                    </span>
+                </div>
             </div>
         </div>
     </AppLayout>
