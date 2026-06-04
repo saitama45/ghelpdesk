@@ -22,6 +22,8 @@ class ProjectController extends Controller
     public function index(Request $request)
     {
         $search = trim((string) $request->input('search', ''));
+        $status = trim((string) $request->input('status', ''));
+        $storeId = $request->input('store_id');
 
         $projects = Project::with(['store', 'tasks'])
             ->when($search !== '', function ($query) use ($search) {
@@ -32,15 +34,37 @@ class ProjectController extends Controller
                         });
                 });
             })
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($storeId, fn ($query) => $query->where('store_id', $storeId))
             ->orderBy('target_go_live', 'desc')
             ->paginate(12)
             ->withQueryString();
+
+        $statusOptions = Project::query()
+            ->whereNotNull('status')
+            ->where('status', '!=', '')
+            ->distinct()
+            ->orderBy('status')
+            ->pluck('status')
+            ->map(fn (string $status) => [
+                'label' => $status,
+                'value' => $status,
+            ])
+            ->values();
 
         return Inertia::render('Projects/Index', [
             'projects' => $projects,
             'filters' => [
                 'search' => $search,
+                'status' => $status,
+                'store_id' => $storeId ? (int) $storeId : null,
             ],
+            'statusOptions' => $statusOptions,
+            'storeOptions' => Store::orderBy('name')->get(['id', 'name'])
+                ->map(fn (Store $store) => [
+                    'label' => $store->name,
+                    'value' => $store->id,
+                ]),
         ]);
     }
 

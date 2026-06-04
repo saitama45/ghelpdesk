@@ -10,10 +10,12 @@ import {
     DocumentDuplicateIcon,
     TrashIcon,
     ClipboardDocumentListIcon,
+    XMarkIcon,
 } from '@heroicons/vue/24/outline';
 import { ref, computed, watch } from 'vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
+import Autocomplete from '@/Components/Autocomplete.vue';
 
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()
@@ -56,22 +58,62 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    statusOptions: {
+        type: Array,
+        default: () => [],
+    },
+    storeOptions: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const searchQuery = ref(props.filters?.search || '');
+const statusFilter = ref(props.filters?.status || null);
+const storeFilter = ref(props.filters?.store_id || null);
 let searchTimeout = null;
 
 const visibleProjects = computed(() => props.projects?.data || []);
 const hasPagination = computed(() => Number(props.projects?.last_page || 1) > 1);
 
-watch(searchQuery, (value) => {
+const filterParams = () => ({
+    search: searchQuery.value || undefined,
+    status: statusFilter.value || undefined,
+    store_id: storeFilter.value || undefined,
+});
+
+const applyFilters = () => {
+    router.get(route('projects.index'), filterParams(), {
+        preserveState: true,
+        replace: true,
+        preserveScroll: true,
+    });
+};
+
+const updateFilter = (key, value) => {
+    if (key === 'status') {
+        statusFilter.value = value || null;
+    }
+
+    if (key === 'store') {
+        storeFilter.value = value || null;
+    }
+
+    applyFilters();
+};
+
+const resetFilters = () => {
+    searchQuery.value = '';
+    statusFilter.value = null;
+    storeFilter.value = null;
+    clearTimeout(searchTimeout);
+    applyFilters();
+};
+
+watch(searchQuery, () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-        router.get(route('projects.index'), { search: value || undefined }, {
-            preserveState: true,
-            replace: true,
-            preserveScroll: true,
-        });
+        applyFilters();
     }, 300);
 });
 
@@ -106,7 +148,8 @@ const formatDate = (dateString) => {
         <div class="space-y-6">
             <!-- Header Actions -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div class="relative max-w-md w-full">
+                <div class="grid w-full grid-cols-1 gap-3 md:grid-cols-4">
+                    <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" />
                     </div>
@@ -116,10 +159,55 @@ const formatDate = (dateString) => {
                         placeholder="Search projects or stores..." 
                         class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                     >
+                    </div>
+
+                    <div class="relative">
+                        <Autocomplete
+                            v-model="statusFilter"
+                            :options="statusOptions"
+                            placeholder="All Statuses"
+                            @update:modelValue="updateFilter('status', $event)"
+                        />
+                        <button
+                            v-if="statusFilter"
+                            type="button"
+                            @click.stop="updateFilter('status', null)"
+                            class="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                            title="Clear status filter"
+                        >
+                            <XMarkIcon class="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div class="relative">
+                        <Autocomplete
+                            v-model="storeFilter"
+                            :options="storeOptions"
+                            placeholder="All Stores"
+                            @update:modelValue="updateFilter('store', $event)"
+                        />
+                        <button
+                            v-if="storeFilter"
+                            type="button"
+                            @click.stop="updateFilter('store', null)"
+                            class="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                            title="Clear store filter"
+                        >
+                            <XMarkIcon class="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        @click="resetFilters"
+                        class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                    >
+                        Reset
+                    </button>
                 </div>
                 <Link 
                     :href="route('projects.create')"
-                    class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    class="inline-flex shrink-0 items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                     <PlusIcon class="-ml-1 mr-2 h-5 w-5" />
                     New Project

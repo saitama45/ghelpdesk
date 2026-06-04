@@ -6,6 +6,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import CustomSelect from '@/Components/CustomSelect.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import StoreDetailsDrawer from '@/Components/StoreDetailsDrawer.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
@@ -620,6 +621,9 @@ const slaNow = ref(new Date());
 let slaTimerInterval = null;
 
 const items = ref([]);
+
+// Store details drawer
+const showStoreDetails = ref(false);
 
 const fetchItems = async () => {
     try {
@@ -2214,7 +2218,19 @@ const linkify = (text) => {
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-6">
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Store</label>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Store</label>
+                                        <button
+                                            v-if="editForm.store_id"
+                                            type="button"
+                                            @click="showStoreDetails = true"
+                                            class="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors"
+                                            title="View store details"
+                                        >
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                            Details
+                                        </button>
+                                    </div>
                                     <Autocomplete
                                         v-model="editForm.store_id"
                                         :options="storesWithLabel"
@@ -3641,6 +3657,13 @@ const linkify = (text) => {
                 </div>
             </div>
         </Modal>
+
+        <!-- Store Details Drawer -->
+        <StoreDetailsDrawer
+            :show="showStoreDetails"
+            :store-id="editForm.store_id"
+            @close="showStoreDetails = false"
+        />
     </AppLayout>
 </template>
 

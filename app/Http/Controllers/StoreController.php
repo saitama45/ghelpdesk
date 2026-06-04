@@ -262,6 +262,52 @@ class StoreController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Store deleted successfully');
     }
 
+    /**
+     * Full store profile (with relations) for the at-a-glance details drawer.
+     * Available to any authenticated user (not gated) — used from the ticket page.
+     */
+    public function details(Store $store)
+    {
+        $store->load([
+            'clusters:id,code,name',
+            'options',
+            'blueprints',
+        ]);
+
+        return response()->json([
+            'store' => $store,
+            'sector_users' => $this->sectorUsers($store->sector),
+        ]);
+    }
+
+    /**
+     * Resolve the user(s) assigned to a store's sector via the "Sector {n}"
+     * department node (under Technology and Solutions) and its descendants.
+     * Mirrors StoreReportService::sectorAssignments() resolution.
+     */
+    private function sectorUsers($sector)
+    {
+        if ($sector === null || $sector === '') {
+            return [];
+        }
+
+        $nodes = \App\Models\DepartmentNode::where('name', 'Sector ' . (int) $sector)->get();
+
+        if ($nodes->isEmpty()) {
+            return [];
+        }
+
+        $nodeIds = [];
+        foreach ($nodes as $node) {
+            $nodeIds[] = $node->id;
+            $nodeIds = array_merge($nodeIds, \App\Models\DepartmentNode::getAllDescendantIds($node->id));
+        }
+
+        return \App\Models\User::whereIn('department_node_id', array_values(array_unique($nodeIds)))
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'position']);
+    }
+
     public function uploadBlueprint(Request $request, Store $store)
     {
         $request->validate([
