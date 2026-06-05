@@ -71,7 +71,7 @@ class ProjectController extends Controller
     public function create()
     {
         return Inertia::render('Projects/Create', [
-            'stores' => Store::all(['id', 'name']),
+            'stores' => Store::orderBy('name')->get(['id', 'name']),
             'boardYears' => $this->boardYears(),
         ]);
     }
@@ -117,7 +117,7 @@ class ProjectController extends Controller
         return Inertia::render('Projects/Show', [
             'project' => $project,
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
-            'stores' => Store::all(['id', 'name']),
+            'stores' => Store::orderBy('name')->get(['id', 'name']),
             'departmentOptions' => $this->departmentOptions(),
             'boardYears' => $this->boardYears(),
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
