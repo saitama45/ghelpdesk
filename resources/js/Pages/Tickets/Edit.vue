@@ -29,6 +29,18 @@ const props = defineProps({
     vendors: Array,
     cannedMessages: Array,
     businessHours: Object,
+    existingRequesters: {
+        type: Array,
+        default: () => [],
+    },
+    existingEmails: {
+        type: Array,
+        default: () => [],
+    },
+    existingDepartments: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const page = usePage();
@@ -2179,15 +2191,21 @@ const linkify = (text) => {
                                 <div v-if="showExternalRequesterFields" class="space-y-3 pt-2 border-t border-gray-200">
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
-                                        <input v-model="requesterDraft.sender_name" type="text" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                        <input v-model="requesterDraft.sender_name" type="text" list="existing-requesters" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
                                                @blur="updateRequesterDetails"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                        <datalist id="existing-requesters">
+                                            <option v-for="name in existingRequesters" :key="name" :value="name"></option>
+                                        </datalist>
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
-                                        <input v-model="requesterDraft.sender_email" type="email" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
+                                        <input v-model="requesterDraft.sender_email" type="email" list="existing-emails" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
                                                @blur="updateRequesterDetails"
                                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                        <datalist id="existing-emails">
+                                            <option v-for="email in existingEmails" :key="email" :value="email"></option>
+                                        </datalist>
                                     </div>
                                 </div>
 

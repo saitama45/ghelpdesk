@@ -811,6 +811,9 @@ class TicketController extends Controller
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
             'businessHours' => $businessHours,
+            'existingRequesters' => Ticket::whereNotNull('sender_name')->where('sender_name', '!=', '')->distinct()->pluck('sender_name'),
+            'existingEmails' => Ticket::whereNotNull('sender_email')->where('sender_email', '!=', '')->distinct()->pluck('sender_email'),
+            'existingDepartments' => Ticket::whereNotNull('department')->where('department', '!=', '')->distinct()->pluck('department'),
         ]);
     }
 
