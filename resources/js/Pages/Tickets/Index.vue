@@ -91,6 +91,39 @@ const isColumnVisible = (key) => {
 };
 
 onMounted(() => {
+    if (!window.location.search) {
+        const savedFiltersStr = localStorage.getItem('ghelpdesk_ticket_filters');
+        if (savedFiltersStr) {
+            try {
+                const savedFilters = JSON.parse(savedFiltersStr);
+                const currentParams = {
+                    ...ticketFilterParams(),
+                    search: pagination.search.value
+                };
+                
+                if (JSON.stringify(savedFilters) !== JSON.stringify(currentParams)) {
+                    if (savedFilters.status !== undefined) filterStatus.value = savedFilters.status;
+                    if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
+                    if (savedFilters.assignee_id !== undefined) filterAssignee.value = savedFilters.assignee_id;
+                    if (savedFilters.start_date !== undefined) filterStartDate.value = savedFilters.start_date;
+                    if (savedFilters.end_date !== undefined) filterEndDate.value = savedFilters.end_date;
+                    if (savedFilters.dashboard_filter !== undefined) activeDashboardFilter.value = savedFilters.dashboard_filter;
+                    if (savedFilters.assigned_department_only !== undefined) assignedDepartmentOnly.value = Boolean(savedFilters.assigned_department_only);
+                    if (savedFilters.search !== undefined) pagination.search.value = savedFilters.search;
+                    
+                    router.get(route('tickets.index'), savedFilters, { replace: true, preserveState: true });
+                    return;
+                }
+            } catch (e) {}
+        }
+    } else {
+        const params = {
+            ...ticketFilterParams(),
+            search: pagination.search.value
+        };
+        localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(params));
+    }
+
     const savedCols = localStorage.getItem('ghelpdesk_ticket_columns');
     if (savedCols) {
         try {
@@ -278,10 +311,14 @@ const ticketFilterParams = () => ({
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
 
 const applyFilter = () => {
-    router.get(route('tickets.index'), {
+    const params = {
         ...ticketFilterParams(),
         search: pagination.search.value
-    }, {
+    };
+    
+    localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(params));
+
+    router.get(route('tickets.index'), params, {
         preserveState: true,
         preserveScroll: true,
         onSuccess: () => {
