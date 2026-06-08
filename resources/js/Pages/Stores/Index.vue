@@ -211,7 +211,7 @@
                                 </div>
                                 <div>
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector</label>
-                                    <input v-model="form.sector" type="number" required min="0" max="8"
+                                    <input v-model="form.sector" type="number" required min="0"
                                            class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                 </div>
                                 <div>

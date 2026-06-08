@@ -151,7 +151,7 @@ class StoreController extends Controller implements HasMiddleware
         return [
             'code' => $codeRule,
             'name' => $nameRule,
-            'sector' => 'required|numeric|min:0|max:8',
+            'sector' => 'required|numeric|min:0',
             'area' => 'required|string|max:255',
             'brand' => 'required|string|max:255',
             'class' => 'nullable|string|max:100',
@@ -416,7 +416,7 @@ class StoreController extends Controller implements HasMiddleware
                 'code'          => 'required|string|max:50|unique:stores,code',
                 'name'          => 'required|string|max:255',
                 'email'         => 'nullable|email|max:255',
-                'sector'        => 'required|integer|min:0|max:8',
+                'sector'        => 'required|integer|min:0',
                 'area'          => 'required|string|max:255',
                 'brand'         => 'required|string|max:255',
                 'class'         => 'required|in:Regular,Kitchen,Office',
