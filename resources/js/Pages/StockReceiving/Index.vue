@@ -97,6 +97,7 @@
                                 label-key="label"
                                 value-key="value"
                                 placeholder="All statuses..."
+                                @update:modelValue="applyFilters"
                             />
                         </div>
                         <div class="md:col-span-1">
@@ -459,7 +460,7 @@ const { showError } = useToast()
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()
 
-const statusFilter = ref([])
+const statusFilter = ref(props.filters?.statuses || [])
 const statusOptions = [
     { value: 'For Receiving', label: 'For Receiving' },
     { value: 'Received', label: 'Received' },
