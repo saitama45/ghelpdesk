@@ -9,14 +9,17 @@ use App\Models\Store;
 use App\Models\User;
 use App\Models\ProjectTemplate;
 use App\Services\ProjectTaskBoardSyncService;
+use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ProjectController extends Controller
 {
-    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
-    {
+    public function __construct(
+        private ProjectTaskBoardSyncService $projectTaskBoards,
+        private OrganizationReferenceService $organizationReferenceService
+    ) {
     }
 
     public function index(Request $request)
@@ -119,6 +122,7 @@ class ProjectController extends Controller
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores' => Store::orderBy('name')->get(['id', 'name']),
             'departmentOptions' => $this->departmentOptions(),
+            'hierarchicalDepartments' => $this->organizationReferenceService->tree(true),
             'boardYears' => $this->boardYears(),
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
             'project_templates' => ProjectTemplate::whereIn('store_class', [$storeClass, 'Both'])

@@ -35,6 +35,20 @@ class ProjectTeamMemberController extends Controller
             $validated['sub_unit'] = $validated['sub_unit'] ?: $user?->org_path;
         }
 
+        $existsQuery = ProjectTeamMember::where('project_id', $validated['project_id']);
+        if (!empty($validated['user_id'])) {
+            $existsQuery->where('user_id', $validated['user_id']);
+        } else {
+            $existsQuery->where('external_name', $validated['external_name']);
+        }
+
+        if ($existsQuery->exists()) {
+            return back()->withErrors([
+                'user_id' => 'This member is already in the project team.',
+                'external_name' => 'This member is already in the project team.'
+            ])->withInput();
+        }
+
         ProjectTeamMember::create($validated);
 
         $project = Project::with(['teamMembers.user', 'tasks'])->findOrFail($validated['project_id']);

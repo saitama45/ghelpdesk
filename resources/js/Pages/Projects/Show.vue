@@ -1,11 +1,12 @@
 <script setup>
-import { ref, computed } from 'vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { ref, computed, watch } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectGantt from '@/Components/ProjectTracker/ProjectGantt.vue';
 import AssetsBoard from '@/Components/ProjectTracker/AssetsBoard.vue';
 import Modal from '@/Components/Modal.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import HierarchySelector from '@/Components/HierarchySelector.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
@@ -32,6 +33,7 @@ const props = defineProps({
     users: Array,
     stores: Array,
     departmentOptions: Array,
+    hierarchicalDepartments: Array,
     boardYears: Array,
     taskListTargets: Object,
     project_templates: Array
@@ -75,12 +77,19 @@ const { confirm: confirmAction } = useConfirm();
 const showManageTeamModal = ref(false);
 const isOpeningTaskList = ref(false);
 const now = new Date();
+
+const page = usePage();
+const currentUser = computed(() => page.props.auth?.user || {});
+
+const defaultDepartment = currentUser.value.department || '';
+const defaultSubUnit = currentUser.value.org_path || '';
+
 const teamForm = useForm({
     project_id: props.project.id,
     user_id: '',
     external_name: '',
-    department: '',
-    sub_unit: '',
+    department: defaultDepartment,
+    sub_unit: defaultSubUnit,
     role_type: '',
     team_category: 'CASA Team',
 });
@@ -90,10 +99,13 @@ const teamMembers = computed(() => {
 });
 
 const userOptions = computed(() => {
-    return props.users.map(u => ({
-        id: u.id,
-        label: `${u.name}${u.department || u.sub_unit ? ` - ${u.department || '-'} / ${u.sub_unit || '-'}` : ''}`
-    }));
+    const existingUserIds = teamMembers.value.map(m => Number(m.user_id)).filter(id => id);
+    return props.users
+        .filter(u => !existingUserIds.includes(Number(u.id)))
+        .map(u => ({
+            id: u.id,
+            label: `${u.name}${u.department || u.sub_unit ? ` - ${u.department || '-'} / ${u.sub_unit || '-'}` : ''}`
+        }));
 });
 
 const showEditProjectModal = ref(false);
@@ -156,6 +168,76 @@ const confirmAutoCreateMonthlyBoards = async (extraTarget = null) => {
     });
 };
 
+const findNodeIdByStrings = (departmentName, orgPath) => {
+    if (!departmentName) return '';
+    const dept = (props.hierarchicalDepartments || []).find(d => d.name === departmentName);
+    if (!dept) return '';
+    if (!orgPath) return `dept-${dept.id}`;
+    
+    const targetPath = orgPath.split(' > ').map(p => p.trim());
+    let currentNodes = dept.nodes || [];
+    let lastFoundNodeId = `dept-${dept.id}`;
+    
+    for (const pathPart of targetPath) {
+        const node = currentNodes.find(n => n.name === pathPart);
+        if (!node) break;
+        lastFoundNodeId = node.id;
+        currentNodes = node.children || [];
+    }
+    return lastFoundNodeId;
+};
+
+const getNodeDetails = (nodeId) => {
+    if (!nodeId) return null;
+    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
+        const deptId = Number(nodeId.replace('dept-', ''));
+        const dept = (props.hierarchicalDepartments || []).find(d => Number(d.id) === deptId);
+        if (dept) return { department: dept.name, sub_unit: '' };
+    }
+    
+    const findNodeAndPath = (nodes, targetId, currentPath = []) => {
+        for (const node of (nodes || [])) {
+            if (Number(node.id) === Number(targetId)) {
+                return { department_id: node.department_id, path: [...currentPath, node.name] };
+            }
+            if (node.children) {
+                const found = findNodeAndPath(node.children, targetId, [...currentPath, node.name]);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+    
+    for (const dept of (props.hierarchicalDepartments || [])) {
+        const found = findNodeAndPath(dept.nodes, nodeId);
+        if (found) return { department: dept.name, sub_unit: found.path.join(' > ') };
+    }
+    return null;
+};
+
+const selectedDepartmentNode = ref(findNodeIdByStrings(defaultDepartment, defaultSubUnit));
+
+watch(selectedDepartmentNode, (newVal) => {
+    if (!newVal) {
+        teamForm.department = '';
+        teamForm.sub_unit = '';
+        return;
+    }
+    const details = getNodeDetails(newVal);
+    if (details) {
+        teamForm.department = details.department;
+        teamForm.sub_unit = details.sub_unit;
+    }
+});
+
+const hierarchicalDepartmentOptions = computed(() => {
+    return (props.hierarchicalDepartments || []).map(dept => ({
+        ...dept,
+        id: `dept-${dept.id}`,
+        children: dept.nodes || [],
+    }));
+});
+
 const selectedTeamUser = computed(() => {
     return props.users.find((user) => Number(user.id) === Number(teamForm.user_id)) || null;
 });
@@ -201,8 +283,10 @@ const syncTeamTargetFromUser = () => {
     if (!selectedTeamUser.value) return;
 
     teamForm.department = selectedTeamUser.value.department || teamForm.department;
-    teamForm.sub_unit = selectedTeamUser.value.sub_unit || teamForm.sub_unit;
+    teamForm.sub_unit = selectedTeamUser.value.org_path || selectedTeamUser.value.sub_unit || teamForm.sub_unit;
     teamForm.external_name = '';
+
+    selectedDepartmentNode.value = findNodeIdByStrings(teamForm.department, teamForm.sub_unit);
 };
 
 const addTeamMember = async () => {
@@ -212,6 +296,20 @@ const addTeamMember = async () => {
         teamForm.setError({
             user_id: 'Please select a system user or enter an external name.',
             external_name: 'Please select a system user or enter an external name.'
+        });
+        return;
+    }
+
+    const isDuplicate = teamMembers.value.some(member => {
+        if (teamForm.user_id && String(member.user_id) === String(teamForm.user_id)) return true;
+        if (!teamForm.user_id && teamForm.external_name && member.external_name?.toLowerCase() === teamForm.external_name.toLowerCase()) return true;
+        return false;
+    });
+
+    if (isDuplicate) {
+        teamForm.setError({
+            user_id: 'This member is already in the project team.',
+            external_name: 'This member is already in the project team.'
         });
         return;
     }
@@ -238,6 +336,7 @@ const addTeamMember = async () => {
         .post(route('projects-team-members.store'), {
         onSuccess: () => {
             teamForm.reset('user_id', 'external_name', 'department', 'sub_unit', 'role_type');
+            selectedDepartmentNode.value = findNodeIdByStrings(defaultDepartment, defaultSubUnit);
         },
         preserveScroll: true
     });
@@ -524,38 +623,15 @@ const getStatusColor = (status) => {
                                 <InputError :message="teamForm.errors.external_name" />
                             </div>
 
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <InputLabel for="team_department" value="Department" />
-                                    <select
-                                        id="team_department"
-                                        v-model="teamForm.department"
-                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                        required
-                                        @change="teamForm.sub_unit = ''"
-                                    >
-                                        <option value="">Select department...</option>
-                                        <option v-for="department in departmentOptions" :key="department.name" :value="department.name">
-                                            {{ department.name }}
-                                        </option>
-                                    </select>
-                                    <InputError :message="teamForm.errors.department" />
-                                </div>
-                                <div>
-                                    <InputLabel for="team_sub_unit" value="Sub-Unit" />
-                                    <select
-                                        id="team_sub_unit"
-                                        v-model="teamForm.sub_unit"
-                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
-                                        required
-                                    >
-                                        <option value="">Select sub-unit...</option>
-                                        <option v-for="subUnit in (selectedDepartment?.sub_units || [])" :key="subUnit" :value="subUnit">
-                                            {{ subUnit }}
-                                        </option>
-                                    </select>
-                                    <InputError :message="teamForm.errors.sub_unit" />
-                                </div>
+                            <div>
+                                <InputLabel value="Department / Sub-Unit" />
+                                <HierarchySelector
+                                    v-model="selectedDepartmentNode"
+                                    :nodes="hierarchicalDepartmentOptions"
+                                    placeholder="Select department or sub-unit..."
+                                />
+                                <InputError :message="teamForm.errors.department" />
+                                <InputError :message="teamForm.errors.sub_unit" />
                             </div>
 
                             <div>
