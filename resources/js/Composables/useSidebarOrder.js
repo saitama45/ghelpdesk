@@ -22,7 +22,7 @@ export const DEFAULT_CHILD_ORDER = {
     projectTracker: [],
     services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests'],
     inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
-    monitoring: ['npc-status', 'payments'],
+    monitoring: ['npc-status', 'payments', 'stamps'],
     adminTask: ['dtr', 'attendance-logs', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles'],
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
@@ -47,6 +47,7 @@ export const CHILD_LABELS = {
     monitoring: {
         'npc-status': 'NPC Status',
         'payments': 'Payments & SOA',
+        'stamps': 'Loyalty Stamps',
     },
     adminTask: {
         'dtr': 'DTR',

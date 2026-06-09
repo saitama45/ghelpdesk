@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\LocatesInventoryUnits;
 use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
+use App\Models\StampRedemption;
 use App\Models\StockIn;
 use App\Models\StockReceiving;
 use App\Models\StockTransfer;
@@ -110,6 +111,12 @@ class InventoryReportController extends Controller implements HasMiddleware
                     ->where('inventory_transactions.reference_type', '=', StockReceiving::class);
             })
             ->leftJoin('stock_transfers as receiving_transfer_history', 'stock_receiving_history.stock_transfer_id', '=', 'receiving_transfer_history.id')
+            ->leftJoin('stamp_redemptions as stamp_redemption_history', function ($join) {
+                $join->on('inventory_transactions.reference_id', '=', 'stamp_redemption_history.id')
+                    ->where('inventory_transactions.reference_type', '=', StampRedemption::class);
+            })
+            ->leftJoin('customers as stamp_customer', 'stamp_redemption_history.customer_id', '=', 'stamp_customer.id')
+            ->leftJoin('stamp_programs as stamp_program_ref', 'stamp_redemption_history.stamp_program_id', '=', 'stamp_program_ref.id')
             ->leftJoin('users', 'inventory_transactions.created_by', '=', 'users.id')
             ->select(
                 'inventory_transactions.transaction_type',
@@ -117,12 +124,14 @@ class InventoryReportController extends Controller implements HasMiddleware
                 'stock_in_history.dr_no',
                 DB::raw('MIN(stock_in_history.id) as stock_in_reference_id'),
                 'stock_in_history.receive_date',
-                DB::raw('COALESCE(stock_in_history.received_by, stock_receiving_history.received_by, receiving_transfer_history.received_by, stock_transfer_history.received_by) as received_by'),
+                DB::raw('COALESCE(stamp_customer.name, stock_in_history.received_by, stock_receiving_history.received_by, receiving_transfer_history.received_by, stock_transfer_history.received_by) as received_by'),
                 DB::raw('COALESCE(stock_transfer_history.transfer_no, receiving_transfer_history.transfer_no) as transfer_no'),
                 DB::raw('MIN(COALESCE(stock_transfer_history.id, receiving_transfer_history.id)) as transfer_reference_id'),
                 DB::raw('COALESCE(stock_transfer_history.origin_location, stock_receiving_history.origin_location, receiving_transfer_history.origin_location, stock_in_history.origin_location) as origin_location'),
                 DB::raw('COALESCE(stock_transfer_history.destination_location, stock_receiving_history.destination_location, receiving_transfer_history.destination_location, stock_in_history.destination_location) as destination_location'),
                 DB::raw('COALESCE(stock_receiving_history.remarks, stock_transfer_history.memo_remarks, receiving_transfer_history.memo_remarks) as remarks'),
+                DB::raw('stamp_program_ref.name as stamp_program_name'),
+                DB::raw('stamp_redemption_history.remarks as stamp_remarks'),
                 DB::raw('SUM(inventory_transactions.quantity) as total_quantity'),
                 DB::raw('COUNT(*) as record_count'),
                 DB::raw('MAX(inventory_transactions.created_at) as latest_tx_at')
@@ -132,11 +141,13 @@ class InventoryReportController extends Controller implements HasMiddleware
                 'users.name',
                 'stock_in_history.dr_no',
                 'stock_in_history.receive_date',
-                DB::raw('COALESCE(stock_in_history.received_by, stock_receiving_history.received_by, receiving_transfer_history.received_by, stock_transfer_history.received_by)'),
+                DB::raw('COALESCE(stamp_customer.name, stock_in_history.received_by, stock_receiving_history.received_by, receiving_transfer_history.received_by, stock_transfer_history.received_by)'),
                 DB::raw('COALESCE(stock_transfer_history.transfer_no, receiving_transfer_history.transfer_no)'),
                 DB::raw('COALESCE(stock_transfer_history.origin_location, stock_receiving_history.origin_location, receiving_transfer_history.origin_location, stock_in_history.origin_location)'),
                 DB::raw('COALESCE(stock_transfer_history.destination_location, stock_receiving_history.destination_location, receiving_transfer_history.destination_location, stock_in_history.destination_location)'),
-                DB::raw('COALESCE(stock_receiving_history.remarks, stock_transfer_history.memo_remarks, receiving_transfer_history.memo_remarks)')
+                DB::raw('COALESCE(stock_receiving_history.remarks, stock_transfer_history.memo_remarks, receiving_transfer_history.memo_remarks)'),
+                DB::raw('stamp_program_ref.name'),
+                DB::raw('stamp_redemption_history.remarks')
             )
             ->orderBy('latest_tx_at', 'desc')
             ->get();

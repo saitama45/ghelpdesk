@@ -342,6 +342,30 @@ Route::middleware('auth')->group(function () {
         // Settings
         Route::put('settings', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateSettings'])->name('settings.update');
     });
+
+    // Loyalty Stamps Monitoring
+    Route::prefix('stamps')->name('stamps.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\StampController::class, 'index'])->name('index');
+        Route::get('assets-at-location', [\App\Http\Controllers\StampController::class, 'assetsAtLocation'])->name('assets-at-location');
+
+        // Customers
+        Route::post('customers', [\App\Http\Controllers\StampController::class, 'storeCustomer'])->name('customers.store');
+        Route::put('customers/{customer}', [\App\Http\Controllers\StampController::class, 'updateCustomer'])->name('customers.update');
+        Route::delete('customers/{customer}', [\App\Http\Controllers\StampController::class, 'destroyCustomer'])->name('customers.destroy');
+
+        // Programs
+        Route::post('programs', [\App\Http\Controllers\StampController::class, 'storeProgram'])->name('programs.store');
+        Route::put('programs/{program}', [\App\Http\Controllers\StampController::class, 'updateProgram'])->name('programs.update');
+        Route::delete('programs/{program}', [\App\Http\Controllers\StampController::class, 'destroyProgram'])->name('programs.destroy');
+
+        // Cards & stamps
+        Route::post('cards', [\App\Http\Controllers\StampController::class, 'storeCard'])->name('cards.store');
+        Route::delete('cards/{card}', [\App\Http\Controllers\StampController::class, 'destroyCard'])->name('cards.destroy');
+        Route::get('cards/{card}/entries', [\App\Http\Controllers\StampController::class, 'cardEntries'])->name('cards.entries');
+        Route::post('cards/{card}/add-stamps', [\App\Http\Controllers\StampController::class, 'addStamps'])->name('cards.add-stamps');
+        Route::post('cards/{card}/record-purchase', [\App\Http\Controllers\StampController::class, 'recordPurchase'])->name('cards.record-purchase');
+        Route::post('cards/{card}/redeem', [\App\Http\Controllers\StampController::class, 'redeem'])->name('cards.redeem');
+    });
 });
 
 // Public Routes (No Auth)

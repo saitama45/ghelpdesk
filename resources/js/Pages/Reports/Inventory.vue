@@ -455,7 +455,7 @@
                                         </td>
                                         <td class="px-4 py-3 text-xs text-gray-500">
                                             <div class="flex flex-col">
-                                                <span class="font-bold text-gray-700 leading-tight">{{ isTransferTransaction(tx) ? 'Transfer Record' : 'Batch Record' }}</span>
+                                                <span class="font-bold text-gray-700 leading-tight">{{ tx.transaction_type === 'Stamp Redemption' ? 'Loyalty Redemption' : isTransferTransaction(tx) ? 'Transfer Record' : 'Batch Record' }}</span>
                                                 <span v-if="isTransferTransaction(tx) && tx.transfer_no" class="text-[10px] text-blue-500 font-semibold mt-0.5">
                                                     Transfer No.:
                                                     <a
@@ -488,6 +488,12 @@
                                                 <span v-if="formatMovement(tx)" class="text-[10px] text-gray-500 font-semibold mt-0.5">{{ formatMovement(tx) }}</span>
                                                 <span v-if="tx.remarks" class="text-[10px] text-orange-600 font-semibold mt-0.5">
                                                     Reason: {{ tx.remarks }}
+                                                </span>
+                                                <span v-if="tx.stamp_program_name" class="text-[10px] text-purple-600 font-semibold mt-0.5">
+                                                    Program: {{ tx.stamp_program_name }}
+                                                </span>
+                                                <span v-if="tx.stamp_remarks" class="text-[10px] text-orange-600 font-semibold mt-0.5">
+                                                    Remarks: {{ tx.stamp_remarks }}
                                                 </span>
                                                 <span v-if="tx.source_count > 1" class="text-[10px] text-gray-400 font-semibold mt-0.5">
                                                     {{ tx.source_count }} rows grouped
@@ -776,6 +782,8 @@ const groupedHistory = computed(() => {
             tx.origin_location || 'No Origin',
             tx.destination_location || 'No Destination',
             tx.remarks || 'No Remarks',
+            tx.stamp_program_name || '',
+            tx.stamp_remarks || '',
         ].join('|')
 
         if (!groups.has(date)) {
@@ -804,6 +812,8 @@ const groupedHistory = computed(() => {
                 origin_locations: [],
                 destination_locations: [],
                 remarks: tx.remarks || '',
+                stamp_program_name: tx.stamp_program_name || '',
+                stamp_remarks: tx.stamp_remarks || '',
             })
         }
 

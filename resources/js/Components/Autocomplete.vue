@@ -190,9 +190,10 @@ watch(selectedOption, (newVal) => {
             leave-from-class="opacity-100"
             leave-to-class="opacity-0"
         >
-            <div 
-                v-if="isOpen" 
-                class="absolute z-[100] mt-1 w-full bg-white shadow-2xl border border-gray-200 rounded-lg overflow-hidden flex flex-col max-h-[300px]"
+            <div
+                v-if="isOpen"
+                :style="dropdownStyle"
+                class="fixed z-[200] bg-white shadow-2xl border border-gray-200 rounded-lg overflow-hidden flex flex-col"
             >
                 <div class="overflow-y-auto overscroll-contain flex-grow custom-scrollbar">
                     <ul class="py-1">

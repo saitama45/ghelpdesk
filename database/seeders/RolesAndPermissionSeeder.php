@@ -231,6 +231,13 @@ class RolesAndPermissionSeeder extends Seeder
             'payments.manage_vendors' => 'Manage payment vendor settings',
             'payments.manage_settings' => 'Manage payment reminder & approval settings',
 
+            // Monitoring - Loyalty Stamps
+            'stamps.view' => 'View loyalty stamps, customers & cards',
+            'stamps.create' => 'Create customers, programs, cards & add stamps',
+            'stamps.edit' => 'Edit customers & stamp programs',
+            'stamps.delete' => 'Delete customers, programs & cards',
+            'stamps.redeem' => 'Redeem completed cards (deducts inventory)',
+
         ];
 
         // Create permissions
@@ -306,6 +313,10 @@ class RolesAndPermissionSeeder extends Seeder
             'payments.create',
             'payments.edit',
             'payments.submit',
+            'stamps.view',
+            'stamps.create',
+            'stamps.edit',
+            'stamps.redeem',
         ]);
         
         $user->givePermissionTo([

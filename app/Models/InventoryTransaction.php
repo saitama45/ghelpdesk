@@ -87,6 +87,12 @@ class InventoryTransaction extends Model
                     $query->where("{$table}.reference_type", StockTransfer::class)
                         ->where("{$table}.transaction_type", 'Transfer Out')
                         ->whereIn("{$stockTransfers}.status", ['Posted', 'Received', 'Declined']);
+                })->orWhere(function ($query) use ($table) {
+                    // Loyalty stamp redemptions are always final (no posting workflow),
+                    // so they count unconditionally. Matched purely on the two columns —
+                    // no join needed.
+                    $query->where("{$table}.reference_type", StampRedemption::class)
+                        ->where("{$table}.transaction_type", 'Stamp Redemption');
                 });
             });
     }

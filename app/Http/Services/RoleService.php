@@ -67,6 +67,7 @@ class RoleService
             'reports',
             'npc status',
             'payments',
+            'loyalty stamps',
             'service vehicle trips',
             'attendance',
             'schedules',
@@ -115,6 +116,8 @@ class RoleService
                 $categoryDisplay = 'Service Vehicle Trips';
             } elseif ($category === 'payments') {
                 $categoryDisplay = 'Payments & SOA';
+            } elseif ($category === 'stamps') {
+                $categoryDisplay = 'Loyalty Stamps';
             } elseif ($category === 'leadership_points') {
                 $categoryDisplay = 'Leadership Points';
             } elseif ($category === 'reference_options') {

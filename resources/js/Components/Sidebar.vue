@@ -91,7 +91,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('service-vehicle-trips.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('npc-statuses.*') || route().current('payments.*')) {
+    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('stamps.*')) {
         openMenus.value.monitoring = true;
     }
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
@@ -132,7 +132,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('payments.view');
+    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('stamps.view');
 });
 
 const canSeeServices = computed(() => {
@@ -385,7 +385,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('monitoring')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('npc-statuses.*') || route().current('payments.*')) && (isCollapsed || !openMenus.monitoring)
+                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('stamps.*')) && (isCollapsed || !openMenus.monitoring)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -407,6 +407,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                                 <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('monitoring', 'payments') }}</Link>
                             </div>
+                            <div v-if="hasPermission('stamps.view')" :style="co('monitoring', 'stamps')">
+                                <Link :href="route('stamps.index')" :class="collapsedFlyoutLinkClass(route().current('stamps.*'))">{{ getChildLabel('monitoring', 'stamps') }}</Link>
+                            </div>
                         </div>
                     </div>
 
@@ -416,6 +419,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                             <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'payments') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('stamps.view')" :style="co('monitoring', 'stamps')">
+                            <Link :href="route('stamps.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stamps.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'stamps') }}</span></Link>
                         </div>
                     </div>
                 </div>

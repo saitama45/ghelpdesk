@@ -39,6 +39,7 @@ export const roleLandingPageOptions = [
         options: [
             { label: 'NPC Status', value: 'npc-statuses.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
+            { label: 'Loyalty Stamps', value: 'stamps.index' },
         ]
     },
     {
