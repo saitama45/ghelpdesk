@@ -48,7 +48,18 @@ const STATUS_FILTERS = [
     { status: 'Restday',  label: 'Rest Day', bg: 'bg-slate-400'   },
     { status: 'Holiday',  label: 'Holiday',  bg: 'bg-yellow-500'  },
     { status: 'Offset',   label: 'Offset',   bg: 'bg-cyan-600'    },
+    { status: 'N/A',      label: 'N/A',      bg: 'bg-gray-500'    },
 ];
+
+const STATUS_ORDER = new Map(STATUS_FILTERS.map((status, index) => [status.status, index]));
+const fallbackStatusMeta = { label: 'Unknown', bg: 'bg-gray-500' };
+
+const getStatusMeta = (status) => {
+    return STATUS_FILTERS.find(option => option.status === status) ?? {
+        label: status || fallbackStatusMeta.label,
+        bg: fallbackStatusMeta.bg,
+    };
+};
 
 // ── Concern Type filter ───────────────────────────────────────────────────────
 const CONCERN_TYPE_FILTERS = [
@@ -513,6 +524,36 @@ const selectedDayDate = ref(null);
 const selectedDayEvents = ref([]);
 const unscheduledUsers = ref([]);
 
+const selectedDayEventGroups = computed(() => {
+    const grouped = new Map();
+
+    for (const event of selectedDayEvents.value) {
+        const status = event.status || fallbackStatusMeta.label;
+        if (!grouped.has(status)) grouped.set(status, []);
+        grouped.get(status).push(event);
+    }
+
+    return [...grouped.entries()]
+        .sort(([statusA], [statusB]) => {
+            const rankA = STATUS_ORDER.get(statusA) ?? STATUS_FILTERS.length;
+            const rankB = STATUS_ORDER.get(statusB) ?? STATUS_FILTERS.length;
+
+            if (rankA !== rankB) return rankA - rankB;
+
+            return statusA.localeCompare(statusB);
+        })
+        .map(([status, events]) => {
+            const meta = getStatusMeta(status);
+
+            return {
+                status,
+                label: meta.label,
+                colorClass: meta.bg,
+                events,
+            };
+        });
+});
+
 const openDayModal = (date) => {
     selectedDayDate.value = date;
     selectedDayEvents.value = getEventsForDate(date);
@@ -845,15 +886,25 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                         </div>
 
                         <div
-                            v-for="event in selectedDayEvents"
-                            :key="event.id"
-                            @click="() => { emit('event-click', { event, date: selectedDayDate }); closeDayModal(); }"
-                            class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group"
-                            :class="isUrgentTicket(event) ? 'border-l-2 !border-l-red-500 pl-2' : ''"
+                            v-for="group in selectedDayEventGroups"
+                            :key="group.status"
+                            class="space-y-1.5 pt-1 first:pt-0"
                         >
-                            <div class="flex items-start gap-3">
-                                <div class="w-3 h-3 rounded-full mt-1 shrink-0" :class="getChipColor(event).split(' ')[0]"></div>
-                                <div class="flex-1">
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="group.colorClass"></span>
+                                {{ group.label }} ({{ group.events.length }})
+                            </p>
+
+                            <div
+                                v-for="event in group.events"
+                                :key="event.id"
+                                @click="() => { emit('event-click', { event, date: selectedDayDate }); closeDayModal(); }"
+                                class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group"
+                                :class="isUrgentTicket(event) ? 'border-l-2 !border-l-red-500 pl-2' : ''"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <div class="w-3 h-3 rounded-full mt-1 shrink-0" :class="getChipColor(event).split(' ')[0]"></div>
+                                    <div class="flex-1">
                                     <div class="flex justify-between items-start">
                                         <div class="flex items-center gap-1.5 flex-wrap">
                                             <p class="text-sm font-bold text-gray-900">{{ event.user?.name }}</p>
@@ -870,7 +921,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                         <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 shrink-0 ml-2">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
                                     </div>
                                     <p class="text-xs text-gray-500 font-medium">
-                                        {{ event.status }}<span v-if="event.ticket" class="ml-1 text-gray-400">[{{ event.ticket.ticket_key }}]</span>
+                                        {{ event.status || 'Unknown' }}<span v-if="event.ticket" class="ml-1 text-gray-400">[{{ event.ticket.ticket_key }}]</span>
                                     </p>
                                     <p v-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
                                     <div v-if="shouldShowTime(event.status) && (getActualTimesForDate(event, selectedDayDate).actual_time_in || getActualTimesForDate(event, selectedDayDate).actual_time_out)"
@@ -881,6 +932,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                         <span v-if="getActualTimesForDate(event, selectedDayDate).actual_time_out" class="text-orange-500">
                                             Actual Out: {{ formatTime(getActualTimesForDate(event, selectedDayDate).actual_time_out) }}
                                         </span>
+                                    </div>
                                     </div>
                                 </div>
                             </div>
