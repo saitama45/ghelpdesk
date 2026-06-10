@@ -79,7 +79,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="px-2 py-1 text-xs font-medium rounded-md" 
-                                      :class="item.concern_type === 'Incident' ? 'bg-amber-100 text-amber-800' : 'bg-cyan-100 text-cyan-800'">
+                                      :class="getConcernTypeClass(item.concern_type)">
                                     {{ item.concern_type }}
                                 </span>
                             </td>
@@ -156,7 +156,7 @@
                         <p class="text-sm text-gray-600">
                             Import items in bulk using an Excel file. Columns: <span class="font-semibold">name</span>, <span class="font-semibold">description</span>,
                             <span class="font-semibold">priority</span> (dropdown: Low/Medium/High/Urgent),
-                            <span class="font-semibold">concern_type</span> (dropdown: Incident/Service Request),
+                            <span class="font-semibold">concern_type</span> (dropdown: Incident/Service Request/Problem),
                             <span class="font-semibold">category</span> (dropdown: select from existing),
                             <span class="font-semibold">sub_category</span> (dropdown: select from existing),
                             <span class="font-semibold">is_active</span> (1 or 0).
@@ -300,6 +300,7 @@
                                         class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                     <option value="Incident">Incident</option>
                                     <option value="Service Request">Service Request</option>
+                                    <option value="Problem">Problem</option>
                                 </select>
                             </div>
                         </div>
@@ -598,6 +599,17 @@ const getPriorityClass = (priority) => {
             return 'bg-red-100 text-red-800 border-red-200 shadow-sm animate-pulse'
         default:
             return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
+}
+
+const getConcernTypeClass = (type) => {
+    switch (type) {
+        case 'Incident':
+            return 'bg-amber-100 text-amber-800'
+        case 'Problem':
+            return 'bg-rose-100 text-rose-800'
+        default:
+            return 'bg-cyan-100 text-cyan-800'
     }
 }
 </script>

@@ -66,6 +66,7 @@ const getStatusMeta = (status) => {
 const CONCERN_TYPE_FILTERS = [
     { key: 'Incident',        label: 'Incident',        bg: 'bg-amber-500'  },
     { key: 'Service Request', label: 'Service Request', bg: 'bg-cyan-600'   },
+    { key: 'Problem',         label: 'Problem',         bg: 'bg-rose-600'   },
 ];
 
 // ── Priority filter ──────────────────────────────────────────────────────────

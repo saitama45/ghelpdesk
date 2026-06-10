@@ -1544,6 +1544,7 @@ const statusFilterOptions = [
 const concernTypeFilterOptions = [
     { key: 'Incident', label: 'Incident', bg: 'bg-amber-500' },
     { key: 'Service Request', label: 'Service Request', bg: 'bg-cyan-600' },
+    { key: 'Problem', label: 'Problem', bg: 'bg-rose-600' },
 ]
 
 const priorityFilterOptions = [
@@ -1578,7 +1579,7 @@ const filterStatus = useRemember(
     'schedules.filterStatus'
 )
 const filterConcernType = useRemember(
-    props.filters?.concern_type ? (Array.isArray(props.filters.concern_type) ? props.filters.concern_type : [props.filters.concern_type]) : ['none', 'Incident', 'Service Request'],
+    props.filters?.concern_type ? (Array.isArray(props.filters.concern_type) ? props.filters.concern_type : [props.filters.concern_type]) : ['none', 'Incident', 'Service Request', 'Problem'],
     'schedules.filterConcernType'
 )
 const filterPriority = useRemember(

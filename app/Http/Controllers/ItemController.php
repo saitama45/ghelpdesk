@@ -19,6 +19,8 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ItemController extends Controller implements HasMiddleware
 {
+    private const CONCERN_TYPES = ['Incident', 'Service Request', 'Problem'];
+
     public static function middleware(): array
     {
         return [
@@ -139,7 +141,7 @@ class ItemController extends Controller implements HasMiddleware
             ],
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
-            'concern_type' => 'required|in:Incident,Service Request',
+            'concern_type' => ['required', Rule::in(self::CONCERN_TYPES)],
             'requires_rca_on_resolve' => 'boolean',
             'is_active' => 'boolean',
         ]);
@@ -164,7 +166,7 @@ class ItemController extends Controller implements HasMiddleware
             ],
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
-            'concern_type' => 'required|in:Incident,Service Request',
+            'concern_type' => ['required', Rule::in(self::CONCERN_TYPES)],
             'requires_rca_on_resolve' => 'boolean',
             'is_active' => 'boolean',
         ]);
@@ -245,7 +247,7 @@ class ItemController extends Controller implements HasMiddleware
                 'name'            => 'required|string|max:255',
                 'description'     => 'nullable|string',
                 'priority'        => 'required|in:Low,Medium,High,Urgent',
-                'concern_type'    => 'required|in:Incident,Service Request',
+                'concern_type'    => ['required', Rule::in(self::CONCERN_TYPES)],
                 'category_id'     => 'nullable|exists:categories,id',
                 'sub_category_id' => 'nullable|exists:sub_categories,id',
                 'requires_rca_on_resolve' => 'nullable|in:0,1',
@@ -313,7 +315,7 @@ class ItemController extends Controller implements HasMiddleware
             $listsSheet->setCellValue('C' . ($i + 2), $p);
         }
 
-        $concernTypes = ['Incident', 'Service Request'];
+        $concernTypes = self::CONCERN_TYPES;
         $listsSheet->setCellValue('D1', 'Concern Type');
         foreach ($concernTypes as $i => $ct) {
             $listsSheet->setCellValue('D' . ($i + 2), $ct);
@@ -370,7 +372,7 @@ class ItemController extends Controller implements HasMiddleware
             ->setErrorStyle(DataValidation::STYLE_INFORMATION)
             ->setAllowBlank(false)
             ->setShowDropDown(false)
-            ->setFormula1('Lists!$D$2:$D$3')
+            ->setFormula1('Lists!$D$2:$D$' . (count($concernTypes) + 1))
             ->setSqref('D2:D1001');
 
         // Category dropdown — E2:E1001

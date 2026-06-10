@@ -181,7 +181,7 @@ class DashboardController extends Controller
 
         $concernCounts = Item::query()
             ->whereIn('id', $ticketCountsByItem->keys())
-            ->whereIn('concern_type', ['Incident', 'Service Request'])
+            ->whereIn('concern_type', ['Incident', 'Service Request', 'Problem'])
             ->get(['id', 'concern_type'])
             ->reduce(function ($counts, $item) use ($ticketCountsByItem) {
                 $itemCounts = $ticketCountsByItem[$item->id] ?? null;
@@ -202,7 +202,7 @@ class DashboardController extends Controller
                 'closed' => (int) ($overallChartRow->closed_count ?? 0),
             ],
             'perBrand' => $brandChartRows,
-            'concernTypes' => collect(['Incident', 'Service Request'])
+            'concernTypes' => collect(['Incident', 'Service Request', 'Problem'])
                 ->map(fn ($type) => [
                     'key' => $type,
                     'label' => $type,

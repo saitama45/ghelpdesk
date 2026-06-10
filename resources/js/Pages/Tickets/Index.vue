@@ -2776,7 +2776,7 @@ const requesterTabs = computed(() => {
                         </div>
                         <Autocomplete
                             v-model="exportFilterConcernType"
-                            :options="[{value:'Incident',label:'Incident'},{value:'Service Request',label:'Service Request'}]"
+                            :options="[{value:'Incident',label:'Incident'},{value:'Service Request',label:'Service Request'},{value:'Problem',label:'Problem'}]"
                             label-key="label"
                             value-key="value"
                             placeholder="All Types"
