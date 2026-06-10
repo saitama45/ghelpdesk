@@ -29,11 +29,29 @@ use Inertia\Inertia;
 
 class TicketController extends Controller
 {
+    private const TICKET_SCOPES = ['parents', 'children', 'all'];
+
     public function __construct(
         private \App\Services\OrganizationReferenceService $organizationReferences,
         private TicketKnowledgeBaseService $ticketKnowledgeBaseService,
         private \App\Services\AutoAssigneeService $autoAssignee
     ) {}
+
+    private function normalizeTicketScope(Request $request): string
+    {
+        $scope = $request->input('ticket_scope', 'parents');
+
+        return in_array($scope, self::TICKET_SCOPES, true) ? $scope : 'parents';
+    }
+
+    private function applyTicketScope($query, string $scope): void
+    {
+        match ($scope) {
+            'children' => $query->whereNotNull('parent_id'),
+            'all' => null,
+            default => $query->whereNull('parent_id'),
+        };
+    }
 
     /**
      * Display a listing of the resource.
@@ -41,6 +59,7 @@ class TicketController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        $ticketScope = $this->normalizeTicketScope($request);
         $query = Ticket::with([
             'reporter:id,name,profile_photo', 
             'assignee:id,name,profile_photo,department_node_id',
@@ -51,13 +70,15 @@ class TicketController extends Controller
             'item.subCategory:id,name',
             'slaMetric',
             'survey:ticket_id,rating,feedback',
+            'parent:id,ticket_key,title',
             'children' => function($q) {
                 $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'status')
                   ->with('assignee:id,name,profile_photo');
             }
         ])
-            ->where('is_deleted', false)
-            ->whereNull('parent_id'); // Only show top-level tickets
+            ->where('is_deleted', false);
+
+        $this->applyTicketScope($query, $ticketScope);
 
         // If user has 'User' role, only show their own reported tickets — no company gate needed
         if ($user->hasRole('User')) {
@@ -377,6 +398,7 @@ class TicketController extends Controller
                 'year' => $request->year,
                 'month' => $request->month,
                 'dashboard_filter' => $request->input('dashboard_filter', 'all'),
+                'ticket_scope' => $ticketScope,
             ],
         ]);
     }
@@ -384,8 +406,10 @@ class TicketController extends Controller
     public function export(Request $request)
     {
         $user = $request->user();
+        $ticketScope = $this->normalizeTicketScope($request);
 
-        $query = Ticket::where('is_deleted', false)->whereNull('parent_id');
+        $query = Ticket::where('is_deleted', false);
+        $this->applyTicketScope($query, $ticketScope);
 
         if ($user->hasRole('User')) {
             $query->where('reporter_id', $user->id);
@@ -487,7 +511,7 @@ class TicketController extends Controller
                 'category:id,name',
                 'subCategory:id,name',
                 'vendor:id,name',
-                'parent:id,ticket_key',
+                'parent:id,ticket_key,title',
                 'slaMetric',
                 'histories' => fn($q) => $q->where('column_changed', 'status')
                     ->with('user:id,name')
@@ -1852,6 +1876,16 @@ class TicketController extends Controller
             'tickets.*.backlogs_end'      => 'nullable|string',
             'tickets.*.remarks'           => 'nullable|string',
         ]);
+
+        $childParentKeys = Ticket::whereIn('id', collect($validated['tickets'])->pluck('parent_id')->unique())
+            ->whereNotNull('parent_id')
+            ->pluck('ticket_key');
+
+        if ($childParentKeys->isNotEmpty()) {
+            return redirect()->back()->withErrors([
+                'tickets' => 'Child tickets cannot be used as parent tickets: ' . $childParentKeys->implode(', '),
+            ]);
+        }
 
         DB::transaction(function () use ($validated) {
             foreach ($validated['tickets'] as $entry) {

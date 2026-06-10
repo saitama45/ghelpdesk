@@ -109,6 +109,10 @@ onMounted(() => {
                     if (savedFilters.end_date !== undefined) filterEndDate.value = savedFilters.end_date;
                     if (savedFilters.dashboard_filter !== undefined) activeDashboardFilter.value = savedFilters.dashboard_filter;
                     if (savedFilters.assigned_department_only !== undefined) assignedDepartmentOnly.value = Boolean(savedFilters.assigned_department_only);
+                    if (savedFilters.ticket_scope !== undefined) {
+                        savedFilters.ticket_scope = normalizeTicketScope(savedFilters.ticket_scope);
+                        filterTicketScope.value = savedFilters.ticket_scope;
+                    }
                     if (savedFilters.search !== undefined) pagination.search.value = savedFilters.search;
                     
                     router.get(route('tickets.index'), savedFilters, { replace: true, preserveState: true });
@@ -218,6 +222,21 @@ const normalizeAssigneeFilterValue = (value) => {
     return matchingStaff?.id ?? value;
 };
 
+const defaultTicketScope = 'parents';
+const ticketScopeOptions = [
+    { value: 'parents', label: 'Parent Tickets' },
+    { value: 'children', label: 'Child Tickets' },
+    { value: 'all', label: 'All Tickets' },
+];
+
+const normalizeTicketScope = (scope) => {
+    return ticketScopeOptions.some(option => option.value === scope) ? scope : defaultTicketScope;
+};
+
+const getTicketScopeLabel = (scope) => {
+    return ticketScopeOptions.find(option => option.value === scope)?.label || 'Parent Tickets';
+};
+
 const filterStatus = ref(normalizeFilterValues(props.filters?.status, defaultStatusFilters(), normalizeStringFilterValue));
 const filterNodeId = ref(
     props.filters?.department_node_id
@@ -228,6 +247,7 @@ const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [],
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
+const filterTicketScope = ref(normalizeTicketScope(props.filters?.ticket_scope || defaultTicketScope));
 
 const filterOptions = [
     { value: 'all', label: 'All' },
@@ -306,6 +326,7 @@ const ticketFilterParams = () => ({
     end_date: filterEndDate.value,
     dashboard_filter: activeDashboardFilter.value,
     assigned_department_only: assignedDepartmentOnly.value ? 1 : undefined,
+    ticket_scope: filterTicketScope.value,
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
@@ -349,6 +370,11 @@ const handleAssigneeFilterChange = (value) => {
     applyFilter();
 };
 
+const handleTicketScopeChange = () => {
+    selectedIds.value = [];
+    applyFilter();
+};
+
 const exportToExcel = () => {
     const params = new URLSearchParams()
     const fp = ticketFilterParams()
@@ -381,6 +407,7 @@ const clearFilters = () => {
     filterEndDate.value = '';
     activeDashboardFilter.value = 'all';
     assignedDepartmentOnly.value = false;
+    filterTicketScope.value = defaultTicketScope;
     pagination.search.value = '';
     applyFilter();
 };
@@ -504,6 +531,7 @@ const selectDeptTab = (tabKey) => {
             status: ['all'],
             dashboard_filter: 'all',
             skip_default_department: true,
+            ticket_scope: filterTicketScope.value,
         }, { preserveScroll: false });
         return;
     }
@@ -520,6 +548,7 @@ const selectDeptTab = (tabKey) => {
         dashboard_filter: 'all',
         skip_default_department: true,
         assigned_department_only: 1,
+        ticket_scope: filterTicketScope.value,
     }, { preserveScroll: false });
 };
 
@@ -557,6 +586,17 @@ const bulkChildForm = useForm({
 
 const openBulkChildModal = () => {
     if (selectedIds.value.length === 0) return;
+    const selectedTickets = getSelectedTickets.value;
+    const selectedChildKeys = selectedTickets
+        .filter(t => t.parent_id)
+        .map(t => t.ticket_key)
+        .filter(Boolean);
+
+    if (selectedChildKeys.length > 0) {
+        showError(`Child tickets cannot be used as parent tickets: ${selectedChildKeys.join(', ')}`);
+        return;
+    }
+
     bulkChildForm.reset();
     
     // Set default times
@@ -568,8 +608,6 @@ const openBulkChildModal = () => {
     end.setHours(17, 0, 0, 0);
     const endTimeStr = formatDateForInput(end);
 
-    const selectedTickets = pagination.data.value.filter(t => selectedIds.value.includes(t.id));
-    
     bulkChildForm.tickets = selectedTickets.map(t => ({
         parent_id: t.id,
         ticket_key: t.ticket_key,
@@ -682,6 +720,10 @@ const submitMerge = async () => {
 const getSelectedTickets = computed(() => {
     return pagination.data.value.filter(t => selectedIds.value.includes(t.id));
 });
+
+const canCreateChildTickets = computed(() =>
+    selectedIds.value.length > 0 && getSelectedTickets.value.every(ticket => !ticket.parent_id)
+);
 
 const showBulkResponseModal = ref(false);
 const showBulkCannedMessages = ref(false);
@@ -1244,6 +1286,7 @@ const toggleDashboardFilter = (filterKey) => {
                 dashboard_filter: isActive ? 'all' : filterKey,
                 skip_default_department: true,
                 assigned_department_only: 1,
+                ticket_scope: filterTicketScope.value,
             };
             // These boxes count against an unfiltered base (no default status=open),
             // so pass status=all to prevent the backend from pre-excluding statuses.
@@ -1286,6 +1329,9 @@ const activeFilterBadges = computed(() => {
     }
     if (filterEndDate.value) {
         badges.push(`To: ${filterEndDate.value}`);
+    }
+    if (filterTicketScope.value !== defaultTicketScope) {
+        badges.push(`Ticket Type: ${getTicketScopeLabel(filterTicketScope.value)}`);
     }
     if (pagination.search.value) {
         badges.push(`Search: ${pagination.search.value}`);
@@ -1579,7 +1625,7 @@ const requesterTabs = computed(() => {
             <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
-                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-2 xl:grid-cols-5">
+                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
                             <div class="flex flex-col gap-1.5">
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
                                 <MultiAutocomplete
@@ -1591,6 +1637,19 @@ const requesterTabs = computed(() => {
                                     :limit="1"
                                     @update:modelValue="handleStatusFilterChange"
                                 />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Ticket Type</label>
+                                <select
+                                    v-model="filterTicketScope"
+                                    @change="handleTicketScopeChange"
+                                    class="h-[38px] rounded-lg border-slate-300 text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                >
+                                    <option v-for="option in ticketScopeOptions" :key="option.value" :value="option.value">
+                                        {{ option.label }}
+                                    </option>
+                                </select>
                             </div>
 
                             <div v-if="hierarchicalOptions.length > 0" class="flex flex-col gap-1.5">
@@ -1747,7 +1806,7 @@ const requesterTabs = computed(() => {
                                     Respond
                                 </button>
                                 <button
-                                    v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
+                                    v-if="canCreateChildTickets && hasPermission('tickets.edit')"
                                     @click="openBulkChildModal"
                                     class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50"
                                 >
@@ -1932,6 +1991,9 @@ const requesterTabs = computed(() => {
                                     <span class="inline-flex rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black tracking-wide text-black shadow-sm">
                                         {{ ticket.ticket_key }}
                                     </span>
+                                    <span v-if="ticket.parent_id" class="inline-flex rounded-full border border-indigo-300 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+                                        Child
+                                    </span>
                                     <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize shadow-sm" :class="getPriorityColor(ticket.item?.priority || ticket.priority)">
                                         {{ getPriorityLabel(ticket.item?.priority || ticket.priority) }}
                                     </span>
@@ -1944,6 +2006,12 @@ const requesterTabs = computed(() => {
                                     <div class="break-words text-sm font-bold leading-5 text-black">
                                         {{ ticket.title }}
                                     </div>
+                                </div>
+
+                                <div v-if="ticket.parent" class="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+                                    <div class="mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-700">Parent Ticket</div>
+                                    <div class="text-xs font-bold text-indigo-900">{{ ticket.parent.ticket_key }}</div>
+                                    <div class="mt-1 break-words text-xs leading-5 text-indigo-900">{{ ticket.parent.title }}</div>
                                 </div>
 
                                 <div @click.stop="openRequesterTicketsModal(ticket)" class="rounded-xl border border-slate-300 bg-white p-3 cursor-pointer hover:bg-slate-50 transition-colors" title="View Requester's Tickets">
