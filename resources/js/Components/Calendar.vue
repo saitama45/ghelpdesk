@@ -37,6 +37,7 @@ const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', '
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
+const MONTH_VISIBLE_EVENT_LIMIT = 3;
 
 // ── Status filter ────────────────────────────────────────────────────────────
 const STATUS_FILTERS = [
@@ -658,7 +659,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
         <div
             v-if="calendarView === 'month'"
             class="flex-1 min-h-0 bg-gray-100/30"
-            :class="compact ? 'grid grid-rows-6 overflow-hidden' : 'overflow-y-auto custom-scrollbar'"
+            :class="compact ? 'grid grid-rows-[repeat(6,minmax(156px,1fr))] overflow-y-auto custom-scrollbar' : 'overflow-y-auto custom-scrollbar'"
         >
             <div
                 v-for="(week, wIndex) in weeks"
@@ -690,9 +691,9 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
 
                     <!-- Events List -->
                     <div v-if="!day.isBlank" class="relative z-10">
-                        <div class="overflow-hidden" :class="compact ? 'space-y-1 max-h-16' : 'space-y-1.5'">
+                        <div class="overflow-hidden" :class="compact ? 'space-y-1 max-h-24' : 'space-y-1.5'">
                         <div 
-                            v-for="event in getEventsForDate(day.date).slice(0, 2)" 
+                            v-for="event in getEventsForDate(day.date).slice(0, MONTH_VISIBLE_EVENT_LIMIT)"
                             :key="event.id"
                             @click.stop="emit('event-click', { event, date: day.date })"
                             class="group relative text-[10px] leading-none shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 border"
@@ -745,12 +746,12 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
 
                         <!-- More Indicator -->
                         <div
-                            v-if="getEventsForDate(day.date).length > 2"
+                            v-if="getEventsForDate(day.date).length > MONTH_VISIBLE_EVENT_LIMIT"
                             @click.stop="openDayModal(day.date)"
                             class="mt-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors px-2 leading-tight"
                             :class="compact ? 'py-0' : 'py-1'"
                         >
-                            +{{ getEventsForDate(day.date).length - 2 }} more
+                            +{{ getEventsForDate(day.date).length - MONTH_VISIBLE_EVENT_LIMIT }} more
                         </div>
                     </div>
                 </div>
