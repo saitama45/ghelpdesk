@@ -248,7 +248,7 @@ watch(() => props.show, (show) => {
 })
 
 const permissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Task Board', 'Pos_requests', 'Sap_requests']
+    const servicesCategories = ['Tickets', 'Task Board', 'Pos_requests', 'Sap_requests', 'Loyalty Stamps']
 
     ;(props.dynamicForms || []).forEach(form => {
         servicesCategories.push(form.name)
@@ -259,7 +259,7 @@ const permissionGroups = computed(() => {
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Services', categories: servicesCategories },
         { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Stock_transfer', 'Receiving_stock', 'Reports'] },
-        { name: 'Monitoring', categories: ['NPC Status', 'Payments & SOA', 'Loyalty Stamps'] },
+        { name: 'Monitoring', categories: ['NPC Status', 'Payments & SOA'] },
         { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Service Vehicle Trips', 'Presence', 'KB Articles'] },
         { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Project Type & Store Class', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },

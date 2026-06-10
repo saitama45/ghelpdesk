@@ -225,7 +225,7 @@ const deleteCard = async (card) => {
  | Add-stamps modal
  * ------------------------------------------------------------------ */
 const stampModal = reactive({ open: false, card: null })
-const stampForm = useForm({ quantity: 1, store_id: null, note: '' })
+const stampForm = useForm({ quantity: 1, purchase_amount: null, store_id: null, note: '' })
 
 /* ------------------------------------------------------------------ *
  | Stamp entry history modal
@@ -257,6 +257,7 @@ const openStampModal = (card) => {
     stampModal.card = card
     stampModal.open = true
     stampForm.quantity = 1
+    stampForm.purchase_amount = null
     stampForm.store_id = card.store_id ?? null
 }
 const submitStamp = () => {
@@ -309,9 +310,9 @@ const submitRedeem = () => {
 </script>
 
 <template>
-    <AppLayout title="Loyalty Stamps">
+    <AppLayout title="Loyalty Stamps" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6 min-w-fit" main-class="overflow-auto">
         <div class="py-8">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            <div class="space-y-6 min-w-fit">
                 <!-- Header -->
                 <div>
                     <h1 class="text-2xl font-bold text-gray-900">Loyalty Stamps</h1>
@@ -319,7 +320,7 @@ const submitRedeem = () => {
                 </div>
 
                 <!-- Summary stat cards (always visible) -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                     <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
                         <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Customers</p>
                         <p class="text-2xl font-bold text-gray-900 mt-2">{{ summary.customers ?? 0 }}</p>
@@ -335,6 +336,10 @@ const submitRedeem = () => {
                     <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
                         <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Redeemed</p>
                         <p class="text-2xl font-bold text-green-600 mt-2">{{ summary.redeemed_cards ?? 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Amount</p>
+                        <p class="text-2xl font-bold text-indigo-600 mt-2">₱{{ formatAmount(summary.total_amount) }}</p>
                     </div>
                 </div>
 
@@ -552,6 +557,7 @@ const submitRedeem = () => {
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Reward Item</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Location</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Qty</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total Purchase</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">By</th>
                         </tr>
                     </template>
@@ -563,6 +569,7 @@ const submitRedeem = () => {
                             <td class="px-6 py-3 text-sm text-gray-700">{{ assetLabel(r.asset) }}</td>
                             <td class="px-6 py-3 text-sm text-gray-600">{{ r.location }}</td>
                             <td class="px-6 py-3 text-sm text-gray-700">{{ r.quantity }}</td>
+                            <td class="px-6 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">₱{{ formatAmount(r.total_purchase_amount) }}</td>
                             <td class="px-6 py-3 text-sm text-gray-600">{{ r.creator?.name || '—' }}</td>
                         </tr>
                     </template>
@@ -735,6 +742,11 @@ const submitRedeem = () => {
                     </div>
                     <input v-model.number="stampForm.quantity" type="number" :min="1" :max="stampRemaining" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
                     <p v-if="stampForm.errors.quantity" class="text-xs text-red-600 mt-1">{{ stampForm.errors.quantity }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Purchase amount (₱) <span class="text-red-500">*</span></label>
+                    <input v-model.number="stampForm.purchase_amount" type="number" min="0.01" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <p v-if="stampForm.errors.purchase_amount" class="text-xs text-red-600 mt-1">{{ stampForm.errors.purchase_amount }}</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Store</label>

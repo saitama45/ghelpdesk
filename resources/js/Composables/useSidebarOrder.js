@@ -20,9 +20,9 @@ export const DEFAULT_SECTION_ORDER = [
 export const DEFAULT_CHILD_ORDER = {
     dashboard: [],
     projectTracker: [],
-    services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests'],
+    services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests', 'stamps'],
     inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
-    monitoring: ['npc-status', 'payments', 'stamps'],
+    monitoring: ['npc-status', 'payments'],
     adminTask: ['dtr', 'attendance-logs', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles'],
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
@@ -36,6 +36,7 @@ export const CHILD_LABELS = {
         'task-boards': 'Task Board',
         'pos-requests': 'POS Requests',
         'sap-requests': 'SAP Requests',
+        'stamps': 'Loyalty Stamps',
     },
     inventory: {
         'assets': 'Assets',
@@ -47,7 +48,6 @@ export const CHILD_LABELS = {
     monitoring: {
         'npc-status': 'NPC Status',
         'payments': 'Payments & SOA',
-        'stamps': 'Loyalty Stamps',
     },
     adminTask: {
         'dtr': 'DTR',
@@ -95,6 +95,47 @@ function cloneChildren(src) {
     )
 }
 
+function normalizeSidebarChildren(children) {
+    const normalized = cloneChildren(children)
+
+    Object.keys(normalized).forEach((sectionId) => {
+        if (sectionId !== 'services' && Array.isArray(normalized[sectionId])) {
+            normalized[sectionId] = normalized[sectionId].filter(childId => childId !== 'stamps')
+        }
+    })
+
+    const serviceChildren = Array.isArray(normalized.services)
+        ? normalized.services.filter(childId => childId !== 'stamps')
+        : []
+    const sapIndex = serviceChildren.indexOf('sap-requests')
+    const insertAt = sapIndex === -1 ? serviceChildren.length : sapIndex + 1
+    serviceChildren.splice(insertAt, 0, 'stamps')
+    normalized.services = serviceChildren
+
+    return normalized
+}
+
+function normalizeChildLabels(labels) {
+    const normalized = cloneChildren(labels)
+
+    if (normalized.monitoring?.stamps) {
+        if (!normalized.services || typeof normalized.services !== 'object' || Array.isArray(normalized.services)) {
+            normalized.services = {}
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(normalized.services, 'stamps')) {
+            normalized.services.stamps = normalized.monitoring.stamps
+        }
+
+        delete normalized.monitoring.stamps
+        if (Object.keys(normalized.monitoring).length === 0) {
+            delete normalized.monitoring
+        }
+    }
+
+    return normalized
+}
+
 // Global shared state for Sidebar.vue and Settings UI
 const _state = reactive({
     sections: [...DEFAULT_SECTION_ORDER],
@@ -131,7 +172,7 @@ export function useSidebarOrder() {
             // Merge per-section: keep saved order, but append any default children
             // that aren't yet in the saved list (so new modules appear automatically).
             const merged = cloneChildren(DEFAULT_CHILD_ORDER)
-            const savedChildren = cloneChildren(config.children)
+            const savedChildren = normalizeSidebarChildren(config.children)
             for (const sectionId of Object.keys(merged)) {
                 const savedList = Array.isArray(savedChildren[sectionId]) ? savedChildren[sectionId] : null
                 if (!savedList) continue
@@ -160,9 +201,10 @@ export function useSidebarOrder() {
         _state.customSectionLabels = config.customSectionLabels || {}
         // Ensure customChildLabels is an object even if DB returns empty JSON array []
         const rawChildLabels = config.customChildLabels
-        _state.customChildLabels = (rawChildLabels && !Array.isArray(rawChildLabels)) 
-            ? rawChildLabels 
+        const childLabels = (rawChildLabels && !Array.isArray(rawChildLabels))
+            ? rawChildLabels
             : {}
+        _state.customChildLabels = normalizeChildLabels(childLabels)
     }
 
     const getSectionOrder = (sectionId) => {

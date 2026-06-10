@@ -91,10 +91,10 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('service-vehicle-trips.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('stamps.*')) {
+    if (route().current('npc-statuses.*') || route().current('payments.*')) {
         openMenus.value.monitoring = true;
     }
-    if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) {
+    if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
     if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*') || route().current('stock-transfers.*') || route().current('stock-receivings.*')) {
@@ -132,7 +132,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('stamps.view');
+    return hasPermission('npc_status.view') || hasPermission('payments.view');
 });
 
 const canSeeServices = computed(() => {
@@ -140,6 +140,7 @@ const canSeeServices = computed(() => {
            hasPermission('task_boards.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
+           hasPermission('stamps.view') ||
            visibleDynamicForms.value.length > 0;
 });
 
@@ -265,7 +266,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('dynamic-form.*')) && (isCollapsed || !openMenus.services)
+                            (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) && (isCollapsed || !openMenus.services)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -293,6 +294,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
                                 <Link :href="route('sap-requests.index')" :class="collapsedFlyoutLinkClass(route().current('sap-requests.*'))">{{ getChildLabel('services', 'sap-requests') }}</Link>
                             </div>
+                            <div v-if="hasPermission('stamps.view')" :style="co('services', 'stamps')">
+                                <Link :href="route('stamps.index')" :class="collapsedFlyoutLinkClass(route().current('stamps.*'))">{{ getChildLabel('services', 'stamps') }}</Link>
+                            </div>
                             <div v-for="form in visibleDynamicForms" :key="'collapsed-form-' + form.slug" :style="co('services', dynamicFormChildId(form))">
                                 <Link :href="route('dynamic-form.index', form.slug)" :class="collapsedFlyoutLinkClass(route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug))">{{ dynamicFormLabel(form) }}</Link>
                             </div>
@@ -311,6 +315,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('sap_requests.view')" :style="co('services', 'sap-requests')">
                             <Link :href="route('sap-requests.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('sap-requests.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'sap-requests') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('stamps.view')" :style="co('services', 'stamps')">
+                            <Link :href="route('stamps.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stamps.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'stamps') }}</span></Link>
                         </div>
                         <div v-for="form in visibleDynamicForms" :key="form.slug" :style="co('services', dynamicFormChildId(form))">
                             <Link :href="route('dynamic-form.index', form.slug)" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('dynamic-form.*') && page.url.includes('/forms/' + form.slug) ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ dynamicFormLabel(form) }}</span></Link>
@@ -385,7 +392,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('monitoring')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('stamps.*')) && (isCollapsed || !openMenus.monitoring)
+                            (route().current('npc-statuses.*') || route().current('payments.*')) && (isCollapsed || !openMenus.monitoring)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -407,9 +414,6 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                                 <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('monitoring', 'payments') }}</Link>
                             </div>
-                            <div v-if="hasPermission('stamps.view')" :style="co('monitoring', 'stamps')">
-                                <Link :href="route('stamps.index')" :class="collapsedFlyoutLinkClass(route().current('stamps.*'))">{{ getChildLabel('monitoring', 'stamps') }}</Link>
-                            </div>
                         </div>
                     </div>
 
@@ -419,9 +423,6 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                             <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'payments') }}</span></Link>
-                        </div>
-                        <div v-if="hasPermission('stamps.view')" :style="co('monitoring', 'stamps')">
-                            <Link :href="route('stamps.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('stamps.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'stamps') }}</span></Link>
                         </div>
                     </div>
                 </div>

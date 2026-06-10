@@ -49,13 +49,22 @@ class StampController extends Controller implements HasMiddleware
                 'program:id,name',
                 'asset:id,item_code,brand,model,description',
                 'creator:id,name',
-            ])->orderByDesc('id')->get(),
+            ])
+                ->select('stamp_redemptions.*')
+                ->addSelect([
+                    'total_purchase_amount' => StampEntry::query()
+                        ->selectRaw('COALESCE(SUM(purchase_amount), 0)')
+                        ->whereColumn('stamp_entries.stamp_card_id', 'stamp_redemptions.stamp_card_id'),
+                ])
+                ->orderByDesc('id')
+                ->get(),
             'stores' => Store::orderBy('code')->get(['id', 'code', 'name']),
             'summary' => [
                 'customers' => Customer::count(),
                 'active_cards' => StampCard::where('status', 'active')->count(),
                 'completed_cards' => StampCard::where('status', 'completed')->count(),
                 'redeemed_cards' => StampCard::where('status', 'redeemed')->count(),
+                'total_amount' => StampEntry::sum('purchase_amount'),
             ],
         ]);
     }
@@ -205,11 +214,12 @@ class StampController extends Controller implements HasMiddleware
     {
         $data = $request->validate([
             'quantity' => 'required|integer|min:1|max:1000',
+            'purchase_amount' => 'required|numeric|min:0.01',
             'store_id' => 'nullable|exists:stores,id',
             'note' => 'nullable|string|max:255',
         ]);
 
-        $this->applyStamps($card, $data['quantity'], 'manual', null, $data['note'] ?? null, $request->user()->id, $data['store_id'] ?? null);
+        $this->applyStamps($card, $data['quantity'], 'manual', $data['purchase_amount'], $data['note'] ?? null, $request->user()->id, $data['store_id'] ?? null);
 
         return back()->with('success', 'Stamps added.');
     }

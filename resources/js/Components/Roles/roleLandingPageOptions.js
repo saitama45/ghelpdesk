@@ -11,6 +11,7 @@ export const roleLandingPageOptions = [
             { label: 'Tickets', value: 'tickets.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
             { label: 'SAP Requests', value: 'sap-requests.index' },
+            { label: 'Loyalty Stamps', value: 'stamps.index' },
         ]
     },
     {
@@ -39,7 +40,6 @@ export const roleLandingPageOptions = [
         options: [
             { label: 'NPC Status', value: 'npc-statuses.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
-            { label: 'Loyalty Stamps', value: 'stamps.index' },
         ]
     },
     {

@@ -123,6 +123,13 @@ class RolesAndPermissionSeeder extends Seeder
             'sap_requests.delete' => 'Delete SAP requests',
             'sap_requests.approve' => 'Approve SAP requests',
 
+            // Services - Loyalty Stamps
+            'stamps.view' => 'View loyalty stamps, customers & cards',
+            'stamps.create' => 'Create customers, programs, cards & add stamps',
+            'stamps.edit' => 'Edit customers & stamp programs',
+            'stamps.delete' => 'Delete customers, programs & cards',
+            'stamps.redeem' => 'Redeem completed cards (deducts inventory)',
+
             // Stock In
             'stock_ins.view' => 'View Stock In',
             'stock_ins.create' => 'Create Stock In',
@@ -230,13 +237,6 @@ class RolesAndPermissionSeeder extends Seeder
             'payments.mark_paid' => 'Mark payment record as paid',
             'payments.manage_vendors' => 'Manage payment vendor settings',
             'payments.manage_settings' => 'Manage payment reminder & approval settings',
-
-            // Monitoring - Loyalty Stamps
-            'stamps.view' => 'View loyalty stamps, customers & cards',
-            'stamps.create' => 'Create customers, programs, cards & add stamps',
-            'stamps.edit' => 'Edit customers & stamp programs',
-            'stamps.delete' => 'Delete customers, programs & cards',
-            'stamps.redeem' => 'Redeem completed cards (deducts inventory)',
 
         ];
 
