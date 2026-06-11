@@ -74,7 +74,6 @@ class DashboardController extends Controller
         
         // Define base query based on role
         $query = Ticket::query()
-            ->where('is_deleted', false)
             ->whereNull('parent_id');
         
         if ($user->hasRole('User')) {

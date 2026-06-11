@@ -237,6 +237,26 @@ class TicketObserver
     }
 
     /**
+     * Handle the Ticket "deleted" event.
+     */
+    public function deleted(Ticket $ticket): void
+    {
+        if (!$ticket->is_deleted) {
+            $ticket->forceFill(['is_deleted' => true])->save();
+        }
+    }
+
+    /**
+     * Handle the Ticket "restored" event.
+     */
+    public function restored(Ticket $ticket): void
+    {
+        if ($ticket->is_deleted) {
+            $ticket->forceFill(['is_deleted' => false])->save();
+        }
+    }
+
+    /**
      * Internal helper to sync parent status based on children.
      */
     private function syncParentStatus($parentId, $triggeredStatus)

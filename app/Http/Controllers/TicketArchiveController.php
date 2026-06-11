@@ -11,6 +11,7 @@ use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class TicketArchiveController extends Controller implements HasMiddleware
@@ -30,7 +31,6 @@ class TicketArchiveController extends Controller implements HasMiddleware
         $retention = $this->retention();
 
         $query = Ticket::onlyTrashed()
-            ->where('is_deleted', true)
             ->with([
                 'reporter:id,name',
                 'assignee:id,name',
@@ -194,7 +194,7 @@ class TicketArchiveController extends Controller implements HasMiddleware
 
     private function findArchivedTicket(Request $request, string $ticketId): Ticket
     {
-        $query = Ticket::onlyTrashed()->where('is_deleted', true)->where('id', $ticketId);
+        $query = Ticket::onlyTrashed()->where('id', $ticketId);
 
         $this->applyTicketVisibility($query, $request);
 
@@ -204,7 +204,6 @@ class TicketArchiveController extends Controller implements HasMiddleware
     private function findArchivedTickets(Request $request, array $ticketIds)
     {
         $query = Ticket::onlyTrashed()
-            ->where('is_deleted', true)
             ->whereIn('id', $ticketIds);
 
         $this->applyTicketVisibility($query, $request);
@@ -298,6 +297,14 @@ class TicketArchiveController extends Controller implements HasMiddleware
         }
 
         $this->detachTicketReferences($ticket->id);
+
+        Log::info('Ticket purged permanently', [
+            'ticket_id' => $ticket->id,
+            'ticket_key' => $ticket->ticket_key,
+            'purged_by_user_id' => auth()->id(),
+            'purged_by_user_name' => auth()->user()?->name,
+        ]);
+
         $ticket->forceDelete();
     }
 

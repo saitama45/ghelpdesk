@@ -76,7 +76,7 @@ class TicketController extends Controller
                   ->with('assignee:id,name,profile_photo');
             }
         ])
-            ->where('is_deleted', false);
+            ->whereNull('deleted_at');
 
         $this->applyTicketScope($query, $ticketScope);
 
@@ -408,7 +408,7 @@ class TicketController extends Controller
         $user = $request->user();
         $ticketScope = $this->normalizeTicketScope($request);
 
-        $query = Ticket::where('is_deleted', false);
+        $query = Ticket::query();
         $this->applyTicketScope($query, $ticketScope);
 
         if ($user->hasRole('User')) {
@@ -1695,7 +1695,7 @@ class TicketController extends Controller
             return response()->json([]);
         }
 
-        $query = \App\Models\Ticket::query()->where('is_deleted', false);
+        $query = \App\Models\Ticket::query();
 
         if ($reporterId) {
             $query->where('reporter_id', $reporterId);
