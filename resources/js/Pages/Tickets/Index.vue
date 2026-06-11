@@ -571,7 +571,7 @@ const storesWithLabel = computed(() =>
 
 // ── Bulk Form ─────────────────────────────────────────────────────────────
 const bulkForm = reactive({
-    store_id: '', item_id: '', assignee_id: ''
+    store_id: '', item_id: '', assignee_id: '', status: ''
 })
 const isBulkSubmitting = ref(false)
 const isBulkArchiving = ref(false)
@@ -850,6 +850,7 @@ const submitBulk = () => {
     if (bulkForm.store_id)        payload.store_id        = bulkForm.store_id
     if (bulkForm.item_id)         payload.item_id         = bulkForm.item_id
     if (bulkForm.assignee_id)     payload.assignee_id     = bulkForm.assignee_id
+    if (bulkForm.status)          payload.status          = bulkForm.status
 
     post(route('tickets.bulk-update'), payload, {
         onSuccess: () => {
@@ -888,6 +889,10 @@ const submitBulkArchive = async () => {
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
 const statuses = ['open', 'for_schedule', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
+
+const bulkStatuses = computed(() => {
+    return statuses.filter(s => s !== 'resolved' && s !== 'closed');
+});
 
 const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
@@ -1773,7 +1778,7 @@ const requesterTabs = computed(() => {
                                 <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for response, update, split, merge, child creation, or archive.</div>
                             </div>
 
-                            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
                                 <div class="flex flex-col gap-1.5">
                                     <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Store</label>
                                     <Autocomplete
@@ -1805,6 +1810,17 @@ const requesterTabs = computed(() => {
                                     >
                                         <option value="">-- Unchanged --</option>
                                         <option v-for="p in staff" :key="p.id" :value="p.id">{{ p.name }}</option>
+                                    </select>
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Status</label>
+                                    <select
+                                        v-model="bulkForm.status"
+                                        class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 capitalize"
+                                    >
+                                        <option value="">-- Unchanged --</option>
+                                        <option v-for="s in bulkStatuses" :key="s" :value="s">{{ getStatusLabel(s) }}</option>
                                     </select>
                                 </div>
                             </div>

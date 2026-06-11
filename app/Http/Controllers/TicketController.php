@@ -1760,9 +1760,10 @@ class TicketController extends Controller
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_id'         => 'nullable|exists:items,id',
             'assignee_id'     => 'nullable|exists:users,id',
+            'status'          => 'nullable|string',
         ]);
 
-        $fields  = ['store_id', 'category_id', 'sub_category_id', 'item_id', 'assignee_id'];
+        $fields  = ['store_id', 'category_id', 'sub_category_id', 'item_id', 'assignee_id', 'status'];
         $updates = collect($fields)
             ->filter(fn($k) => $request->has($k))
             ->mapWithKeys(fn($k) => [$k => $validated[$k]])
@@ -1773,6 +1774,7 @@ class TicketController extends Controller
             if ($item) {
                 $updates['category_id'] = $item->category_id;
                 $updates['sub_category_id'] = $item->sub_category_id;
+                $updates['priority'] = strtolower($item->priority);
             }
         }
 
@@ -1780,14 +1782,30 @@ class TicketController extends Controller
             return redirect()->back()->withErrors(['bulk' => 'No fields selected for update.']);
         }
 
-        if (!empty($updates['item_id'])) {
-            $item = \App\Models\Item::find($updates['item_id']);
-            if ($item) {
-                $updates['priority'] = strtolower($item->priority);
+        if (isset($updates['status'])) {
+            $ticketsToUpdate = Ticket::whereIn('id', $validated['ticket_ids'])->get();
+            $count = 0;
+            foreach ($ticketsToUpdate as $t) {
+                $oldStatus = $t->status;
+                $t->update($updates);
+                if ($oldStatus !== $updates['status']) {
+                    \App\Models\TicketHistory::create([
+                        'ticket_id' => $t->id,
+                        'user_id' => auth()->id(),
+                        'column_changed' => 'status',
+                        'old_value' => $oldStatus,
+                        'new_value' => $updates['status'],
+                        'changed_at' => now('Asia/Manila'),
+                    ]);
+                    if ($t->parent_id) {
+                        $this->syncParentStatus($t->parent_id, $updates['status']);
+                    }
+                }
+                $count++;
             }
+        } else {
+            $count = Ticket::whereIn('id', $validated['ticket_ids'])->update($updates);
         }
-
-        $count = Ticket::whereIn('id', $validated['ticket_ids'])->update($updates);
 
         return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
     }
