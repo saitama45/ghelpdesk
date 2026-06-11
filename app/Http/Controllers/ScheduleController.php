@@ -320,7 +320,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
-        if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries)) {
+        if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries, null, $request->status)) {
             return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
         }
 
@@ -770,7 +770,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ]);
         }
 
-        if ($this->hasScheduleOverlap((int) $payload['user_id'], $expandedStoreEntries, $schedule->id)) {
+        if ($this->hasScheduleOverlap((int) $payload['user_id'], $expandedStoreEntries, $schedule->id, $payload['status'])) {
             throw ValidationException::withMessages([
                 'stores' => 'This user already has a schedule that overlaps with the selected time range.',
             ]);
@@ -1166,23 +1166,29 @@ class ScheduleController extends Controller implements HasMiddleware
         return Carbon::parse($value, 'Asia/Manila')->timezone('Asia/Manila')->format('Y-m-d H:i:s');
     }
 
-    private function hasScheduleOverlap(int $userId, array $newEntries, $excludeScheduleId = null): bool
+    private function hasScheduleOverlap(int $userId, array $newEntries, $excludeScheduleId = null, $newStatus = null): bool
     {
         if (empty($newEntries)) {
             return false;
         }
 
+        $wholeDayStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
+        $isNewWholeDay = in_array($newStatus, $wholeDayStatuses);
+
         $candidateEntries = collect($newEntries)->map(fn ($entry) => [
             'start_time' => Carbon::parse($entry['start_time']),
             'end_time'   => Carbon::parse($entry['end_time']),
+            'start_date' => Carbon::parse($entry['start_time'])->startOfDay(),
+            'end_date'   => Carbon::parse($entry['end_time'])->startOfDay(),
         ]);
 
         $rangeStart = $candidateEntries->sortBy(fn ($entry) => $entry['start_time']->getTimestamp())->first()['start_time'];
         $rangeEnd = $candidateEntries->sortByDesc(fn ($entry) => $entry['end_time']->getTimestamp())->first()['end_time'];
 
         $existingSegments = ScheduleStore::query()
-            ->where('start_time', '<=', $rangeEnd)
-            ->where('end_time', '>=', $rangeStart)
+            ->with('schedule')
+            ->where('start_time', '<=', $rangeEnd->copy()->endOfDay())
+            ->where('end_time', '>=', $rangeStart->copy()->startOfDay())
             ->whereHas('schedule', function ($query) use ($userId, $excludeScheduleId) {
                 $query->where('user_id', $userId);
 
@@ -1190,11 +1196,22 @@ class ScheduleController extends Controller implements HasMiddleware
                     $query->where('id', '!=', $excludeScheduleId);
                 }
             })
-            ->get(['start_time', 'end_time']);
+            ->get();
 
         foreach ($existingSegments as $segment) {
+            $isExistingWholeDay = in_array($segment->schedule->status, $wholeDayStatuses);
             foreach ($candidateEntries as $entry) {
-                if ($entry['start_time']->lte($segment->end_time) && $entry['end_time']->gte($segment->start_time)) {
+                $segmentStart = Carbon::parse($segment->start_time);
+                $segmentEnd = Carbon::parse($segment->end_time);
+
+                $sharesDay = $entry['start_date']->lte($segmentEnd->copy()->startOfDay()) 
+                          && $entry['end_date']->gte($segmentStart->copy()->startOfDay());
+
+                if ($sharesDay && ($isNewWholeDay || $isExistingWholeDay)) {
+                    return true;
+                }
+
+                if ($entry['start_time']->lte($segmentEnd) && $entry['end_time']->gte($segmentStart)) {
                     return true;
                 }
             }
@@ -1204,13 +1221,24 @@ class ScheduleController extends Controller implements HasMiddleware
             ->where('user_id', $userId)
             ->when($excludeScheduleId, fn ($query) => $query->where('id', '!=', $excludeScheduleId))
             ->whereDoesntHave('scheduleStores')
-            ->where('start_time', '<=', $rangeEnd)
-            ->where('end_time', '>=', $rangeStart)
-            ->get(['start_time', 'end_time']);
+            ->where('start_time', '<=', $rangeEnd->copy()->endOfDay())
+            ->where('end_time', '>=', $rangeStart->copy()->startOfDay())
+            ->get(['id', 'start_time', 'end_time', 'status']);
 
         foreach ($legacySchedules as $legacySchedule) {
+            $isExistingWholeDay = in_array($legacySchedule->status, $wholeDayStatuses);
             foreach ($candidateEntries as $entry) {
-                if ($entry['start_time']->lte($legacySchedule->end_time) && $entry['end_time']->gte($legacySchedule->start_time)) {
+                $legacyStart = Carbon::parse($legacySchedule->start_time);
+                $legacyEnd = Carbon::parse($legacySchedule->end_time);
+
+                $sharesDay = $entry['start_date']->lte($legacyEnd->copy()->startOfDay()) 
+                          && $entry['end_date']->gte($legacyStart->copy()->startOfDay());
+
+                if ($sharesDay && ($isNewWholeDay || $isExistingWholeDay)) {
+                    return true;
+                }
+
+                if ($entry['start_time']->lte($legacyEnd) && $entry['end_time']->gte($legacyStart)) {
                     return true;
                 }
             }
