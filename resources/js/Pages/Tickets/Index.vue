@@ -958,6 +958,21 @@ const editTicket = (ticket) => {
     router.visit(route('tickets.edit', ticket.id));
 };
 
+const openInNewTab = (ticket) => {
+    if (!hasPermission('tickets.edit')) {
+        showError('You do not have permission to edit this ticket.');
+        return;
+    }
+    window.open(route('tickets.edit', ticket.id), '_blank');
+};
+
+const handleAuxClick = (event, ticket) => {
+    if (event.button === 1) { // Middle click
+        event.preventDefault();
+        openInNewTab(ticket);
+    }
+};
+
 const acceptTicket = (ticket) => {
     if (!hasPermission('tickets.assign')) {
         showError('You do not have permission to accept tickets.');
@@ -1970,6 +1985,8 @@ const requesterTabs = computed(() => {
                         v-for="ticket in data"
                         :key="ticket.id"
                         @click="editTicket(ticket)"
+                        @auxclick.prevent="handleAuxClick($event, ticket)"
+                        @mousedown.middle.prevent
                         class="group border-l-4 align-top transition-all"
                         :class="[
                             getSlaRowClass(ticket),
