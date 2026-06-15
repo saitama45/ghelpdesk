@@ -167,6 +167,12 @@ class TicketController extends Controller
             $query->whereIn('assignee_id', $assigneeFilters->all());
         }
 
+        // Apply Store filter
+        $storeFilters = $normalizeFilterValues($request->input('store_id'));
+        if ($storeFilters->isNotEmpty()) {
+            $query->whereIn('store_id', $storeFilters->all());
+        }
+
         // Apply Date Range filter
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();

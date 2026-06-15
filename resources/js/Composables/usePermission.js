@@ -8,7 +8,7 @@ export function usePermission() {
     const permissions = computed(() => page.props.auth?.permissions || []);
 
     const hasPermission = (name) => {
-        if (hasAnyRole(['Admin', 'Solutions Admin'])) {
+        if (hasAnyRole(['Admin'])) {
             return true;
         }
 

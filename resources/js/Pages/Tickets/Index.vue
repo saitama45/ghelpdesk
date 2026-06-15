@@ -67,7 +67,7 @@ let timer;
 const tableColumns = ref([
     { key: 'ticket', label: 'Ticket', visible: true, locked: true },
     { key: 'assignee', label: 'Assignee', visible: true, locked: false },
-    { key: 'queue_detail', label: 'Queue Detail', visible: true, locked: false },
+    { key: 'queue_detail', label: 'Location / Item', visible: true, locked: false },
     { key: 'sla_health', label: 'SLA Health', visible: true, locked: false },
     { key: 'created', label: 'Created', visible: true, locked: false },
     { key: 'sla_timer', label: 'SLA Timer', visible: false, locked: false },
@@ -222,6 +222,11 @@ const normalizeAssigneeFilterValue = (value) => {
     return matchingStaff?.id ?? value;
 };
 
+const normalizeStoreFilterValue = (value) => {
+    const matchingStore = props.stores?.find(store => String(store.id) === String(value));
+    return matchingStore?.id ?? value;
+};
+
 const defaultTicketScope = 'parents';
 const ticketScopeOptions = [
     { value: 'parents', label: 'Parent Tickets' },
@@ -244,6 +249,7 @@ const filterNodeId = ref(
         : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
 )
 const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [], normalizeAssigneeFilterValue));
+const filterStore = ref(normalizeFilterValues(props.filters?.store_id, [], normalizeStoreFilterValue));
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
@@ -322,6 +328,7 @@ const ticketFilterParams = () => ({
     status: filterStatus.value,
     ...deptFilterParams.value,
     assignee_id: filterAssignee.value,
+    store_id: filterStore.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
     dashboard_filter: activeDashboardFilter.value,
@@ -370,6 +377,11 @@ const handleAssigneeFilterChange = (value) => {
     applyFilter();
 };
 
+const handleStoreFilterChange = (value) => {
+    filterStore.value = normalizeFilterValues(value, [], normalizeStoreFilterValue);
+    applyFilter();
+};
+
 const handleTicketScopeChange = () => {
     selectedIds.value = [];
     applyFilter();
@@ -403,6 +415,7 @@ const clearFilters = () => {
     filterStatus.value = defaultStatusFilters();
     filterNodeId.value = '';
     filterAssignee.value = [];
+    filterStore.value = [];
     filterStartDate.value = '';
     filterEndDate.value = '';
     activeDashboardFilter.value = 'all';
@@ -1344,6 +1357,9 @@ const activeFilterBadges = computed(() => {
     if (filterAssignee.value.length) {
         badges.push(`Assignee: ${formatFilterBadgeValues(filterAssignee.value, getAssigneeFilterLabel)}`);
     }
+    if (filterStore.value.length) {
+        badges.push(`Location: ${formatFilterBadgeValues(filterStore.value, getStoreFilterLabel)}`);
+    }
     if (filterStartDate.value) {
         badges.push(`From: ${filterStartDate.value}`);
     }
@@ -1376,6 +1392,11 @@ const formatFilterBadgeValues = (values, formatter = (value) => value) => {
 const getAssigneeFilterLabel = (assigneeId) => {
     const assignee = props.staff?.find(staff => String(staff.id) === String(assigneeId));
     return assignee?.name || assigneeId;
+};
+
+const getStoreFilterLabel = (storeId) => {
+    const store = props.stores?.find(s => String(s.id) === String(storeId));
+    return store?.name || storeId;
 };
 
 const hasActiveFilters = computed(() => activeFilterBadges.value.length > 0);
@@ -1645,7 +1666,7 @@ const requesterTabs = computed(() => {
             <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
-                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
+                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-7">
                             <div class="flex flex-col gap-1.5">
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
                                 <MultiAutocomplete
@@ -1692,6 +1713,19 @@ const requesterTabs = computed(() => {
                                     placeholder="Assignee..."
                                     :limit="1"
                                     @update:modelValue="handleAssigneeFilterChange"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Location</label>
+                                <MultiAutocomplete
+                                    :model-value="filterStore"
+                                    :options="storesWithLabel"
+                                    label-key="display_name"
+                                    value-key="id"
+                                    placeholder="Location..."
+                                    :limit="1"
+                                    @update:modelValue="handleStoreFilterChange"
                                 />
                             </div>
 
@@ -1985,7 +2019,7 @@ const requesterTabs = computed(() => {
                         </th>
                         <th v-if="isColumnVisible('ticket')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
                         <th v-if="isColumnVisible('assignee')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
-                        <th v-if="isColumnVisible('queue_detail')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Queue Detail</th>
+                        <th v-if="isColumnVisible('queue_detail')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Location / Item</th>
                         <th v-if="isColumnVisible('sla_health')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Health</th>
                         <th v-if="isColumnVisible('created')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</th>
                         <th v-if="isColumnVisible('sla_timer')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Timer</th>
