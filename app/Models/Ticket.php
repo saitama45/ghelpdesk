@@ -14,6 +14,7 @@ class Ticket extends Model
         'ticket_key',
         'title',
         'description',
+        'description_html',
         'type',
         'status',
         'priority',

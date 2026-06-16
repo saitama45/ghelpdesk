@@ -214,15 +214,16 @@ class EmailTicketService
         $user = User::where('email', $senderEmail)->first();
         $cleanBody = $this->extractCleanMessageBody($message);
         $emailBodyHash = $this->emailBodyHash($cleanBody);
+        $richBody = $this->extractRichHtmlBody($message);
 
         // --- THREADING LOGIC ---
         $existingTicket = $this->findExistingTicketForMessage($message, $subject, $senderEmail, $emailBodyHash);
 
         if ($existingTicket) {
-            return $this->addEmailAsComment($existingTicket, $message, $user, $cleanBody, $emailBodyHash, $messageId);
+            return $this->addEmailAsComment($existingTicket, $message, $user, $cleanBody, $emailBodyHash, $messageId, $richBody);
         }
 
-        return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash) {
+        return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash, $richBody) {
             $company = Company::where('code', 'TBG')->first() ?? Company::first();
             $companyId = $company ? $company->id : null;
             $companyCode = $company ? $company->code : 'EXT';
@@ -246,6 +247,7 @@ class EmailTicketService
                 'ticket_key' => $ticketKey,
                 'title' => mb_substr($subject, 0, 255),
                 'description' => $cleanBody,
+                'description_html' => $richBody,
                 'type' => 'task',
                 'status' => 'open',
                 'priority' => 'medium',
@@ -286,7 +288,7 @@ class EmailTicketService
     /**
      * Add the incoming email content as a comment to an existing ticket.
      */
-    protected function addEmailAsComment(Ticket $ticket, $message, $user, ?string $cleanBody = null, ?string $emailBodyHash = null, ?string $messageId = null)
+    protected function addEmailAsComment(Ticket $ticket, $message, $user, ?string $cleanBody = null, ?string $emailBodyHash = null, ?string $messageId = null, ?string $richBody = null)
     {
         $messageId ??= $this->normalizeMessageId($message->getMessageId());
         $senderEmail = $this->normalizeEmailAddress($message->getFrom()[0]->mail ?? '');
@@ -306,12 +308,14 @@ class EmailTicketService
 
         $cleanBody ??= $this->extractCleanMessageBody($message);
         $emailBodyHash ??= $this->emailBodyHash($cleanBody);
+        $richBody ??= $this->extractRichHtmlBody($message);
 
-        return DB::transaction(function () use ($ticket, $message, $user, $senderEmail, $senderName, $cleanBody, $emailBodyHash, $messageId) {
+        return DB::transaction(function () use ($ticket, $message, $user, $senderEmail, $senderName, $cleanBody, $emailBodyHash, $messageId, $richBody) {
             // Create the comment
             $comment = TicketComment::create([
                 'ticket_id' => $ticket->id,
                 'comment_text' => $cleanBody,
+                'comment_html' => $richBody,
                 'user_id' => $user ? $user->id : null,
                 'sender_email' => mb_substr($senderEmail, 0, 255),
                 'sender_name' => mb_substr($senderName, 0, 255),
@@ -719,6 +723,129 @@ class EmailTicketService
         return mb_strlen($htmlBody, 'UTF-8') > mb_strlen($textBody, 'UTF-8')
             ? $htmlBody
             : $textBody;
+    }
+
+    /**
+     * Returns a sanitized, rich-HTML version of the email body when it carries
+     * tabular structure — that's the formatting the plain-text pipeline destroys.
+     * For simple emails (no tables) we return null and keep the plain-text body.
+     */
+    protected function extractRichHtmlBody($message): ?string
+    {
+        $html = (string) $message->getHTMLBody();
+
+        if (trim($html) === '' || stripos($html, '<table') === false) {
+            return null;
+        }
+
+        $sanitized = $this->sanitizeEmailHtml($html);
+
+        // Only keep it if the table actually survived sanitization.
+        return stripos($sanitized, '<table') !== false ? $sanitized : null;
+    }
+
+    /**
+     * Sanitize raw email HTML down to a safe display subset (tables, lists,
+     * basic text formatting, links). Strips scripts/styles/iframes/forms,
+     * all event handlers, inline styles, and javascript:/data: URLs so the
+     * result is safe to render with v-html on the ticket page.
+     */
+    protected function sanitizeEmailHtml(string $html): string
+    {
+        // Remove obviously dangerous / noise blocks before DOM parsing.
+        $html = preg_replace('/<!--.*?-->/s', '', $html) ?? $html;
+        $html = preg_replace('/<(script|style|head|title|meta|link|o:p)\b[^>]*>.*?<\/\1>/is', '', $html) ?? $html;
+
+        $allowedTags = array_flip([
+            'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col',
+            'p', 'br', 'div', 'span', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup',
+            'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'a',
+        ]);
+        $allowedAttrs = array_flip(['colspan', 'rowspan', 'href', 'title', 'align', 'valign']);
+
+        $dom = new \DOMDocument();
+        libxml_use_internal_errors(true);
+        $loaded = $dom->loadHTML(
+            '<?xml encoding="UTF-8"?><div id="__email_root__">' . $html . '</div>',
+            LIBXML_NOERROR | LIBXML_NONET | LIBXML_NOWARNING
+        );
+        libxml_clear_errors();
+
+        if (!$loaded) {
+            return '';
+        }
+
+        $xpath = new \DOMXPath($dom);
+
+        // 1. Drop dangerous nodes entirely, including their subtree.
+        foreach (iterator_to_array($xpath->query('//script | //style | //iframe | //object | //embed | //form | //input | //button | //textarea | //select')) as $node) {
+            $node->parentNode?->removeChild($node);
+        }
+
+        $root = $xpath->query('//*[@id="__email_root__"]')->item(0);
+
+        // 2. Walk every element: unwrap disallowed tags (keep their text), strip
+        //    disallowed/dangerous attributes from allowed ones.
+        foreach (iterator_to_array($xpath->query('//*')) as $el) {
+            if (!$el instanceof \DOMElement || $el === $root) {
+                continue;
+            }
+
+            $tag = strtolower($el->nodeName);
+
+            if (!isset($allowedTags[$tag])) {
+                $this->unwrapDomNode($el);
+                continue;
+            }
+
+            foreach (iterator_to_array($el->attributes) as $attr) {
+                $name = strtolower($attr->name);
+
+                if (!isset($allowedAttrs[$name])) {
+                    $el->removeAttribute($attr->name);
+                    continue;
+                }
+
+                if ($name === 'href') {
+                    $href = trim($attr->value);
+                    if (preg_match('/^\s*(javascript|data|vbscript):/i', $href)) {
+                        $el->removeAttribute('href');
+                    } else {
+                        $el->setAttribute('target', '_blank');
+                        $el->setAttribute('rel', 'noopener noreferrer');
+                    }
+                }
+            }
+        }
+
+        if (!$root) {
+            return '';
+        }
+
+        $inner = '';
+        foreach ($root->childNodes as $child) {
+            $inner .= $dom->saveHTML($child);
+        }
+
+        return trim($inner);
+    }
+
+    /**
+     * Replace an element with its children (keeps content, drops the tag).
+     */
+    protected function unwrapDomNode(\DOMElement $el): void
+    {
+        $parent = $el->parentNode;
+        if (!$parent) {
+            return;
+        }
+
+        while ($el->firstChild) {
+            $parent->insertBefore($el->firstChild, $el);
+        }
+
+        $parent->removeChild($el);
     }
 
     protected function htmlEmailBodyToText(string $html): string

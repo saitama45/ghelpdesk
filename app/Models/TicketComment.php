@@ -12,6 +12,7 @@ class TicketComment extends Model
     protected $fillable = [
         'ticket_id',
         'comment_text',
+        'comment_html',
         'is_internal',
         'user_id',
         'sender_email',

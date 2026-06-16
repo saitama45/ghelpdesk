@@ -1337,6 +1337,7 @@ const activities = computed(() => {
         sender_name: props.ticket.sender_name,
         sender_email: props.ticket.sender_email,
         text: props.ticket.description,
+        text_html: props.ticket.description_html,
         // Include schedule for child context
         schedule: parentSStore?.schedule,
         store: parentSStore?.store,
@@ -1955,6 +1956,11 @@ const formatFileSize = (bytes) => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
+
+// Email bodies that carried tables are stored as pre-sanitized HTML on the
+// server (description_html / comment_html). When present, render that directly
+// to preserve the original tabular formatting; otherwise fall back to linkify.
+const hasRichHtml = (value) => typeof value === 'string' && value.trim() !== '';
 
 const linkify = (text) => {
     if (!text) return '';
@@ -2634,7 +2640,8 @@ const linkify = (text) => {
 
                                 <div v-if="child.description" class="rounded-lg border border-gray-100 bg-white px-3 py-2">
                                     <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Description</div>
-                                    <div class="text-xs leading-relaxed text-gray-700 whitespace-pre-wrap" v-html="linkify(child.description)"></div>
+                                    <div v-if="hasRichHtml(child.description_html)" class="email-html-body text-xs leading-relaxed text-gray-700" v-html="child.description_html"></div>
+                                    <div v-else class="text-xs leading-relaxed text-gray-700 whitespace-pre-wrap" v-html="linkify(child.description)"></div>
                                 </div>
 
                                 <div v-if="child.attachments?.length" class="flex flex-wrap gap-2">
@@ -2727,7 +2734,8 @@ const linkify = (text) => {
                                             </span>
                                         </div>
                                         <div class="p-4">
-                                            <div class="text-sm text-gray-600 leading-relaxed line-clamp-3 italic whitespace-pre-wrap" v-html="linkify(ticket.parent.description)"></div>
+                                            <div v-if="hasRichHtml(ticket.parent.description_html)" class="email-html-body text-sm text-gray-600 leading-relaxed line-clamp-3" v-html="ticket.parent.description_html"></div>
+                                            <div v-else class="text-sm text-gray-600 leading-relaxed line-clamp-3 italic whitespace-pre-wrap" v-html="linkify(ticket.parent.description)"></div>
                                             <div class="mt-3 flex justify-end">
                                                 <Link :href="route('tickets.edit', ticket.parent_id)" class="text-[10px] font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center group">
                                                     View Parent Details
@@ -2816,7 +2824,8 @@ const linkify = (text) => {
                                     <!-- Editable Description Area -->
                                     <div v-if="!isEditingDescription" 
                                          class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors">
-                                        <div class="text-gray-700 text-sm sm:text-base leading-relaxed">
+                                        <div v-if="hasRichHtml(activity.text_html)" class="email-html-body text-gray-700 text-sm sm:text-base leading-relaxed" v-html="activity.text_html"></div>
+                                        <div v-else class="text-gray-700 text-sm sm:text-base leading-relaxed">
                                             <template v-for="line in getDescriptionLines(activity.text)" :key="line.index">
                                                 <div v-if="line.storeList" class="flex flex-wrap items-center gap-1.5 min-h-[1.5rem]">
                                                     <span class="font-semibold text-gray-800" v-html="linkify(line.storeList.prefix)"></span>
@@ -2922,7 +2931,8 @@ const linkify = (text) => {
                                         <span class="text-[10px] sm:text-xs text-gray-500 font-medium">{{ formatDate(activity.date) }}</span>
                                     </div>
                                     
-                                    <div class="text-gray-700 whitespace-pre-wrap mb-2 text-sm sm:text-base leading-relaxed" v-html="linkify(activity.comment_text)"></div>
+                                    <div v-if="hasRichHtml(activity.comment_html)" class="email-html-body text-gray-700 mb-2 text-sm sm:text-base leading-relaxed" v-html="activity.comment_html"></div>
+                                    <div v-else class="text-gray-700 whitespace-pre-wrap mb-2 text-sm sm:text-base leading-relaxed" v-html="linkify(activity.comment_text)"></div>
 
                                     <!-- Comment Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -3051,7 +3061,8 @@ const linkify = (text) => {
                                         </div>
                                         <div v-if="activity.description" class="flex items-start gap-2 border-t border-purple-100 pt-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Details</span>
-                                            <span class="text-gray-700 whitespace-pre-wrap" v-html="linkify(activity.description)"></span>
+                                            <span v-if="hasRichHtml(activity.description_html)" class="email-html-body text-gray-700" v-html="activity.description_html"></span>
+                                            <span v-else class="text-gray-700 whitespace-pre-wrap" v-html="linkify(activity.description)"></span>
                                         </div>
                                         <div v-if="activity.scheduleContext?.schedule?.status" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Schedule</span>
@@ -3695,5 +3706,36 @@ const linkify = (text) => {
 }
 .animate-bounce-short {
   animation: bounce-short 1s ease-in-out infinite;
+}
+
+/* Rendered email HTML (preserved tables / rich formatting from fetched emails).
+   Uses :deep() because the markup is injected via v-html. */
+.email-html-body { overflow-x: auto; }
+.email-html-body :deep(table) {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  max-width: 100%;
+  font-size: 0.8125rem;
+}
+.email-html-body :deep(td),
+.email-html-body :deep(th) {
+  border: 1px solid #d1d5db;
+  padding: 4px 8px;
+  vertical-align: top;
+  text-align: left;
+}
+.email-html-body :deep(th) {
+  background-color: #f3f4f6;
+  font-weight: 700;
+}
+.email-html-body :deep(a) { color: #2563eb; text-decoration: underline; word-break: break-all; }
+.email-html-body :deep(ul) { list-style: disc; padding-left: 1.25rem; }
+.email-html-body :deep(ol) { list-style: decimal; padding-left: 1.25rem; }
+.email-html-body :deep(p) { margin: 0.25rem 0; }
+.email-html-body :deep(blockquote) {
+  border-left: 3px solid #e5e7eb;
+  padding-left: 0.75rem;
+  color: #6b7280;
+  margin: 0.5rem 0;
 }
 </style>
