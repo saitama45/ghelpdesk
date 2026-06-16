@@ -22,6 +22,7 @@ class TaskCard extends Model
 
     protected $fillable = [
         'task_board_id',
+        'task_board_column_id',
         'project_id',
         'project_task_id',
         'title',
@@ -40,6 +41,7 @@ class TaskCard extends Model
 
     protected $casts = [
         'task_board_id' => 'integer',
+        'task_board_column_id' => 'integer',
         'project_id' => 'integer',
         'project_task_id' => 'integer',
         'created_by' => 'integer',
@@ -54,6 +56,48 @@ class TaskCard extends Model
     public function board(): BelongsTo
     {
         return $this->belongsTo(TaskBoard::class, 'task_board_id');
+    }
+
+    public function column(): BelongsTo
+    {
+        return $this->belongsTo(TaskBoardColumn::class, 'task_board_column_id');
+    }
+
+    /**
+     * Column name is the canonical status. When the column relation is loaded we use
+     * its (possibly renamed) name; otherwise we fall back to the legacy status string,
+     * which is kept in sync on every write — so this never triggers a lazy query.
+     */
+    public function getStatusAttribute($value): ?string
+    {
+        if ($this->relationLoaded('column') && $this->column) {
+            return $this->column->name;
+        }
+
+        return $value;
+    }
+
+    public function getColumnRoleAttribute(): ?string
+    {
+        return $this->column?->role;
+    }
+
+    /**
+     * Resolve a column on the given board by display name and point this card at it,
+     * keeping the legacy status string in sync. Returns the resolved column (if any).
+     */
+    public function setStatusByName(TaskBoard $board, string $name): ?TaskBoardColumn
+    {
+        $column = $board->columnForName($name);
+
+        $this->task_board_column_id = $column?->id;
+        $this->attributes['status'] = $column?->name ?? $name;
+
+        if ($column) {
+            $this->setRelation('column', $column);
+        }
+
+        return $column;
     }
 
     public function projectTask(): BelongsTo

@@ -19,6 +19,7 @@ import {
     ChevronDownIcon,
     ClipboardDocumentCheckIcon,
     DocumentDuplicateIcon,
+    EllipsisHorizontalIcon,
     EyeIcon,
     FunnelIcon,
     LinkIcon,
@@ -63,6 +64,18 @@ const detailsSectionRef = ref(null);
 const lastSavedDetailsSignature = ref('');
 const pendingDetailsSave = ref(null);
 const isAutoSavingDetails = ref(false);
+
+// Column (list) management
+const activeColumnMenu = ref(null);
+const editingColumnId = ref(null);
+const columnForm = reactive({ name: '', color: '#2563eb' });
+const showAddColumn = ref(false);
+const newColumnForm = reactive({ name: '', color: '#64748b' });
+const isSavingColumn = ref(false);
+const draggedColumnId = ref(null);
+const dragOverColumnId = ref(null);
+const columnNameInputs = ref({});
+const addColumnInput = ref(null);
 
 watch(() => props.board, (board) => {
     localBoard.value = JSON.parse(JSON.stringify(board));
@@ -131,7 +144,7 @@ const showSubTaskInput = ref(false);
 const showChecklistItemInputs = reactive({});
 const showSubtaskItemInputs = reactive({});
 const newChecklistItems = reactive({});
-const newCardTitles = reactive(Object.fromEntries((props.statuses || []).map((status) => [status, ''])));
+const newCardTitles = reactive(Object.fromEntries((localBoard.value.columns || []).map((column) => [column.name, ''])));
 
 const collapsedChecklists = reactive({});
 const activitySectionOpen = ref(true);
@@ -146,12 +159,28 @@ const colorOptions = [
     '#374151',
 ];
 
-const statusStyles = {
-    Backlogs: 'border-slate-300 bg-slate-100 text-slate-700',
-    'In Progress': 'border-blue-300 bg-blue-100 text-blue-700',
-    'For Verification': 'border-amber-300 bg-amber-100 text-amber-800',
-    Done: 'border-emerald-300 bg-emerald-100 text-emerald-700',
+const boardColumns = computed(() => {
+    return [...(localBoard.value.columns || [])].sort((a, b) => {
+        if ((a.sort_order || 0) !== (b.sort_order || 0)) {
+            return (a.sort_order || 0) - (b.sort_order || 0);
+        }
+        return a.id - b.id;
+    });
+});
+
+const columnNames = computed(() => boardColumns.value.map((column) => column.name));
+
+const backlogColumnName = computed(() => {
+    const columns = boardColumns.value;
+    return columns.find((column) => column.role === 'backlog')?.name || columns[0]?.name || 'Backlogs';
+});
+
+const columnHeaderStyle = (column) => {
+    const color = normalizeHexColor(column?.color, '#64748b');
+    return { backgroundColor: color, borderColor: color, color: readableTextColor(color) };
 };
+
+const columnFor = (name) => boardColumns.value.find((column) => column.name === name) || null;
 
 const canEditBoard = computed(() => {
     return hasPermission('task_boards.edit') &&
@@ -247,7 +276,7 @@ const toDateTimeInput = (value) => {
 
 const detailsPayloadFromDraft = () => ({
     description: cardDraft.description || '',
-    status: cardDraft.status || selectedCard.value?.status || props.statuses?.[0] || '',
+    status: cardDraft.status || selectedCard.value?.status || columnNames.value?.[0] || '',
     start_at: cardDraft.start_at || null,
     due_at: cardDraft.due_at || null,
     due_complete: !!cardDraft.due_complete,
@@ -255,7 +284,7 @@ const detailsPayloadFromDraft = () => ({
 
 const detailsPayloadFromCard = (card) => ({
     description: card?.description || '',
-    status: card?.status || props.statuses?.[0] || '',
+    status: card?.status || columnNames.value?.[0] || '',
     start_at: toDateTimeInput(card?.start_at) || null,
     due_at: toDateTimeInput(card?.due_at) || null,
     due_complete: !!card?.due_complete,
@@ -286,7 +315,7 @@ watch(selectedCard, (card, previousCard) => {
 
     if (isDifferentCard || !hasPendingDetailsChanges.value) {
         cardDraft.description = card.description || '';
-        cardDraft.status = card.status || props.statuses?.[0] || '';
+        cardDraft.status = card.status || columnNames.value?.[0] || '';
         cardDraft.start_at = toDateTimeInput(card.start_at);
         cardDraft.due_at = toDateTimeInput(card.due_at);
         cardDraft.due_complete = !!card.due_complete;
@@ -594,7 +623,7 @@ const createSubTask = async () => {
     try {
         const response = await axios.post(route('task-boards.cards.store', localBoard.value.id), {
             title,
-            status: 'Backlogs',
+            status: backlogColumnName.value,
             category: parentTask.category || 'General',
             parent_project_task_id: parentTask.id,
         });
@@ -930,6 +959,163 @@ const deleteLabel = async (label) => {
         }
     } catch (error) {
         handleApiError(error, 'Unable to delete label');
+    }
+};
+
+const setColumnNameInput = (columnId, el) => {
+    if (el) {
+        columnNameInputs.value[columnId] = el;
+    } else {
+        delete columnNameInputs.value[columnId];
+    }
+};
+
+const toggleColumnMenu = (columnId) => {
+    activeColumnMenu.value = activeColumnMenu.value === columnId ? null : columnId;
+};
+
+const openAddColumn = async () => {
+    if (!canEditBoard.value) return;
+    showAddColumn.value = true;
+    newColumnForm.name = '';
+    await nextTick();
+    addColumnInput.value?.focus();
+};
+
+const closeAddColumn = () => {
+    showAddColumn.value = false;
+    newColumnForm.name = '';
+};
+
+const createColumn = async () => {
+    const name = newColumnForm.name.trim();
+    if (!name || !canEditBoard.value || isSavingColumn.value) return;
+
+    isSavingColumn.value = true;
+
+    try {
+        const response = await axios.post(route('task-boards.columns.store', localBoard.value.id), {
+            name,
+            color: normalizeHexColor(newColumnForm.color, '#64748b'),
+        });
+        localBoard.value.columns = response.data.columns;
+        closeAddColumn();
+    } catch (error) {
+        handleApiError(error, 'Unable to add column');
+    } finally {
+        isSavingColumn.value = false;
+    }
+};
+
+const startEditingColumn = async (column) => {
+    if (!canEditBoard.value) return;
+
+    activeColumnMenu.value = null;
+    editingColumnId.value = column.id;
+    columnForm.name = column.name || '';
+    columnForm.color = normalizeHexColor(column.color, '#64748b');
+
+    await nextTick();
+    columnNameInputs.value[column.id]?.focus();
+    columnNameInputs.value[column.id]?.select();
+};
+
+const cancelEditingColumn = () => {
+    editingColumnId.value = null;
+};
+
+const saveColumn = async (column) => {
+    const name = columnForm.name.trim();
+    if (!name || !canEditBoard.value || isSavingColumn.value) return;
+
+    const color = normalizeHexColor(columnForm.color, '#64748b');
+    if (name === column.name && color === normalizeHexColor(column.color, '#64748b')) {
+        cancelEditingColumn();
+        return;
+    }
+
+    isSavingColumn.value = true;
+
+    try {
+        const response = await axios.put(route('task-columns.update', column.id), { name, color });
+        localBoard.value.columns = response.data.columns;
+
+        // Keep the cards already in this column matched after a rename.
+        if (name !== column.name) {
+            localBoard.value.cards = (localBoard.value.cards || []).map((card) => (
+                card.column_id === column.id ? { ...card, status: name } : card
+            ));
+        }
+
+        cancelEditingColumn();
+    } catch (error) {
+        handleApiError(error, 'Unable to update column');
+    } finally {
+        isSavingColumn.value = false;
+    }
+};
+
+const deleteColumn = async (column) => {
+    if (!canEditBoard.value) return;
+
+    activeColumnMenu.value = null;
+
+    const ok = await confirm({
+        title: 'Delete Column',
+        message: `Delete the "${column.name}" column?`,
+        confirmLabel: 'Delete',
+        variant: 'danger',
+    });
+    if (!ok) return;
+
+    try {
+        const response = await axios.delete(route('task-columns.destroy', column.id));
+        localBoard.value.columns = response.data.columns;
+    } catch (error) {
+        handleApiError(error, 'Unable to delete column');
+    }
+};
+
+const startColumnDrag = (event, column) => {
+    if (!canEditBoard.value || editingColumnId.value === column.id) return;
+    draggedColumnId.value = column.id;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', `column:${column.id}`);
+};
+
+const endColumnDrag = () => {
+    draggedColumnId.value = null;
+    dragOverColumnId.value = null;
+};
+
+const dropColumn = async (targetColumn) => {
+    if (!draggedColumnId.value || draggedColumnId.value === targetColumn.id) {
+        endColumnDrag();
+        return;
+    }
+
+    const ordered = boardColumns.value.map((column) => column.id);
+    const from = ordered.indexOf(draggedColumnId.value);
+    const to = ordered.indexOf(targetColumn.id);
+    if (from === -1 || to === -1) {
+        endColumnDrag();
+        return;
+    }
+
+    ordered.splice(to, 0, ordered.splice(from, 1)[0]);
+
+    const byId = Object.fromEntries((localBoard.value.columns || []).map((column) => [column.id, column]));
+    localBoard.value.columns = ordered.map((id, index) => ({ ...byId[id], sort_order: index }));
+    endColumnDrag();
+
+    try {
+        const response = await axios.post(route('task-boards.columns.reorder', localBoard.value.id), {
+            ordered_column_ids: ordered,
+        });
+        localBoard.value.columns = response.data.columns;
+    } catch (error) {
+        handleApiError(error, 'Unable to reorder columns');
+        router.reload({ only: ['board'] });
     }
 };
 
@@ -1362,6 +1548,9 @@ const handleKeyboard = (event) => {
         showBoardMenu.value = false;
         showMemberModal.value = false;
         showLabelModal.value = false;
+        activeColumnMenu.value = null;
+        cancelEditingColumn();
+        closeAddColumn();
         return;
     }
 
@@ -1388,16 +1577,22 @@ const handleKeyboard = (event) => {
     }
 };
 
+const closeColumnMenu = () => {
+    activeColumnMenu.value = null;
+};
+
 onMounted(() => {
     window.addEventListener('keydown', handleKeyboard);
     document.addEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
     document.addEventListener('focusin', handleDetailsBoundaryFocusIn, true);
+    document.addEventListener('click', closeColumnMenu);
 });
 
 onUnmounted(() => {
     window.removeEventListener('keydown', handleKeyboard);
     document.removeEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
     document.removeEventListener('focusin', handleDetailsBoundaryFocusIn, true);
+    document.removeEventListener('click', closeColumnMenu);
 });
 </script>
 
@@ -1499,20 +1694,80 @@ onUnmounted(() => {
             <main class="flex-1 overflow-x-auto overflow-y-hidden px-4 py-4">
                 <div class="flex h-full gap-4">
                     <section
-                        v-for="status in statuses"
-                        :key="status"
+                        v-for="status in columnNames"
+                        :key="columnFor(status)?.id ?? status"
                         class="flex h-full w-[19rem] shrink-0 flex-col rounded-lg bg-gray-100 shadow-xl ring-1 ring-black/10"
+                        :class="dragOverColumnId === columnFor(status)?.id ? 'ring-2 ring-blue-400' : ''"
                         @dragover.prevent="dragOverStatus = status"
                         @dragleave="dragOverStatus = null"
                         @drop.prevent="moveDraggedCard(status)"
                     >
-                        <div class="flex items-center justify-between gap-3 border-b border-gray-200 px-3 py-3">
-                            <div class="flex items-center gap-2">
-                                <span class="rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider" :class="statusStyles[status]">
-                                    {{ status }}
-                                </span>
-                                <span class="text-xs font-bold text-gray-500">{{ visibleCardsForStatus(status).length }}</span>
-                            </div>
+                        <div
+                            class="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-3"
+                            @dragover.prevent="draggedColumnId ? (dragOverColumnId = columnFor(status)?.id) : null"
+                            @drop.prevent="draggedColumnId ? dropColumn(columnFor(status)) : null"
+                        >
+                            <form v-if="editingColumnId === columnFor(status)?.id" class="w-full space-y-2" @submit.prevent="saveColumn(columnFor(status))">
+                                <input
+                                    :ref="(el) => { const col = columnFor(status); if (col) setColumnNameInput(col.id, el); }"
+                                    v-model="columnForm.name"
+                                    type="text"
+                                    maxlength="60"
+                                    class="h-8 w-full rounded-md border-gray-300 text-sm font-bold shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    @keydown.esc.prevent="cancelEditingColumn"
+                                >
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex flex-wrap items-center gap-1">
+                                        <button
+                                            v-for="swatch in colorOptions"
+                                            :key="swatch"
+                                            type="button"
+                                            class="h-5 w-5 rounded-full border-2"
+                                            :style="{ backgroundColor: swatch, borderColor: columnForm.color === swatch ? '#111827' : 'transparent' }"
+                                            @click="columnForm.color = swatch"
+                                        ></button>
+                                    </div>
+                                    <div class="flex shrink-0 items-center gap-1">
+                                        <button type="button" :disabled="isSavingColumn" class="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50" title="Save" @click="saveColumn(columnFor(status))">
+                                            <CheckIcon class="h-4 w-4" />
+                                        </button>
+                                        <button type="button" class="rounded-md p-1.5 text-gray-400 hover:bg-gray-200" title="Cancel" @click="cancelEditingColumn">
+                                            <XMarkIcon class="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                            <template v-else>
+                                <div class="flex min-w-0 items-center gap-2">
+                                    <span
+                                        class="truncate rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider"
+                                        :class="canEditBoard ? 'cursor-move' : ''"
+                                        :style="columnHeaderStyle(columnFor(status))"
+                                        :draggable="canEditBoard"
+                                        :title="canEditBoard ? 'Drag to reorder' : ''"
+                                        @dragstart="startColumnDrag($event, columnFor(status))"
+                                        @dragend="endColumnDrag"
+                                    >
+                                        {{ status }}
+                                    </span>
+                                    <span class="text-xs font-bold text-gray-500">{{ visibleCardsForStatus(status).length }}</span>
+                                </div>
+                                <div v-if="canEditBoard" class="relative shrink-0">
+                                    <button type="button" class="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700" title="Column options" @click.stop="toggleColumnMenu(columnFor(status).id)">
+                                        <EllipsisHorizontalIcon class="h-4 w-4" />
+                                    </button>
+                                    <div v-if="activeColumnMenu === columnFor(status)?.id" class="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl" @click.stop>
+                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50" @click="startEditingColumn(columnFor(status))">
+                                            <PencilSquareIcon class="h-4 w-4" />
+                                            Rename
+                                        </button>
+                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50" @click="deleteColumn(columnFor(status))">
+                                            <TrashIcon class="h-4 w-4" />
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
 
                         <div class="custom-scrollbar flex-1 space-y-2 overflow-y-auto p-2" :class="dragOverStatus === status ? 'bg-blue-50/70' : ''">
@@ -1616,6 +1871,48 @@ onUnmounted(() => {
                             </form>
                         </div>
                     </section>
+
+                    <div v-if="canEditBoard" class="w-[17rem] shrink-0">
+                        <button
+                            v-if="!showAddColumn"
+                            type="button"
+                            class="flex w-full items-center gap-2 rounded-lg border-2 border-dashed border-white/40 bg-white/10 px-4 py-3 text-sm font-bold text-white/90 backdrop-blur transition-colors hover:bg-white/20"
+                            @click="openAddColumn"
+                        >
+                            <PlusIcon class="h-4 w-4" />
+                            Add Column
+                        </button>
+                        <form v-else class="space-y-2 rounded-lg bg-white p-3 shadow-xl ring-1 ring-black/10" @submit.prevent="createColumn">
+                            <input
+                                ref="addColumnInput"
+                                v-model="newColumnForm.name"
+                                type="text"
+                                maxlength="60"
+                                class="w-full rounded-md border-gray-300 text-sm font-semibold shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Column name..."
+                                @keydown.esc.prevent="closeAddColumn"
+                            >
+                            <div class="flex items-center gap-1.5">
+                                <button
+                                    v-for="swatch in colorOptions"
+                                    :key="swatch"
+                                    type="button"
+                                    class="h-6 w-6 rounded-full border-2"
+                                    :style="{ backgroundColor: swatch, borderColor: newColumnForm.color === swatch ? '#111827' : 'transparent' }"
+                                    @click="newColumnForm.color = swatch"
+                                ></button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="submit" :disabled="isSavingColumn" class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
+                                    <PlusIcon class="h-4 w-4" />
+                                    {{ isSavingColumn ? 'Adding...' : 'Add' }}
+                                </button>
+                                <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600" @click="closeAddColumn">
+                                    <XMarkIcon class="h-5 w-5" />
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </main>
         </div>
@@ -1775,7 +2072,7 @@ onUnmounted(() => {
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Status</label>
                                     <select v-model="cardDraft.status" :disabled="!canEditBoard || !!selectedCard.archived_at" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                        <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
+                                        <option v-for="status in columnNames" :key="status" :value="status">{{ status }}</option>
                                     </select>
                                 </div>
                                 <div>

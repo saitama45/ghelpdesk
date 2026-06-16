@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TaskBoard;
+use App\Models\TaskBoardColumn;
 use App\Models\TaskCard;
 use App\Models\TaskCardActivity;
 use App\Models\TaskCardAttachment;
@@ -41,7 +42,7 @@ class TaskCardController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'status' => ['required', Rule::in(TaskCard::STATUSES)],
+            'status' => ['required', Rule::in($taskBoard->columns()->pluck('name')->all())],
             'category' => 'nullable|string|max:255',
             'parent_project_task_id' => 'nullable|integer|exists:project_tasks,id',
             'assignee_ids' => 'nullable|array',
@@ -70,6 +71,7 @@ class TaskCardController extends Controller implements HasMiddleware
 
             $card = TaskCard::create([
                 'task_board_id' => $taskBoard->id,
+                'task_board_column_id' => $taskBoard->columnForName($validated['status'])?->id,
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
                 'status' => $validated['status'],
@@ -99,7 +101,7 @@ class TaskCardController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'status' => ['sometimes', 'required', Rule::in(TaskCard::STATUSES)],
+            'status' => ['sometimes', 'required', Rule::in($taskCard->board->columns()->pluck('name')->all())],
             'assignee_ids' => 'nullable|array',
             'assignee_ids.*' => 'integer|exists:users,id',
             'label_ids' => 'nullable|array',
@@ -137,6 +139,10 @@ class TaskCardController extends Controller implements HasMiddleware
                 }
             }
 
+            if (array_key_exists('status', $validated)) {
+                $updates['task_board_column_id'] = $taskCard->board->columnForName($validated['status'])?->id;
+            }
+
             if ($updates) {
                 $taskCard->update($updates);
             }
@@ -164,12 +170,14 @@ class TaskCardController extends Controller implements HasMiddleware
         $this->ensureBoardEditor($taskCard->board, $request->user());
 
         $validated = $request->validate([
-            'status' => ['required', Rule::in(TaskCard::STATUSES)],
+            'status' => ['required', Rule::in($taskCard->board->columns()->pluck('name')->all())],
             'ordered_card_ids' => 'required|array',
             'ordered_card_ids.*' => 'integer|exists:task_cards,id',
         ]);
 
-        DB::transaction(function () use ($request, $taskCard, $validated) {
+        $targetColumnId = $taskCard->board->columnForName($validated['status'])?->id;
+
+        DB::transaction(function () use ($request, $taskCard, $validated, $targetColumnId) {
             $oldStatus = $taskCard->status;
             $ids = collect($validated['ordered_card_ids'])->unique()->values();
 
@@ -184,6 +192,7 @@ class TaskCardController extends Controller implements HasMiddleware
                     ->where('task_board_id', $taskCard->task_board_id)
                     ->update([
                         'status' => $validated['status'],
+                        'task_board_column_id' => $targetColumnId,
                         'sort_order' => ($index + 1) * 1000,
                     ]);
             }
@@ -287,6 +296,114 @@ class TaskCardController extends Controller implements HasMiddleware
         $taskLabel->delete();
 
         return response()->json(['deleted' => true, 'labels' => $board->labels()->get()]);
+    }
+
+    public function storeColumn(Request $request, TaskBoard $taskBoard)
+    {
+        $this->ensureBoardEditor($taskBoard, $request->user());
+
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:60',
+                Rule::unique('task_board_columns', 'name')->where('task_board_id', $taskBoard->id),
+            ],
+            'color' => 'required|string|max:40',
+        ]);
+
+        $column = $taskBoard->columns()->create([
+            'name' => $validated['name'],
+            'color' => $validated['color'],
+            'role' => null,
+            'sort_order' => ((int) $taskBoard->columns()->max('sort_order')) + 1,
+        ]);
+
+        $this->recordActivity($taskBoard, null, $request->user()->id, 'column.created', "added the \"{$column->name}\" column");
+
+        return response()->json(['column' => $column, 'columns' => $taskBoard->columns()->get()], 201);
+    }
+
+    public function updateColumn(Request $request, TaskBoardColumn $taskBoardColumn)
+    {
+        $board = $taskBoardColumn->board;
+        $this->ensureBoardEditor($board, $request->user());
+
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:60',
+                Rule::unique('task_board_columns', 'name')
+                    ->where('task_board_id', $board->id)
+                    ->ignore($taskBoardColumn->id),
+            ],
+            'color' => 'required|string|max:40',
+        ]);
+
+        $oldName = $taskBoardColumn->name;
+
+        DB::transaction(function () use ($taskBoardColumn, $board, $validated, $oldName) {
+            $taskBoardColumn->update([
+                'name' => $validated['name'],
+                'color' => $validated['color'],
+            ]);
+
+            // Keep the legacy status string in sync with the renamed column.
+            if ($oldName !== $validated['name']) {
+                $board->cards()->where('status', $oldName)->update(['status' => $validated['name']]);
+            }
+        });
+
+        return response()->json([
+            'column' => $taskBoardColumn->fresh(),
+            'columns' => $board->columns()->get(),
+        ]);
+    }
+
+    public function destroyColumn(Request $request, TaskBoardColumn $taskBoardColumn)
+    {
+        $board = $taskBoardColumn->board;
+        $this->ensureBoardEditor($board, $request->user());
+
+        if ($board->columns()->count() <= 1) {
+            abort(422, 'A board must keep at least one column.');
+        }
+
+        if ($taskBoardColumn->cards()->whereNull('archived_at')->exists()) {
+            abort(422, 'Move or archive the cards in this column before deleting it.');
+        }
+
+        if ($taskBoardColumn->role && $board->project_id) {
+            abort(422, 'This is a default column required to sync the project and cannot be removed.');
+        }
+
+        $name = $taskBoardColumn->name;
+        $taskBoardColumn->delete();
+
+        $this->recordActivity($board, null, $request->user()->id, 'column.deleted', "removed the \"{$name}\" column");
+
+        return response()->json(['deleted' => true, 'columns' => $board->columns()->get()]);
+    }
+
+    public function reorderColumns(Request $request, TaskBoard $taskBoard)
+    {
+        $this->ensureBoardEditor($taskBoard, $request->user());
+
+        $validated = $request->validate([
+            'ordered_column_ids' => 'required|array',
+            'ordered_column_ids.*' => 'integer',
+        ]);
+
+        $validIds = $taskBoard->columns()->pluck('id')->all();
+
+        DB::transaction(function () use ($validated, $validIds, $taskBoard) {
+            foreach ($validated['ordered_column_ids'] as $index => $columnId) {
+                if (!in_array((int) $columnId, $validIds, true)) {
+                    continue;
+                }
+
+                $taskBoard->columns()->whereKey($columnId)->update(['sort_order' => $index]);
+            }
+        });
+
+        return response()->json(['columns' => $taskBoard->columns()->get()]);
     }
 
     public function storeChecklist(Request $request, TaskCard $taskCard)
@@ -600,6 +717,7 @@ class TaskCardController extends Controller implements HasMiddleware
     private function freshCard(TaskCard $card): array
     {
         $card = $card->fresh([
+            'column:id,name,role',
             'creator:id,name,profile_photo',
             'assignees:id,name,email,profile_photo,org_path',
             'labels',
@@ -619,6 +737,8 @@ class TaskCardController extends Controller implements HasMiddleware
         return [
             'id' => $card->id,
             'task_board_id' => $card->task_board_id,
+            'column_id' => $card->task_board_column_id,
+            'column_role' => $card->column_role,
             'project_id' => $card->project_id,
             'title' => $card->title,
             'description' => $card->description,

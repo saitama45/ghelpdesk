@@ -229,6 +229,8 @@ class TaskBoardController extends Controller implements HasMiddleware
                 ]);
             }
 
+            $board->seedDefaultColumns();
+
             $this->recordActivity($board, null, $request->user()->id, 'board.created', 'created this board');
 
             return $board;
@@ -310,6 +312,8 @@ class TaskBoardController extends Controller implements HasMiddleware
                     ]);
                 }
 
+                $board->seedDefaultColumns();
+
                 $this->recordActivity(
                     $board,
                     null,
@@ -356,8 +360,13 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->where('user_id', $request->user()->id)
             ->update(['last_opened_at' => now()]);
 
+        if ($taskBoard->columns()->doesntExist()) {
+            $taskBoard->seedDefaultColumns();
+        }
+
         $taskBoard->load([
             'creator:id,name',
+            'columns',
             'members:id,name,email,profile_photo,org_path',
             'watchers:id,name',
             'project.store:id,name',
@@ -369,6 +378,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         $cards = $taskBoard->cards()
             ->reorder()
             ->with([
+                'column:id,name,role',
                 'creator:id,name,profile_photo',
                 'assignees:id,name,email,profile_photo,org_path',
                 'labels',
@@ -635,6 +645,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         return [
             ...$summary,
             'labels' => $board->labels,
+            'columns' => $board->columns,
             'cards' => $cards->map(fn (TaskCard $card) => $this->cardPayload($card))->values(),
             'activities' => $board->activities->take(80)->values(),
             'milestones' => $this->boardMilestones($cards),
@@ -647,6 +658,8 @@ class TaskBoardController extends Controller implements HasMiddleware
         return [
             'id' => $card->id,
             'task_board_id' => $card->task_board_id,
+            'column_id' => $card->task_board_column_id,
+            'column_role' => $card->column_role,
             'project_id' => $card->project_id,
             'title' => $card->title,
             'description' => $card->description,

@@ -180,8 +180,10 @@ class ProjectTaskBoardSyncService
                     ->findOrFail($data['parent_project_task_id']);
             }
 
-            $status = $data['status'] ?? 'Backlogs';
-            $taskState = $this->projectTaskStateForCardStatus($status, null);
+            $statusName = $data['status'] ?? ($board->columnNameForRole('backlog') ?? 'Backlogs');
+            $column = $board->columnForName($statusName);
+            $role = $column?->role ?? 'backlog';
+            $taskState = $this->projectTaskStateForRole($role, null) ?: ['status' => 'Pending', 'progress' => 0];
             $category = $parentTask?->category ?: ($data['category'] ?? 'General');
             $assigneeIds = collect($data['assignee_ids'] ?? [])->filter()->values();
 
@@ -200,16 +202,17 @@ class ProjectTaskBoardSyncService
 
             $card = TaskCard::create([
                 'task_board_id' => $board->id,
+                'task_board_column_id' => $column?->id,
                 'project_task_id' => $task->id,
                 'title' => $data['title'],
                 'description' => $data['description'] ?? null,
-                'status' => $status,
-                'sort_order' => $this->nextCardSortOrder($board, $status),
+                'status' => $statusName,
+                'sort_order' => $this->nextCardSortOrder($board, $statusName),
                 'start_at' => $data['start_at'] ?? null,
                 'due_at' => $data['due_at'] ?? null,
                 'cover_type' => $data['cover_type'] ?? null,
                 'cover_value' => $data['cover_value'] ?? null,
-                'due_complete' => $status === 'Done',
+                'due_complete' => $role === 'done',
                 'created_by' => $actor->id,
             ]);
 
@@ -230,7 +233,7 @@ class ProjectTaskBoardSyncService
             return $card;
         }
 
-        DB::transaction(function () use ($task, $data) {
+        DB::transaction(function () use ($card, $task, $data) {
             $updates = [];
 
             if (array_key_exists('title', $data)) {
@@ -250,9 +253,10 @@ class ProjectTaskBoardSyncService
             }
 
             if (array_key_exists('status', $data)) {
+                $role = $card->board?->roleForColumnName($data['status']) ?? 'in_progress';
                 $updates = [
                     ...$updates,
-                    ...$this->projectTaskStateForCardStatus($data['status'], $task->progress),
+                    ...$this->projectTaskStateForRole($role, $task->progress),
                 ];
             }
 
@@ -313,6 +317,7 @@ class ProjectTaskBoardSyncService
     public function cardRelations(): array
     {
         return [
+            'column:id,name,role',
             'creator:id,name,profile_photo',
             'assignees:id,name,email,profile_photo,org_path',
             'labels',
@@ -398,6 +403,8 @@ class ProjectTaskBoardSyncService
             ]);
         }
 
+        $board->seedDefaultColumns();
+
         $this->recordActivity($board, null, $actor->id, 'board.monthly_created', 'auto-created this monthly board for project sync');
 
         return $board;
@@ -425,7 +432,9 @@ class ProjectTaskBoardSyncService
 
     private function syncProjectCard(TaskBoard $board, Project $project, ?User $actor): TaskCard
     {
-        $status = $this->cardStatusForProject($project);
+        $role = $this->cardRoleForProject($project);
+        $column = $board->columnForRole($role);
+        $statusName = $column?->name ?? $this->fallbackRoleName($role);
         $card = TaskCard::firstOrNew([
             'task_board_id' => $board->id,
             'project_id' => $project->id,
@@ -434,19 +443,20 @@ class ProjectTaskBoardSyncService
         $isNew = !$card->exists;
         $card->fill([
             'project_task_id' => null,
+            'task_board_column_id' => $column?->id,
             'title' => $project->name,
             'description' => $project->remarks,
-            'status' => $status,
+            'status' => $statusName,
             'start_at' => $project->turn_over_date ? Carbon::parse($project->turn_over_date)->startOfDay()->format('Y-m-d H:i:s') : null,
             'due_at' => $project->target_go_live ? Carbon::parse($project->target_go_live)->endOfDay()->format('Y-m-d H:i:s') : null,
-            'due_complete' => $status === 'Done',
+            'due_complete' => $role === 'done',
             'created_by' => $card->created_by ?: ($actor?->id ?? $board->created_by),
         ]);
 
         if ($isNew) {
-            $card->sort_order = $this->nextCardSortOrder($board, $status);
+            $card->sort_order = $this->nextCardSortOrder($board, $statusName);
         } elseif ($card->isDirty('status')) {
-            $card->sort_order = $this->nextCardSortOrder($board, $status);
+            $card->sort_order = $this->nextCardSortOrder($board, $statusName);
         }
 
         $card->save();
@@ -613,32 +623,36 @@ class ProjectTaskBoardSyncService
 
     private function syncLegacyProjectTask(ProjectTask $task, ?User $actor, TaskBoard $board): TaskCard
     {
-        $card = TaskCard::where('project_task_id', $task->id)->first();
-        $status = $this->cardStatusForProjectTask($task, $card);
+        $card = TaskCard::where('project_task_id', $task->id)->with('column')->first();
+        $role = $this->cardRoleForProjectTask($task, $card);
+        $column = $board->columnForRole($role);
+        $statusName = $column?->name ?? $this->fallbackRoleName($role);
         $dateFields = $this->cardDateFields($task);
 
         if (!$card) {
             $card = TaskCard::create([
                 'task_board_id' => $board->id,
+                'task_board_column_id' => $column?->id,
                 'project_task_id' => $task->id,
                 'title' => $task->name,
                 'description' => null,
-                'status' => $status,
-                'sort_order' => $this->nextCardSortOrder($board, $status),
+                'status' => $statusName,
+                'sort_order' => $this->nextCardSortOrder($board, $statusName),
                 'start_at' => $dateFields['start_at'],
                 'due_at' => $dateFields['due_at'],
-                'due_complete' => $status === 'Done',
+                'due_complete' => $role === 'done',
                 'created_by' => $actor?->id ?? $board->created_by,
             ]);
 
             $this->recordActivity($board, $card, $actor?->id, 'project.card.created', 'created from project activity');
         } else {
             $card->update([
+                'task_board_column_id' => $column?->id,
                 'title' => $task->name,
-                'status' => $status,
+                'status' => $statusName,
                 'start_at' => $dateFields['start_at'],
                 'due_at' => $dateFields['due_at'],
-                'due_complete' => $status === 'Done',
+                'due_complete' => $role === 'done',
             ]);
         }
 
@@ -689,41 +703,56 @@ class ProjectTaskBoardSyncService
         return blank($value) ? null : Carbon::parse($value)->toDateString();
     }
 
-    private function cardStatusForProject(Project $project): string
+    private function cardRoleForProject(Project $project): string
     {
         return match (strtolower((string) $project->status)) {
-            'completed', 'done' => 'Done',
-            'in progress', 'ongoing', 'delayed' => 'In Progress',
-            default => 'Backlogs',
+            'completed', 'done' => 'done',
+            'in progress', 'ongoing', 'delayed' => 'in_progress',
+            default => 'backlog',
         };
     }
 
-    private function cardStatusForProjectTask(ProjectTask $task, ?TaskCard $card = null): string
+    private function cardRoleForProjectTask(ProjectTask $task, ?TaskCard $card = null): string
     {
         if ($task->status === 'Done' || (int) $task->progress >= 100) {
-            return 'Done';
+            return 'done';
         }
 
-        if ($card?->status === 'For Verification' && (int) $task->progress >= 90) {
-            return 'For Verification';
+        if ($card?->column_role === 'for_verification' && (int) $task->progress >= 90) {
+            return 'for_verification';
         }
 
         if ($task->status === 'Pending' || (int) $task->progress <= 0) {
-            return 'Backlogs';
+            return 'backlog';
         }
 
-        return 'In Progress';
+        return 'in_progress';
     }
 
-    private function projectTaskStateForCardStatus(string $status, ?int $currentProgress): array
+    /**
+     * Map a column role onto the underlying project-task status/progress. Returns an
+     * empty array for custom columns (role null/unknown) so the task is left unchanged.
+     */
+    private function projectTaskStateForRole(string $role, ?int $currentProgress): array
     {
         $progress = (int) ($currentProgress ?? 0);
 
-        return match ($status) {
-            'Done' => ['status' => 'Done', 'progress' => 100],
-            'For Verification' => ['status' => 'Ongoing', 'progress' => min(max($progress, 90), 99)],
-            'In Progress' => ['status' => 'Ongoing', 'progress' => min(max($progress, 1), 99)],
-            default => ['status' => 'Pending', 'progress' => 0],
+        return match ($role) {
+            'done' => ['status' => 'Done', 'progress' => 100],
+            'for_verification' => ['status' => 'Ongoing', 'progress' => min(max($progress, 90), 99)],
+            'in_progress' => ['status' => 'Ongoing', 'progress' => min(max($progress, 1), 99)],
+            'backlog' => ['status' => 'Pending', 'progress' => 0],
+            default => [],
+        };
+    }
+
+    private function fallbackRoleName(string $role): string
+    {
+        return match ($role) {
+            'done' => 'Done',
+            'for_verification' => 'For Verification',
+            'in_progress' => 'In Progress',
+            default => 'Backlogs',
         };
     }
 

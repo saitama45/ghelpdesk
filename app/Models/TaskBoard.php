@@ -74,6 +74,48 @@ class TaskBoard extends Model
         return $this->hasMany(TaskCard::class)->orderBy('sort_order')->orderBy('id');
     }
 
+    public function columns(): HasMany
+    {
+        return $this->hasMany(TaskBoardColumn::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function columnForRole(string $role): ?TaskBoardColumn
+    {
+        return $this->columns->firstWhere('role', $role)
+            ?? $this->columns()->where('role', $role)->orderBy('sort_order')->first();
+    }
+
+    public function columnNameForRole(string $role): ?string
+    {
+        return $this->columnForRole($role)?->name;
+    }
+
+    public function columnForName(string $name): ?TaskBoardColumn
+    {
+        return $this->columns->firstWhere('name', $name)
+            ?? $this->columns()->where('name', $name)->first();
+    }
+
+    public function roleForColumnName(string $name): ?string
+    {
+        return $this->columnForName($name)?->role;
+    }
+
+    /**
+     * Seed the four default columns onto a freshly created board.
+     */
+    public function seedDefaultColumns(): void
+    {
+        foreach (TaskBoardColumn::DEFAULTS as $index => $default) {
+            $this->columns()->create([
+                'name' => $default['name'],
+                'color' => $default['color'],
+                'role' => $default['role'],
+                'sort_order' => $index,
+            ]);
+        }
+    }
+
     public function activities(): HasMany
     {
         return $this->hasMany(TaskCardActivity::class)->latest();

@@ -153,11 +153,15 @@ Route::middleware('auth')->group(function () {
     Route::delete('task-boards/{taskBoard}/members/{user}', [\App\Http\Controllers\TaskBoardController::class, 'destroyMember'])->name('task-boards.members.destroy');
     Route::post('task-boards/{taskBoard}/cards', [\App\Http\Controllers\TaskCardController::class, 'store'])->name('task-boards.cards.store');
     Route::post('task-boards/{taskBoard}/labels', [\App\Http\Controllers\TaskCardController::class, 'storeLabel'])->name('task-boards.labels.store');
+    Route::post('task-boards/{taskBoard}/columns', [\App\Http\Controllers\TaskCardController::class, 'storeColumn'])->name('task-boards.columns.store');
+    Route::post('task-boards/{taskBoard}/columns/reorder', [\App\Http\Controllers\TaskCardController::class, 'reorderColumns'])->name('task-boards.columns.reorder');
     Route::resource('task-boards', \App\Http\Controllers\TaskBoardController::class)
         ->parameters(['task-boards' => 'taskBoard'])
         ->except(['create', 'edit']);
     Route::put('task-labels/{taskLabel}', [\App\Http\Controllers\TaskCardController::class, 'updateLabel'])->name('task-labels.update');
     Route::delete('task-labels/{taskLabel}', [\App\Http\Controllers\TaskCardController::class, 'destroyLabel'])->name('task-labels.destroy');
+    Route::put('task-columns/{taskBoardColumn}', [\App\Http\Controllers\TaskCardController::class, 'updateColumn'])->name('task-columns.update');
+    Route::delete('task-columns/{taskBoardColumn}', [\App\Http\Controllers\TaskCardController::class, 'destroyColumn'])->name('task-columns.destroy');
     Route::put('task-cards/{taskCard}', [\App\Http\Controllers\TaskCardController::class, 'update'])->name('task-cards.update');
     Route::post('task-cards/{taskCard}/move', [\App\Http\Controllers\TaskCardController::class, 'move'])->name('task-cards.move');
     Route::post('task-cards/{taskCard}/archive', [\App\Http\Controllers\TaskCardController::class, 'archive'])->name('task-cards.archive');
