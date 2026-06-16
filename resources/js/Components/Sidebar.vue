@@ -193,7 +193,7 @@ const canSeeSettings = computed(() => {
                 <div class="w-9 h-9 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
                     <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
                 </div>
-                <span class="text-lg font-bold leading-none whitespace-nowrap text-white">TAS Service Center</span>
+                <span class="text-lg font-bold leading-none whitespace-nowrap text-white">TGI Hub</span>
             </div>
 
             <button
