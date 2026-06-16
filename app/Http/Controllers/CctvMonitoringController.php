@@ -499,7 +499,7 @@ class CctvMonitoringController extends Controller implements HasMiddleware
             'priority' => $validated['overall_status'] === 'Not Working' ? 'high' : 'medium',
             'severity' => 'minor',
             'reporter_id' => $user->id,
-            'company_id' => $user->company_id,
+            'company_id' => $this->resolveCompanyId($store, $user->company_id),
             'store_id' => $store->id,
             'category_id' => $categoryId,
             'item_id' => $itemId,
@@ -518,7 +518,7 @@ class CctvMonitoringController extends Controller implements HasMiddleware
             'priority' => $status === 'Not Working' ? 'high' : 'medium',
             'severity' => 'minor',
             'reporter_id' => $userId,
-            'company_id' => $userId ? (\App\Models\User::find($userId)?->company_id) : null,
+            'company_id' => $this->resolveCompanyId($store, $userId ? \App\Models\User::find($userId)?->company_id : null),
             'store_id' => $store->id,
             'category_id' => $categoryId,
             'item_id' => $itemId,
@@ -535,6 +535,44 @@ class CctvMonitoringController extends Controller implements HasMiddleware
         );
 
         return [$category->id, $item->id];
+    }
+
+    /**
+     * Resolve a non-null company for a CCTV ticket.
+     *
+     * Helpdesk users carry no direct company_id, so the TicketObserver cannot
+     * generate a ticket_key without one — and a second null ticket_key would
+     * violate the unique index on SQL Server (only one NULL is allowed).
+     * We map the store's brand to a company (CBTL → CBTL, Nonos → NONO'S, …)
+     * and fall back to the first company so a key is always produced.
+     */
+    private function resolveCompanyId(?Store $store, ?int $preferredCompanyId): ?int
+    {
+        if ($preferredCompanyId) {
+            return $preferredCompanyId;
+        }
+
+        $brand = $store?->brand;
+        if ($brand) {
+            $normalize = fn (?string $v) => strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $v));
+            $target = $normalize($brand);
+
+            if ($target !== '') {
+                $company = \App\Models\Company::all(['id', 'code', 'name'])->first(function ($c) use ($normalize, $target) {
+                    $code = $normalize($c->code);
+                    $name = $normalize($c->name);
+
+                    return ($code !== '' && (str_starts_with($target, $code) || str_starts_with($code, $target)))
+                        || $name === $target;
+                });
+
+                if ($company) {
+                    return $company->id;
+                }
+            }
+        }
+
+        return \App\Models\Company::orderBy('id')->value('id');
     }
 
     private function syncLinkedUnits(CctvInspection $inspection, array $units): void
@@ -583,6 +621,7 @@ class CctvMonitoringController extends Controller implements HasMiddleware
                 'status' => $latest->overall_status,
                 'date' => $latest->inspection_date?->format('Y-m-d'),
                 'ticket_key' => $latest->ticket?->ticket_key,
+                'ticket_id' => $latest->ticket_id,
                 'inspection_id' => $latest->id,
             ] : null;
         }

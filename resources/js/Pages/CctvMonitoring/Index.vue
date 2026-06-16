@@ -114,12 +114,21 @@
                                 </div>
                             </td>
                             <td v-for="m in 12" :key="m" class="px-2 py-2 text-center">
-                                <button v-if="row.months[m]" @click="openInspectionModal(row, m, row.months[m])"
-                                    class="w-full py-1.5 rounded-md text-[10px] font-black uppercase tracking-wide transition-transform hover:scale-105"
-                                    :class="statusColorClass(row.months[m].status, 'bg')"
-                                    :title="row.months[m].date + ' · ' + row.months[m].status">
-                                    {{ statusChipLabel(row.months[m].status) }}
-                                </button>
+                                <template v-if="row.months[m]">
+                                    <button @click="openInspectionModal(row, m, row.months[m])"
+                                        class="w-full py-1.5 rounded-md text-[10px] font-black uppercase tracking-wide transition-transform hover:scale-105"
+                                        :class="statusColorClass(row.months[m].status, 'bg')"
+                                        :title="row.months[m].date + ' · ' + row.months[m].status">
+                                        {{ statusChipLabel(row.months[m].status) }}
+                                    </button>
+                                    <a v-if="row.months[m].ticket_key && row.months[m].ticket_id"
+                                        :href="route('tickets.edit', row.months[m].ticket_id)"
+                                        target="_blank"
+                                        @click.stop
+                                        class="block mt-0.5 text-[9px] font-bold text-blue-500 hover:text-blue-800 hover:underline leading-tight truncate">
+                                        {{ row.months[m].ticket_key }}
+                                    </a>
+                                </template>
                                 <button v-else-if="hasPermission('cctv_monitoring.create')" @click="openInspectionModal(row, m)"
                                     class="w-full py-1.5 rounded-md text-[10px] font-bold text-gray-300 hover:text-blue-600 hover:bg-blue-50 transition-colors">+</button>
                                 <span v-else class="text-gray-200">·</span>
@@ -287,7 +296,8 @@
                         <div class="p-4 bg-blue-50/50 rounded-lg border border-blue-100">
                             <div class="flex items-center justify-between mb-2">
                                 <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest">Linked Ticket <span class="text-red-500">(required)</span></h4>
-                                <span v-if="existingTicket" class="text-[11px] font-bold text-blue-700">🎫 {{ existingTicket.ticket_key }}</span>
+                                <a v-if="existingTicket" :href="route('tickets.edit', existingTicket.id)" target="_blank"
+                                   class="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline">🎫 {{ existingTicket.ticket_key }} ↗</a>
                             </div>
                             <div v-if="existingTicket" class="text-xs text-gray-600">
                                 Ticket already created: <span class="font-bold">{{ existingTicket.title }}</span> ({{ existingTicket.status }})
