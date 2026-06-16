@@ -82,11 +82,12 @@
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
                                 <span>Add System</span>
                             </button>
-                            <button v-if="hasPermission('cctv_monitoring.create')" @click="openImportModal"
+                            <!-- Import button hidden temporarily -->
+                            <!-- <button v-if="hasPermission('cctv_monitoring.create')" @click="openImportModal"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                 <span>Import</span>
-                            </button>
+                            </button> -->
                         </div>
                     </template>
 
@@ -269,8 +270,11 @@
                         <!-- Units Inspected / Defective -->
                         <div class="p-4 bg-red-50/40 rounded-lg border border-red-100">
                             <div class="flex items-center justify-between mb-2">
-                                <h4 class="text-xs font-black text-red-500 uppercase tracking-widest">Units Inspected / Defective</h4>
-                                <button type="button" @click="openUnitPicker" class="text-[11px] font-bold text-blue-600 hover:text-blue-700">+ Link unit</button>
+                                <div>
+                                    <h4 class="text-xs font-black text-red-500 uppercase tracking-widest">Units Inspected / Defective</h4>
+                                    <p class="text-[10px] text-gray-400">Auto-loaded from deployed inventory — mark any defective ones.</p>
+                                </div>
+                                <button type="button" @click="openUnitPicker" class="text-[11px] font-bold text-blue-600 hover:text-blue-700">+ Add unit</button>
                             </div>
                             <div v-if="inspectionForm.linked_units.length" class="space-y-1.5">
                                 <div v-for="(lu, idx) in inspectionForm.linked_units" :key="lu.stock_in_id"
@@ -289,7 +293,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <p v-else class="text-[11px] text-gray-400 italic">No units linked. Defective units are auto-tagged on the ticket.</p>
+                            <p v-else class="text-[11px] text-gray-400 italic">No CCTV units found in this store's deployed inventory.</p>
                         </div>
 
                         <!-- Mandatory Ticket -->
@@ -683,7 +687,24 @@ const openInspectionModal = async (row, month, existing) => {
         editingInspectionId.value = null
     }
 
-    loadUnitOptions(row.store.id)
+    const units = await loadUnitOptions(row.store.id)
+
+    // Auto-populate inspected units from the store's deployed inventory for new
+    // inspections — no need to link them one by one. Each defaults to "Working";
+    // the user just flips the defective ones.
+    if (!editingInspection.value) {
+        inspectionForm.linked_units = units.map(u => ({
+            stock_in_id: u.stock_in_id,
+            condition: 'Working',
+            notes: '',
+            item_code: u.item_code,
+            brand: u.brand,
+            model: u.model,
+            serial_no: u.serial_no,
+            barcode: u.barcode,
+        }))
+    }
+
     showInspectionModal.value = true
 }
 
@@ -691,8 +712,10 @@ const loadUnitOptions = async (storeId) => {
     try {
         const { data } = await axios.get(route('cctv-monitoring.units.search', storeId))
         unitOptions.value = data.units
+        return data.units
     } catch (e) {
         unitOptions.value = []
+        return []
     }
 }
 
@@ -708,7 +731,7 @@ const openUnitPicker = () => { showUnitPicker.value = true }
 const linkUnit = (u) => {
     inspectionForm.linked_units.push({
         stock_in_id: u.stock_in_id,
-        condition: 'Defective',
+        condition: 'Working',
         notes: '',
         item_code: u.item_code,
         brand: u.brand,
