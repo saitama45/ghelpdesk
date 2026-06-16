@@ -6,6 +6,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\NpcStatusController;
+use App\Http\Controllers\CctvMonitoringController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -55,6 +56,18 @@ Route::middleware('auth')->group(function () {
     Route::get('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'downloadCctvSealNotice'])->name('stores.cctv-seal-notice.download');
     Route::resource('npc-statuses', NpcStatusController::class)
         ->parameters(['npc-statuses' => 'npcStatus'])
+        ->except(['show', 'create', 'edit']);
+
+    // CCTV Monitoring
+    Route::get('cctv-monitoring/import-template', [CctvMonitoringController::class, 'importTemplate'])->name('cctv-monitoring.import-template');
+    Route::post('cctv-monitoring/import', [CctvMonitoringController::class, 'import'])->name('cctv-monitoring.import');
+    Route::get('stores/{store}/cctv-units', [CctvMonitoringController::class, 'unitsSearch'])->name('cctv-monitoring.units.search');
+    Route::post('cctv-systems/{cctvSystem}/inspections', [CctvMonitoringController::class, 'storeInspection'])->name('cctv-monitoring.inspections.store');
+    Route::put('cctv-inspections/{cctvInspection}', [CctvMonitoringController::class, 'updateInspection'])->name('cctv-monitoring.inspections.update');
+    Route::get('cctv-inspections/{cctvInspection}', [CctvMonitoringController::class, 'showInspection'])->name('cctv-monitoring.inspections.show');
+    Route::delete('cctv-inspections/{cctvInspection}', [CctvMonitoringController::class, 'destroyInspection'])->name('cctv-monitoring.inspections.destroy');
+    Route::resource('cctv-monitoring', CctvMonitoringController::class)
+        ->parameters(['cctv-monitoring' => 'cctvSystem'])
         ->except(['show', 'create', 'edit']);
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');

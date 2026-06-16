@@ -91,7 +91,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('service-vehicle-trips.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('npc-statuses.*') || route().current('payments.*')) {
+    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*')) {
         openMenus.value.monitoring = true;
     }
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
@@ -132,7 +132,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('payments.view');
+    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view');
 });
 
 const canSeeServices = computed(() => {
@@ -388,11 +388,11 @@ const canSeeSettings = computed(() => {
 
                 <!-- Monitoring Section -->
                 <div v-if="canSeeMonitoring" :style="so('monitoring')" class="space-y-1 collapsed-menu-group">
-                    <button
+                        <button
                         @click="toggleMenu('monitoring')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('npc-statuses.*') || route().current('payments.*')) && (isCollapsed || !openMenus.monitoring)
+                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*')) && (isCollapsed || !openMenus.monitoring)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -411,6 +411,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('npc_status.view')" :style="co('monitoring', 'npc-status')">
                                 <Link :href="route('npc-statuses.index')" :class="collapsedFlyoutLinkClass(route().current('npc-statuses.*'))">{{ getChildLabel('monitoring', 'npc-status') }}</Link>
                             </div>
+                            <div v-if="hasPermission('cctv_monitoring.view')" :style="co('monitoring', 'cctv-monitoring')">
+                                <Link :href="route('cctv-monitoring.index')" :class="collapsedFlyoutLinkClass(route().current('cctv-monitoring.*'))">{{ getChildLabel('monitoring', 'cctv-monitoring') }}</Link>
+                            </div>
                             <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                                 <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('monitoring', 'payments') }}</Link>
                             </div>
@@ -420,6 +423,9 @@ const canSeeSettings = computed(() => {
                     <div v-if="!isCollapsed && openMenus.monitoring" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
                         <div v-if="hasPermission('npc_status.view')" :style="co('monitoring', 'npc-status')">
                             <Link :href="route('npc-statuses.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('npc-statuses.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'npc-status') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('cctv_monitoring.view')" :style="co('monitoring', 'cctv-monitoring')">
+                            <Link :href="route('cctv-monitoring.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('cctv-monitoring.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'cctv-monitoring') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                             <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'payments') }}</span></Link>

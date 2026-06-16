@@ -84,6 +84,7 @@ class RoleService
             'request_types',
             'form_builder',
             'stores',
+            'cctv monitoring',
             'vendors',
             'activity_templates',
             'project type & store class',
@@ -116,6 +117,8 @@ class RoleService
                 $categoryDisplay = 'Service Vehicle Trips';
             } elseif ($category === 'payments') {
                 $categoryDisplay = 'Payments & SOA';
+            } elseif ($category === 'cctv_monitoring') {
+                $categoryDisplay = 'CCTV Monitoring';
             } elseif ($category === 'stamps') {
                 $categoryDisplay = 'Loyalty Stamps';
             } elseif ($category === 'leadership_points') {

@@ -87,6 +87,11 @@ class StockIn extends Model
         return $this->hasMany(StockTransfer::class, 'source_stock_in_id');
     }
 
+    public function cctvInspectionUnits()
+    {
+        return $this->hasMany(\App\Models\CctvInspectionUnit::class, 'stock_in_id');
+    }
+
     protected static function booted()
     {
         static::saving(function ($stockIn) {

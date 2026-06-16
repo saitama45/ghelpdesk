@@ -174,4 +174,9 @@ class Ticket extends Model
     {
         return $this->belongsTo(\App\Models\Vendor::class);
     }
+
+    public function cctvInspection()
+    {
+        return $this->hasOne(\App\Models\CctvInspection::class);
+    }
 }

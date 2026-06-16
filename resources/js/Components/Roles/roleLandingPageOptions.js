@@ -39,6 +39,7 @@ export const roleLandingPageOptions = [
         group: 'Monitoring',
         options: [
             { label: 'NPC Status', value: 'npc-statuses.index' },
+            { label: 'CCTV Monitoring', value: 'cctv-monitoring.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
         ]
     },

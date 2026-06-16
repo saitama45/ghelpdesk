@@ -1110,6 +1110,10 @@ const formatItemName = (item) => {
     return `${cat} | ${sub} | ${item.name}`;
 };
 
+const isCctvTicket = (ticket) => {
+    return ticket.item?.category?.name === 'CCTV' || ticket.item?.name?.toLowerCase().startsWith('cctv');
+};
+
 const getReporterLabel = (ticket) => {
     if (ticket.reporter?.name) return ticket.reporter.name;
     if (ticket.sender_name) return ticket.sender_name;
@@ -2152,7 +2156,13 @@ const requesterTabs = computed(() => {
                                 </div>
                                 <div>
                                     <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Item</div>
-                                    <div class="mt-1 break-words text-xs leading-5 text-black">{{ formatItemName(ticket.item) }}</div>
+                                    <div class="mt-1 break-words text-xs leading-5 text-black">
+                                        {{ formatItemName(ticket.item) }}
+                                        <span v-if="isCctvTicket(ticket)"
+                                              class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-100 align-middle">
+                                            CCTV
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </td>

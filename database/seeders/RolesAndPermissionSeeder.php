@@ -168,6 +168,12 @@ class RolesAndPermissionSeeder extends Seeder
             'npc_status.edit' => 'Edit NPC Status records',
             'npc_status.delete' => 'Delete NPC Status records',
 
+            // CCTV Monitoring
+            'cctv_monitoring.view' => 'View CCTV Monitoring',
+            'cctv_monitoring.create' => 'Create CCTV inspections',
+            'cctv_monitoring.edit' => 'Edit CCTV inspections',
+            'cctv_monitoring.delete' => 'Delete CCTV inspections',
+
             // Administrative - Schedules
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',
