@@ -10,6 +10,7 @@ use App\Models\Item;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketAsset;
+use App\Models\User;
 use App\Services\CctvEquipmentMatcher;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -117,6 +118,11 @@ class CctvMonitoringController extends Controller implements HasMiddleware
             'sectors' => Store::whereNotNull('sector')->distinct()->orderBy('sector')->pluck('sector'),
             'summary' => $this->buildSummary($rows),
             'availableStores' => $availableStores,
+            'assignableStaff' => User::whereHas('roles', fn ($q) => $q->where('is_assignable', true))
+                ->select('id', 'name')
+                ->orderBy('name')
+                ->pluck('name')
+                ->map(fn ($name) => ['label' => $name, 'value' => $name]),
         ]);
     }
 

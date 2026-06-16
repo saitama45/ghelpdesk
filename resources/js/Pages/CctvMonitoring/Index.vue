@@ -195,8 +195,12 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Technician</label>
-                                <input v-model="inspectionForm.technician" type="text" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Tech</label>
+                                <Autocomplete
+                                    v-model="inspectionForm.technician"
+                                    :options="assignableStaff"
+                                    placeholder="Select technician..."
+                                />
                             </div>
                         </div>
 
@@ -510,6 +514,7 @@ const props = defineProps({
     sectors: Array,
     summary: Object,
     availableStores: { type: Array, default: () => [] },
+    assignableStaff: { type: Array, default: () => [] },
 })
 
 const { showSuccess, showError } = useToast()
