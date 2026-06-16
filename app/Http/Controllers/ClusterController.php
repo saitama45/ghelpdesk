@@ -69,13 +69,13 @@ class ClusterController extends Controller implements HasMiddleware
     public function assignStores(Request $request, Cluster $cluster)
     {
         $validated = $request->validate([
-            'store_ids' => 'required|array|min:1',
+            'store_ids' => 'nullable|array',
             'store_ids.*' => 'exists:stores,id',
         ]);
 
-        // Use syncWithoutDetaching to fulfill requirement:
-        // "if the store was already assign to a cluster, it should still be assign to another clusters"
-        $cluster->stores()->syncWithoutDetaching($validated['store_ids']);
+        // sync() replaces this cluster's store list (adds new, removes deselected)
+        // without touching other clusters — stores can still belong to multiple clusters.
+        $cluster->stores()->sync($validated['store_ids'] ?? []);
 
         return redirect()->back()->with('success', 'Stores assigned successfully');
     }

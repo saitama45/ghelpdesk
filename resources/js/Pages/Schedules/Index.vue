@@ -315,6 +315,7 @@
                         @visible-range-change="handleVisibleRangeChange"
                         @date-click="handleDateClick"
                         @event-click="handleEventClick"
+                        @add-schedule-for-user="handleAddScheduleForUser"
                     />
                 </div>
 
@@ -1940,7 +1941,7 @@ const storeOptions = computed(() => {
     ]
 })
 
-const optionalScheduleLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday', 'N/A'])
+const optionalScheduleLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday', 'Offset', 'N/A'])
 
 // For the store repeater inside the form (no "All Stores" entry)
 const storeSelectOptions = computed(() => {
@@ -2625,6 +2626,18 @@ const handleDateClick = (date) => {
     if (!hasPermission('schedules.create')) return
 
     openCreateModal()
+    const start = new Date(date)
+    start.setHours(7, 0, 0, 0)
+    const end = new Date(date)
+    end.setHours(17, 0, 0, 0)
+    form.stores = [{ store_id: null, ticket_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
+}
+
+const handleAddScheduleForUser = ({ user, date }) => {
+    if (!hasPermission('schedules.create')) return
+
+    openCreateModal()
+    form.user_id = user.id
     const start = new Date(date)
     start.setHours(7, 0, 0, 0)
     const end = new Date(date)

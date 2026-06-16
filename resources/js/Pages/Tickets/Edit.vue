@@ -234,7 +234,7 @@ const scheduleStatuses = [
     'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
 ];
 
-const childOptionalLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday']);
+const childOptionalLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday', 'Offset']);
 const isChildLocationRequired = computed(() => !childOptionalLocationStatuses.has(childForm.status));
 const childStoreOptions = computed(() => {
     return isChildLocationRequired.value

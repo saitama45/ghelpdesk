@@ -33,7 +33,7 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:concernTypeFilter', 'update:priorityFilter']);
+const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:concernTypeFilter', 'update:priorityFilter', 'add-schedule-for-user']);
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
@@ -875,7 +875,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                 <div
                                     v-for="user in unscheduledUsers"
                                     :key="user.id"
-                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors group"
                                 >
                                     <div class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></div>
                                     <span class="text-xs text-gray-600 font-medium flex-1 truncate">{{ user.name }}</span>
@@ -883,6 +883,13 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                         v-if="user.department_reference?.code"
                                         class="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded shrink-0"
                                     >{{ user.department_reference.code }}</span>
+                                    <button
+                                        @click.stop="() => { emit('add-schedule-for-user', { user, date: selectedDayDate }); closeDayModal(); }"
+                                        class="shrink-0 w-5 h-5 flex items-center justify-center rounded-full bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white transition-colors"
+                                        title="Add schedule"
+                                    >
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" /></svg>
+                                    </button>
                                 </div>
                             </div>
                         </div>
