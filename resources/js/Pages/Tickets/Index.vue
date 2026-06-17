@@ -32,15 +32,39 @@ const props = defineProps({
 const page = usePage();
 const showCreateModal = ref(false);
 const showAcceptModal = ref(false);
+const localTodayStr = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+
 const showExportModal = ref(false);
 const exportItems = ref([]);
-const exportFilterItemId = ref('');
+const exportFieldMode = ref('sub_category'); // 'sub_category' | 'item'
+const exportFilterItemIds = ref([]);
+const exportFilterSubCategoryIds = ref([]);
 const exportFilterRequester = ref('');
 const exportFilterPriority = ref([]);
 const exportFilterConcernType = ref('');
+const exportFrom = ref('');
+const exportTo = ref('');
+
+// Subcategories derived from the loaded items (each item carries its sub_category relation)
+const exportSubCategories = computed(() => {
+    const seen = new Map();
+    exportItems.value.forEach((item) => {
+        const sub = item.sub_category;
+        if (sub && sub.id != null && !seen.has(sub.id)) {
+            seen.set(sub.id, { id: sub.id, name: sub.name });
+        }
+    });
+    return Array.from(seen.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+});
 
 const openExportModal = async () => {
     showExportModal.value = true;
+    exportFieldMode.value = 'sub_category';
+    exportFrom.value = localTodayStr();
+    exportTo.value = localTodayStr();
     if (!exportItems.value.length) {
         try {
             const res = await axios.get(route('tickets.data.items', undefined, false));
@@ -395,20 +419,32 @@ const exportToExcel = () => {
         else if (v !== null && v !== undefined && v !== '') params.set(k, v)
     })
     if (pagination.search.value) params.set('search', pagination.search.value)
-    if (exportFilterItemId.value) params.set('item_id', exportFilterItemId.value)
+    if (exportFieldMode.value === 'item') {
+        exportFilterItemIds.value.forEach(id => params.append('item_id[]', id))
+    } else {
+        exportFilterSubCategoryIds.value.forEach(id => params.append('sub_category_id[]', id))
+    }
     if (exportFilterRequester.value) params.set('requester', exportFilterRequester.value)
     exportFilterPriority.value.forEach(p => params.append('priority[]', p))
     if (exportFilterConcernType.value) params.set('concern_type', exportFilterConcernType.value)
+    // Modal date range overrides any inherited list date filters
+    params.delete('start_date')
+    params.delete('end_date')
+    if (exportFrom.value) params.set('start_date', exportFrom.value)
+    if (exportTo.value) params.set('end_date', exportTo.value)
     window.location.href = route('tickets.export') + '?' + params.toString()
     showExportModal.value = false
 }
 
 const closeExportModal = () => {
     showExportModal.value = false
-    exportFilterItemId.value = ''
+    exportFilterItemIds.value = []
+    exportFilterSubCategoryIds.value = []
     exportFilterRequester.value = ''
     exportFilterPriority.value = []
     exportFilterConcernType.value = ''
+    exportFrom.value = ''
+    exportTo.value = ''
 }
 
 const clearFilters = () => {
@@ -2864,19 +2900,54 @@ const requesterTabs = computed(() => {
                 </div>
 
                 <div class="space-y-4">
-                    <!-- Item -->
+                    <!-- Date Range -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Date Range (Created)</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <span class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">From</span>
+                                <input type="date" v-model="exportFrom"
+                                       class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                            </div>
+                            <div>
+                                <span class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">To</span>
+                                <input type="date" v-model="exportTo" :min="exportFrom"
+                                       class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Item / Concern OR SubCategory -->
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Item / Concern</label>
-                            <button v-if="exportFilterItemId" type="button" @click="exportFilterItemId = ''"
+                            <div class="flex items-center gap-2">
+                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Filter By</label>
+                                <select v-model="exportFieldMode"
+                                        class="bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-700 pl-2 pr-7 py-1 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                    <option value="sub_category">SubCategory</option>
+                                    <option value="item">Item / Concern</option>
+                                </select>
+                            </div>
+                            <button v-if="(exportFieldMode === 'item' ? exportFilterItemIds.length : exportFilterSubCategoryIds.length)"
+                                    type="button"
+                                    @click="exportFieldMode === 'item' ? (exportFilterItemIds = []) : (exportFilterSubCategoryIds = [])"
                                     class="text-xs font-semibold text-red-500 hover:text-red-700">Clear</button>
                         </div>
-                        <Autocomplete
-                            v-model="exportFilterItemId"
+                        <MultiAutocomplete
+                            v-if="exportFieldMode === 'item'"
+                            v-model="exportFilterItemIds"
                             :options="exportItems"
                             label-key="display_name"
                             value-key="id"
                             placeholder="All Items"
+                        />
+                        <MultiAutocomplete
+                            v-else
+                            v-model="exportFilterSubCategoryIds"
+                            :options="exportSubCategories"
+                            label-key="name"
+                            value-key="id"
+                            placeholder="All SubCategories"
                         />
                     </div>
 

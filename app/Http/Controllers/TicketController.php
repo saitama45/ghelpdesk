@@ -489,8 +489,14 @@ class TicketController extends Controller
             });
         }
 
-        if ($request->filled('item_id')) {
-            $query->where('item_id', (int) $request->item_id);
+        $itemFilters = $normalizeFilterValues($request->input('item_id'));
+        if ($itemFilters->isNotEmpty()) {
+            $query->whereIn('item_id', $itemFilters->map(fn ($id) => (int) $id)->all());
+        }
+
+        $subCategoryFilters = $normalizeFilterValues($request->input('sub_category_id'));
+        if ($subCategoryFilters->isNotEmpty()) {
+            $query->whereIn('sub_category_id', $subCategoryFilters->map(fn ($id) => (int) $id)->all());
         }
 
         if ($request->filled('requester')) {
