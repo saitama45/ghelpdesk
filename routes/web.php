@@ -327,6 +327,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [\App\Http\Controllers\PaymentMonitoringController::class, 'index'])->name('index');
 
         // Renewals
+        Route::get('renewals/import-template', [\App\Http\Controllers\PaymentMonitoringController::class, 'renewalImportTemplate'])->name('renewals.import-template');
+        Route::post('renewals/import', [\App\Http\Controllers\PaymentMonitoringController::class, 'importRenewals'])->name('renewals.import');
         Route::post('renewals', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeRenewal'])->name('renewals.store');
         Route::put('renewals/{renewal}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateRenewal'])->name('renewals.update');
         Route::delete('renewals/{renewal}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyRenewal'])->name('renewals.destroy');
@@ -343,6 +345,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('overpayments/{overpayment}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyOverpayment'])->name('overpayments.destroy');
 
         // Weekly Plans
+        Route::get('weekly-plans/import-template', [\App\Http\Controllers\PaymentMonitoringController::class, 'weeklyPlanImportTemplate'])->name('weekly-plans.import-template');
+        Route::post('weekly-plans/import', [\App\Http\Controllers\PaymentMonitoringController::class, 'importWeeklyPlans'])->name('weekly-plans.import');
         Route::post('weekly-plans', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeWeeklyPlan'])->name('weekly-plans.store');
         Route::put('weekly-plans/{weekly_plan}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateWeeklyPlan'])->name('weekly-plans.update');
         Route::delete('weekly-plans/{weekly_plan}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyWeeklyPlan'])->name('weekly-plans.destroy');

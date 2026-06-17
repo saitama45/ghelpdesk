@@ -102,10 +102,20 @@
                         @change-per-page="renewalsPagination.changePerPage"
                     >
                         <template #actions>
-                            <button v-if="hasPermission('payments.create')" @click="openRenewalModal()"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
-                                + New Renewal
-                            </button>
+                            <div class="flex items-center gap-2 flex-nowrap">
+                                <a v-if="hasPermission('payments.view')" href="/payments/renewals/import-template"
+                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    Download Template
+                                </a>
+                                <button v-if="hasPermission('payments.create')" @click="openRenewalImportModal()"
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    Import
+                                </button>
+                                <button v-if="hasPermission('payments.create')" @click="openRenewalModal()"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    + New Renewal
+                                </button>
+                            </div>
                         </template>
                         <template #header>
                             <tr>
@@ -460,10 +470,20 @@
                         @change-per-page="weeklyPagination.changePerPage"
                     >
                         <template #actions>
-                            <button v-if="hasPermission('payments.create')" @click="openWeeklyModal()"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
-                                + New Plan Row
-                            </button>
+                            <div class="flex items-center gap-2 flex-nowrap">
+                                <a v-if="hasPermission('payments.view')" href="/payments/weekly-plans/import-template"
+                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    Download Template
+                                </a>
+                                <button v-if="hasPermission('payments.create')" @click="openWeeklyImportModal()"
+                                        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    Import
+                                </button>
+                                <button v-if="hasPermission('payments.create')" @click="openWeeklyModal()"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                    + New Plan Row
+                                </button>
+                            </div>
                         </template>
                         <template #header>
                             <tr>
@@ -629,6 +649,86 @@
                         <button type="submit" :disabled="importModal.loading"
                                 class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-sm disabled:opacity-60">
                             {{ importModal.loading ? 'Importing...' : 'Import' }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </Modal>
+
+        <!-- RENEWAL IMPORT MODAL -->
+        <Modal v-if="renewalImportModal.open" @close="renewalImportModal.open = false" title="Import Renewals">
+            <form @submit.prevent="submitRenewalImport" class="space-y-4">
+                <div class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                    <div class="font-semibold mb-1">Template columns</div>
+                    <p>Use the Excel template for renewal fields. Rows matching an existing vendor + service type + sub type are skipped (never overwritten). Fill paid_on / paid_amount to also record a payment.</p>
+                </div>
+                <FormField label="Excel File" required>
+                    <input type="file" accept=".xlsx" required @change="onRenewalImportFileChange"
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                </FormField>
+                <div v-if="renewalImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div><span class="text-gray-500">Created:</span> <strong>{{ renewalImportResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Duplicates:</span> <strong>{{ renewalImportResult.duplicates || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Payments:</span> <strong>{{ renewalImportResult.payments_created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ renewalImportResult.skipped || 0 }}</strong></div>
+                    </div>
+                    <div v-if="renewalImportResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
+                        <div v-for="error in renewalImportResult.errors" :key="error">{{ error }}</div>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <a href="/payments/renewals/import-template" class="text-sm font-semibold text-blue-700 hover:text-blue-800">
+                        Download template
+                    </a>
+                    <div class="flex gap-3">
+                        <button type="button" @click="renewalImportModal.open = false"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            Close
+                        </button>
+                        <button type="submit" :disabled="renewalImportModal.loading"
+                                class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-sm disabled:opacity-60">
+                            {{ renewalImportModal.loading ? 'Importing...' : 'Import' }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </Modal>
+
+        <!-- WEEKLY PLAN IMPORT MODAL -->
+        <Modal v-if="weeklyImportModal.open" @close="weeklyImportModal.open = false" title="Import Weekly Plans">
+            <form @submit.prevent="submitWeeklyImport" class="space-y-4">
+                <div class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                    <div class="font-semibold mb-1">Template columns</div>
+                    <p>Use the Excel template for weekly plan fields. Rows matching an existing vendor + month + week no + category are skipped (never overwritten). Set status to Paid or fill paid_on / paid_amount to also record a payment.</p>
+                </div>
+                <FormField label="Excel File" required>
+                    <input type="file" accept=".xlsx" required @change="onWeeklyImportFileChange"
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                </FormField>
+                <div v-if="weeklyImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div><span class="text-gray-500">Created:</span> <strong>{{ weeklyImportResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Duplicates:</span> <strong>{{ weeklyImportResult.duplicates || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Payments:</span> <strong>{{ weeklyImportResult.payments_created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ weeklyImportResult.skipped || 0 }}</strong></div>
+                    </div>
+                    <div v-if="weeklyImportResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
+                        <div v-for="error in weeklyImportResult.errors" :key="error">{{ error }}</div>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <a href="/payments/weekly-plans/import-template" class="text-sm font-semibold text-blue-700 hover:text-blue-800">
+                        Download template
+                    </a>
+                    <div class="flex gap-3">
+                        <button type="button" @click="weeklyImportModal.open = false"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            Close
+                        </button>
+                        <button type="submit" :disabled="weeklyImportModal.loading"
+                                class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-sm disabled:opacity-60">
+                            {{ weeklyImportModal.loading ? 'Importing...' : 'Import' }}
                         </button>
                     </div>
                 </div>
@@ -1258,6 +1358,84 @@ const submitInvoiceImport = async () => {
         showError(importResult.value.errors?.[0] || 'Import failed.')
     } finally {
         importModal.loading = false
+    }
+}
+
+/* ---- Renewal import ---- */
+const renewalImportModal = reactive({ open: false, loading: false, file: null })
+const renewalImportResult = ref(null)
+const openRenewalImportModal = () => {
+    renewalImportModal.open = true
+    renewalImportModal.loading = false
+    renewalImportModal.file = null
+    renewalImportResult.value = null
+}
+const onRenewalImportFileChange = (event) => {
+    renewalImportModal.file = event.target.files?.[0] || null
+}
+const submitRenewalImport = async () => {
+    if (!renewalImportModal.file) {
+        showError('Please choose an Excel file to import.')
+        return
+    }
+
+    renewalImportModal.loading = true
+    renewalImportResult.value = null
+
+    const formData = new FormData()
+    formData.append('file', renewalImportModal.file)
+
+    try {
+        const response = await axios.post('/payments/renewals/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data', 'Accept': 'application/json' },
+        })
+        renewalImportResult.value = response.data
+        showSuccess('Renewal import completed.')
+        router.reload({ only: ['renewals', 'records', 'summary', 'cashSchedule'], preserveScroll: true })
+    } catch (error) {
+        renewalImportResult.value = error.response?.data || { errors: ['Import failed.'] }
+        showError(renewalImportResult.value.errors?.[0] || 'Import failed.')
+    } finally {
+        renewalImportModal.loading = false
+    }
+}
+
+/* ---- Weekly plan import ---- */
+const weeklyImportModal = reactive({ open: false, loading: false, file: null })
+const weeklyImportResult = ref(null)
+const openWeeklyImportModal = () => {
+    weeklyImportModal.open = true
+    weeklyImportModal.loading = false
+    weeklyImportModal.file = null
+    weeklyImportResult.value = null
+}
+const onWeeklyImportFileChange = (event) => {
+    weeklyImportModal.file = event.target.files?.[0] || null
+}
+const submitWeeklyImport = async () => {
+    if (!weeklyImportModal.file) {
+        showError('Please choose an Excel file to import.')
+        return
+    }
+
+    weeklyImportModal.loading = true
+    weeklyImportResult.value = null
+
+    const formData = new FormData()
+    formData.append('file', weeklyImportModal.file)
+
+    try {
+        const response = await axios.post('/payments/weekly-plans/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data', 'Accept': 'application/json' },
+        })
+        weeklyImportResult.value = response.data
+        showSuccess('Weekly plan import completed.')
+        router.reload({ only: ['weeklyPlans', 'records', 'summary', 'cashSchedule'], preserveScroll: true })
+    } catch (error) {
+        weeklyImportResult.value = error.response?.data || { errors: ['Import failed.'] }
+        showError(weeklyImportResult.value.errors?.[0] || 'Import failed.')
+    } finally {
+        weeklyImportModal.loading = false
     }
 }
 

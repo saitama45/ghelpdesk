@@ -37,9 +37,11 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         return [
             new Middleware('can:payments.view', only: [
                 'index', 'renewals', 'invoices', 'weeklyPlans', 'records', 'invoiceImportTemplate',
+                'renewalImportTemplate', 'weeklyPlanImportTemplate',
             ]),
             new Middleware('can:payments.create', only: [
                 'storeRenewal', 'storeInvoice', 'storeWeeklyPlan', 'storeOverpayment', 'importInvoices',
+                'importRenewals', 'importWeeklyPlans',
             ]),
             new Middleware('can:payments.edit', only: [
                 'updateRenewal', 'updateInvoice', 'updateWeeklyPlan',
@@ -768,6 +770,632 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         ], empty($errors) ? 200 : 422);
     }
 
+    /* ============ RENEWAL IMPORT ============ */
+
+    public function renewalImportTemplate()
+    {
+        $vendors = Vendor::orderBy('name')->get(['name', 'code']);
+        $users = User::orderBy('email')->get(['email']);
+
+        $spreadsheet = new Spreadsheet;
+
+        $listsSheet = $spreadsheet->createSheet(1);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $listsSheet->setCellValue('A1', 'Vendors');
+        foreach ($vendors as $index => $vendor) {
+            $label = trim(($vendor->code ? "{$vendor->code} - " : '').$vendor->name);
+            $listsSheet->setCellValue('A'.($index + 2), $label);
+        }
+
+        $listsSheet->setCellValue('B1', 'Currencies');
+        foreach (['PHP', 'USD'] as $index => $currency) {
+            $listsSheet->setCellValue('B'.($index + 2), $currency);
+        }
+
+        $listsSheet->setCellValue('C1', 'Cycles');
+        foreach (['monthly', 'quarterly', 'semi_annual', 'annual'] as $index => $cycle) {
+            $listsSheet->setCellValue('C'.($index + 2), $cycle);
+        }
+
+        $listsSheet->setCellValue('D1', 'Statuses');
+        foreach (['active', 'paused', 'cancelled'] as $index => $status) {
+            $listsSheet->setCellValue('D'.($index + 2), $status);
+        }
+
+        $listsSheet->setCellValue('E1', 'Assignee Emails');
+        foreach ($users as $index => $user) {
+            $listsSheet->setCellValue('E'.($index + 2), $user->email);
+        }
+
+        $sheet = $spreadsheet->getSheet(0);
+        $sheet->setTitle('Renewals');
+
+        $headers = $this->renewalImportHeaders();
+        foreach ($headers as $index => $header) {
+            $col = Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue("{$col}1", $header);
+        }
+
+        $today = now()->toDateString();
+        $sampleVendor = $vendors->first();
+        $vendorLabel = $sampleVendor ? trim(($sampleVendor->code ? "{$sampleVendor->code} - " : '').$sampleVendor->name) : '';
+        $sheet->fromArray([[
+            $vendorLabel,
+            'Internet Lease Line',
+            'Fiber 100Mbps',
+            'Branch connectivity',
+            '5000.00',
+            '1',
+            '5000.00',
+            'PHP',
+            'monthly',
+            $today,
+            now()->addMonth()->toDateString(),
+            now()->addYear()->toDateString(),
+            'Net 30',
+            'active',
+            $users->first()?->email ?? '',
+            '',
+            'Sample active renewal',
+            '',
+            '',
+            '',
+            '',
+        ], [
+            $vendorLabel,
+            'Antivirus License',
+            '50 seats',
+            'Endpoint security',
+            '12000.00',
+            '1',
+            '12000.00',
+            'PHP',
+            'annual',
+            $today,
+            now()->addYear()->toDateString(),
+            now()->addYear()->toDateString(),
+            'Net 15',
+            'active',
+            '',
+            '',
+            'Sample renewal with a recorded payment',
+            $today,
+            '12000.00',
+            'REF-RNW-001',
+            'Imported renewal payment',
+        ]], null, 'A2');
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastColumn}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+        $sheet->getStyle('E:E')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->getStyle('G:G')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->getStyle('J:L')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('R:R')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('S:S')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->freezePane('A2');
+
+        foreach (range(1, count($headers)) as $colIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
+        }
+
+        if ($vendors->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'A', sprintf('Lists!$A$2:$A$%d', $vendors->count() + 1), false);
+        }
+        $this->applyListValidation($sheet, 'H', 'Lists!$B$2:$B$3', true);
+        $this->applyListValidation($sheet, 'I', 'Lists!$C$2:$C$5', false);
+        $this->applyListValidation($sheet, 'N', 'Lists!$D$2:$D$4', true);
+        if ($users->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'O', sprintf('Lists!$E$2:$E$%d', $users->count() + 1), true);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'payment-renewals-import-template.xlsx';
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    public function importRenewals(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:xlsx|max:5120']);
+
+        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $header = array_map(fn ($value) => trim((string) $value), array_shift($rows) ?? []);
+        $expectedHeaders = $this->renewalImportHeaders();
+        $missingHeaders = array_values(array_diff($expectedHeaders, $header));
+
+        if (! empty($missingHeaders)) {
+            return response()->json([
+                'created' => 0,
+                'duplicates' => 0,
+                'payments_created' => 0,
+                'skipped' => 0,
+                'errors' => ['Template is missing required columns: '.implode(', ', $missingHeaders)],
+            ], 422);
+        }
+
+        $headerIndexes = array_flip($header);
+        $vendorsByKey = $this->importVendorLookup();
+        $usersByEmail = $this->importUserLookup();
+        $userId = $request->user()->id;
+
+        $existingKeys = [];
+        foreach (PaymentRenewal::query()->get(['vendor_id', 'service_type', 'sub_type']) as $renewal) {
+            $existingKeys[$this->renewalDupKey($renewal->vendor_id, $renewal->service_type, $renewal->sub_type)] = true;
+        }
+
+        $created = 0;
+        $duplicates = 0;
+        $paymentsCreated = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowNum = 1;
+
+        foreach ($rows as $line) {
+            $rowNum++;
+            if (! array_filter($line, fn ($value) => trim((string) $value) !== '')) {
+                continue;
+            }
+
+            $data = [];
+            foreach ($expectedHeaders as $expectedHeader) {
+                $data[$expectedHeader] = $this->normalizeImportValue($line[$headerIndexes[$expectedHeader]] ?? null);
+            }
+
+            if ($data['vendor_code_or_name'] === '') {
+                $errors[] = "Row {$rowNum}: vendor is required.";
+                $skipped++;
+                continue;
+            }
+            $vendor = $vendorsByKey->get(mb_strtolower($data['vendor_code_or_name']));
+            if (! $vendor) {
+                $errors[] = "Row {$rowNum}: vendor '{$data['vendor_code_or_name']}' was not found.";
+                $skipped++;
+                continue;
+            }
+            if ($data['service_type'] === '') {
+                $errors[] = "Row {$rowNum}: service_type is required.";
+                $skipped++;
+                continue;
+            }
+
+            $assignee = null;
+            if ($data['assignee_email'] !== '') {
+                $assignee = $usersByEmail->get(mb_strtolower($data['assignee_email']));
+                if (! $assignee) {
+                    $errors[] = "Row {$rowNum}: assignee email '{$data['assignee_email']}' was not found.";
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            $dupKey = $this->renewalDupKey($vendor->id, $data['service_type'], $data['sub_type']);
+            if (isset($existingKeys[$dupKey])) {
+                $duplicates++;
+                continue;
+            }
+
+            $unitCost = $this->normalizeImportNumber($data['unit_cost'], 0);
+            $qty = $this->normalizeImportNumber($data['qty'], 1);
+            $totalAmount = $this->normalizeImportNumber($data['total_amount'], null);
+
+            $payload = [
+                'vendor_id' => $vendor->id,
+                'service_type' => $data['service_type'],
+                'sub_type' => $data['sub_type'] ?: null,
+                'purpose' => $data['purpose'] ?: null,
+                'unit_cost' => $unitCost,
+                'qty' => $qty,
+                'total_amount' => $totalAmount,
+                'currency' => $data['currency'] ?: 'PHP',
+                'cycle' => mb_strtolower($data['cycle']) ?: 'monthly',
+                'cycle_anchor_date' => $this->normalizeImportDate($data['cycle_anchor_date']),
+                'next_due_date' => $this->normalizeImportDate($data['next_due_date']),
+                'expiration_date' => $this->normalizeImportDate($data['expiration_date']),
+                'payment_terms' => $data['payment_terms'] ?: null,
+                'status' => $data['status'] ?: 'active',
+                'assignee_user_id' => $assignee?->id,
+                'cc_emails' => $data['cc_emails'] ?: null,
+                'notes' => $data['notes'] ?: null,
+            ];
+
+            $validator = Validator::make($payload, [
+                'vendor_id' => 'required|exists:vendors,id',
+                'service_type' => 'required|string|max:255',
+                'sub_type' => 'nullable|string|max:255',
+                'purpose' => 'nullable|string|max:255',
+                'unit_cost' => 'required|numeric|min:0',
+                'qty' => 'required|integer|min:1',
+                'total_amount' => 'nullable|numeric|min:0',
+                'currency' => 'nullable|string|max:8',
+                'cycle' => 'required|in:monthly,quarterly,semi_annual,annual',
+                'cycle_anchor_date' => 'nullable|date',
+                'next_due_date' => 'nullable|date',
+                'expiration_date' => 'nullable|date',
+                'payment_terms' => 'nullable|string|max:255',
+                'status' => 'nullable|in:active,paused,cancelled',
+                'assignee_user_id' => 'nullable|exists:users,id',
+                'cc_emails' => 'nullable|string',
+                'notes' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                $errors[] = "Row {$rowNum}: ".implode(', ', $validator->errors()->all());
+                $skipped++;
+                continue;
+            }
+
+            $paidAmount = $this->normalizeImportNumber($data['paid_amount'], null);
+            $hasPayment = $paidAmount !== null
+                || $data['paid_on'] !== ''
+                || $data['payment_reference_no'] !== '';
+            if ($hasPayment && $paidAmount === null) {
+                $paidAmount = $totalAmount ?? ((float) $unitCost * (int) $qty);
+            }
+
+            if ($hasPayment) {
+                $paymentValidator = Validator::make([
+                    'paid_on' => $this->normalizeImportDate($data['paid_on']) ?: now()->toDateString(),
+                    'paid_amount' => $paidAmount,
+                    'payment_reference_no' => $data['payment_reference_no'] ?: null,
+                ], [
+                    'paid_on' => 'required|date',
+                    'paid_amount' => 'required|numeric|min:0.01',
+                    'payment_reference_no' => 'nullable|string|max:100',
+                ]);
+
+                if ($paymentValidator->fails()) {
+                    $errors[] = "Row {$rowNum}: ".implode(', ', $paymentValidator->errors()->all());
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            DB::transaction(function () use ($validator, $data, $hasPayment, $paidAmount, $userId, &$created, &$paymentsCreated) {
+                $renewal = PaymentRenewal::create([...$validator->validated(), 'created_by' => $userId, 'updated_by' => $userId]);
+
+                if ($hasPayment) {
+                    PaymentRecord::create([
+                        'payable_type' => 'renewal',
+                        'payable_id' => $renewal->id,
+                        'vendor_id' => $renewal->vendor_id,
+                        'amount' => $paidAmount,
+                        'paid_on' => $this->normalizeImportDate($data['paid_on']) ?: now()->toDateString(),
+                        'reference_no' => $data['payment_reference_no'] ?: null,
+                        'paid_by' => $userId,
+                        'status' => 'posted',
+                        'current_approval_level' => 0,
+                        'approver_data' => ['levels' => 0, 'approvers' => []],
+                        'remarks' => $data['payment_remarks'] ?: 'Imported renewal payment',
+                        'created_by' => $userId,
+                        'updated_by' => $userId,
+                    ]);
+                    $paymentsCreated++;
+                }
+
+                $created++;
+            });
+
+            $existingKeys[$dupKey] = true;
+        }
+
+        return response()->json([
+            'created' => $created,
+            'duplicates' => $duplicates,
+            'payments_created' => $paymentsCreated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ], empty($errors) ? 200 : 422);
+    }
+
+    /* ============ WEEKLY PLAN IMPORT ============ */
+
+    public function weeklyPlanImportTemplate()
+    {
+        $vendors = Vendor::orderBy('name')->get(['name', 'code']);
+        $users = User::orderBy('email')->get(['email']);
+
+        $spreadsheet = new Spreadsheet;
+
+        $listsSheet = $spreadsheet->createSheet(1);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $listsSheet->setCellValue('A1', 'Vendors');
+        foreach ($vendors as $index => $vendor) {
+            $label = trim(($vendor->code ? "{$vendor->code} - " : '').$vendor->name);
+            $listsSheet->setCellValue('A'.($index + 2), $label);
+        }
+
+        $listsSheet->setCellValue('B1', 'Categories');
+        foreach (['POS', 'CCTV', 'Internet', 'Speaker', 'Anti-virus', 'Router', 'Google'] as $index => $category) {
+            $listsSheet->setCellValue('B'.($index + 2), $category);
+        }
+
+        $listsSheet->setCellValue('C1', 'Statuses');
+        foreach (['Planned', 'Released', 'Paid'] as $index => $status) {
+            $listsSheet->setCellValue('C'.($index + 2), $status);
+        }
+
+        $listsSheet->setCellValue('D1', 'Assignee Emails');
+        foreach ($users as $index => $user) {
+            $listsSheet->setCellValue('D'.($index + 2), $user->email);
+        }
+
+        $sheet = $spreadsheet->getSheet(0);
+        $sheet->setTitle('Weekly Plans');
+
+        $headers = $this->weeklyPlanImportHeaders();
+        foreach ($headers as $index => $header) {
+            $col = Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue("{$col}1", $header);
+        }
+
+        $today = now()->toDateString();
+        $sampleVendor = $vendors->first();
+        $vendorLabel = $sampleVendor ? trim(($sampleVendor->code ? "{$sampleVendor->code} - " : '').$sampleVendor->name) : '';
+        $sheet->fromArray([[
+            $vendorLabel,
+            'Store Rollout Q3',
+            now()->format('F'),
+            '1',
+            $today,
+            '15000.00',
+            'POS',
+            'Planned',
+            $users->first()?->email ?? '',
+            'Sample planned plan row',
+            '',
+            '',
+            '',
+            '',
+        ], [
+            $vendorLabel,
+            'Store Rollout Q3',
+            now()->format('F'),
+            '2',
+            now()->addDays(7)->toDateString(),
+            '8000.00',
+            'CCTV',
+            'Paid',
+            '',
+            'Sample paid plan row',
+            $today,
+            '8000.00',
+            'REF-WK-001',
+            'Imported weekly payment',
+        ]], null, 'A2');
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastColumn}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+        $sheet->getStyle('E:E')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('F:F')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->getStyle('K:K')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('L:L')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->freezePane('A2');
+
+        foreach (range(1, count($headers)) as $colIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
+        }
+
+        if ($vendors->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'A', sprintf('Lists!$A$2:$A$%d', $vendors->count() + 1), false);
+        }
+        $this->applyListValidation($sheet, 'G', 'Lists!$B$2:$B$8', true);
+        $this->applyListValidation($sheet, 'H', 'Lists!$C$2:$C$4', true);
+        if ($users->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'I', sprintf('Lists!$D$2:$D$%d', $users->count() + 1), true);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'payment-weekly-plans-import-template.xlsx';
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    public function importWeeklyPlans(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:xlsx|max:5120']);
+
+        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $header = array_map(fn ($value) => trim((string) $value), array_shift($rows) ?? []);
+        $expectedHeaders = $this->weeklyPlanImportHeaders();
+        $missingHeaders = array_values(array_diff($expectedHeaders, $header));
+
+        if (! empty($missingHeaders)) {
+            return response()->json([
+                'created' => 0,
+                'duplicates' => 0,
+                'payments_created' => 0,
+                'skipped' => 0,
+                'errors' => ['Template is missing required columns: '.implode(', ', $missingHeaders)],
+            ], 422);
+        }
+
+        $headerIndexes = array_flip($header);
+        $vendorsByKey = $this->importVendorLookup();
+        $usersByEmail = $this->importUserLookup();
+        $userId = $request->user()->id;
+
+        $existingKeys = [];
+        foreach (PaymentWeeklyPlan::query()->get(['vendor_id', 'month', 'week_no', 'category']) as $plan) {
+            $existingKeys[$this->weeklyDupKey($plan->vendor_id, $plan->month, $plan->week_no, $plan->category)] = true;
+        }
+
+        $created = 0;
+        $duplicates = 0;
+        $paymentsCreated = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowNum = 1;
+
+        foreach ($rows as $line) {
+            $rowNum++;
+            if (! array_filter($line, fn ($value) => trim((string) $value) !== '')) {
+                continue;
+            }
+
+            $data = [];
+            foreach ($expectedHeaders as $expectedHeader) {
+                $data[$expectedHeader] = $this->normalizeImportValue($line[$headerIndexes[$expectedHeader]] ?? null);
+            }
+
+            if ($data['vendor_code_or_name'] === '') {
+                $errors[] = "Row {$rowNum}: vendor is required.";
+                $skipped++;
+                continue;
+            }
+            $vendor = $vendorsByKey->get(mb_strtolower($data['vendor_code_or_name']));
+            if (! $vendor) {
+                $errors[] = "Row {$rowNum}: vendor '{$data['vendor_code_or_name']}' was not found.";
+                $skipped++;
+                continue;
+            }
+
+            $assignee = null;
+            if ($data['assignee_email'] !== '') {
+                $assignee = $usersByEmail->get(mb_strtolower($data['assignee_email']));
+                if (! $assignee) {
+                    $errors[] = "Row {$rowNum}: assignee email '{$data['assignee_email']}' was not found.";
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            $weekNo = $this->normalizeImportNumber($data['week_no'], null);
+            $dupKey = $this->weeklyDupKey($vendor->id, $data['month'], $weekNo, $data['category']);
+            if (isset($existingKeys[$dupKey])) {
+                $duplicates++;
+                continue;
+            }
+
+            $amount = $this->normalizeImportNumber($data['amount'], 0);
+
+            $payload = [
+                'vendor_id' => $vendor->id,
+                'project_label' => $data['project_label'] ?: null,
+                'month' => $data['month'] ?: null,
+                'week_no' => $weekNo !== null && $weekNo !== '' ? (int) $weekNo : null,
+                'week_date' => $this->normalizeImportDate($data['week_date']),
+                'amount' => $amount,
+                'category' => $data['category'] ?: null,
+                'notes' => $data['notes'] ?: null,
+                'assignee_user_id' => $assignee?->id,
+                'status' => $data['status'] ?: 'Planned',
+            ];
+
+            $validator = Validator::make($payload, [
+                'vendor_id' => 'required|exists:vendors,id',
+                'project_label' => 'nullable|string|max:255',
+                'month' => 'nullable|string|max:16',
+                'week_no' => 'nullable|integer|min:1|max:53',
+                'week_date' => 'nullable|date',
+                'amount' => 'required|numeric|min:0',
+                'category' => 'nullable|string|max:64',
+                'notes' => 'nullable|string',
+                'assignee_user_id' => 'nullable|exists:users,id',
+                'status' => 'nullable|in:Planned,Released,Paid',
+            ]);
+
+            if ($validator->fails()) {
+                $errors[] = "Row {$rowNum}: ".implode(', ', $validator->errors()->all());
+                $skipped++;
+                continue;
+            }
+
+            $paidAmount = $this->normalizeImportNumber($data['paid_amount'], null);
+            $hasPayment = $paidAmount !== null
+                || $data['paid_on'] !== ''
+                || $data['payment_reference_no'] !== ''
+                || strcasecmp($data['status'], 'Paid') === 0;
+            if ($hasPayment && $paidAmount === null) {
+                $paidAmount = $amount;
+            }
+
+            if ($hasPayment) {
+                $paymentValidator = Validator::make([
+                    'paid_on' => $this->normalizeImportDate($data['paid_on']) ?: now()->toDateString(),
+                    'paid_amount' => $paidAmount,
+                    'payment_reference_no' => $data['payment_reference_no'] ?: null,
+                ], [
+                    'paid_on' => 'required|date',
+                    'paid_amount' => 'required|numeric|min:0.01',
+                    'payment_reference_no' => 'nullable|string|max:100',
+                ]);
+
+                if ($paymentValidator->fails()) {
+                    $errors[] = "Row {$rowNum}: ".implode(', ', $paymentValidator->errors()->all());
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            DB::transaction(function () use ($validator, $data, $hasPayment, $paidAmount, $userId, &$created, &$paymentsCreated) {
+                $values = $validator->validated();
+                if ($hasPayment) {
+                    $values['status'] = 'Paid';
+                }
+                $plan = PaymentWeeklyPlan::create([...$values, 'created_by' => $userId, 'updated_by' => $userId]);
+
+                if ($hasPayment) {
+                    PaymentRecord::create([
+                        'payable_type' => 'weekly',
+                        'payable_id' => $plan->id,
+                        'vendor_id' => $plan->vendor_id,
+                        'amount' => $paidAmount,
+                        'paid_on' => $this->normalizeImportDate($data['paid_on']) ?: now()->toDateString(),
+                        'reference_no' => $data['payment_reference_no'] ?: null,
+                        'paid_by' => $userId,
+                        'status' => 'posted',
+                        'current_approval_level' => 0,
+                        'approver_data' => ['levels' => 0, 'approvers' => []],
+                        'remarks' => $data['payment_remarks'] ?: 'Imported weekly plan payment',
+                        'created_by' => $userId,
+                        'updated_by' => $userId,
+                    ]);
+                    $paymentsCreated++;
+                }
+
+                $created++;
+            });
+
+            $existingKeys[$dupKey] = true;
+        }
+
+        return response()->json([
+            'created' => $created,
+            'duplicates' => $duplicates,
+            'payments_created' => $paymentsCreated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ], empty($errors) ? 200 : 422);
+    }
+
     /* ============ OVERPAYMENTS ============ */
 
     protected function overpaymentsList(Request $request)
@@ -1301,6 +1929,83 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'payment_reference_no',
             'payment_remarks',
         ];
+    }
+
+    protected function renewalImportHeaders(): array
+    {
+        return [
+            'vendor_code_or_name',
+            'service_type',
+            'sub_type',
+            'purpose',
+            'unit_cost',
+            'qty',
+            'total_amount',
+            'currency',
+            'cycle',
+            'cycle_anchor_date',
+            'next_due_date',
+            'expiration_date',
+            'payment_terms',
+            'status',
+            'assignee_email',
+            'cc_emails',
+            'notes',
+            'paid_on',
+            'paid_amount',
+            'payment_reference_no',
+            'payment_remarks',
+        ];
+    }
+
+    protected function weeklyPlanImportHeaders(): array
+    {
+        return [
+            'vendor_code_or_name',
+            'project_label',
+            'month',
+            'week_no',
+            'week_date',
+            'amount',
+            'category',
+            'status',
+            'assignee_email',
+            'notes',
+            'paid_on',
+            'paid_amount',
+            'payment_reference_no',
+            'payment_remarks',
+        ];
+    }
+
+    protected function renewalDupKey($vendorId, $serviceType, $subType): string
+    {
+        return $vendorId.'|'.mb_strtolower(trim((string) $serviceType)).'|'.mb_strtolower(trim((string) $subType));
+    }
+
+    protected function weeklyDupKey($vendorId, $month, $weekNo, $category): string
+    {
+        return $vendorId.'|'.mb_strtolower(trim((string) $month)).'|'.trim((string) $weekNo).'|'.mb_strtolower(trim((string) $category));
+    }
+
+    protected function importVendorLookup()
+    {
+        $map = collect();
+        foreach (Vendor::query()->get(['id', 'name', 'code']) as $vendor) {
+            foreach (array_filter([$vendor->name, $vendor->code, trim(($vendor->code ? "{$vendor->code} - " : '').$vendor->name)]) as $key) {
+                $map->put(mb_strtolower(trim($key)), $vendor);
+            }
+        }
+
+        return $map;
+    }
+
+    protected function importUserLookup()
+    {
+        return User::query()
+            ->whereNotNull('email')
+            ->get(['id', 'email'])
+            ->keyBy(fn (User $user) => mb_strtolower(trim($user->email)));
     }
 
     protected function applyListValidation($sheet, string $column, string $formula, bool $allowBlank): void
