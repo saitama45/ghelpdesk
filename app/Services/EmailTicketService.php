@@ -256,6 +256,7 @@ class EmailTicketService
                 'sender_email' => mb_substr($senderEmail, 0, 255),
                 'sender_name' => mb_substr($senderName, 0, 255),
                 'message_id' => $messageId ? mb_substr($messageId, 0, 255) : null,
+                'source_message_id' => $this->originalMessageIdForThreading($message),
                 'email_body_hash' => $emailBodyHash,
                 'company_id' => $companyId,
             ]);
@@ -265,6 +266,9 @@ class EmailTicketService
             if ($assigneeId && \App\Models\User::where('id', $assigneeId)->exists()) {
                 $ticket->update(['assignee_id' => $assigneeId]);
             }
+
+            // Add the email's To/CC recipients to the ticket CC list so replies notify them.
+            $this->syncCcsFromEmail($ticket, $message, $senderEmail);
 
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket) {
@@ -342,6 +346,9 @@ class EmailTicketService
             } elseif ($ticket->status === 'open') {
                 // Already open, no status change needed but we could log that it's still open if desired.
             }
+
+            // Merge any new To/CC recipients on this reply into the ticket CC list.
+            $this->syncCcsFromEmail($ticket, $message, $senderEmail);
 
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket, $comment) {
@@ -620,6 +627,19 @@ class EmailTicketService
         return strtolower(trim((string) $messageId, " \t\n\r\0\x0B<>"));
     }
 
+    /**
+     * The original Message-ID with its case and angle brackets preserved, for use
+     * in outgoing In-Reply-To / References headers so mail clients thread replies
+     * under the original conversation. (The `message_id` column is lowercased for
+     * dedup, which would break case-sensitive RFC 5322 message-id matching.)
+     */
+    protected function originalMessageIdForThreading($message): ?string
+    {
+        $raw = trim((string) $message->getMessageId(), " \t\n\r\0\x0B");
+
+        return $raw === '' ? null : mb_substr($raw, 0, 255);
+    }
+
     protected function normalizeEmailSubject(string $subject): string
     {
         $subject = trim($subject);
@@ -630,6 +650,121 @@ class EmailTicketService
         } while ($subject !== $previous);
 
         return trim($subject);
+    }
+
+    /**
+     * Add the email's To/CC recipients to the ticket's CC list so that future
+     * replies notify everyone who was originally looped in.
+     *
+     * Always excludes: the support inbox, the sender, the ticket assignee, and
+     * automated addresses (no-reply / mailer-daemon style). Existing CCs are never
+     * removed — this only unions in new addresses, so manual edits are preserved.
+     */
+    protected function syncCcsFromEmail(Ticket $ticket, $message, string $senderEmail): void
+    {
+        // CC list lives on the parent ticket; children inherit it (see Ticket::effectiveCcs).
+        $owner = $ticket->parent_id ? ($ticket->parent ?? Ticket::find($ticket->parent_id)) : $ticket;
+        if (!$owner) {
+            return;
+        }
+
+        $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', config('imap.accounts.default.username')));
+        $senderEmail = $this->normalizeEmailAddress($senderEmail);
+        $assigneeEmail = $owner->assignee_id
+            ? $this->normalizeEmailAddress((string) User::where('id', $owner->assignee_id)->value('email'))
+            : '';
+
+        $candidates = $this->collectRecipientAddresses($message);
+
+        if (empty($candidates)) {
+            return;
+        }
+
+        $existing = $owner->ccs()
+            ->pluck('email')
+            ->map(fn ($e) => $this->normalizeEmailAddress($e))
+            ->all();
+
+        foreach ($candidates as $email => $name) {
+            if ($email === $supportEmail || $email === $senderEmail || $email === $assigneeEmail) {
+                continue;
+            }
+            if ($this->isAutomatedAddress($email)) {
+                continue;
+            }
+            if (in_array($email, $existing, true)) {
+                continue;
+            }
+
+            $owner->ccs()->create([
+                'email' => mb_substr($email, 0, 255),
+                'name' => $name ? mb_substr($name, 0, 255) : null,
+                'user_id' => User::where('email', $email)->value('id'),
+                'created_by' => null,
+            ]);
+
+            $existing[] = $email;
+            Log::debug("EmailTicketService: Auto-added CC {$email} to ticket {$owner->ticket_key}.");
+        }
+    }
+
+    /**
+     * Collect every To/CC recipient from a message as a [normalized email => display name] map.
+     *
+     * The Webklex parsed address objects (getTo()/getCc()) are unreliable in this IMAP setup —
+     * that's why messageIsAddressedToSupportEmail falls back to the raw headers. We do the same
+     * here: read the raw 'to'/'cc' headers for the addresses, then overlay any display names the
+     * parsed address objects did manage to provide.
+     */
+    protected function collectRecipientAddresses($message): array
+    {
+        $candidates = [];
+
+        // 1. Primary source: raw To/CC headers (robust against unparsed address objects).
+        $headers = $this->messageHeaders($message);
+        if ($headers) {
+            foreach (['to', 'cc', 'toaddress', 'ccaddress'] as $headerName) {
+                foreach ($this->flattenHeaderValues($headers->get($headerName)) as $value) {
+                    foreach ($this->extractEmailAddresses((string) $value) as $email) {
+                        $normalized = $this->normalizeEmailAddress($email);
+                        if ($normalized !== '' && !array_key_exists($normalized, $candidates)) {
+                            $candidates[$normalized] = null;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Overlay display names from the parsed address objects when available.
+        foreach ([$message->getTo(), $message->getCc()] as $recipients) {
+            foreach ($recipients ?: [] as $recipient) {
+                $email = $this->normalizeEmailAddress($recipient->mail ?? '');
+                if ($email === '') {
+                    continue;
+                }
+                $name = $this->decodeMimeHeader($recipient->full ?? $recipient->personal ?? '');
+                if (!array_key_exists($email, $candidates) || ($name !== '' && empty($candidates[$email]))) {
+                    $candidates[$email] = $name !== '' ? $name : ($candidates[$email] ?? null);
+                }
+            }
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * Whether an address is an automated/non-deliverable mailbox we should not CC.
+     * Mirrors the banned-sender list used when filtering inbound messages.
+     */
+    protected function isAutomatedAddress(string $email): bool
+    {
+        foreach (['mailer-daemon', 'postmaster', 'no-reply', 'noreply'] as $banned) {
+            if (str_contains($email, $banned)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function messageIsAddressedToSupportEmail($message, string $supportEmail): bool

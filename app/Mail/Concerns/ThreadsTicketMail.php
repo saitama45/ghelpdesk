@@ -26,6 +26,13 @@ trait ThreadsTicketMail
 
     protected function ticketThreadMessageId(Ticket $ticket): string
     {
+        // Prefer the customer's original Message-ID with its case preserved — mail
+        // clients (Gmail) match In-Reply-To / References case-sensitively, so the
+        // lowercased `message_id` (kept for dedup) would not thread.
+        if ($ticket->source_message_id) {
+            return $this->formatMessageId($ticket->source_message_id);
+        }
+
         if (! $ticket->message_id) {
             $ticket->forceFill([
                 'message_id' => $this->makeTicketMessageId($ticket),
