@@ -364,6 +364,14 @@ Route::middleware('auth')->group(function () {
         Route::put('weekly-plans/{weekly_plan}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateWeeklyPlan'])->name('weekly-plans.update');
         Route::delete('weekly-plans/{weekly_plan}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyWeeklyPlan'])->name('weekly-plans.destroy');
 
+        // Connectivity Monitoring (Offices / Stores)
+        Route::get('services/import-template', [\App\Http\Controllers\PaymentMonitoringController::class, 'connectivityImportTemplate'])->name('services.import-template');
+        Route::post('services/import', [\App\Http\Controllers\PaymentMonitoringController::class, 'importConnectivity'])->name('services.import');
+        Route::put('locations/{store}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateLocation'])->name('locations.update');
+        Route::post('services', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeService'])->name('services.store');
+        Route::put('services/{service}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateService'])->name('services.update');
+        Route::delete('services/{service}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyService'])->name('services.destroy');
+
         // Records / Approval
         Route::post('records', [\App\Http\Controllers\PaymentMonitoringController::class, 'submitRecord'])->name('records.submit');
         Route::post('records/{record}/approve', [\App\Http\Controllers\PaymentMonitoringController::class, 'approveRecord'])->name('records.approve');

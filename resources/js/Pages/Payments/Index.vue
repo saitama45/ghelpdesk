@@ -1,76 +1,417 @@
 <template>
-    <AppLayout title="Payments & SOA Monitoring">
-        <div class="py-8">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-                <!-- Header -->
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-900">Payments & SOA Monitoring</h1>
-                        <p class="text-sm text-gray-500">Track vendor renewals, invoices, weekly plans, and approval workflow</p>
+    <AppLayout title="Payments & Monitoring" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-6 space-y-6">
+            <!-- Header -->
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Payments & Monitoring</h1>
+                    <p class="text-sm text-gray-500">Telco / connectivity monitoring by office & store, with cash schedule and approval workflow</p>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-6 overflow-x-auto">
+                    <button
+                        v-for="t in tabList"
+                        :key="t.id"
+                        @click="switchTab(t.id)"
+                        :class="[
+                            'whitespace-nowrap py-3 px-2 border-b-2 text-sm font-medium transition-colors',
+                            currentTab === t.id
+                                ? 'border-blue-600 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ]"
+                    >
+                        {{ t.label }}
+                    </button>
+                </nav>
+            </div>
+
+            <!-- ============ MONITORING TAB ============ -->
+            <div v-if="currentTab === 'monitoring'" class="space-y-5">
+                <!-- KPI strip -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Monthly MRC</p>
+                        <p class="text-xl font-bold text-gray-900 mt-1">₱{{ formatAmount(summary.monthly_mrc) }}</p>
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Annual MRC</p>
+                        <p class="text-xl font-bold text-purple-600 mt-1">₱{{ formatAmount(summary.annual_mrc) }}</p>
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Active Services</p>
+                        <p class="text-xl font-bold text-emerald-600 mt-1">{{ summary.active_services || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Pending Installs</p>
+                        <p class="text-xl font-bold text-orange-600 mt-1">{{ summary.pending_installs || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Monitored Sites</p>
+                        <p class="text-xl font-bold text-blue-600 mt-1">{{ summary.monitored_locations || 0 }}</p>
+                    </div>
+                    <button @click="switchTab('approvals')" class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:border-yellow-200 hover:bg-yellow-50 transition-colors group">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-yellow-600">Pending Approvals</p>
+                        <p class="text-xl font-bold text-yellow-600 mt-1">{{ summary.pending_approvals || 0 }}</p>
+                    </button>
+                </div>
+
+                <!-- Controls -->
+                <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                                <button v-for="seg in locationTypes" :key="seg.id" @click="monitoringType = seg.id"
+                                        :class="[
+                                            'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                                            monitoringType === seg.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                        ]">
+                                    {{ seg.label }}
+                                    <span class="ml-1 text-xs text-gray-400">{{ seg.id === 'office' ? officeCount : storeCount }}</span>
+                                </button>
+                            </div>
+                            <select v-model="monitoringBrand" class="border-gray-300 rounded-lg text-sm pl-2 pr-7">
+                                <option value="">All Brands</option>
+                                <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
+                            </select>
+                            <input v-model="monitoringSearch" type="text" placeholder="Search code, name, address..."
+                                   class="border-gray-300 rounded-lg text-sm w-56" />
+                        </div>
+                        <div class="flex items-center gap-2 flex-nowrap">
+                            <a v-if="hasPermission('payments.view')" href="/payments/services/import-template"
+                               class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                Download Template
+                            </a>
+                            <button v-if="hasPermission('payments.create')" @click="openConnectivityImportModal()"
+                                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                Import
+                            </button>
+                            <button v-if="hasPermission('payments.create')" @click="openServiceModal(null)"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                + Add Service
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Tabs -->
-                <div class="border-b border-gray-200">
-                    <nav class="-mb-px flex space-x-6 overflow-x-auto">
-                        <button
-                            v-for="t in tabList"
-                            :key="t.id"
-                            @click="switchTab(t.id)"
+                <!-- Brand groups -->
+                <div v-if="groupedByBrand.length" class="space-y-4">
+                    <div v-for="group in groupedByBrand" :key="group.brand" class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                        <button @click="toggleBrand(group.brand)"
+                                class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-4 h-4 text-gray-400 transition-transform" :class="collapsedBrands[group.brand] ? '-rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                                <span class="font-bold text-gray-900">{{ group.brand }}</span>
+                                <span class="text-xs text-gray-500">{{ group.locations.length }} {{ monitoringType === 'office' ? 'office(s)' : 'store(s)' }} · {{ group.serviceCount }} service(s)</span>
+                            </div>
+                            <span class="text-sm font-mono font-semibold text-gray-700">₱{{ formatAmount(group.mrc) }}/mo</span>
+                        </button>
+
+                        <div v-show="!collapsedBrands[group.brand]" class="divide-y divide-gray-100">
+                            <div v-for="loc in group.locations" :key="loc.id" class="p-4">
+                                <!-- Location header -->
+                                <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <span class="text-sm font-bold text-gray-900">{{ loc.code }}</span>
+                                            <span class="text-sm text-gray-700">{{ loc.name }}</span>
+                                            <span :class="loc.type === 'office' ? 'bg-indigo-100 text-indigo-800' : 'bg-sky-100 text-sky-800'" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ loc.type }}</span>
+                                            <span v-if="loc.monitoring_status" :class="monitoringStatusPill(loc.monitoring_status)" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ loc.monitoring_status }}</span>
+                                        </div>
+                                        <div v-if="loc.address" class="text-xs text-gray-500 mt-0.5">{{ loc.address }}</div>
+                                        <div v-if="loc.legal_company" class="text-xs text-gray-400">{{ loc.legal_company }}</div>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <span class="text-xs font-mono text-gray-500 mr-1">₱{{ formatAmount(locationMrc(loc)) }}/mo</span>
+                                        <IconBtn v-if="hasPermission('payments.edit')" kind="edit" title="Edit location details" @click="openLocationModal(loc)" />
+                                        <button v-if="hasPermission('payments.create')" @click="openServiceModal(loc)" title="Add connectivity service"
+                                                class="p-2 rounded-full text-blue-600 hover:text-blue-900 hover:bg-blue-50 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Services table -->
+                                <div v-if="loc.services.length" class="mt-3 overflow-x-auto border border-gray-100 rounded-lg">
+                                    <table class="min-w-full text-sm">
+                                        <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left">Role</th>
+                                                <th class="px-3 py-2 text-left">Telco / Vendor</th>
+                                                <th class="px-3 py-2 text-left">Account / Service ID</th>
+                                                <th class="px-3 py-2 text-left">Bandwidth</th>
+                                                <th class="px-3 py-2 text-right">MRC</th>
+                                                <th class="px-3 py-2 text-left">Installed</th>
+                                                <th class="px-3 py-2 text-left">Status</th>
+                                                <th class="px-3 py-2 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <tr v-for="sv in loc.services" :key="sv.id" class="hover:bg-gray-50">
+                                                <td class="px-3 py-2">
+                                                    <span :class="sv.role === 'primary' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ sv.role }}</span>
+                                                </td>
+                                                <td class="px-3 py-2">
+                                                    <div class="font-medium text-gray-900">{{ sv.telco || '—' }}</div>
+                                                    <div class="text-xs text-gray-500">{{ sv.vendor?.name || 'No vendor' }}</div>
+                                                </td>
+                                                <td class="px-3 py-2">
+                                                    <div>{{ sv.account_no || '—' }}</div>
+                                                    <div v-if="sv.service_id" class="text-xs text-gray-500">SID {{ sv.service_id }}</div>
+                                                </td>
+                                                <td class="px-3 py-2">
+                                                    <div>{{ sv.bandwidth || '—' }}</div>
+                                                    <div v-if="sv.install_type" class="text-xs text-gray-500 capitalize">{{ sv.install_type }}</div>
+                                                </td>
+                                                <td class="px-3 py-2 text-right font-mono">{{ formatAmount(sv.mrc) }}</td>
+                                                <td class="px-3 py-2 text-xs">{{ sv.installation_date || '—' }}</td>
+                                                <td class="px-3 py-2">
+                                                    <span :class="statusPill(sv.status)" class="px-2 py-0.5 text-xs rounded-full font-semibold capitalize">{{ sv.status }}</span>
+                                                    <div v-if="sv.latest_record_status" class="mt-1">
+                                                        <span :class="approvalPill(sv.latest_record_status)" class="px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wide">
+                                                            {{ approvalLabel(sv.latest_record_status) }}
+                                                        </span>
+                                                    </div>
+                                                    <div v-if="sv.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400" :title="'Last reminder sent on ' + sv.last_reminder_sent_at">
+                                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                                                        {{ formatDateShort(sv.last_reminder_sent_at) }}
+                                                    </div>
+                                                </td>
+                                                <td class="px-3 py-2 text-right">
+                                                    <div class="flex justify-end space-x-1">
+                                                        <IconBtn kind="remind" title="Send Manual Reminder" @click="sendManualReminder('service', sv.id)" />
+                                                        <IconBtn v-if="hasPermission('payments.submit') && !sv.latest_record_status" kind="submit" title="Submit for Approval" @click="openSubmitModal('service', sv)" />
+                                                        <IconBtn v-if="sv.latest_record_status === 'approved' && hasPermission('payments.mark_paid')" kind="paid" title="Mark as Paid" @click="openMarkPaidForPayable('service', sv.id)" />
+                                                        <IconBtn v-if="hasPermission('payments.edit') && sv.latest_record_status !== 'approved'" kind="edit" title="Edit Service" @click="openServiceModal(loc, sv)" />
+                                                        <IconBtn v-if="hasPermission('payments.delete') && !sv.latest_record_status" kind="delete" title="Delete Service" @click="confirmDelete('services', sv, 'connectivity service')" />
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div v-else class="mt-3 text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg py-3 text-center">
+                                    No connectivity service yet.
+                                    <button v-if="hasPermission('payments.create')" @click="openServiceModal(loc)" class="text-blue-600 hover:text-blue-800 font-medium not-italic">Add one</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="bg-white rounded-xl border border-dashed border-gray-300 py-12 text-center text-gray-400">
+                    No {{ monitoringType === 'office' ? 'offices' : 'stores' }} match the current filters.
+                </div>
+            </div>
+
+            <!-- ============ SCHEDULE TAB ============ -->
+            <div v-if="currentTab === 'schedule'" class="space-y-4">
+                <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
+                    <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
+                        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900">Cash Schedule</h3>
+                                <p class="text-sm text-gray-600">Monthly, weekly, and calendar view of payable due dates</p>
+                            </div>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input v-model="cashFilters.month" @change="refreshCashSchedule" type="month"
+                                       class="border-gray-300 rounded-lg text-sm">
+                                <select v-model="cashFilters.vendor_id" @change="refreshCashSchedule"
+                                        class="border-gray-300 rounded-lg text-sm pl-2 pr-7">
+                                    <option value="">All vendors</option>
+                                    <option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.name }}</option>
+                                </select>
+                                <select v-model="cashFilters.source" @change="refreshCashSchedule"
+                                        class="border-gray-300 rounded-lg text-sm pl-2 pr-7">
+                                    <option value="all">All sources</option>
+                                    <option value="service">Connectivity (Telco)</option>
+                                    <option value="invoice">SOA Invoices</option>
+                                    <option value="renewal">Renewals</option>
+                                    <option value="weekly">Weekly Plans</option>
+                                </select>
+                                <label class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                    <input v-model="cashFilters.include_paid" @change="refreshCashSchedule" type="checkbox"
+                                           class="rounded border-gray-300 text-blue-600">
+                                    Include Paid
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-4 sm:px-6 py-4 space-y-4">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                                <button v-for="view in cashViews" :key="view.id" @click="cashView = view.id"
+                                        :class="[
+                                            'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                                            cashView === view.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                        ]">
+                                    {{ view.label }}
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                                <div class="rounded-lg border border-gray-200 px-4 py-3">
+                                    <div class="text-xs uppercase text-gray-500 font-semibold">Items</div>
+                                    <div class="text-xl font-bold text-gray-900">{{ cashSchedule.items?.length || 0 }}</div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 px-4 py-3">
+                                    <div class="text-xs uppercase text-gray-500 font-semibold">Year Total</div>
+                                    <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(cashSchedule.total) }}</div>
+                                </div>
+                                <div class="rounded-lg border border-gray-200 px-4 py-3 col-span-2 sm:col-span-1">
+                                    <div class="text-xs uppercase text-gray-500 font-semibold">Selected Month</div>
+                                    <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(selectedMonthTotal) }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="cashView === 'monthly'" class="overflow-x-auto border border-gray-200 rounded-lg">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Month</th>
+                                        <th class="px-4 py-3 text-right">Connectivity</th>
+                                        <th class="px-4 py-3 text-right">SOA Invoices</th>
+                                        <th class="px-4 py-3 text-right">Renewals</th>
+                                        <th class="px-4 py-3 text-right">Weekly Plans</th>
+                                        <th class="px-4 py-3 text-right">Total</th>
+                                        <th class="px-4 py-3 text-right">Items</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    <tr v-for="row in cashSchedule.monthly || []" :key="row.month" class="hover:bg-gray-50">
+                                        <td class="px-4 py-3 font-medium text-gray-900">{{ formatMonthLabel(row.month) }}</td>
+                                        <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.service_total) }}</td>
+                                        <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.invoice_total) }}</td>
+                                        <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.renewal_total) }}</td>
+                                        <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.weekly_total) }}</td>
+                                        <td class="px-4 py-3 text-right font-mono font-semibold">{{ formatAmount(row.total) }}</td>
+                                        <td class="px-4 py-3 text-right">{{ row.count }}</td>
+                                    </tr>
+                                    <tr v-if="!(cashSchedule.monthly || []).length">
+                                        <td colspan="7" class="px-4 py-8 text-center text-gray-400">No scheduled payable dates found.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div v-if="cashView === 'weekly'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div v-for="week in cashSchedule.weekly || []" :key="week.week" class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
+                                    <div>
+                                        <div class="font-semibold text-gray-900">{{ week.week }}</div>
+                                        <div class="text-xs text-gray-500">{{ week.range }}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="font-mono font-bold text-gray-900">₱{{ formatAmount(week.total) }}</div>
+                                        <div class="text-xs text-gray-500">{{ week.count }} items</div>
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <div v-for="item in week.items" :key="`${item.source_type}-${item.source_id}-${item.due_date}`" class="flex items-start justify-between gap-3 text-sm">
+                                        <div>
+                                            <div class="font-medium text-gray-800">{{ item.vendor_name || '—' }}</div>
+                                            <div class="text-xs text-gray-500">{{ sourceLabel(item.source_type) }} · {{ item.label }}</div>
+                                        </div>
+                                        <div class="text-right shrink-0">
+                                            <div class="font-mono">{{ formatAmount(item.amount) }}</div>
+                                            <div class="text-xs" :class="dueDateClass(item.due_date)">{{ item.due_date }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="!(cashSchedule.weekly || []).length" class="lg:col-span-2 border border-dashed border-gray-300 rounded-lg py-10 text-center text-gray-400">
+                                No weekly schedule for the selected month.
+                            </div>
+                        </div>
+
+                        <div v-if="cashView === 'calendar'" class="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
+                            <div v-for="day in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="day" class="bg-gray-50 px-2 py-2 text-xs font-semibold text-gray-500 text-center">
+                                {{ day }}
+                            </div>
+                            <div v-for="day in calendarDays" :key="day.key"
+                                 :class="['min-h-28 bg-white p-2 text-xs', !day.inMonth ? 'bg-gray-50 text-gray-400' : '']">
+                                <div class="font-semibold text-gray-700 mb-1">{{ day.day }}</div>
+                                <div v-if="day.total > 0" class="font-mono font-bold text-blue-700 mb-1">₱{{ formatCompactAmount(day.total) }}</div>
+                                <div class="space-y-1">
+                                    <div v-for="item in day.items.slice(0, 3)" :key="`${day.key}-${item.source_type}-${item.source_id}`"
+                                         class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate" :title="`${item.vendor_name} - ${item.label}`">
+                                        {{ sourceLabel(item.source_type) }} · {{ item.vendor_name || '—' }}
+                                    </div>
+                                    <div v-if="day.items.length > 3" class="text-gray-500">+{{ day.items.length - 3 }} more</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============ APPROVALS TAB ============ -->
+            <div v-if="currentTab === 'approvals'">
+                <DataTable
+                    title="Payment Records (Approval Chain)"
+                    subtitle="Submitted payments awaiting approval / posting"
+                    empty-message="No payment records yet."
+                    :search="recordsPagination.search.value"
+                    :data="recordsPagination.data.value"
+                    :current-page="recordsPagination.currentPage.value"
+                    :last-page="recordsPagination.lastPage.value"
+                    :per-page="recordsPagination.perPage.value"
+                    :showing-text="recordsPagination.showingText.value"
+                    :is-loading="recordsPagination.isLoading.value"
+                    @update:search="recordsPagination.search.value = $event"
+                    @go-to-page="recordsPagination.goToPage"
+                    @change-per-page="recordsPagination.changePerPage"
+                >
+                    <template #header>
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payable</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status / Level</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid On / Ref</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </template>
+                    <template #body="{ data }">
+                        <tr v-for="rec in data" :key="rec.id" class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm">{{ rec.id }}</td>
+                            <td class="px-4 py-3 text-sm capitalize">{{ rec.payable_type }} #{{ rec.payable_id }}</td>
+                            <td class="px-4 py-3 text-sm">{{ rec.vendor?.name || '—' }}</td>
+                            <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(rec.amount) }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span :class="statusPill(rec.status)" class="px-2 py-0.5 text-xs rounded-full font-semibold">{{ rec.status }}</span>
+                                <div class="text-xs text-gray-500 mt-0.5">Lvl {{ rec.current_approval_level }} / {{ rec.approver_data?.levels || '?' }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-xs">{{ rec.paid_on || '—' }}<div v-if="rec.reference_no" class="text-gray-500">{{ rec.reference_no }}</div></td>
+                            <td class="px-4 py-3 text-right">
+                                <div class="flex justify-end space-x-1">
+                                    <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="approve" title="Approve" @click="openApproveModal(rec)" />
+                                    <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="reject" title="Reject" @click="openRejectModal(rec)" />
+                                    <IconBtn v-if="rec.status === 'approved' && hasPermission('payments.mark_paid')" kind="paid" title="Mark as Paid" @click="openMarkPaidModal(rec)" />
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </DataTable>
+            </div>
+
+            <!-- ============ OTHER PAYABLES TAB ============ -->
+            <div v-if="currentTab === 'payables'" class="space-y-4">
+                <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                    <button v-for="seg in payablesTabs" :key="seg.id" @click="payablesTab = seg.id"
                             :class="[
-                                'whitespace-nowrap py-3 px-2 border-b-2 text-sm font-medium transition-colors',
-                                currentTab === t.id
-                                    ? 'border-blue-600 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            ]"
-                        >
-                            {{ t.label }}
-                        </button>
-                    </nav>
+                                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                                payablesTab === seg.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                            ]">
+                        {{ seg.label }}
+                    </button>
                 </div>
 
-                <!-- DASHBOARD TAB -->
-                <div v-if="currentTab === 'dashboard'" class="space-y-6">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Outstanding</p>
-                            <p class="text-2xl font-bold text-gray-900 mt-2">₱{{ formatAmount(summary.total_outstanding) }}</p>
-                        </div>
-                        <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Due This Month</p>
-                            <p class="text-2xl font-bold text-orange-600 mt-2">₱{{ formatAmount(summary.due_this_month) }}</p>
-                        </div>
-                        <button @click="quickFilterInvoices('Overdue')" class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left hover:border-red-200 hover:bg-red-50 transition-colors group">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider group-hover:text-red-600">Overdue Invoices</p>
-                            <p class="text-2xl font-bold text-red-600 mt-2">{{ summary.overdue_count }}</p>
-                        </button>
-                        <button @click="switchTab('renewals')" class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left hover:border-blue-200 hover:bg-blue-50 transition-colors group">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider group-hover:text-blue-600">Upcoming Renewals (30d)</p>
-                            <p class="text-2xl font-bold text-blue-600 mt-2">{{ summary.upcoming_renewals_30d }}</p>
-                        </button>
-                        <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Annual Renewal Spend</p>
-                            <p class="text-2xl font-bold text-purple-600 mt-2">₱{{ formatAmount(summary.annual_renewal_spend) }}</p>
-                        </div>
-                        <button @click="switchTab('records')" class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm text-left hover:border-yellow-200 hover:bg-yellow-50 transition-colors group">
-                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wider group-hover:text-yellow-600">Pending Approvals</p>
-                            <p class="text-2xl font-bold text-yellow-600 mt-2">{{ summary.pending_approvals }}</p>
-                        </button>
-                    </div>
-                    <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
-                        <p class="font-semibold mb-1">Quick Tips</p>
-                        <ul class="list-disc ml-5 space-y-1">
-                            <li>Add recurring subscriptions (Google Workspace, anti-virus, firewalls, cloud) under the <strong>Renewals</strong> tab.</li>
-                            <li>Track aged SOAs and apply overpayments under <strong>SOA Invoices</strong>.</li>
-                            <li>Plan weekly disbursements per project (Datche, Vantage, etc.) under <strong>Weekly Plans</strong>.</li>
-                            <li>Submit a payment for the approval chain → mark paid once fully approved.</li>
-                            <li>Due-date reminders are sent automatically at 30 / 7 / 1 / 0 days and daily after overdue.</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- RENEWALS TAB -->
-                <div v-if="currentTab === 'renewals'" class="space-y-4">
+                <!-- Renewals -->
+                <div v-if="payablesTab === 'renewals'" class="space-y-4">
                     <div class="flex flex-wrap gap-2">
                         <button v-for="s in ['active', 'paused', 'cancelled']" :key="s"
                                 @click="renewalsPagination.updateSearchParam('status', s)"
@@ -153,10 +494,6 @@
                                             Last Paid: {{ formatDateShort(r.last_paid_on) }}
                                         </span>
                                     </div>
-                                    <div v-if="r.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400" :title="'Last reminder sent on ' + r.last_reminder_sent_at">
-                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                                        {{ formatDateShort(r.last_reminder_sent_at) }}
-                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <div v-if="!isRowFinal('renewal', r)" class="flex justify-end space-x-1">
@@ -173,8 +510,8 @@
                     </DataTable>
                 </div>
 
-                <!-- INVOICES TAB -->
-                <div v-if="currentTab === 'invoices'" class="space-y-6">
+                <!-- SOA Invoices -->
+                <div v-if="payablesTab === 'invoices'" class="space-y-6">
                     <div class="flex flex-wrap gap-2">
                         <button v-for="s in ['Pending', 'Due', 'Overdue']" :key="s"
                                 @click="invoicesPagination.updateSearchParam('inv_status', s)"
@@ -261,10 +598,6 @@
                                             {{ approvalLabel(i.latest_record_status) }}
                                         </span>
                                     </div>
-                                    <div v-if="i.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400" :title="'Last reminder sent on ' + i.last_reminder_sent_at">
-                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                                        {{ formatDateShort(i.last_reminder_sent_at) }}
-                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-right">
                                     <div v-if="!isRowFinal('invoice', i)" class="flex justify-end space-x-1">
@@ -313,147 +646,8 @@
                     </div>
                 </div>
 
-                <!-- CASH SCHEDULE TAB -->
-                <div v-if="currentTab === 'cash-schedule'" class="space-y-4">
-                    <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-                        <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
-                            <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-                                <div>
-                                    <h3 class="text-lg font-semibold text-gray-900">Cash Schedule</h3>
-                                    <p class="text-sm text-gray-600">Monthly, weekly, and calendar view of payable due dates</p>
-                                </div>
-                                <div class="flex flex-col sm:flex-row gap-2">
-                                    <input v-model="cashFilters.month" @change="refreshCashSchedule" type="month"
-                                           class="border-gray-300 rounded-lg text-sm">
-                                    <select v-model="cashFilters.vendor_id" @change="refreshCashSchedule"
-                                            class="border-gray-300 rounded-lg text-sm">
-                                        <option value="">All vendors</option>
-                                        <option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.name }}</option>
-                                    </select>
-                                    <select v-model="cashFilters.source" @change="refreshCashSchedule"
-                                            class="border-gray-300 rounded-lg text-sm">
-                                        <option value="all">All sources</option>
-                                        <option value="invoice">SOA Invoices</option>
-                                        <option value="renewal">Renewals</option>
-                                        <option value="weekly">Weekly Plans</option>
-                                    </select>
-                                    <label class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
-                                        <input v-model="cashFilters.include_paid" @change="refreshCashSchedule" type="checkbox"
-                                               class="rounded border-gray-300 text-blue-600">
-                                        Include Paid
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="px-4 sm:px-6 py-4 space-y-4">
-                            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
-                                    <button v-for="view in cashViews" :key="view.id" @click="cashView = view.id"
-                                            :class="[
-                                                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                                                cashView === view.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                                            ]">
-                                        {{ view.label }}
-                                    </button>
-                                </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                                    <div class="rounded-lg border border-gray-200 px-4 py-3">
-                                        <div class="text-xs uppercase text-gray-500 font-semibold">Items</div>
-                                        <div class="text-xl font-bold text-gray-900">{{ cashSchedule.items?.length || 0 }}</div>
-                                    </div>
-                                    <div class="rounded-lg border border-gray-200 px-4 py-3">
-                                        <div class="text-xs uppercase text-gray-500 font-semibold">Year Total</div>
-                                        <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(cashSchedule.total) }}</div>
-                                    </div>
-                                    <div class="rounded-lg border border-gray-200 px-4 py-3 col-span-2 sm:col-span-1">
-                                        <div class="text-xs uppercase text-gray-500 font-semibold">Selected Month</div>
-                                        <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(selectedMonthTotal) }}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div v-if="cashView === 'monthly'" class="overflow-x-auto border border-gray-200 rounded-lg">
-                                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                    <thead class="bg-gray-50 text-xs uppercase text-gray-500">
-                                        <tr>
-                                            <th class="px-4 py-3 text-left">Month</th>
-                                            <th class="px-4 py-3 text-right">SOA Invoices</th>
-                                            <th class="px-4 py-3 text-right">Renewals</th>
-                                            <th class="px-4 py-3 text-right">Weekly Plans</th>
-                                            <th class="px-4 py-3 text-right">Total</th>
-                                            <th class="px-4 py-3 text-right">Items</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-200">
-                                        <tr v-for="row in cashSchedule.monthly || []" :key="row.month" class="hover:bg-gray-50">
-                                            <td class="px-4 py-3 font-medium text-gray-900">{{ formatMonthLabel(row.month) }}</td>
-                                            <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.invoice_total) }}</td>
-                                            <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.renewal_total) }}</td>
-                                            <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.weekly_total) }}</td>
-                                            <td class="px-4 py-3 text-right font-mono font-semibold">{{ formatAmount(row.total) }}</td>
-                                            <td class="px-4 py-3 text-right">{{ row.count }}</td>
-                                        </tr>
-                                        <tr v-if="!(cashSchedule.monthly || []).length">
-                                            <td colspan="6" class="px-4 py-8 text-center text-gray-400">No scheduled payable dates found.</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div v-if="cashView === 'weekly'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <div v-for="week in cashSchedule.weekly || []" :key="week.week" class="border border-gray-200 rounded-lg p-4">
-                                    <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
-                                        <div>
-                                            <div class="font-semibold text-gray-900">{{ week.week }}</div>
-                                            <div class="text-xs text-gray-500">{{ week.range }}</div>
-                                        </div>
-                                        <div class="text-right">
-                                            <div class="font-mono font-bold text-gray-900">₱{{ formatAmount(week.total) }}</div>
-                                            <div class="text-xs text-gray-500">{{ week.count }} items</div>
-                                        </div>
-                                    </div>
-                                    <div class="space-y-2">
-                                        <div v-for="item in week.items" :key="`${item.source_type}-${item.source_id}`" class="flex items-start justify-between gap-3 text-sm">
-                                            <div>
-                                                <div class="font-medium text-gray-800">{{ item.vendor_name || '—' }}</div>
-                                                <div class="text-xs text-gray-500">{{ sourceLabel(item.source_type) }} · {{ item.label }}</div>
-                                            </div>
-                                            <div class="text-right shrink-0">
-                                                <div class="font-mono">{{ formatAmount(item.amount) }}</div>
-                                                <div class="text-xs" :class="dueDateClass(item.due_date)">{{ item.due_date }}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div v-if="!(cashSchedule.weekly || []).length" class="lg:col-span-2 border border-dashed border-gray-300 rounded-lg py-10 text-center text-gray-400">
-                                    No weekly schedule for the selected month.
-                                </div>
-                            </div>
-
-                            <div v-if="cashView === 'calendar'" class="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
-                                <div v-for="day in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="day" class="bg-gray-50 px-2 py-2 text-xs font-semibold text-gray-500 text-center">
-                                    {{ day }}
-                                </div>
-                                <div v-for="day in calendarDays" :key="day.key"
-                                     :class="['min-h-28 bg-white p-2 text-xs', !day.inMonth ? 'bg-gray-50 text-gray-400' : '']">
-                                    <div class="font-semibold text-gray-700 mb-1">{{ day.day }}</div>
-                                    <div v-if="day.total > 0" class="font-mono font-bold text-blue-700 mb-1">₱{{ formatCompactAmount(day.total) }}</div>
-                                    <div class="space-y-1">
-                                        <div v-for="item in day.items.slice(0, 3)" :key="`${day.key}-${item.source_type}-${item.source_id}`"
-                                             class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate" :title="`${item.vendor_name} - ${item.label}`">
-                                            {{ sourceLabel(item.source_type) }} · {{ item.vendor_name || '—' }}
-                                        </div>
-                                        <div v-if="day.items.length > 3" class="text-gray-500">+{{ day.items.length - 3 }} more</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- WEEKLY PLANS TAB -->
-                <div v-if="currentTab === 'weekly'">
+                <!-- Weekly Plans -->
+                <div v-if="payablesTab === 'weekly'">
                     <DataTable
                         title="Weekly Payment Plans"
                         subtitle="Per-project weekly disbursement schedule (Datche, Vantage, etc.)"
@@ -528,92 +722,155 @@
                         </template>
                     </DataTable>
                 </div>
+            </div>
 
-                <!-- RECORDS / APPROVAL TAB -->
-                <div v-if="currentTab === 'records'">
-                    <DataTable
-                        title="Payment Records (Approval Chain)"
-                        subtitle="Submitted payments awaiting approval / posting"
-                        empty-message="No payment records yet."
-                        :search="recordsPagination.search.value"
-                        :data="recordsPagination.data.value"
-                        :current-page="recordsPagination.currentPage.value"
-                        :last-page="recordsPagination.lastPage.value"
-                        :per-page="recordsPagination.perPage.value"
-                        :showing-text="recordsPagination.showingText.value"
-                        :is-loading="recordsPagination.isLoading.value"
-                        @update:search="recordsPagination.search.value = $event"
-                        @go-to-page="recordsPagination.goToPage"
-                        @change-per-page="recordsPagination.changePerPage"
-                    >
-                        <template #header>
-                            <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payable</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status / Level</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid On / Ref</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
-                            </tr>
-                        </template>
-                        <template #body="{ data }">
-                            <tr v-for="rec in data" :key="rec.id" class="hover:bg-gray-50">
-                                <td class="px-4 py-3 text-sm">{{ rec.id }}</td>
-                                <td class="px-4 py-3 text-sm capitalize">{{ rec.payable_type }} #{{ rec.payable_id }}</td>
-                                <td class="px-4 py-3 text-sm">{{ rec.vendor?.name || '—' }}</td>
-                                <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(rec.amount) }}</td>
-                                <td class="px-4 py-3 text-sm">
-                                    <span :class="statusPill(rec.status)" class="px-2 py-0.5 text-xs rounded-full font-semibold">{{ rec.status }}</span>
-                                    <div class="text-xs text-gray-500 mt-0.5">Lvl {{ rec.current_approval_level }} / {{ rec.approver_data?.levels || '?' }}</div>
-                                </td>
-                                <td class="px-4 py-3 text-xs">{{ rec.paid_on || '—' }}<div v-if="rec.reference_no" class="text-gray-500">{{ rec.reference_no }}</div></td>
-                                <td class="px-4 py-3 text-right">
-                                    <div class="flex justify-end space-x-1">
-                                        <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="approve" title="Approve" @click="openApproveModal(rec)" />
-                                        <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="reject" title="Reject" @click="openRejectModal(rec)" />
-                                        <IconBtn v-if="rec.status === 'approved' && hasPermission('payments.mark_paid')" kind="paid" title="Mark as Paid" @click="openMarkPaidModal(rec)" />
-                                    </div>
-                                </td>
-                            </tr>
-                        </template>
-                    </DataTable>
-                </div>
-
-                <!-- SETTINGS TAB -->
-                <div v-if="currentTab === 'settings'" class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 max-w-2xl">
-                    <h3 class="font-semibold text-gray-900">Reminder & Approval Settings</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Approval Levels</label>
-                            <input v-model.number="settingsForm.approval_levels" type="number" min="1" max="5"
-                                   class="block w-full border-gray-300 rounded-lg text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Default Currency</label>
-                            <input v-model="settingsForm.default_currency" type="text" maxlength="8"
-                                   class="block w-full border-gray-300 rounded-lg text-sm">
-                        </div>
+            <!-- ============ SETTINGS TAB ============ -->
+            <div v-if="currentTab === 'settings'" class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 max-w-2xl">
+                <h3 class="font-semibold text-gray-900">Reminder & Approval Settings</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Approval Levels</label>
+                        <input v-model.number="settingsForm.approval_levels" type="number" min="1" max="5"
+                               class="block w-full border-gray-300 rounded-lg text-sm">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Global BCC (email)</label>
-                        <input v-model="settingsForm.global_bcc" type="text"
-                               class="block w-full border-gray-300 rounded-lg text-sm" placeholder="finance-bcc@company.com">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Default Currency</label>
+                        <input v-model="settingsForm.default_currency" type="text" maxlength="8"
+                               class="block w-full border-gray-300 rounded-lg text-sm">
                     </div>
-                    <div class="flex items-center">
-                        <input v-model="settingsForm.reminders_enabled" type="checkbox" id="rem_enabled"
-                               class="rounded border-gray-300 text-blue-600">
-                        <label for="rem_enabled" class="ml-2 text-sm">Enable automated due-date reminders</label>
-                    </div>
-                    <div class="pt-3 border-t flex justify-end">
-                        <button v-if="hasPermission('payments.manage_settings')" @click="saveSettings"
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm">
-                            Save Settings
-                        </button>
-                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Global BCC (email)</label>
+                    <input v-model="settingsForm.global_bcc" type="text"
+                           class="block w-full border-gray-300 rounded-lg text-sm" placeholder="finance-bcc@company.com">
+                </div>
+                <div class="flex items-center">
+                    <input v-model="settingsForm.reminders_enabled" type="checkbox" id="rem_enabled"
+                           class="rounded border-gray-300 text-blue-600">
+                    <label for="rem_enabled" class="ml-2 text-sm">Enable automated due-date reminders</label>
+                </div>
+                <div class="pt-3 border-t flex justify-end">
+                    <button v-if="hasPermission('payments.manage_settings')" @click="saveSettings"
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm">
+                        Save Settings
+                    </button>
                 </div>
             </div>
         </div>
+
+        <!-- ============ CONNECTIVITY SERVICE MODAL ============ -->
+        <Modal v-if="serviceModal.open" @close="serviceModal.open = false" :title="serviceModal.editing ? 'Edit Connectivity Service' : 'Add Connectivity Service'">
+            <form @submit.prevent="submitService" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <FormField label="Location (Office / Store)" required>
+                        <Autocomplete v-model="serviceForm.store_id" :options="storeIdOptions" placeholder="Search location..." />
+                    </FormField>
+                    <FormField label="Role" required>
+                        <Autocomplete v-model="serviceForm.role" :options="roleOptions" placeholder="Select role..." />
+                    </FormField>
+                    <FormField label="Telco / Provider">
+                        <input v-model="serviceForm.telco" placeholder="PLDT, Innove, Converge..." class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Vendor (for approval)">
+                        <Autocomplete v-model="serviceForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
+                    </FormField>
+                    <FormField label="Account No.">
+                        <input v-model="serviceForm.account_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Service ID">
+                        <input v-model="serviceForm.service_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Bandwidth">
+                        <input v-model="serviceForm.bandwidth" placeholder="50 Mbps" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Install Type">
+                        <Autocomplete v-model="serviceForm.install_type" :options="installTypeOptions" placeholder="Select type..." />
+                    </FormField>
+                    <FormField label="MRC (VAT inc)" required>
+                        <input v-model.number="serviceForm.mrc" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Currency">
+                        <Autocomplete v-model="serviceForm.currency" :options="currencyOptions" placeholder="Select currency..." />
+                    </FormField>
+                    <FormField label="Installation Date">
+                        <input v-model="serviceForm.installation_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Billing Day (1-31)">
+                        <input v-model.number="serviceForm.billing_day" type="number" min="1" max="31" placeholder="Defaults to install day" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Status">
+                        <Autocomplete v-model="serviceForm.status" :options="serviceStatusOptions" placeholder="Select status..." />
+                    </FormField>
+                    <FormField label="Assignee">
+                        <Autocomplete v-model="serviceForm.assignee_id" :options="userOptions" placeholder="Search user..." />
+                    </FormField>
+                    <FormField label="CC Emails (comma-separated)">
+                        <input v-model="serviceForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                </div>
+                <FormField label="Notes">
+                    <textarea v-model="serviceForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                </FormField>
+                <ModalFooter @cancel="serviceModal.open = false" :submit-label="serviceModal.editing ? 'Update' : 'Add Service'" />
+            </form>
+        </Modal>
+
+        <!-- ============ LOCATION DETAILS MODAL ============ -->
+        <Modal v-if="locationModal.open" @close="locationModal.open = false" :title="'Edit Location — ' + (locationModal.current?.code || '')">
+            <form @submit.prevent="submitLocation" class="space-y-3">
+                <FormField label="Address">
+                    <textarea v-model="locationForm.address" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                </FormField>
+                <div class="grid grid-cols-2 gap-3">
+                    <FormField label="Legal Company">
+                        <input v-model="locationForm.legal_company" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                    <FormField label="Monitoring Status">
+                        <input v-model="locationForm.monitoring_status" placeholder="OPEN / PENDING" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    </FormField>
+                </div>
+                <ModalFooter @cancel="locationModal.open = false" submit-label="Save" />
+            </form>
+        </Modal>
+
+        <!-- ============ CONNECTIVITY IMPORT MODAL ============ -->
+        <Modal v-if="connectivityImportModal.open" @close="connectivityImportModal.open = false" title="Import Connectivity Services">
+            <form @submit.prevent="submitConnectivityImport" class="space-y-4">
+                <div class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                    <div class="font-semibold mb-1">Template columns</div>
+                    <p>Match rows to locations by <strong>store_code</strong>. One primary and one secondary line per store — re-importing the same store/role updates it in place.</p>
+                </div>
+                <FormField label="Excel File" required>
+                    <input type="file" accept=".xlsx" required @change="onConnectivityImportFileChange"
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                </FormField>
+                <div v-if="connectivityImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                    <div class="grid grid-cols-3 gap-2">
+                        <div><span class="text-gray-500">Created:</span> <strong>{{ connectivityImportResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Updated:</span> <strong>{{ connectivityImportResult.updated || 0 }}</strong></div>
+                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ connectivityImportResult.skipped || 0 }}</strong></div>
+                    </div>
+                    <div v-if="connectivityImportResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
+                        <div v-for="error in connectivityImportResult.errors" :key="error">{{ error }}</div>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <a href="/payments/services/import-template" class="text-sm font-semibold text-blue-700 hover:text-blue-800">
+                        Download template
+                    </a>
+                    <div class="flex gap-3">
+                        <button type="button" @click="connectivityImportModal.open = false"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            Close
+                        </button>
+                        <button type="submit" :disabled="connectivityImportModal.loading"
+                                class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-sm disabled:opacity-60">
+                            {{ connectivityImportModal.loading ? 'Importing...' : 'Import' }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </Modal>
 
         <!-- INVOICE IMPORT MODAL -->
         <Modal v-if="importModal.open" @close="importModal.open = false" title="Import SOA Invoices">
@@ -740,7 +997,7 @@
             <form @submit.prevent="submitRenewal" class="space-y-3">
                 <div class="grid grid-cols-2 gap-3">
                     <FormField label="Vendor" required>
-                        <Autocomplete v-model="renewalForm.vendor_id" :options="vendorOptions" placeholder="Search vendor..." />
+                        <Autocomplete v-model="renewalForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                     </FormField>
                     <FormField label="Service Type" required>
                         <input v-model="renewalForm.service_type" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
@@ -802,7 +1059,7 @@
             <form @submit.prevent="submitInvoice" class="space-y-3">
                 <div class="grid grid-cols-2 gap-3">
                     <FormField label="Vendor" required>
-                        <Autocomplete v-model="invoiceForm.vendor_id" :options="vendorOptions" placeholder="Search vendor..." />
+                        <Autocomplete v-model="invoiceForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                     </FormField>
                     <FormField label="APV No.">
                         <input v-model="invoiceForm.apv_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
@@ -849,7 +1106,7 @@
         <Modal v-if="overpaymentModal.open" @close="overpaymentModal.open = false" title="Apply Overpayment">
             <form @submit.prevent="submitOverpayment" class="space-y-3">
                 <FormField label="Vendor" required>
-                    <Autocomplete v-model="overpaymentForm.vendor_id" :options="vendorOptions" placeholder="Search vendor..." />
+                    <Autocomplete v-model="overpaymentForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                 </FormField>
                 <div class="grid grid-cols-2 gap-3">
                     <FormField label="Collection Date">
@@ -877,7 +1134,7 @@
             <form @submit.prevent="submitWeekly" class="space-y-3">
                 <div class="grid grid-cols-2 gap-3">
                     <FormField label="Vendor" required>
-                        <Autocomplete v-model="weeklyForm.vendor_id" :options="vendorOptions" placeholder="Search vendor..." />
+                        <Autocomplete v-model="weeklyForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                     </FormField>
                     <FormField label="Project Label">
                         <input v-model="weeklyForm.project_label" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
@@ -1025,17 +1282,22 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    tab: { type: String, default: 'dashboard' },
+    tab: { type: String, default: 'monitoring' },
     summary: { type: Object, default: () => ({}) },
     vendors: { type: Array, default: () => [] },
     stores: { type: Array, default: () => [] },
+    brands: { type: Array, default: () => [] },
+    companies: { type: Array, default: () => [] },
     users: { type: Array, default: () => [] },
     currencies: { type: Array, default: () => ['PHP'] },
     cycles: { type: Array, default: () => [] },
+    installTypes: { type: Array, default: () => [] },
+    serviceStatuses: { type: Array, default: () => [] },
     invoiceStatuses: { type: Array, default: () => [] },
     renewalStatuses: { type: Array, default: () => [] },
     weeklyStatuses: { type: Array, default: () => [] },
     settings: { type: Object, default: () => ({}) },
+    locations: { type: Array, default: () => [] },
     renewals: { type: Object, default: () => ({ data: [] }) },
     invoices: { type: Object, default: () => ({ data: [] }) },
     overpayments: { type: Object, default: () => ({ data: [] }) },
@@ -1050,25 +1312,39 @@ const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
 
 const tabList = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'renewals', label: 'Renewals' },
-    { id: 'invoices', label: 'SOA Invoices' },
-    { id: 'cash-schedule', label: 'Cash Schedule' },
-    { id: 'weekly', label: 'Weekly Plans' },
-    { id: 'records', label: 'Approval Records' },
+    { id: 'monitoring', label: 'Monitoring' },
+    { id: 'schedule', label: 'Schedule' },
+    { id: 'approvals', label: 'Approvals' },
+    { id: 'payables', label: 'Other Payables' },
     { id: 'settings', label: 'Settings' },
 ]
 
-const currentTab = ref(props.tab || 'dashboard')
+/* Map any legacy tab value coming from the backend / pagination links to a current tab. */
+const normalizeTab = (id) => {
+    const map = {
+        dashboard: 'monitoring',
+        renewals: 'payables',
+        invoices: 'payables',
+        weekly: 'payables',
+        'cash-schedule': 'schedule',
+        records: 'approvals',
+    }
+    return map[id] || (tabList.some(t => t.id === id) ? id : 'monitoring')
+}
+
+const currentTab = ref(normalizeTab(props.tab))
 const switchTab = (id) => {
     currentTab.value = id
     router.get('/payments', { tab: id }, { preserveScroll: true, preserveState: true, replace: true })
 }
 
-const quickFilterInvoices = (status) => {
-    currentTab.value = 'invoices'
-    router.get('/payments', { tab: 'invoices', inv_status: status }, { preserveScroll: true, preserveState: true, replace: true })
-}
+/* Other Payables secondary tabs */
+const payablesTabs = [
+    { id: 'renewals', label: 'Renewals' },
+    { id: 'invoices', label: 'SOA Invoices' },
+    { id: 'weekly', label: 'Weekly Plans' },
+]
+const payablesTab = ref(['renewals', 'invoices', 'weekly'].includes(props.tab) ? props.tab : 'renewals')
 
 const summary = computed(() => props.summary || {})
 const weeklyCategories = ['POS', 'CCTV', 'Internet', 'Speaker', 'Anti-virus', 'Router', 'Google']
@@ -1078,15 +1354,68 @@ const cashViews = [
     { id: 'calendar', label: 'Calendar' },
 ]
 
+/* ---- Monitoring (locations) ---- */
+const locationTypes = [
+    { id: 'store', label: 'Location / Stores' },
+    { id: 'office', label: 'Corporate Offices' },
+]
+const monitoringType = ref('store')
+const monitoringBrand = ref('')
+const monitoringSearch = ref('')
+const collapsedBrands = reactive({})
+const toggleBrand = (b) => { collapsedBrands[b] = !collapsedBrands[b] }
+
+const officeCount = computed(() => (props.locations || []).filter(l => l.type === 'office').length)
+const storeCount = computed(() => (props.locations || []).filter(l => l.type === 'store').length)
+
+const locationMrc = (loc) => (loc.services || []).reduce((s, sv) => s + (sv.status === 'active' ? Number(sv.mrc || 0) : 0), 0)
+
+const filteredLocations = computed(() => {
+    const term = monitoringSearch.value.trim().toLowerCase()
+    return (props.locations || []).filter((l) => {
+        if (l.type !== monitoringType.value) return false
+        if (monitoringBrand.value && l.brand !== monitoringBrand.value) return false
+        if (term) {
+            const hay = `${l.code || ''} ${l.name || ''} ${l.address || ''} ${l.legal_company || ''}`.toLowerCase()
+            if (!hay.includes(term)) return false
+        }
+        return true
+    })
+})
+
+const groupedByBrand = computed(() => {
+    const groups = new Map()
+    for (const l of filteredLocations.value) {
+        const key = l.brand || 'Unbranded'
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(l)
+    }
+    return Array.from(groups.entries())
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+        .map(([brand, locations]) => ({
+            brand,
+            locations,
+            mrc: locations.reduce((s, l) => s + locationMrc(l), 0),
+            serviceCount: locations.reduce((s, l) => s + (l.services?.length || 0), 0),
+        }))
+})
+
 /* ---- Autocomplete option lists ---- */
-const vendorOptions = computed(() => (props.vendors || []).map(v => ({ label: v.name, value: v.id })))
+const userVendorOptions = computed(() => (props.vendors || []).map(v => ({ label: v.name, value: v.id })))
 const storeOptions = computed(() => (props.stores || []).map(s => ({
     label: s.code + (s.name ? ` — ${s.name}` : ''),
     value: s.code,
 })))
+const storeIdOptions = computed(() => (props.stores || []).map(s => ({
+    label: s.code + (s.name ? ` — ${s.name}` : ''),
+    value: s.id,
+})))
 const userOptions = computed(() => [{ label: '—', value: null }, ...(props.users || []).map(u => ({ label: u.name, value: u.id }))])
 const currencyOptions = computed(() => (props.currencies || []).map(c => ({ label: c, value: c })))
 const cycleOptions = computed(() => (props.cycles || []).map(c => ({ label: c.replace('_', ' '), value: c })))
+const installTypeOptions = computed(() => (props.installTypes || []).map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t })))
+const serviceStatusOptions = computed(() => (props.serviceStatuses || []).map(s => ({ label: s.charAt(0).toUpperCase() + s.slice(1), value: s })))
+const roleOptions = [{ label: 'Primary', value: 'primary' }, { label: 'Secondary', value: 'secondary' }]
 const renewalStatusOptions = computed(() => (props.renewalStatuses || []).map(s => ({ label: s, value: s })))
 const invoiceStatusOptions = computed(() => (props.invoiceStatuses || []).map(s => ({ label: s, value: s })))
 const weeklyStatusOptions = computed(() => (props.weeklyStatuses || []).map(s => ({ label: s, value: s })))
@@ -1172,10 +1501,17 @@ const dueDateClass = (d) => {
 }
 const statusPill = (s) => {
     const k = String(s || '').toLowerCase()
-    if (['paid', 'posted', 'approved', 'released'].includes(k)) return 'bg-green-100 text-green-800'
-    if (['overdue', 'rejected'].includes(k)) return 'bg-red-100 text-red-800'
-    if (['due', 'pending', 'planned', 'active'].includes(k)) return 'bg-blue-100 text-blue-800'
+    if (['paid', 'posted', 'approved', 'released', 'active'].includes(k)) return 'bg-green-100 text-green-800'
+    if (['overdue', 'rejected', 'terminated'].includes(k)) return 'bg-red-100 text-red-800'
+    if (['due', 'pending', 'planned'].includes(k)) return 'bg-blue-100 text-blue-800'
     if (['paused', 'cancelled'].includes(k)) return 'bg-gray-200 text-gray-700'
+    return 'bg-gray-100 text-gray-700'
+}
+const monitoringStatusPill = (s) => {
+    const k = String(s || '').toLowerCase()
+    if (k === 'open') return 'bg-green-100 text-green-800'
+    if (k === 'pending') return 'bg-amber-100 text-amber-800'
+    if (['closed', 'terminated'].includes(k)) return 'bg-red-100 text-red-800'
     return 'bg-gray-100 text-gray-700'
 }
 const approvalPill = (s) => {
@@ -1232,7 +1568,7 @@ watch(() => props.cashSchedule?.filters, (filters) => {
 }, { deep: true })
 const refreshCashSchedule = () => {
     router.get('/payments', {
-        tab: 'cash-schedule',
+        tab: 'schedule',
         cash_month: cashFilters.month,
         cash_vendor_id: cashFilters.vendor_id || undefined,
         cash_source: cashFilters.source === 'all' ? undefined : cashFilters.source,
@@ -1258,6 +1594,7 @@ const sourceLabel = (source) => {
     if (source === 'invoice') return 'SOA'
     if (source === 'renewal') return 'Renewal'
     if (source === 'weekly') return 'Weekly'
+    if (source === 'service') return 'Telco'
     return source || 'Item'
 }
 const calendarDays = computed(() => {
@@ -1280,6 +1617,94 @@ const calendarDays = computed(() => {
         }
     })
 })
+
+/* ---- Connectivity service form ---- */
+const serviceModal = reactive({ open: false, editing: false, current: null })
+const serviceForm = reactive(blankService())
+function blankService() {
+    return {
+        store_id: '', role: 'primary', vendor_id: null, telco: '', account_no: '',
+        service_id: '', bandwidth: '', install_type: '', installation_date: '',
+        billing_day: null, mrc: 0, currency: 'PHP', status: 'active',
+        assignee_id: null, cc_emails: '', notes: '',
+    }
+}
+const openServiceModal = (location = null, svc = null) => {
+    serviceModal.editing = !!svc
+    serviceModal.current = svc
+    Object.assign(
+        serviceForm,
+        blankService(),
+        location ? { store_id: location.id } : {},
+        svc ? { ...svc, vendor_id: svc.vendor_id ?? null, installation_date: svc.installation_date || '' } : {},
+    )
+    serviceModal.open = true
+}
+const submitService = () => {
+    const url = serviceModal.editing ? `/payments/services/${serviceModal.current.id}` : '/payments/services'
+    const method = serviceModal.editing ? put : post
+    method(url, serviceForm, {
+        preserveScroll: true,
+        onSuccess: () => { serviceModal.open = false },
+        onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Save failed'),
+    })
+}
+
+/* ---- Location details form ---- */
+const locationModal = reactive({ open: false, current: null })
+const locationForm = reactive({ address: '', legal_company: '', monitoring_status: 'OPEN' })
+const openLocationModal = (loc) => {
+    locationModal.current = loc
+    Object.assign(locationForm, {
+        address: loc.address || '',
+        legal_company: loc.legal_company || '',
+        monitoring_status: loc.monitoring_status || 'OPEN',
+    })
+    locationModal.open = true
+}
+const submitLocation = () => {
+    put(`/payments/locations/${locationModal.current.id}`, locationForm, {
+        preserveScroll: true,
+        onSuccess: () => { locationModal.open = false },
+        onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Save failed'),
+    })
+}
+
+/* ---- Connectivity import ---- */
+const connectivityImportModal = reactive({ open: false, loading: false, file: null })
+const connectivityImportResult = ref(null)
+const openConnectivityImportModal = () => {
+    connectivityImportModal.open = true
+    connectivityImportModal.loading = false
+    connectivityImportModal.file = null
+    connectivityImportResult.value = null
+}
+const onConnectivityImportFileChange = (event) => {
+    connectivityImportModal.file = event.target.files?.[0] || null
+}
+const submitConnectivityImport = async () => {
+    if (!connectivityImportModal.file) {
+        showError('Please choose an Excel file to import.')
+        return
+    }
+    connectivityImportModal.loading = true
+    connectivityImportResult.value = null
+    const formData = new FormData()
+    formData.append('file', connectivityImportModal.file)
+    try {
+        const response = await axios.post('/payments/services/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data', 'Accept': 'application/json' },
+        })
+        connectivityImportResult.value = response.data
+        showSuccess('Connectivity import completed.')
+        router.reload({ only: ['locations', 'records', 'summary', 'cashSchedule'], preserveScroll: true })
+    } catch (error) {
+        connectivityImportResult.value = error.response?.data || { errors: ['Import failed.'] }
+        showError(connectivityImportResult.value.errors?.[0] || 'Import failed.')
+    } finally {
+        connectivityImportModal.loading = false
+    }
+}
 
 /* ---- Renewal form ---- */
 const renewalModal = reactive({ open: false, editing: false, current: null })
@@ -1310,8 +1735,6 @@ const openRenewalModal = (r = null) => {
     renewalModal.open = true
 }
 const submitRenewal = () => {
-    // Always recompute total_amount at submit so watcher misses (e.g. unchanged
-    // defaults on a fresh modal) can't send a stale 0 to the backend.
     renewalForm.total_amount = Number(renewalForm.unit_cost || 0) * Number(renewalForm.qty || 0)
     const url = renewalModal.editing ? `/payments/renewals/${renewalModal.current.id}` : '/payments/renewals'
     const method = renewalModal.editing ? put : post
@@ -1517,6 +1940,7 @@ const openSubmitModal = (type, payable) => {
     submitForm.payable_id = payable.id
     submitForm.amount = type === 'invoice' ? Number(payable.outstanding_amount || 0)
                      : type === 'renewal' ? Number(payable.total_amount || 0)
+                     : type === 'service' ? Number(payable.mrc || 0)
                      : Number(payable.amount || 0)
     submitForm.remarks = ''
 }

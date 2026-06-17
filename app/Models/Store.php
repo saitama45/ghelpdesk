@@ -15,6 +15,9 @@ class Store extends Model
     protected $fillable = [
         'code',
         'name',
+        'address',
+        'legal_company',
+        'monitoring_status',
         'sector',
         'area',
         'brand',
@@ -66,6 +69,11 @@ class Store extends Model
     public function projects(): HasMany
     {
         return $this->hasMany(Project::class);
+    }
+
+    public function connectivityServices(): HasMany
+    {
+        return $this->hasMany(PaymentConnectivityService::class);
     }
 
     public function tickets()

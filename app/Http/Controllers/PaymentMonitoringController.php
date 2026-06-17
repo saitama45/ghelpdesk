@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PaymentConnectivityService;
 use App\Models\PaymentInvoice;
 use App\Models\PaymentOverpayment;
 use App\Models\PaymentRecord;
@@ -37,17 +38,17 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         return [
             new Middleware('can:payments.view', only: [
                 'index', 'renewals', 'invoices', 'weeklyPlans', 'records', 'invoiceImportTemplate',
-                'renewalImportTemplate', 'weeklyPlanImportTemplate',
+                'renewalImportTemplate', 'weeklyPlanImportTemplate', 'connectivityImportTemplate',
             ]),
             new Middleware('can:payments.create', only: [
                 'storeRenewal', 'storeInvoice', 'storeWeeklyPlan', 'storeOverpayment', 'importInvoices',
-                'importRenewals', 'importWeeklyPlans',
+                'importRenewals', 'importWeeklyPlans', 'storeService', 'importConnectivity',
             ]),
             new Middleware('can:payments.edit', only: [
-                'updateRenewal', 'updateInvoice', 'updateWeeklyPlan',
+                'updateRenewal', 'updateInvoice', 'updateWeeklyPlan', 'updateService', 'updateLocation',
             ]),
             new Middleware('can:payments.delete', only: [
-                'destroyRenewal', 'destroyInvoice', 'destroyWeeklyPlan', 'destroyOverpayment',
+                'destroyRenewal', 'destroyInvoice', 'destroyWeeklyPlan', 'destroyOverpayment', 'destroyService',
             ]),
             new Middleware('can:payments.submit', only: ['submitRecord', 'sendManualReminder']),
             new Middleware('can:payments.approve', only: ['approveRecord', 'rejectRecord']),
@@ -64,14 +65,22 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'tab' => $tab,
             'vendors' => Vendor::orderBy('name')->get(['id', 'name', 'code']),
             'stores' => Store::orderBy('code')->get(['id', 'code', 'name']),
+            'brands' => Store::query()
+                ->whereNotNull('brand')->where('brand', '!=', '')
+                ->distinct()->orderBy('brand')->pluck('brand')->values(),
+            'companies' => \App\Models\Company::where('is_active', true)
+                ->orderBy('name')->get(['id', 'name', 'code']),
             'currencies' => ['PHP', 'USD'],
             'cycles' => ['monthly', 'quarterly', 'semi_annual', 'annual'],
+            'installTypes' => ['copper', 'fiber', 'wireless'],
+            'serviceStatuses' => ['active', 'pending', 'terminated'],
             'invoiceStatuses' => ['Pending', 'Due', 'Overdue', 'Paid', 'Cancelled'],
             'renewalStatuses' => ['active', 'paused', 'cancelled'],
             'weeklyStatuses' => ['Planned', 'Released', 'Paid'],
             'settings' => PaymentSetting::current(),
             'users' => User::select('id', 'name', 'email')->orderBy('name')->get(),
             'summary' => $this->dashboardSummary(),
+            'locations' => $this->locationsList($request),
         ];
 
         // Always load all paginated lists so action POSTs that redirect back
@@ -120,6 +129,23 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             $toEmail = $r->assignee?->email;
             $rowCc = $this->parseCcEmails($r->cc_emails);
             $vendorName = $r->vendor?->name;
+        } elseif ($type === 'service') {
+            $svc = PaymentConnectivityService::with('assignee:id,name,email', 'vendor:id,name', 'store:id,code,name')->findOrFail($id);
+            $day = $svc->billing_day ?: ($svc->installation_date ? Carbon::parse($svc->installation_date)->day : 1);
+            $today = Carbon::now()->startOfDay();
+            $due = $today->copy()->day(min($day, $today->daysInMonth));
+            if ($due->lt($today)) {
+                $next = $today->copy()->addMonthNoOverflow()->startOfMonth();
+                $due = $next->copy()->day(min($day, $next->daysInMonth));
+            }
+            $payload = [
+                'title' => trim(($svc->store?->code ? $svc->store->code.' ' : '').($svc->telco ?: 'Telco').' '.ucfirst((string) $svc->role)),
+                'amount' => (float) $svc->mrc,
+                'due_date' => $due->toDateString(),
+            ];
+            $toEmail = $svc->assignee?->email;
+            $rowCc = $this->parseCcEmails($svc->cc_emails);
+            $vendorName = $svc->vendor?->name ?: $svc->telco;
         } else {
             abort(404);
         }
@@ -191,6 +217,11 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
 
         $pendingApprovals = PaymentRecord::whereIn('status', ['pending', 'approved'])->count();
 
+        $monthlyMrc = (float) PaymentConnectivityService::where('status', 'active')->sum('mrc');
+        $activeServices = PaymentConnectivityService::where('status', 'active')->count();
+        $pendingInstalls = PaymentConnectivityService::where('status', 'pending')->count();
+        $monitoredLocations = PaymentConnectivityService::distinct('store_id')->count('store_id');
+
         return [
             'total_outstanding' => $outstanding,
             'due_this_month' => $dueThisMonth,
@@ -198,7 +229,384 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'upcoming_renewals_30d' => $upcomingRenewals,
             'annual_renewal_spend' => $annualRenewalSpend,
             'pending_approvals' => $pendingApprovals,
+            'monthly_mrc' => $monthlyMrc,
+            'annual_mrc' => $monthlyMrc * 12,
+            'active_services' => $activeServices,
+            'pending_installs' => $pendingInstalls,
+            'monitored_locations' => $monitoredLocations,
         ];
+    }
+
+    /* ============ CONNECTIVITY (Offices / Stores) ============ */
+
+    protected function locationsList(Request $request): array
+    {
+        $services = PaymentConnectivityService::query()
+            ->with(['vendor:id,name,code', 'assignee:id,name'])
+            ->addSelect('payment_connectivity_services.*')
+            ->addSelect(['latest_record_status' => PaymentRecord::select('status')
+                ->whereColumn('payable_id', 'payment_connectivity_services.id')
+                ->where('payable_type', 'service')
+                ->whereIn('status', ['pending', 'approved'])
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->addSelect(['last_reminder_sent_at' => \App\Models\PaymentReminderLog::select('sent_at')
+                ->whereColumn('payable_id', 'payment_connectivity_services.id')
+                ->where('payable_type', 'service')
+                ->orderByDesc('id')
+                ->limit(1),
+            ])
+            ->orderByRaw("CASE WHEN role = 'primary' THEN 0 ELSE 1 END")
+            ->get()
+            ->groupBy('store_id');
+
+        return Store::query()
+            ->orderBy('brand')->orderBy('code')
+            ->get([
+                'id', 'code', 'name', 'address', 'legal_company', 'monitoring_status',
+                'brand', 'class', 'is_active', 'latitude', 'longitude', 'opening_date',
+            ])
+            ->map(function (Store $store) use ($services) {
+                return [
+                    'id' => $store->id,
+                    'code' => $store->code,
+                    'name' => $store->name,
+                    'address' => $store->address,
+                    'legal_company' => $store->legal_company,
+                    'monitoring_status' => $store->monitoring_status,
+                    'brand' => $store->brand,
+                    'class' => $store->class,
+                    'is_active' => (bool) $store->is_active,
+                    'latitude' => $store->latitude,
+                    'longitude' => $store->longitude,
+                    'opening_date' => optional($store->opening_date)->toDateString(),
+                    'type' => strcasecmp((string) $store->class, 'Office') === 0 ? 'office' : 'store',
+                    'services' => ($services[$store->id] ?? collect())->values(),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    protected function serviceRules(): array
+    {
+        return [
+            'store_id' => 'required|exists:stores,id',
+            'role' => 'required|in:primary,secondary',
+            'vendor_id' => 'nullable|exists:vendors,id',
+            'telco' => 'nullable|string|max:255',
+            'account_no' => 'nullable|string|max:255',
+            'service_id' => 'nullable|string|max:255',
+            'bandwidth' => 'nullable|string|max:100',
+            'install_type' => 'nullable|string|max:50',
+            'installation_date' => 'nullable|date',
+            'billing_day' => 'nullable|integer|min:1|max:31',
+            'mrc' => 'required|numeric|min:0',
+            'currency' => 'nullable|string|max:8',
+            'status' => 'nullable|in:active,pending,terminated',
+            'assignee_id' => 'nullable|exists:users,id',
+            'cc_emails' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ];
+    }
+
+    public function storeService(Request $request)
+    {
+        $data = $request->validate($this->serviceRules());
+        $data['created_by'] = $request->user()->id;
+        $data['updated_by'] = $request->user()->id;
+        $data['currency'] = $data['currency'] ?? 'PHP';
+        $data['status'] = $data['status'] ?? 'active';
+
+        PaymentConnectivityService::create($data);
+
+        return redirect()->back()->with('success', 'Connectivity service added successfully');
+    }
+
+    public function updateService(Request $request, PaymentConnectivityService $service)
+    {
+        if ($this->hasApprovedRecord('service', $service->id)) {
+            return redirect()->back()->withErrors(['service' => 'Cannot edit — a payment record for this service is already approved.']);
+        }
+        $data = $request->validate($this->serviceRules());
+        $data['updated_by'] = $request->user()->id;
+        $service->update($data);
+
+        return redirect()->back()->with('success', 'Connectivity service updated successfully');
+    }
+
+    public function destroyService(PaymentConnectivityService $service)
+    {
+        $service->delete();
+
+        return redirect()->back()->with('success', 'Connectivity service deleted successfully');
+    }
+
+    public function updateLocation(Request $request, Store $store)
+    {
+        $data = $request->validate([
+            'address' => 'nullable|string',
+            'legal_company' => 'nullable|string|max:255',
+            'monitoring_status' => 'nullable|string|max:100',
+        ]);
+        $store->update($data);
+
+        return redirect()->back()->with('success', 'Location details updated successfully');
+    }
+
+    protected function connectivityImportHeaders(): array
+    {
+        return [
+            'store_code',
+            'role',
+            'telco',
+            'vendor_code_or_name',
+            'account_no',
+            'service_id',
+            'bandwidth',
+            'install_type',
+            'installation_date',
+            'billing_day',
+            'mrc',
+            'currency',
+            'status',
+            'assignee_email',
+            'cc_emails',
+            'notes',
+        ];
+    }
+
+    public function connectivityImportTemplate()
+    {
+        $vendors = Vendor::orderBy('name')->get(['name', 'code']);
+        $users = User::orderBy('email')->get(['email']);
+        $stores = Store::orderBy('code')->get(['code', 'name']);
+
+        $spreadsheet = new Spreadsheet;
+
+        $listsSheet = $spreadsheet->createSheet(1);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $listsSheet->setCellValue('A1', 'Stores');
+        foreach ($stores as $index => $store) {
+            $listsSheet->setCellValue('A'.($index + 2), $store->code);
+        }
+        $listsSheet->setCellValue('B1', 'Roles');
+        foreach (['primary', 'secondary'] as $index => $role) {
+            $listsSheet->setCellValue('B'.($index + 2), $role);
+        }
+        $listsSheet->setCellValue('C1', 'Install Types');
+        foreach (['copper', 'fiber', 'wireless'] as $index => $type) {
+            $listsSheet->setCellValue('C'.($index + 2), $type);
+        }
+        $listsSheet->setCellValue('D1', 'Statuses');
+        foreach (['active', 'pending', 'terminated'] as $index => $status) {
+            $listsSheet->setCellValue('D'.($index + 2), $status);
+        }
+        $listsSheet->setCellValue('E1', 'Currencies');
+        foreach (['PHP', 'USD'] as $index => $currency) {
+            $listsSheet->setCellValue('E'.($index + 2), $currency);
+        }
+        $listsSheet->setCellValue('F1', 'Vendors');
+        foreach ($vendors as $index => $vendor) {
+            $label = trim(($vendor->code ? "{$vendor->code} - " : '').$vendor->name);
+            $listsSheet->setCellValue('F'.($index + 2), $label);
+        }
+        $listsSheet->setCellValue('G1', 'Assignee Emails');
+        foreach ($users as $index => $user) {
+            $listsSheet->setCellValue('G'.($index + 2), $user->email);
+        }
+
+        $sheet = $spreadsheet->getSheet(0);
+        $sheet->setTitle('Connectivity');
+
+        $headers = $this->connectivityImportHeaders();
+        foreach ($headers as $index => $header) {
+            $col = Coordinate::stringFromColumnIndex($index + 1);
+            $sheet->setCellValue("{$col}1", $header);
+        }
+
+        $today = now()->toDateString();
+        $sampleStore = $stores->first();
+        $sheet->fromArray([[
+            $sampleStore?->code ?? 'CBTL-001',
+            'primary',
+            'PLDT',
+            '',
+            '6018360606',
+            '',
+            '50 Mbps',
+            'copper',
+            $today,
+            '',
+            '3080.00',
+            'PHP',
+            'active',
+            '',
+            '',
+            'Imported primary line',
+        ]], null, 'A2');
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastColumn}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+        $sheet->getStyle('I:I')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+        $sheet->getStyle('K:K')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        $sheet->freezePane('A2');
+
+        foreach (range(1, count($headers)) as $colIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
+        }
+
+        if ($stores->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'A', sprintf('Lists!$A$2:$A$%d', $stores->count() + 1), false);
+        }
+        $this->applyListValidation($sheet, 'B', 'Lists!$B$2:$B$3', false);
+        $this->applyListValidation($sheet, 'H', 'Lists!$C$2:$C$4', true);
+        $this->applyListValidation($sheet, 'M', 'Lists!$D$2:$D$4', true);
+        $this->applyListValidation($sheet, 'L', 'Lists!$E$2:$E$3', true);
+        if ($vendors->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'D', sprintf('Lists!$F$2:$F$%d', $vendors->count() + 1), true);
+        }
+        if ($users->isNotEmpty()) {
+            $this->applyListValidation($sheet, 'N', sprintf('Lists!$G$2:$G$%d', $users->count() + 1), true);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'connectivity-import-template.xlsx';
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    public function importConnectivity(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:xlsx|max:5120']);
+
+        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $header = array_map(fn ($value) => trim((string) $value), array_shift($rows) ?? []);
+        $expectedHeaders = $this->connectivityImportHeaders();
+        $missingHeaders = array_values(array_diff($expectedHeaders, $header));
+
+        if (! empty($missingHeaders)) {
+            return response()->json([
+                'created' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'errors' => ['Template is missing required columns: '.implode(', ', $missingHeaders)],
+            ], 422);
+        }
+
+        $headerIndexes = array_flip($header);
+        $vendorsByKey = $this->importVendorLookup();
+        $usersByEmail = $this->importUserLookup();
+        $storesByCode = Store::query()->get(['id', 'code'])
+            ->keyBy(fn (Store $store) => mb_strtolower(trim((string) $store->code)));
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowNum = 1;
+        $userId = $request->user()->id;
+
+        foreach ($rows as $line) {
+            $rowNum++;
+
+            if (empty(array_filter($line, fn ($value) => $value !== null && trim((string) $value) !== ''))) {
+                continue;
+            }
+
+            $data = [];
+            foreach ($expectedHeaders as $expectedHeader) {
+                $data[$expectedHeader] = $this->normalizeImportValue($line[$headerIndexes[$expectedHeader]] ?? null);
+            }
+
+            $store = $storesByCode->get(mb_strtolower(trim($data['store_code'])));
+            if (! $store) {
+                $errors[] = "Row {$rowNum}: store code '{$data['store_code']}' was not found.";
+                $skipped++;
+                continue;
+            }
+
+            $vendor = null;
+            if ($data['vendor_code_or_name'] !== '') {
+                $vendor = $vendorsByKey->get(mb_strtolower(trim($data['vendor_code_or_name'])));
+                if (! $vendor) {
+                    $errors[] = "Row {$rowNum}: vendor '{$data['vendor_code_or_name']}' was not found.";
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            $assignee = null;
+            if ($data['assignee_email'] !== '') {
+                $assignee = $usersByEmail->get(mb_strtolower($data['assignee_email']));
+                if (! $assignee) {
+                    $errors[] = "Row {$rowNum}: assignee email '{$data['assignee_email']}' was not found.";
+                    $skipped++;
+                    continue;
+                }
+            }
+
+            $payload = [
+                'store_id' => $store->id,
+                'role' => strtolower($data['role']) ?: 'primary',
+                'vendor_id' => $vendor?->id,
+                'telco' => $data['telco'] ?: null,
+                'account_no' => $data['account_no'] ?: null,
+                'service_id' => $data['service_id'] ?: null,
+                'bandwidth' => $data['bandwidth'] ?: null,
+                'install_type' => $data['install_type'] ? strtolower($data['install_type']) : null,
+                'installation_date' => $this->normalizeImportDate($data['installation_date']),
+                'billing_day' => $data['billing_day'] !== '' ? (int) $data['billing_day'] : null,
+                'mrc' => $this->normalizeImportNumber($data['mrc'], 0),
+                'currency' => $data['currency'] ?: 'PHP',
+                'status' => $data['status'] ? strtolower($data['status']) : 'active',
+                'assignee_id' => $assignee?->id,
+                'cc_emails' => $data['cc_emails'] ?: null,
+                'notes' => $data['notes'] ?: null,
+            ];
+
+            $validator = Validator::make($payload, $this->serviceRules());
+            if ($validator->fails()) {
+                $errors[] = "Row {$rowNum}: ".implode(', ', $validator->errors()->all());
+                $skipped++;
+                continue;
+            }
+
+            // One primary / one secondary line per store — update in place on re-import.
+            $existing = PaymentConnectivityService::where('store_id', $store->id)
+                ->where('role', $payload['role'])
+                ->first();
+
+            if ($existing) {
+                $existing->update([...$payload, 'updated_by' => $userId]);
+                $updated++;
+            } else {
+                PaymentConnectivityService::create([...$payload, 'created_by' => $userId, 'updated_by' => $userId]);
+                $created++;
+            }
+        }
+
+        return response()->json([
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ], empty($errors) ? 200 : 422);
     }
 
     /* ============ RENEWALS ============ */
@@ -1575,7 +1983,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
     public function submitRecord(Request $request)
     {
         $data = $request->validate([
-            'payable_type' => 'required|in:renewal,invoice,weekly',
+            'payable_type' => 'required|in:renewal,invoice,weekly,service',
             'payable_id' => 'required|integer',
             'amount' => 'required|numeric|min:0',
             'remarks' => 'nullable|string',
@@ -1584,6 +1992,10 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $payable = $this->resolvePayable($data['payable_type'], $data['payable_id']);
         if (!$payable) {
             return redirect()->back()->withErrors(['payable_id' => 'Payable not found']);
+        }
+
+        if (empty($payable->vendor_id)) {
+            return redirect()->back()->withErrors(['payable_id' => 'Assign a telco/vendor to this item before submitting for approval.']);
         }
 
         $alreadyOpen = PaymentRecord::where('payable_type', $data['payable_type'])
@@ -1722,6 +2134,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'renewal' => PaymentRenewal::find($id),
             'invoice' => PaymentInvoice::find($id),
             'weekly' => PaymentWeeklyPlan::find($id),
+            'service' => PaymentConnectivityService::find($id),
             default => null,
         };
     }
@@ -1829,6 +2242,34 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 });
         }
 
+        if (! $source || $source === 'service') {
+            PaymentConnectivityService::with('vendor:id,name,code', 'store:id,code,name')
+                ->where('status', 'active')
+                ->where('mrc', '>', 0)
+                ->when($vendorId, fn ($query) => $query->where('vendor_id', $vendorId))
+                ->get()
+                ->each(function (PaymentConnectivityService $service) use ($items, $yearStart) {
+                    $day = $service->billing_day
+                        ?: ($service->installation_date ? Carbon::parse($service->installation_date)->day : 1);
+                    for ($m = 0; $m < 12; $m++) {
+                        $month = $yearStart->copy()->addMonths($m);
+                        $due = $month->copy()->day(min($day, $month->daysInMonth));
+                        $items->push([
+                            'source_type' => 'service',
+                            'source_id' => $service->id,
+                            'vendor_id' => $service->vendor_id,
+                            'vendor_name' => $service->vendor?->name ?: ($service->telco ?: '—'),
+                            'label' => trim(($service->store?->code ? $service->store->code.' · ' : '')
+                                .($service->telco ?: 'Telco').' '.ucfirst((string) $service->role)),
+                            'due_date' => $due->toDateString(),
+                            'amount' => (float) $service->mrc,
+                            'status' => $service->status,
+                            'is_paid' => false,
+                        ]);
+                    }
+                });
+        }
+
         $items = $items
             ->filter(fn ($item) => ! empty($item['due_date']))
             ->sortBy('due_date')
@@ -1843,6 +2284,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 'invoice_total' => round((float) $group->where('source_type', 'invoice')->sum('amount'), 2),
                 'renewal_total' => round((float) $group->where('source_type', 'renewal')->sum('amount'), 2),
                 'weekly_total' => round((float) $group->where('source_type', 'weekly')->sum('amount'), 2),
+                'service_total' => round((float) $group->where('source_type', 'service')->sum('amount'), 2),
             ])
             ->values();
 
