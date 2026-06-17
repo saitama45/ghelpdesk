@@ -94,6 +94,7 @@ class GlobalSearchController extends Controller
             ['name' => 'DTR',                    'url' => route('attendance.index', [], false),        'path' => 'Administrative > DTR',             'permission' => 'attendance.view'],
             ['name' => 'Attendance Logs',        'url' => route('attendance.logs', [], false),         'path' => 'Administrative > Attendance Logs', 'permission' => 'attendance.logs'],
             ['name' => 'NPC Status',             'url' => route('npc-statuses.index', [], false),      'path' => 'Monitoring > NPC Status',          'permission' => 'npc_status.view'],
+            ['name' => 'WIGS',                   'url' => route('wigs.index', [], false),              'path' => 'Monitoring > WIGS',                'permission' => 'wigs.view'],
             ['name' => 'Tickets',                'url' => route('tickets.index', [], false),           'path' => 'Services > Tickets',               'permission' => 'tickets.view'],
             ['name' => 'Task Board',             'url' => route('task-boards.index', [], false),       'path' => 'Services > Task Board',            'permission' => 'task_boards.view'],
             ['name' => 'POS Requests',           'url' => route('pos-requests.index', [], false),      'path' => 'Services > POS Requests',          'permission' => 'pos_requests.view'],

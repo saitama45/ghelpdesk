@@ -69,6 +69,19 @@ Route::middleware('auth')->group(function () {
     Route::resource('cctv-monitoring', CctvMonitoringController::class)
         ->parameters(['cctv-monitoring' => 'cctvSystem'])
         ->except(['show', 'create', 'edit']);
+
+    // WIGS — Wildly Important Goals (Yardstick / PCF / PAF)
+    Route::prefix('wigs')->name('wigs.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\WigsController::class, 'index'])->name('index');
+        Route::put('yardstick', [\App\Http\Controllers\WigsController::class, 'saveYardstick'])->name('yardstick.save');
+        Route::get('pcf/{pcf}', [\App\Http\Controllers\WigsController::class, 'showPcf'])->name('pcf.show');
+        Route::post('pcf', [\App\Http\Controllers\WigsController::class, 'storePcf'])->name('pcf.store');
+        Route::put('pcf/{pcf}', [\App\Http\Controllers\WigsController::class, 'updatePcf'])->name('pcf.update');
+        Route::post('pcf/{pcf}/confirm', [\App\Http\Controllers\WigsController::class, 'confirmPcf'])->name('pcf.confirm');
+        Route::put('pcf/{pcf}/grades', [\App\Http\Controllers\WigsController::class, 'gradePcf'])->name('pcf.grade');
+        Route::delete('pcf/{pcf}', [\App\Http\Controllers\WigsController::class, 'destroyPcf'])->name('pcf.destroy');
+    });
+
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     

@@ -174,6 +174,14 @@ class RolesAndPermissionSeeder extends Seeder
             'cctv_monitoring.edit' => 'Edit CCTV inspections',
             'cctv_monitoring.delete' => 'Delete CCTV inspections',
 
+            // Monitoring - WIGS (Wildly Important Goals)
+            'wigs.view' => 'View WIGS (records scoped to self + org subtree)',
+            'wigs.create' => 'Create a PCF (Performance Commitment Form)',
+            'wigs.edit' => 'Edit a PCF and enter PAF quarterly grades',
+            'wigs.delete' => 'Delete a PCF',
+            'wigs.manage_all' => 'View/manage all WIGS records (bypass hierarchy scope)',
+            'wigs.manage_yardstick' => 'Edit the Yardstick reference configuration',
+
             // Administrative - Schedules
             'schedules.view' => 'View schedules',
             'schedules.create' => 'Create schedules',

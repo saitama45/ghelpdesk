@@ -132,7 +132,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view');
+    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view');
 });
 
 const canSeeServices = computed(() => {
@@ -392,7 +392,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('monitoring')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*')) && (isCollapsed || !openMenus.monitoring)
+                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*')) && (isCollapsed || !openMenus.monitoring)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -414,6 +414,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('cctv_monitoring.view')" :style="co('monitoring', 'cctv-monitoring')">
                                 <Link :href="route('cctv-monitoring.index')" :class="collapsedFlyoutLinkClass(route().current('cctv-monitoring.*'))">{{ getChildLabel('monitoring', 'cctv-monitoring') }}</Link>
                             </div>
+                            <div v-if="hasPermission('wigs.view')" :style="co('monitoring', 'wigs')">
+                                <Link :href="route('wigs.index')" :class="collapsedFlyoutLinkClass(route().current('wigs.*'))">{{ getChildLabel('monitoring', 'wigs') }}</Link>
+                            </div>
                             <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                                 <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('monitoring', 'payments') }}</Link>
                             </div>
@@ -426,6 +429,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('cctv_monitoring.view')" :style="co('monitoring', 'cctv-monitoring')">
                             <Link :href="route('cctv-monitoring.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('cctv-monitoring.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'cctv-monitoring') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('wigs.view')" :style="co('monitoring', 'wigs')">
+                            <Link :href="route('wigs.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('wigs.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'wigs') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                             <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'payments') }}</span></Link>

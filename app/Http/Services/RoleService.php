@@ -85,6 +85,7 @@ class RoleService
             'form_builder',
             'stores',
             'cctv monitoring',
+            'wigs',
             'vendors',
             'activity_templates',
             'project type & store class',
@@ -119,6 +120,8 @@ class RoleService
                 $categoryDisplay = 'Payments & SOA';
             } elseif ($category === 'cctv_monitoring') {
                 $categoryDisplay = 'CCTV Monitoring';
+            } elseif ($category === 'wigs') {
+                $categoryDisplay = 'WIGS';
             } elseif ($category === 'stamps') {
                 $categoryDisplay = 'Loyalty Stamps';
             } elseif ($category === 'leadership_points') {

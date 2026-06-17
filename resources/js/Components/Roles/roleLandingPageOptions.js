@@ -40,6 +40,7 @@ export const roleLandingPageOptions = [
         options: [
             { label: 'NPC Status', value: 'npc-statuses.index' },
             { label: 'CCTV Monitoring', value: 'cctv-monitoring.index' },
+            { label: 'WIGS', value: 'wigs.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
         ]
     },
