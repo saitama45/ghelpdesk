@@ -1,18 +1,35 @@
 <template>
     <div class="space-y-8">
         <!-- Toolbar -->
-        <div v-if="canEdit" class="flex justify-end gap-2">
-            <template v-if="!editing">
-                <button @click="startEdit" class="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors">
-                    Edit Yardstick
-                </button>
-            </template>
-            <template v-else>
-                <button @click="cancelEdit" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
-                <button @click="save" :disabled="saving" class="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50">
-                    {{ saving ? 'Saving…' : 'Save Changes' }}
-                </button>
-            </template>
+        <div class="flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3.5">
+            <div>
+                <p class="text-sm font-black text-gray-800">Yardstick Configuration</p>
+                <p class="text-xs text-gray-400 mt-0.5">Performance standards, TRACK values, rating definitions &amp; quarterly guidelines</p>
+            </div>
+            <div v-if="canEdit" class="flex items-center gap-2">
+                <template v-if="!editing">
+                    <button @click="startEdit"
+                            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Edit Yardstick
+                    </button>
+                </template>
+                <template v-else>
+                    <button @click="cancelEdit"
+                            class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-200 transition-colors">
+                        Cancel
+                    </button>
+                    <button @click="save" :disabled="saving"
+                            class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        {{ saving ? 'Saving…' : 'Save Changes' }}
+                    </button>
+                </template>
+            </div>
         </div>
 
         <!-- Performance Standards -->

@@ -1,18 +1,27 @@
 <template>
     <div class="space-y-4">
-        <p class="text-sm text-gray-500">
-            The PAF is generated from each PCF. Grading is entered per quarter and opens the first week after the quarter ends.
-        </p>
-
-        <!-- Quarter window legend -->
-        <div class="flex flex-wrap gap-2">
-            <span v-for="q in [1,2,3,4]" :key="q"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border"
-                  :class="quarterStatuses[q]?.open ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-400'">
-                {{ quarterStatuses[q]?.label }}
-                <span v-if="quarterStatuses[q]?.open">• open</span>
-                <span v-else>• opens {{ quarterStatuses[q]?.opens_at }}</span>
-            </span>
+        <!-- toolbar + quarter windows -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 space-y-3">
+            <div>
+                <p class="text-sm font-black text-gray-800">Performance Appraisal Forms</p>
+                <p class="text-xs text-gray-400 mt-0.5">
+                    Auto-generated from confirmed PCFs. Grading opens the 1st of the month after each quarter ends.
+                </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <div v-for="q in [1,2,3,4]" :key="q"
+                     class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border-2 transition-colors"
+                     :class="quarterStatuses[q]?.open
+                         ? 'bg-green-50 border-green-200 text-green-700'
+                         : 'bg-gray-50 border-gray-200 text-gray-400'">
+                    <span class="w-2 h-2 rounded-full flex-shrink-0"
+                          :class="quarterStatuses[q]?.open ? 'bg-green-500' : 'bg-gray-300'"></span>
+                    {{ quarterStatuses[q]?.label }}
+                    <span class="font-medium" :class="quarterStatuses[q]?.open ? 'text-green-600' : 'text-gray-400'">
+                        {{ quarterStatuses[q]?.open ? '· Open' : `· Opens ${quarterStatuses[q]?.opens_at}` }}
+                    </span>
+                </div>
+            </div>
         </div>
 
         <div v-if="pcfs.length === 0" class="bg-white rounded-xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">

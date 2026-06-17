@@ -1,12 +1,19 @@
 <template>
     <div class="space-y-4">
-        <div class="flex items-center justify-between">
-            <p class="text-sm text-gray-500">
-                {{ pcfs.length }} commitment form(s) for {{ year }}
-            </p>
+        <!-- toolbar -->
+        <div class="flex items-center justify-between bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3.5">
+            <div>
+                <p class="text-sm font-black text-gray-800">Performance Commitment Forms</p>
+                <p class="text-xs text-gray-400 mt-0.5">
+                    {{ pcfs.length }} record{{ pcfs.length !== 1 ? 's' : '' }} for {{ year }}
+                </p>
+            </div>
             <button v-if="can.create" @click="openCreate"
-                    class="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors">
-                + New PCF
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                New PCF
             </button>
         </div>
 
