@@ -188,17 +188,15 @@ const canSeeSettings = computed(() => {
         ]"
     >
         <!-- Sidebar Header -->
-        <div class="flex items-center justify-between px-4 border-b border-gray-800 shrink-0 h-16">
-            <div v-if="!isCollapsed" class="flex items-center space-x-3 min-w-0">
-                <div class="w-9 h-9 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
-                    <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
-                </div>
-                <span class="text-lg font-bold leading-none whitespace-nowrap text-white">TGI Hub</span>
+        <div class="relative flex items-center px-4 border-b border-gray-800 shrink-0 h-16">
+            <div v-if="!isCollapsed" class="w-9 h-9 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
+                <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
             </div>
+            <span v-if="!isCollapsed" class="absolute inset-0 flex items-center justify-center text-lg font-bold leading-none whitespace-nowrap text-white pointer-events-none">Link Hub</span>
 
             <button
                 @click="toggleSidebar"
-                class="p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
+                class="ml-auto p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
                 :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
             >
                 <Bars3Icon v-if="isCollapsed" class="w-5 h-5 text-gray-400 group-hover:text-white" />

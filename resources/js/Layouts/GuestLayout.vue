@@ -6,21 +6,20 @@ import { Link } from '@inertiajs/vue3';
 <template>
     <div class="min-h-screen flex font-sans">
         <!-- Left Panel - Branding -->
-        <div class="hidden lg:flex lg:w-1/2 bg-slate-900 relative overflow-hidden items-center justify-center">
-            <!-- Dynamic Background Pattern -->
-            <div class="absolute inset-0 z-0">
-                <!-- Base subtle gradient -->
-                <div class="absolute inset-0 bg-gradient-to-br from-indigo-900 via-slate-900 to-blue-900 opacity-90"></div>
-                <!-- Animated decorative blobs -->
-                <div class="absolute top-0 left-0 w-full h-full overflow-hidden opacity-30 mix-blend-screen pointer-events-none">
-                    <div class="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-indigo-600 blur-[120px] animate-blob"></div>
-                    <div class="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-blue-600 blur-[120px] animate-blob animation-delay-2000"></div>
-                    <div class="absolute -bottom-[20%] left-[20%] w-[80%] h-[80%] rounded-full bg-purple-600 blur-[120px] animate-blob animation-delay-4000"></div>
-                </div>
+        <div class="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center">
+            <!-- Background photo -->
+            <div class="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat" style="background-image: url('/images/background_login.jpg');"></div>
+            <!-- Dark overlay for readability -->
+            <div class="absolute inset-0 z-10 bg-gradient-to-br from-indigo-950/85 via-slate-900/80 to-blue-950/85"></div>
+            <!-- Animated colour blobs layered on top of photo -->
+            <div class="absolute inset-0 z-20 overflow-hidden opacity-25 mix-blend-screen pointer-events-none">
+                <div class="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-indigo-500 blur-[120px] animate-blob"></div>
+                <div class="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-blue-500 blur-[120px] animate-blob animation-delay-2000"></div>
+                <div class="absolute -bottom-[20%] left-[20%] w-[80%] h-[80%] rounded-full bg-purple-500 blur-[120px] animate-blob animation-delay-4000"></div>
             </div>
 
             <!-- Content -->
-            <div class="relative z-10 flex flex-col justify-center items-center text-center text-white w-full max-w-2xl px-16 py-16">
+            <div class="relative z-30 flex flex-col justify-center items-center text-center text-white w-full max-w-2xl px-16 py-16">
                 <div class="mb-12 flex flex-col items-center">
                     <div class="relative inline-flex items-center justify-center w-52 h-52 mb-8">
                         <!-- Outer glow ring -->
@@ -108,8 +107,11 @@ import { Link } from '@inertiajs/vue3';
 
         <!-- Right Panel - Login Form -->
         <div class="flex-1 flex flex-col justify-center items-center bg-gray-50 px-6 py-12 lg:px-24 relative">
-            <!-- Subtle background pattern for form side -->
-            <div class="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#4f46e5 1px, transparent 1px); background-size: 24px 24px;"></div>
+            <!-- Mobile: photo background + dark overlay (hidden on lg where the left panel shows the photo) -->
+            <div class="absolute inset-0 z-0 lg:hidden bg-cover bg-center bg-no-repeat" style="background-image: url('/images/background_login.jpg');"></div>
+            <div class="absolute inset-0 z-0 lg:hidden bg-slate-900/70 backdrop-blur-sm"></div>
+            <!-- Desktop: subtle dot pattern -->
+            <div class="absolute inset-0 z-0 hidden lg:block opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#4f46e5 1px, transparent 1px); background-size: 24px 24px;"></div>
 
             <div class="w-full max-w-[420px] relative z-10">
                 <!-- Mobile Logo -->
