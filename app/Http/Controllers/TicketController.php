@@ -1229,6 +1229,7 @@ class TicketController extends Controller
             $companyCode = $company->code;
 
             $maxNumber = Ticket::withTrashed()
+                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->selectRaw(
                     'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
@@ -1943,6 +1944,7 @@ class TicketController extends Controller
                 // Generate Ticket Key
                 $companyCode = $parentTicket->company->code;
                 $maxNumber = Ticket::withTrashed()
+                    ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
                     ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                     ->selectRaw('MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num', [$companyCode])
                     ->value('max_num');

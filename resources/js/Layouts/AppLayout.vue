@@ -17,6 +17,8 @@ import { useTheme } from '@/Composables/useTheme.js';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
+const activeCompany = computed(() => page.props.activeCompany || null);
+const activeCompanyLogo = computed(() => (activeCompany.value?.logo ? '/serve-storage/' + activeCompany.value.logo : null));
 defineProps({
     contentClass: {
         type: String,
@@ -146,6 +148,15 @@ const isCurrentRoute = (routeName) => {
                         <div class="lg:hidden flex items-center ml-2">
                             <ApplicationLogo class="h-8 w-8 text-blue-600" />
                             <span class="ml-2 text-lg font-bold text-gray-900 truncate dark:text-gray-100">TAS</span>
+                        </div>
+
+                        <!-- Active entity badge (display only, no switching) -->
+                        <div v-if="activeCompany" class="hidden lg:flex items-center mr-4 pr-4 border-r border-gray-200 dark:border-gray-700">
+                            <span class="h-8 w-8 rounded-md overflow-hidden bg-white border border-gray-200 dark:border-gray-700 flex items-center justify-center flex-shrink-0">
+                                <img v-if="activeCompanyLogo" :src="activeCompanyLogo" :alt="activeCompany.name" class="h-8 w-8 object-contain">
+                                <span v-else class="text-xs font-bold text-gray-500">{{ activeCompany.name?.charAt(0) }}</span>
+                            </span>
+                            <span class="ml-2 text-sm font-semibold text-gray-800 truncate max-w-[180px] dark:text-gray-200">{{ activeCompany.name }}</span>
                         </div>
 
                         <!-- Desktop Page Title -->

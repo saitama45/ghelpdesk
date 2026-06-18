@@ -230,6 +230,7 @@ class EmailTicketService
 
             // Generate Ticket Key
             $maxNumber = Ticket::withTrashed()
+                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
                 ->where('ticket_key', 'LIKE', "{$companyCode}-%")
                 ->get(['ticket_key'])
                 ->map(function ($t) {

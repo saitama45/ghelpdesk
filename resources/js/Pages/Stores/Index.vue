@@ -82,7 +82,7 @@
                                             {{ store.area }}
                                         </span>
                                         <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                            {{ store.brand }}
+                                            {{ store.company?.name || store.brand }}
                                         </span>
                                     </div>
                                     <div class="flex flex-wrap gap-1">
@@ -200,9 +200,14 @@
                                            class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Brand</label>
-                                    <input v-model="form.brand" type="text" required
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Entity</label>
+                                    <Autocomplete
+                                        v-model="form.company_id"
+                                        :options="companies"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select entity..."
+                                    />
                                 </div>
                                 <div>
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Area</label>
@@ -588,6 +593,7 @@ import { usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
 import ManageableMultiAutocomplete from '@/Components/ManageableMultiAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
@@ -601,6 +607,7 @@ const props = defineProps({
     stores: Object,
     users: Array,
     clusters: Array,
+    companies: { type: Array, default: () => [] },
     settings: Object,
     classOptions: { type: Array, default: () => [] },
     hookupOptions: { type: Array, default: () => [] },
@@ -638,7 +645,7 @@ const importResults = ref(null)
 const form = reactive({
     code: '',
     name: '',
-    brand: '',
+    company_id: '',
     area: '',
     sector: 1,
     class: 'Regular',
@@ -719,7 +726,7 @@ const editStore = (store) => {
     currentStore.value = store
     form.code = store.code
     form.name = store.name
-    form.brand = store.brand
+    form.company_id = store.company_id || ''
     form.area = store.area
     form.sector = store.sector
     form.class = store.class || ''
@@ -750,7 +757,7 @@ const editStore = (store) => {
 const resetForm = () => {
     form.code = ''
     form.name = ''
-    form.brand = ''
+    form.company_id = ''
     form.area = ''
     form.sector = 1
     form.class = 'Regular'

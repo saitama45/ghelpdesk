@@ -35,7 +35,8 @@ class AssetController extends Controller implements HasMiddleware
 
     private function nextItemCode(): string
     {
-        $latestNumber = Asset::where('item_code', 'like', 'SKU%')
+        $latestNumber = Asset::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->where('item_code', 'like', 'SKU%')
             ->pluck('item_code')
             ->map(function (string $itemCode): ?int {
                 if (preg_match('/^SKU(\d+)$/', $itemCode, $matches)) {

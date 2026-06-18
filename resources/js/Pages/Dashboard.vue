@@ -345,10 +345,10 @@ const projectTotals  = computed(() => props.kanbanProjects?.totals  || {});
 
 const projectStatusTheme = (status) => {
     switch (status) {
-        case 'Completed': return { header: 'bg-emerald-50', badge: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-500' };
-        case 'In Progress': return { header: 'bg-blue-50', badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' };
-        case 'Delayed': return { header: 'bg-red-50', badge: 'bg-red-100 text-red-700', bar: 'bg-red-500' };
-        default: return { header: 'bg-gray-50', badge: 'bg-gray-100 text-gray-600', bar: 'bg-gray-400' };
+        case 'Completed': return { header: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-800/50 dark:text-emerald-200', bar: 'bg-emerald-500' };
+        case 'In Progress': return { header: 'bg-blue-50 dark:bg-blue-900/20', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-800/50 dark:text-blue-200', bar: 'bg-blue-500' };
+        case 'Delayed': return { header: 'bg-red-50 dark:bg-red-900/20', badge: 'bg-red-100 text-red-700 dark:bg-red-800/50 dark:text-red-200', bar: 'bg-red-500' };
+        default: return { header: 'bg-gray-50 dark:bg-gray-900/20', badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-200', bar: 'bg-gray-400' };
     }
 };
 const kanbanPrioritySummary = computed(() => {
@@ -438,33 +438,33 @@ const getKanbanColumnTheme = (key) => {
     switch (key) {
         case 'backlogs':
             return {
-                header: 'bg-sky-50 text-sky-800 border-sky-200',
-                count: 'bg-sky-100 text-sky-800',
-                rail: 'border-sky-200',
+                header: 'bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800',
+                count: 'bg-sky-100 text-sky-800 dark:bg-sky-800/50 dark:text-sky-200',
+                rail: 'border-sky-200 dark:border-sky-800',
             };
         case 'in_progress':
             return {
-                header: 'bg-violet-50 text-violet-800 border-violet-200',
-                count: 'bg-violet-100 text-violet-800',
-                rail: 'border-violet-200',
+                header: 'bg-violet-50 text-violet-800 border-violet-200 dark:bg-violet-900/20 dark:text-violet-300 dark:border-violet-800',
+                count: 'bg-violet-100 text-violet-800 dark:bg-violet-800/50 dark:text-violet-200',
+                rail: 'border-violet-200 dark:border-violet-800',
             };
         case 'resolved':
             return {
-                header: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-                count: 'bg-emerald-100 text-emerald-800',
-                rail: 'border-emerald-200',
+                header: 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
+                count: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-800/50 dark:text-emerald-200',
+                rail: 'border-emerald-200 dark:border-emerald-800',
             };
         case 'closed':
             return {
-                header: 'bg-slate-50 text-slate-700 border-slate-200',
-                count: 'bg-slate-100 text-slate-700',
-                rail: 'border-slate-200',
+                header: 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/20 dark:text-slate-300 dark:border-slate-800',
+                count: 'bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-200',
+                rail: 'border-slate-200 dark:border-slate-800',
             };
         default:
             return {
-                header: 'bg-gray-50 text-gray-700 border-gray-200',
-                count: 'bg-gray-100 text-gray-700',
-                rail: 'border-gray-200',
+                header: 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-800',
+                count: 'bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-200',
+                rail: 'border-gray-200 dark:border-gray-800',
             };
     }
 };
@@ -627,9 +627,9 @@ const exportToExcel = (type) => {
                     <div v-for="card in topTechCards" :key="card.rank"
                         class="relative overflow-hidden rounded-xl border p-4 min-h-[180px] flex flex-col justify-between"
                         :class="{
-                            'md:order-1 bg-gradient-to-br from-amber-50 via-orange-50 to-white border-amber-200 shadow-sm': card.rank === 3,
-                            'md:order-2 bg-gradient-to-br from-blue-50 via-cyan-50 to-yellow-50 border-blue-300 shadow-lg min-h-[224px]': card.rank === 1,
-                            'md:order-3 bg-gradient-to-br from-violet-50 via-fuchsia-50 to-white border-violet-200 shadow-sm': card.rank === 2,
+                            'md:order-1 bg-gradient-to-br from-amber-50 via-orange-50 to-white border-amber-200 shadow-sm dark:from-amber-900/20 dark:via-orange-900/20 dark:to-gray-800 dark:border-amber-800': card.rank === 3,
+                            'md:order-2 bg-gradient-to-br from-blue-50 via-cyan-50 to-yellow-50 border-blue-300 shadow-lg min-h-[224px] dark:from-blue-900/20 dark:via-cyan-900/20 dark:to-yellow-900/10 dark:border-blue-800': card.rank === 1,
+                            'md:order-3 bg-gradient-to-br from-violet-50 via-fuchsia-50 to-white border-violet-200 shadow-sm dark:from-violet-900/20 dark:via-fuchsia-900/20 dark:to-gray-800 dark:border-violet-800': card.rank === 2,
                         }">
                         <template v-if="card.agent">
                             <div v-if="card.rank === 1" class="absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-yellow-400 p-2 text-yellow-950 shadow-sm">
@@ -878,7 +878,7 @@ const exportToExcel = (type) => {
                             <div
                                 v-for="priority in priorityBreakdownItems"
                                 :key="`${column.key}-${priority.key}`"
-                                class="rounded-md border border-white/60 bg-white/70 px-1 py-1 text-center"
+                                class="rounded-md border border-white/60 bg-white/70 px-1 py-1 text-center dark:border-white/10 dark:bg-black/20"
                             >
                                 <div class="text-[11px] font-black leading-none text-gray-900 dark:text-gray-100">
                                     {{ kanbanPrioritySummary[column.key]?.[priority.key] || 0 }}

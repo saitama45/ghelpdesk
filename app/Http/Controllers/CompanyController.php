@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Support\CompanyContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -88,6 +89,30 @@ class CompanyController extends Controller implements HasMiddleware
         $company->save();
 
         return redirect()->back()->with('success', 'Company updated successfully');
+    }
+
+    /**
+     * Set the active entity for the current session. Any authenticated user may
+     * switch, but only to an entity they can access.
+     */
+    public function switch(Request $request)
+    {
+        $request->validate([
+            'company_id' => 'required|integer',
+        ]);
+
+        $accessible = CompanyContext::accessibleCompanies($request->user());
+
+        if (!$accessible->contains('id', (int) $request->company_id)) {
+            return redirect()->back()->with('error', 'You do not have access to that entity.');
+        }
+
+        session([CompanyContext::SESSION_KEY => (int) $request->company_id]);
+        CompanyContext::flushMemo();
+
+        $name = $accessible->firstWhere('id', (int) $request->company_id)->name;
+
+        return redirect()->back()->with('success', "Switched to {$name}.");
     }
 
     public function destroy(Company $company)

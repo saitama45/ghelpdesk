@@ -461,6 +461,7 @@ class DefaultFormService implements FormServiceContract
         $companyId = $company ? $company->id : null;
 
         $maxNumber = Ticket::withTrashed()
+            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
             ->where('ticket_key', 'LIKE', "{$companyCode}-%")
             ->get(['ticket_key'])
             ->map(function ($t) {

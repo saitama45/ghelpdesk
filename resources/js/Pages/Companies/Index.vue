@@ -45,7 +45,7 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="h-10 w-10 rounded-full flex items-center justify-center shadow-sm overflow-hidden flex-shrink-0">
-                                        <img v-if="company.logo" :src="`/storage/${company.logo}`" :alt="company.name" class="h-10 w-10 object-cover rounded-full" />
+                                        <img v-if="company.logo" :src="`/serve-storage/${company.logo}`" :alt="company.name" class="h-10 w-10 object-cover rounded-full" />
                                         <div v-else class="h-10 w-10 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
                                             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -267,7 +267,7 @@ const editCompany = (company) => {
     form.description = company.description || ''
     form.is_active = company.is_active
     resetLogoState()
-    logoPreview.value = company.logo ? `/storage/${company.logo}` : null
+    logoPreview.value = company.logo ? `/serve-storage/${company.logo}` : null
     showModal.value = true
 }
 

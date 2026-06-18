@@ -44,6 +44,7 @@ class TicketObserver
     {
         if (DB::connection()->getDriverName() === 'sqlsrv') {
             $maxNumber = Ticket::withTrashed()
+                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
                 ->where('ticket_key', 'LIKE', "{$prefix}-%")
                 ->selectRaw(
                     'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
@@ -57,6 +58,7 @@ class TicketObserver
         $pattern = '/^' . preg_quote($prefix, '/') . '-(\d+)$/';
 
         $maxNumber = Ticket::withTrashed()
+            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
             ->where('ticket_key', 'LIKE', "{$prefix}-%")
             ->pluck('ticket_key')
             ->map(function ($ticketKey) use ($pattern) {

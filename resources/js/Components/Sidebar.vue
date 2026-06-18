@@ -15,11 +15,13 @@ import {
     PresentationChartLineIcon,
     BriefcaseIcon,
     DocumentTextIcon,
+    BuildingOffice2Icon,
 } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 import { usePresence } from '@/Composables/usePresence.js';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import UserStatus from '@/Components/UserStatus.vue';
+import EntitySwitcher from '@/Components/EntitySwitcher.vue';
 
 const props = defineProps({
     isCollapsed: {
@@ -91,7 +93,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('service-vehicle-trips.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*')) {
+    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*')) {
         openMenus.value.monitoring = true;
     }
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
@@ -747,25 +749,9 @@ const canSeeSettings = computed(() => {
 
         </nav>
 
-        <!-- User Section -->
-        <div class="p-4 border-t border-gray-800 shrink-0">
-            <div class="flex items-center">
-                <div class="relative">
-                    <div v-if="user.profile_photo" class="w-8 h-8 rounded-full overflow-hidden border border-gray-600">
-                        <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
-                    </div>
-                    <div v-else class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-                        <span class="text-sm font-medium">
-                            {{ user.name?.charAt(0)?.toUpperCase() || 'U' }}
-                        </span>
-                    </div>
-                    <UserStatus :status="currentStatus" size="lg" class="absolute -bottom-0.5 -right-0.5 border-2 border-gray-900" />
-                </div>
-                <div v-if="!isCollapsed" class="ml-3 flex-1 min-w-0">
-                    <p class="text-sm font-medium truncate">{{ user.name || 'User' }}</p>
-                    <p class="text-xs text-gray-400 truncate dark:text-gray-400">{{ user.email || 'user@example.com' }}</p>
-                </div>
-            </div>
+        <!-- Entity Switcher (lower part) -->
+        <div class="px-4 py-4 border-t border-gray-800 shrink-0">
+            <EntitySwitcher :is-collapsed="isCollapsed" />
         </div>
     </aside>
 </template>

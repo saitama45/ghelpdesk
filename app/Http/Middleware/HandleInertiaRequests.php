@@ -40,6 +40,8 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $permissions = [];
+        $activeCompany = null;
+        $availableCompanies = [];
 
         if ($user) {
             // Load roles and companies for company-based filtering
@@ -53,6 +55,13 @@ class HandleInertiaRequests extends Middleware
             $permissions = Cache::remember($cacheKey, 3600, function () use ($user) {
                 return $user->getAllPermissions()->pluck('name')->unique()->values()->toArray();
             });
+
+            // Entity (company) switcher data: the entities this user can access
+            // and which one is currently active (session-based).
+            $accessible = \App\Support\CompanyContext::accessibleCompanies($user);
+            $availableCompanies = $accessible->values()->all();
+            $activeId = \App\Support\CompanyContext::resolveActiveId($user);
+            $activeCompany = $activeId ? $accessible->firstWhere('id', $activeId) : null;
         }
         
         return array_merge(parent::share($request), [
@@ -60,6 +69,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'permissions' => array_values($permissions),
             ],
+            'activeCompany' => $activeCompany,
+            'availableCompanies' => $availableCompanies,
             'sidebarLayout' => Cache::remember('sidebar_layout_config', 3600, function () {
                 $val = \App\Models\Setting::where('key', 'sidebar_layout')->value('value');
                 return $val ? json_decode($val, true) : null;

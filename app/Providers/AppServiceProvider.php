@@ -40,6 +40,33 @@ class AppServiceProvider extends ServiceProvider
         \App\Models\Ticket::observe(\App\Observers\TicketObserver::class);
         \App\Models\ProjectTask::observe(\App\Observers\ProjectTaskObserver::class);
 
+        // Filter transactional module records by the active entity everywhere.
+        // No-op when there is no active entity (console/queue/no access).
+        foreach (\App\Support\CompanyContext::SCOPED_MODELS as $scopedModel) {
+            $scopedModel::addGlobalScope(new \App\Models\Scopes\ActiveEntityScope());
+        }
+
+        // Stamp the active entity onto new records of any module table whose
+        // company_id is still empty. Viewing stays unfiltered; this only sets a
+        // default owner-entity at creation time. Runs only for authed web
+        // requests (console/queue have no active entity, so nothing is stamped).
+        \Illuminate\Support\Facades\Event::listen('eloquent.creating: *', function ($eventName, $payload) {
+            $model = $payload[0] ?? null;
+            if (!$model instanceof \Illuminate\Database\Eloquent\Model) {
+                return;
+            }
+            if (!\App\Support\CompanyContext::shouldStamp($model->getTable())) {
+                return;
+            }
+            if (!empty($model->getAttribute('company_id'))) {
+                return;
+            }
+            $companyId = \App\Support\CompanyContext::activeCompanyId();
+            if ($companyId) {
+                $model->setAttribute('company_id', $companyId);
+            }
+        });
+
         // Override config from database — cached for 1 hour so this never hits the DB per-request.
         // Clear cache via: Cache::forget('app_mail_settings') after saving settings in the UI.
         if (config('app.env') !== 'testing') {

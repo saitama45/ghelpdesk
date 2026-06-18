@@ -86,6 +86,7 @@ Route::middleware('auth')->group(function () {
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
+    Route::post('companies/switch', [CompanyController::class, 'switch'])->name('companies.switch');
     Route::resource('companies', CompanyController::class)->except(['show', 'create', 'edit']);
     Route::resource('departments', DepartmentController::class)->except(['show', 'create', 'edit']);
     Route::post('departments/{department}/nodes', [DepartmentController::class, 'storeNode'])->name('departments.nodes.store');

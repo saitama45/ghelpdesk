@@ -15,6 +15,7 @@ class Store extends Model
     protected $fillable = [
         'code',
         'name',
+        'company_id',
         'address',
         'legal_company',
         'company_applied_with',
@@ -42,6 +43,7 @@ class Store extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'company_id' => 'integer',
         'sector' => 'integer',
         'opening_date' => 'date:Y-m-d',
         'latitude' => 'float',
@@ -51,6 +53,11 @@ class Store extends Model
         'cctv_seal_notice_uploaded_at' => 'datetime',
         'cctv_seal_notice_uploaded_by' => 'integer',
     ];
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 
     public function users()
     {

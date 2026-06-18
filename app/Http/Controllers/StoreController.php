@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cluster;
+use App\Models\Company;
 use App\Models\ReferenceOption;
 use App\Models\Store;
 use App\Models\StoreBlueprint;
@@ -37,7 +38,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Store::with(['users:id,name,email', 'clusters:id,code,name', 'options', 'blueprints'])
+        $query = Store::with(['users:id,name,email', 'clusters:id,code,name', 'options', 'blueprints', 'company:id,name,code'])
             ->withCount(['tickets' => function($q) {
                 $q->where('tickets.status', 'open');
             }]);
@@ -72,6 +73,7 @@ class StoreController extends Controller implements HasMiddleware
             'stores' => $stores,
             'users' => $users,
             'clusters' => $clusters,
+            'companies' => Company::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
             'settings' => $settings,
             'classOptions' => ReferenceOption::ofType('store_class'),
             'hookupOptions' => ReferenceOption::ofType('store_hookup'),
@@ -95,7 +97,10 @@ class StoreController extends Controller implements HasMiddleware
         $clusterIds = $this->resolveClusterIds($validated);
 
         $store = DB::transaction(function () use ($validated, $clusterIds, $request) {
-            $store = Store::create($this->scalarStoreAttributes($validated));
+            $attributes = $this->scalarStoreAttributes($validated);
+            $attributes['brand'] = $this->brandFromCompany($validated['company_id'] ?? null, $attributes['brand'] ?? null);
+
+            $store = Store::create($attributes);
             $store->clusters()->sync($clusterIds);
 
             if ($request->has('user_ids')) {
@@ -128,7 +133,10 @@ class StoreController extends Controller implements HasMiddleware
         $clusterIds = $this->resolveClusterIds($validated);
 
         DB::transaction(function () use ($store, $validated, $clusterIds, $request) {
-            $store->update($this->scalarStoreAttributes($validated));
+            $attributes = $this->scalarStoreAttributes($validated);
+            $attributes['brand'] = $this->brandFromCompany($validated['company_id'] ?? null, $store->brand);
+
+            $store->update($attributes);
             $store->clusters()->sync($clusterIds);
 
             if ($request->has('user_ids')) {
@@ -153,7 +161,8 @@ class StoreController extends Controller implements HasMiddleware
             'name' => $nameRule,
             'sector' => 'required|numeric|min:0',
             'area' => 'required|string|max:255',
-            'brand' => 'required|string|max:255',
+            'company_id' => 'required|exists:companies,id',
+            'brand' => 'nullable|string|max:255',
             'class' => 'nullable|string|max:100',
             'cluster' => 'nullable|required_without:cluster_ids|string|max:255',
             'cluster_ids' => 'nullable|required_without:cluster|array',
@@ -182,12 +191,48 @@ class StoreController extends Controller implements HasMiddleware
     }
 
     /**
+     * Keep the legacy `brand` string in sync with the selected entity so that
+     * brand-based features (CCTV, Payments filters, search, exports) keep
+     * working. Falls back to the supplied value when the company is missing.
+     */
+    private function brandFromCompany(?int $companyId, ?string $fallback): ?string
+    {
+        $code = $companyId ? Company::whereKey($companyId)->value('code') : null;
+
+        return $code ?: $fallback;
+    }
+
+    /**
+     * Match a free-text brand to an entity (company) by normalised code/name,
+     * mirroring the import/legacy brand→company mapping. Returns null when no
+     * confident match is found.
+     */
+    private function resolveCompanyIdFromBrand(?string $brand): ?int
+    {
+        $normalize = fn (?string $v) => strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $v));
+        $target = $normalize($brand);
+        if ($target === '') {
+            return null;
+        }
+
+        $company = Company::all(['id', 'code', 'name'])->first(function ($c) use ($normalize, $target) {
+            $code = $normalize($c->code);
+            $name = $normalize($c->name);
+
+            return ($code !== '' && (str_starts_with($target, $code) || str_starts_with($code, $target)))
+                || $name === $target;
+        });
+
+        return $company?->id;
+    }
+
+    /**
      * Pluck only the persistable scalar store columns from validated data.
      */
     private function scalarStoreAttributes(array $validated): array
     {
         return collect($validated)->only([
-            'code', 'name', 'sector', 'area', 'brand', 'class', 'email',
+            'code', 'name', 'sector', 'area', 'company_id', 'brand', 'class', 'email',
             'contact_person', 'contact_details', 'opening_date', 'hookup',
             'latitude', 'longitude', 'radius_meters', 'is_active',
         ])->all();
@@ -443,6 +488,7 @@ class StoreController extends Controller implements HasMiddleware
                 'sector'        => (int) $data['sector'],
                 'area'          => $data['area'],
                 'brand'         => $data['brand'],
+                'company_id'    => $this->resolveCompanyIdFromBrand($data['brand'] ?? null),
                 'class'         => $data['class'],
                 'latitude'      => $data['latitude'] !== '' ? $data['latitude'] : null,
                 'longitude'     => $data['longitude'] !== '' ? $data['longitude'] : null,
