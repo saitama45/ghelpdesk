@@ -37,11 +37,21 @@ class StampController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
+        // Scope all stamp records to the stores of the active entity (company).
+        // Stamp cards/entries/redemptions are tied to a store, and each store
+        // belongs to a company, so we filter through that relationship.
+        $activeCompanyId = \App\Support\CompanyContext::activeCompanyId();
+
+        $forActiveEntity = fn ($relation) => function ($query) use ($activeCompanyId, $relation) {
+            $query->whereHas($relation, fn ($q) => $q->where('company_id', $activeCompanyId));
+        };
+
         return Inertia::render('Stamps/Index', [
             'tab' => $request->get('tab', 'cards'),
             'customers' => Customer::orderBy('name')->get(),
             'programs' => StampProgram::orderBy('name')->get(),
             'cards' => StampCard::with(['customer:id,name,email', 'program:id,name,stamps_required,auto_stamp_amount', 'store:id,code,name'])
+                ->when($activeCompanyId, $forActiveEntity('store'))
                 ->orderByDesc('id')
                 ->get(),
             'redemptions' => StampRedemption::with([
@@ -56,15 +66,19 @@ class StampController extends Controller implements HasMiddleware
                         ->selectRaw('COALESCE(SUM(purchase_amount), 0)')
                         ->whereColumn('stamp_entries.stamp_card_id', 'stamp_redemptions.stamp_card_id'),
                 ])
+                ->when($activeCompanyId, $forActiveEntity('card.store'))
                 ->orderByDesc('id')
                 ->get(),
-            'stores' => Store::orderBy('code')->get(['id', 'code', 'name']),
+            'stores' => Store::query()
+                ->when($activeCompanyId, fn ($q) => $q->where('company_id', $activeCompanyId))
+                ->orderBy('code')
+                ->get(['id', 'code', 'name']),
             'summary' => [
                 'customers' => Customer::count(),
-                'active_cards' => StampCard::where('status', 'active')->count(),
-                'completed_cards' => StampCard::where('status', 'completed')->count(),
-                'redeemed_cards' => StampCard::where('status', 'redeemed')->count(),
-                'total_amount' => StampEntry::sum('purchase_amount'),
+                'active_cards' => StampCard::where('status', 'active')->when($activeCompanyId, $forActiveEntity('store'))->count(),
+                'completed_cards' => StampCard::where('status', 'completed')->when($activeCompanyId, $forActiveEntity('store'))->count(),
+                'redeemed_cards' => StampCard::where('status', 'redeemed')->when($activeCompanyId, $forActiveEntity('store'))->count(),
+                'total_amount' => StampEntry::when($activeCompanyId, $forActiveEntity('store'))->sum('purchase_amount'),
             ],
         ]);
     }

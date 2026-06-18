@@ -30,7 +30,7 @@ import { Link } from '@inertiajs/vue3';
                         <!-- Outer glow ring -->
                         <div class="absolute inset-0 bg-white/10 blur-xl rounded-full"></div>
                         <!-- Blob background -->
-                        <div class="absolute inset-0 bg-white shadow-2xl shadow-white/20 dark:bg-gray-800" style="border-radius: 62% 38% 46% 54% / 60% 44% 56% 40%;"></div>
+                        <div class="absolute inset-0 shadow-2xl shadow-white/20" style="border-radius: 62% 38% 46% 54% / 60% 44% 56% 40%; background-color: #ffffff;"></div>
                         <ApplicationLogo class="relative z-10 h-4/5 w-4/5" />
                     </div>
 
