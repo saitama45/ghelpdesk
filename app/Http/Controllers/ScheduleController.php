@@ -310,7 +310,7 @@ class ScheduleController extends Controller implements HasMiddleware
         ]);
 
         abort_unless(
-            in_array((int) $request->user_id, $this->editableScheduleUserIds($request->user()), true),
+            in_array((int) $request->user_id, $this->creatableScheduleUserIds($request->user()), true),
             403,
             'You can only create schedules for users under your org chart level.'
         );
@@ -2769,6 +2769,36 @@ class ScheduleController extends Controller implements HasMiddleware
         })->values()->all();
 
         return $payload;
+    }
+
+    private function creatableScheduleUserIds(User $user): array
+    {
+        if (!$user->can('schedules.create')) {
+            return [];
+        }
+
+        if ($user->hasAnyRole(['Admin', 'Solutions Admin'])) {
+            return User::query()
+                ->where('is_active', true)
+                ->where('is_vacant', false)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $userIds = collect([(int) $user->id]);
+
+        if ($user->is_manager) {
+            $userIds = $userIds->merge($this->getTransitiveSubordinateIds((int) $user->id));
+        }
+
+        return User::query()
+            ->where('is_active', true)
+            ->where('is_vacant', false)
+            ->whereIn('id', $userIds->map(fn ($id) => (int) $id)->unique()->values()->all())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     private function editableScheduleUserIds(User $user): array

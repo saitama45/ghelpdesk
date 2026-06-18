@@ -1366,15 +1366,22 @@
                             </button>
                             <div v-else></div>
 
-                            <div class="flex gap-3">
-                                <button type="button" @click="closeModal"
-                                        class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
-                                    {{ isViewingOnly ? 'Close' : 'Cancel' }}
-                                </button>
-                                <button v-if="!isViewingOnly" type="submit"
-                                        class="px-8 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all transform active:scale-95">
-                                    {{ isRequestingScheduleChange ? 'Submit Request' : (isEditing ? 'Save Changes' : 'Create Schedule') }}
-                                </button>
+                            <div class="flex flex-col items-end gap-1.5">
+                                <p v-if="isRequestingScheduleChange && !isViewingOnly"
+                                   class="flex items-center gap-1 text-xs font-semibold text-amber-600">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" /></svg>
+                                    Approval Required
+                                </p>
+                                <div class="flex gap-3">
+                                    <button type="button" @click="closeModal"
+                                            class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
+                                        {{ isViewingOnly ? 'Close' : 'Cancel' }}
+                                    </button>
+                                    <button v-if="!isViewingOnly" type="submit"
+                                            class="px-8 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all transform active:scale-95">
+                                        {{ isRequestingScheduleChange ? 'Submit Request' : (isEditing ? 'Save Changes' : 'Create Schedule') }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </form>
