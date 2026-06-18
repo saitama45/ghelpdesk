@@ -11,10 +11,11 @@ class OrganizationReferenceService
     /**
      * Fetch the complete organizational tree.
      */
-    public function tree(bool $activeOnly = false): array
+    public function tree(bool $activeOnly = false, ?int $companyId = null): array
     {
         $departments = Department::query()
             ->when($activeOnly, fn ($query) => $query->where('is_active', true))
+            ->when($companyId, fn ($query) => $query->where('company_id', $companyId))
             ->orderBy('name')
             ->get();
 

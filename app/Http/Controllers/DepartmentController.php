@@ -6,6 +6,7 @@ use App\Models\Department;
 use App\Models\DepartmentNode;
 use App\Models\User;
 use App\Services\OrganizationReferenceService;
+use App\Support\CompanyContext;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -32,6 +33,8 @@ class DepartmentController extends Controller implements HasMiddleware
 
     public function index()
     {
+        $activeCompanyId = CompanyContext::activeCompanyId();
+
         $users = User::with(['roles:id,name', 'managers:id,name'])
             ->orderBy('org_sort_order')
             ->orderBy('name')
@@ -52,8 +55,8 @@ class DepartmentController extends Controller implements HasMiddleware
             ]);
 
         return Inertia::render('Departments/Index', [
-            'departments' => $this->organizationReferences->tree(),
-            'activeDepartments' => $this->organizationReferences->tree(activeOnly: true),
+            'departments' => $this->organizationReferences->tree(companyId: $activeCompanyId),
+            'activeDepartments' => $this->organizationReferences->tree(activeOnly: true, companyId: $activeCompanyId),
             'users' => $users,
             'authUserDepartmentId' => auth()->user()->department_id
                 ?? optional(auth()->user()->load('departmentNode')->departmentNode)->department_id,
