@@ -368,6 +368,7 @@ Route::middleware('auth')->group(function () {
         Route::get('services/import-template', [\App\Http\Controllers\PaymentMonitoringController::class, 'connectivityImportTemplate'])->name('services.import-template');
         Route::post('services/import', [\App\Http\Controllers\PaymentMonitoringController::class, 'importConnectivity'])->name('services.import');
         Route::put('locations/{store}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateLocation'])->name('locations.update');
+        Route::put('locations/{store}/services', [\App\Http\Controllers\PaymentMonitoringController::class, 'syncServices'])->name('locations.services.sync');
         Route::post('services', [\App\Http\Controllers\PaymentMonitoringController::class, 'storeService'])->name('services.store');
         Route::put('services/{service}', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateService'])->name('services.update');
         Route::delete('services/{service}', [\App\Http\Controllers\PaymentMonitoringController::class, 'destroyService'])->name('services.destroy');

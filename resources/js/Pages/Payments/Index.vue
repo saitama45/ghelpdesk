@@ -121,7 +121,10 @@
                                             <span v-if="loc.monitoring_status" :class="monitoringStatusPill(loc.monitoring_status)" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ loc.monitoring_status }}</span>
                                         </div>
                                         <div v-if="loc.address" class="text-xs text-gray-500 mt-0.5">{{ loc.address }}</div>
-                                        <div v-if="loc.legal_company" class="text-xs text-gray-400">{{ loc.legal_company }}</div>
+                                        <div v-if="loc.legal_company || loc.company_applied_with" class="text-xs text-gray-400">
+                                            <span v-if="loc.legal_company">{{ loc.legal_company }}</span>
+                                            <span v-if="loc.company_applied_with"> · applied with {{ loc.company_applied_with }}</span>
+                                        </div>
                                     </div>
                                     <div class="flex items-center gap-1 shrink-0">
                                         <span class="text-xs font-mono text-gray-500 mr-1">₱{{ formatAmount(locationMrc(loc)) }}/mo</span>
@@ -758,60 +761,95 @@
             </div>
         </div>
 
-        <!-- ============ CONNECTIVITY SERVICE MODAL ============ -->
-        <Modal v-if="serviceModal.open" @close="serviceModal.open = false" :title="serviceModal.editing ? 'Edit Connectivity Service' : 'Add Connectivity Service'">
-            <form @submit.prevent="submitService" class="space-y-3">
-                <div class="grid grid-cols-2 gap-3">
-                    <FormField label="Location (Office / Store)" required>
-                        <Autocomplete v-model="serviceForm.store_id" :options="storeIdOptions" placeholder="Search location..." />
-                    </FormField>
-                    <FormField label="Role" required>
-                        <Autocomplete v-model="serviceForm.role" :options="roleOptions" placeholder="Select role..." />
-                    </FormField>
-                    <FormField label="Telco / Provider">
-                        <input v-model="serviceForm.telco" placeholder="PLDT, Innove, Converge..." class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Vendor (for approval)">
-                        <Autocomplete v-model="serviceForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
-                    </FormField>
-                    <FormField label="Account No.">
-                        <input v-model="serviceForm.account_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Service ID">
-                        <input v-model="serviceForm.service_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Bandwidth">
-                        <input v-model="serviceForm.bandwidth" placeholder="50 Mbps" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Install Type">
-                        <Autocomplete v-model="serviceForm.install_type" :options="installTypeOptions" placeholder="Select type..." />
-                    </FormField>
-                    <FormField label="MRC (VAT inc)" required>
-                        <input v-model.number="serviceForm.mrc" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Currency">
-                        <Autocomplete v-model="serviceForm.currency" :options="currencyOptions" placeholder="Select currency..." />
-                    </FormField>
-                    <FormField label="Installation Date">
-                        <input v-model="serviceForm.installation_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Billing Day (1-31)">
-                        <input v-model.number="serviceForm.billing_day" type="number" min="1" max="31" placeholder="Defaults to install day" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                    <FormField label="Status">
-                        <Autocomplete v-model="serviceForm.status" :options="serviceStatusOptions" placeholder="Select status..." />
-                    </FormField>
-                    <FormField label="Assignee">
-                        <Autocomplete v-model="serviceForm.assignee_id" :options="userOptions" placeholder="Search user..." />
-                    </FormField>
-                    <FormField label="CC Emails (comma-separated)">
-                        <input v-model="serviceForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
-                    </FormField>
-                </div>
-                <FormField label="Notes">
-                    <textarea v-model="serviceForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+        <!-- ============ CONNECTIVITY SERVICES MODAL (per-provider blocks) ============ -->
+        <Modal v-if="serviceModal.open" @close="serviceModal.open = false" title="Connectivity Services">
+            <form @submit.prevent="submitServices" class="space-y-4">
+                <FormField label="Location (Office / Store)" required>
+                    <Autocomplete v-model="serviceModal.store_id" :options="storeIdOptions" placeholder="Search location..." />
                 </FormField>
-                <ModalFooter @cancel="serviceModal.open = false" :submit-label="serviceModal.editing ? 'Update' : 'Add Service'" />
+
+                <div class="max-h-[56vh] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+                    <div v-for="(provider, idx) in serviceProviders" :key="idx" class="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[11px] font-black uppercase tracking-widest text-gray-500">Provider {{ idx + 1 }}</span>
+                                <span :class="provider.role === 'primary' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ provider.role }}</span>
+                            </div>
+                            <button type="button" @click="removeProvider(idx)" class="p-1 text-red-500 hover:bg-red-50 rounded-lg" title="Remove provider">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <FormField label="Telco / Provider">
+                                <ManageableAutocomplete
+                                    v-model="provider.telco"
+                                    :options="telcoOptionsLocal"
+                                    option-type="store_telco"
+                                    placeholder="Select telco..."
+                                    :can-create="canCreateOption"
+                                    :can-edit="canEditOption"
+                                    :can-delete="canDeleteOption"
+                                    @options-changed="telcoOptionsLocal = $event"
+                                />
+                            </FormField>
+                            <FormField label="Role" required>
+                                <Autocomplete v-model="provider.role" :options="roleOptions" placeholder="Select role..." />
+                            </FormField>
+                            <FormField label="Vendor (for approval)">
+                                <Autocomplete v-model="provider.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
+                            </FormField>
+                            <FormField label="Account No.">
+                                <input v-model="provider.account_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                            <FormField label="Service ID">
+                                <input v-model="provider.service_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                            <FormField label="Bandwidth">
+                                <input v-model="provider.bandwidth" placeholder="50 Mbps" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                            <FormField label="Install Type">
+                                <Autocomplete v-model="provider.install_type" :options="installTypeOptions" placeholder="Select type..." />
+                            </FormField>
+                            <FormField label="MRC (VAT inc)" required>
+                                <input v-model.number="provider.mrc" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                            <FormField label="Currency">
+                                <Autocomplete v-model="provider.currency" :options="currencyOptions" placeholder="Select currency..." />
+                            </FormField>
+                            <FormField label="Installation Date">
+                                <input v-model="provider.installation_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                            <FormField label="Billing Day (1-31)">
+                                <input v-model.number="provider.billing_day" type="number" min="1" max="31" placeholder="Defaults to install day" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                            <FormField label="Status">
+                                <Autocomplete v-model="provider.status" :options="serviceStatusOptions" placeholder="Select status..." />
+                            </FormField>
+                            <FormField label="Assignee">
+                                <Autocomplete v-model="provider.assignee_id" :options="userOptions" placeholder="Search user..." />
+                            </FormField>
+                            <FormField label="CC Emails (comma-separated)">
+                                <input v-model="provider.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                            </FormField>
+                        </div>
+                        <div class="mt-3">
+                            <FormField label="Notes">
+                                <textarea v-model="provider.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                            </FormField>
+                        </div>
+                    </div>
+
+                    <div v-if="!serviceProviders.length" class="text-center text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg py-6">
+                        No providers. Add one below.
+                    </div>
+                </div>
+
+                <button type="button" @click="addProvider"
+                        class="w-full border border-dashed border-blue-300 rounded-lg py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors">
+                    + Add Provider
+                </button>
+
+                <ModalFooter @cancel="serviceModal.open = false" submit-label="Save Services" />
             </form>
         </Modal>
 
@@ -822,11 +860,15 @@
                     <textarea v-model="locationForm.address" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
                 </FormField>
                 <div class="grid grid-cols-2 gap-3">
-                    <FormField label="Legal Company">
-                        <input v-model="locationForm.legal_company" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    <FormField label="Company (operating entity)">
+                        <Autocomplete v-model="locationForm.legal_company" :options="companyOptions" allow-custom placeholder="Select or type company..." />
+                    </FormField>
+                    <FormField label="Company Applied With">
+                        <input v-model="locationForm.company_applied_with" placeholder="Telco account holder" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
                     </FormField>
                     <FormField label="Monitoring Status">
-                        <input v-model="locationForm.monitoring_status" placeholder="OPEN / PENDING" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <Autocomplete v-model="locationForm.monitoring_status" :options="monitoringStatusOptions" allow-custom placeholder="Select status..." />
+                        <p class="mt-1 text-[11px] text-gray-400">Site lifecycle: OPEN once live, PENDING/FOR APPLICATION while connectivity is being set up, FOR TERMINATION when winding down.</p>
                     </FormField>
                 </div>
                 <ModalFooter @cancel="locationModal.open = false" submit-label="Save" />
@@ -838,7 +880,7 @@
             <form @submit.prevent="submitConnectivityImport" class="space-y-4">
                 <div class="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
                     <div class="font-semibold mb-1">Template columns</div>
-                    <p>Match rows to locations by <strong>store_code</strong>. One primary and one secondary line per store — re-importing the same store/role updates it in place.</p>
+                    <p>One row per location, matched by <strong>Branch Code</strong>. Each row sets the location's identity plus its <strong>primary and secondary telco</strong> (each with its own account / bandwidth / MRC). Existing locations are updated in place; unknown branch codes are skipped. Extra per-provider fields are optional columns appended after the core set.</p>
                 </div>
                 <FormField label="Excel File" required>
                     <input type="file" accept=".xlsx" required @change="onConnectivityImportFileChange"
@@ -1271,6 +1313,7 @@ import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
 import Modal from '@/Pages/Payments/_PaymentsModal.vue'
 import FormField from '@/Pages/Payments/_PaymentsField.vue'
 import ModalFooter from '@/Pages/Payments/_PaymentsFooter.vue'
@@ -1293,6 +1336,8 @@ const props = defineProps({
     cycles: { type: Array, default: () => [] },
     installTypes: { type: Array, default: () => [] },
     serviceStatuses: { type: Array, default: () => [] },
+    telcoOptions: { type: Array, default: () => [] },
+    monitoringStatuses: { type: Array, default: () => [] },
     invoiceStatuses: { type: Array, default: () => [] },
     renewalStatuses: { type: Array, default: () => [] },
     weeklyStatuses: { type: Array, default: () => [] },
@@ -1416,6 +1461,16 @@ const cycleOptions = computed(() => (props.cycles || []).map(c => ({ label: c.re
 const installTypeOptions = computed(() => (props.installTypes || []).map(t => ({ label: t.charAt(0).toUpperCase() + t.slice(1), value: t })))
 const serviceStatusOptions = computed(() => (props.serviceStatuses || []).map(s => ({ label: s.charAt(0).toUpperCase() + s.slice(1), value: s })))
 const roleOptions = [{ label: 'Primary', value: 'primary' }, { label: 'Secondary', value: 'secondary' }]
+/* Company (operating entity) options come from the Companies module; legal_company stays a string. */
+const companyOptions = computed(() => (props.companies || []).map(c => ({ label: c.name, value: c.name })))
+const monitoringStatusOptions = computed(() => (props.monitoringStatuses || []).map(s => ({ label: s, value: s })))
+/* Telco/Provider shares the Stores `store_telco` reference list — add/edit/delete here writes
+   to the same options the Stores page uses. Kept in a local ref synced via @options-changed. */
+const telcoOptionsLocal = ref([...(props.telcoOptions || [])])
+watch(() => props.telcoOptions, (v) => { telcoOptionsLocal.value = [...(v || [])] })
+const canCreateOption = computed(() => hasPermission('reference_options.create'))
+const canEditOption = computed(() => hasPermission('reference_options.edit'))
+const canDeleteOption = computed(() => hasPermission('reference_options.delete'))
 const renewalStatusOptions = computed(() => (props.renewalStatuses || []).map(s => ({ label: s, value: s })))
 const invoiceStatusOptions = computed(() => (props.invoiceStatuses || []).map(s => ({ label: s, value: s })))
 const weeklyStatusOptions = computed(() => (props.weeklyStatuses || []).map(s => ({ label: s, value: s })))
@@ -1618,32 +1673,76 @@ const calendarDays = computed(() => {
     })
 })
 
-/* ---- Connectivity service form ---- */
-const serviceModal = reactive({ open: false, editing: false, current: null })
-const serviceForm = reactive(blankService())
-function blankService() {
+/* ---- Connectivity services (per-provider blocks for one location) ---- */
+const serviceModal = reactive({ open: false, store_id: '' })
+const serviceProviders = ref([])
+const deletedServiceIds = ref([])
+
+function blankProvider(role = 'primary') {
     return {
-        store_id: '', role: 'primary', vendor_id: null, telco: '', account_no: '',
-        service_id: '', bandwidth: '', install_type: '', installation_date: '',
-        billing_day: null, mrc: 0, currency: 'PHP', status: 'active',
-        assignee_id: null, cc_emails: '', notes: '',
+        id: null, role, vendor_id: null, telco: '', account_no: '', service_id: '',
+        bandwidth: '', install_type: '', installation_date: '', billing_day: null,
+        mrc: 0, currency: 'PHP', status: 'active', assignee_id: null, cc_emails: '', notes: '',
     }
 }
-const openServiceModal = (location = null, svc = null) => {
-    serviceModal.editing = !!svc
-    serviceModal.current = svc
-    Object.assign(
-        serviceForm,
-        blankService(),
-        location ? { store_id: location.id } : {},
-        svc ? { ...svc, vendor_id: svc.vendor_id ?? null, installation_date: svc.installation_date || '' } : {},
-    )
+const providerFromService = (sv) => ({
+    id: sv.id,
+    role: sv.role || 'primary',
+    vendor_id: sv.vendor_id ?? null,
+    telco: sv.telco || '',
+    account_no: sv.account_no || '',
+    service_id: sv.service_id || '',
+    bandwidth: sv.bandwidth || '',
+    install_type: sv.install_type || '',
+    installation_date: sv.installation_date || '',
+    billing_day: sv.billing_day ?? null,
+    mrc: Number(sv.mrc || 0),
+    currency: sv.currency || 'PHP',
+    status: sv.status || 'active',
+    assignee_id: sv.assignee_id ?? null,
+    cc_emails: sv.cc_emails || '',
+    notes: sv.notes || '',
+})
+const loadProvidersForStore = (storeId) => {
+    const loc = (props.locations || []).find(l => l.id === storeId)
+    const svcs = loc?.services || []
+    serviceProviders.value = svcs.length ? svcs.map(providerFromService) : [blankProvider('primary')]
+    deletedServiceIds.value = []
+}
+const openServiceModal = (location = null) => {
+    deletedServiceIds.value = []
+    if (location) {
+        serviceModal.store_id = location.id
+        loadProvidersForStore(location.id)
+    } else {
+        serviceModal.store_id = ''
+        serviceProviders.value = [blankProvider('primary')]
+    }
     serviceModal.open = true
 }
-const submitService = () => {
-    const url = serviceModal.editing ? `/payments/services/${serviceModal.current.id}` : '/payments/services'
-    const method = serviceModal.editing ? put : post
-    method(url, serviceForm, {
+/* When a location is picked from the selector, load its existing providers. */
+watch(() => serviceModal.store_id, (id, prev) => {
+    if (serviceModal.open && id && id !== prev) loadProvidersForStore(id)
+})
+const addProvider = () => {
+    const role = serviceProviders.value.some(p => p.role === 'primary') ? 'secondary' : 'primary'
+    serviceProviders.value.push(blankProvider(role))
+}
+const removeProvider = (idx) => {
+    const p = serviceProviders.value[idx]
+    if (p?.id) deletedServiceIds.value.push(p.id)
+    serviceProviders.value.splice(idx, 1)
+}
+const submitServices = () => {
+    if (!serviceModal.store_id) { showError('Select a location first.'); return }
+    if (!serviceProviders.value.length && !deletedServiceIds.value.length) {
+        showError('Add at least one provider.')
+        return
+    }
+    put(`/payments/locations/${serviceModal.store_id}/services`, {
+        services: serviceProviders.value,
+        deleted_ids: deletedServiceIds.value,
+    }, {
         preserveScroll: true,
         onSuccess: () => { serviceModal.open = false },
         onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Save failed'),
@@ -1652,12 +1751,13 @@ const submitService = () => {
 
 /* ---- Location details form ---- */
 const locationModal = reactive({ open: false, current: null })
-const locationForm = reactive({ address: '', legal_company: '', monitoring_status: 'OPEN' })
+const locationForm = reactive({ address: '', legal_company: '', company_applied_with: '', monitoring_status: 'OPEN' })
 const openLocationModal = (loc) => {
     locationModal.current = loc
     Object.assign(locationForm, {
         address: loc.address || '',
         legal_company: loc.legal_company || '',
+        company_applied_with: loc.company_applied_with || '',
         monitoring_status: loc.monitoring_status || 'OPEN',
     })
     locationModal.open = true

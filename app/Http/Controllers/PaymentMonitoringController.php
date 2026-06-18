@@ -45,7 +45,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 'importRenewals', 'importWeeklyPlans', 'storeService', 'importConnectivity',
             ]),
             new Middleware('can:payments.edit', only: [
-                'updateRenewal', 'updateInvoice', 'updateWeeklyPlan', 'updateService', 'updateLocation',
+                'updateRenewal', 'updateInvoice', 'updateWeeklyPlan', 'updateService', 'updateLocation', 'syncServices',
             ]),
             new Middleware('can:payments.delete', only: [
                 'destroyRenewal', 'destroyInvoice', 'destroyWeeklyPlan', 'destroyOverpayment', 'destroyService',
@@ -74,6 +74,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'cycles' => ['monthly', 'quarterly', 'semi_annual', 'annual'],
             'installTypes' => ['copper', 'fiber', 'wireless'],
             'serviceStatuses' => ['active', 'pending', 'terminated'],
+            'telcoOptions' => \App\Models\ReferenceOption::ofType('store_telco'),
+            'monitoringStatuses' => ['OPEN', 'PENDING', 'FOR APPLICATION', 'FOR TERMINATION', 'TEMPORARILY CLOSED', 'CLOSED'],
             'invoiceStatuses' => ['Pending', 'Due', 'Overdue', 'Paid', 'Cancelled'],
             'renewalStatuses' => ['active', 'paused', 'cancelled'],
             'weeklyStatuses' => ['Planned', 'Released', 'Paid'],
@@ -155,8 +157,13 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $diff = (int) round(Carbon::now()->startOfDay()->diffInDays($due, false));
         $reminderType = $diff < 0 ? 'overdue' : ($diff === 0 ? 'due' : ($diff <= 1 ? '1d' : ($diff <= 7 ? '7d' : '30d')));
 
+        $primaryRecipient = $toEmail ?: ($mergedCc[0] ?? ($bcc[0] ?? null));
+        if (! $primaryRecipient) {
+            return back()->withErrors(['reminder' => 'No recipient for this reminder. Add an assignee or CC email to the item, or set a Global BCC in Settings.']);
+        }
+
         $mailable = new \App\Mail\PaymentDueReminderMail($type, $payload, $reminderType, $vendorName);
-        $pending = $toEmail ? \Illuminate\Support\Facades\Mail::to($toEmail) : \Illuminate\Support\Facades\Mail::to($mergedCc[0] ?? $bcc[0]);
+        $pending = \Illuminate\Support\Facades\Mail::to($primaryRecipient);
         if (!empty($mergedCc)) $pending->cc($mergedCc);
         if (!empty($bcc)) $pending->bcc($bcc);
         $pending->send($mailable);
@@ -264,8 +271,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         return Store::query()
             ->orderBy('brand')->orderBy('code')
             ->get([
-                'id', 'code', 'name', 'address', 'legal_company', 'monitoring_status',
-                'brand', 'class', 'is_active', 'latitude', 'longitude', 'opening_date',
+                'id', 'code', 'name', 'address', 'legal_company', 'company_applied_with',
+                'monitoring_status', 'brand', 'class', 'is_active', 'latitude', 'longitude', 'opening_date',
             ])
             ->map(function (Store $store) use ($services) {
                 return [
@@ -274,6 +281,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                     'name' => $store->name,
                     'address' => $store->address,
                     'legal_company' => $store->legal_company,
+                    'company_applied_with' => $store->company_applied_with,
                     'monitoring_status' => $store->monitoring_status,
                     'brand' => $store->brand,
                     'class' => $store->class,
@@ -348,6 +356,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $data = $request->validate([
             'address' => 'nullable|string',
             'legal_company' => 'nullable|string|max:255',
+            'company_applied_with' => 'nullable|string|max:255',
             'monitoring_status' => 'nullable|string|max:100',
         ]);
         $store->update($data);
@@ -355,25 +364,149 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Location details updated successfully');
     }
 
+    /**
+     * Batch upsert/delete the connectivity providers for a single location.
+     * Each provider entry carries its own telco-specific fields.
+     */
+    public function syncServices(Request $request, Store $store)
+    {
+        $data = $request->validate([
+            'services' => 'array',
+            'services.*.id' => 'nullable|integer',
+            'services.*.role' => 'required|in:primary,secondary',
+            'services.*.vendor_id' => 'nullable|exists:vendors,id',
+            'services.*.telco' => 'nullable|string|max:255',
+            'services.*.account_no' => 'nullable|string|max:255',
+            'services.*.service_id' => 'nullable|string|max:255',
+            'services.*.bandwidth' => 'nullable|string|max:100',
+            'services.*.install_type' => 'nullable|string|max:50',
+            'services.*.installation_date' => 'nullable|date',
+            'services.*.billing_day' => 'nullable|integer|min:1|max:31',
+            'services.*.mrc' => 'required|numeric|min:0',
+            'services.*.currency' => 'nullable|string|max:8',
+            'services.*.status' => 'nullable|in:active,pending,terminated',
+            'services.*.assignee_id' => 'nullable|exists:users,id',
+            'services.*.cc_emails' => 'nullable|string',
+            'services.*.notes' => 'nullable|string',
+            'deleted_ids' => 'array',
+            'deleted_ids.*' => 'integer',
+        ]);
+
+        $user = $request->user();
+        $services = $data['services'] ?? [];
+        $deletedIds = $data['deleted_ids'] ?? [];
+
+        // Adding new lines needs create; removing lines needs delete.
+        $hasNew = collect($services)->contains(fn ($s) => empty($s['id']));
+        if ($hasNew && $user->cannot('payments.create')) {
+            return back()->withErrors(['services' => 'You do not have permission to add new providers.']);
+        }
+        if (! empty($deletedIds) && $user->cannot('payments.delete')) {
+            return back()->withErrors(['services' => 'You do not have permission to remove providers.']);
+        }
+
+        // Guard: a line with an approved payment can't be edited; one with any payment history can't be removed.
+        foreach ($services as $s) {
+            if (! empty($s['id']) && $this->hasApprovedRecord('service', (int) $s['id'])) {
+                return back()->withErrors(['services' => 'A provider with an approved payment cannot be edited. Resolve its payment first.']);
+            }
+        }
+        foreach ($deletedIds as $id) {
+            if (PaymentRecord::where('payable_type', 'service')->where('payable_id', $id)->exists()) {
+                return back()->withErrors(['services' => 'A provider with payment history cannot be removed.']);
+            }
+        }
+
+        DB::transaction(function () use ($services, $deletedIds, $store, $user) {
+            if (! empty($deletedIds)) {
+                PaymentConnectivityService::where('store_id', $store->id)
+                    ->whereIn('id', $deletedIds)
+                    ->delete();
+            }
+
+            foreach ($services as $s) {
+                $installDate = $s['installation_date'] ?? null;
+                $billingDay = $s['billing_day'] ?? null;
+                if (! $billingDay && $installDate) {
+                    $billingDay = (int) Carbon::parse($installDate)->day;
+                }
+
+                $payload = [
+                    'store_id' => $store->id,
+                    'role' => $s['role'],
+                    'vendor_id' => $s['vendor_id'] ?? null,
+                    'telco' => $s['telco'] ?: null,
+                    'account_no' => $s['account_no'] ?: null,
+                    'service_id' => $s['service_id'] ?: null,
+                    'bandwidth' => $s['bandwidth'] ?: null,
+                    'install_type' => $s['install_type'] ?: null,
+                    'installation_date' => $installDate,
+                    'billing_day' => $billingDay,
+                    'mrc' => $s['mrc'] ?? 0,
+                    'currency' => $s['currency'] ?: 'PHP',
+                    'status' => $s['status'] ?: 'active',
+                    'assignee_id' => $s['assignee_id'] ?? null,
+                    'cc_emails' => $s['cc_emails'] ?: null,
+                    'notes' => $s['notes'] ?: null,
+                    'updated_by' => $user->id,
+                ];
+
+                if (! empty($s['id'])) {
+                    PaymentConnectivityService::where('store_id', $store->id)
+                        ->where('id', $s['id'])
+                        ->update($payload);
+                } else {
+                    $payload['created_by'] = $user->id;
+                    PaymentConnectivityService::create($payload);
+                }
+            }
+        });
+
+        return back()->with('success', 'Connectivity services saved');
+    }
+
     protected function connectivityImportHeaders(): array
     {
         return [
-            'store_code',
-            'role',
-            'telco',
-            'vendor_code_or_name',
-            'account_no',
-            'service_id',
-            'bandwidth',
-            'install_type',
-            'installation_date',
-            'billing_day',
-            'mrc',
-            'currency',
-            'status',
-            'assignee_email',
-            'cc_emails',
-            'notes',
+            // ── Location identity (matches the Location/Stores sheet order) ──
+            'Branch Code',
+            'Address',
+            'Brand',
+            'Branch Name',
+            'Company',
+            'Company Applied With',
+            // ── Primary telco ──
+            'Currently Installed Primary',
+            'Account No',
+            'Bandwidth',
+            'MRC (VAT inc)',
+            // ── Secondary telco ──
+            'Secondary Telco',
+            'Secondary MRC (VAT inc)',
+            // ── Appended extras (optional) ──
+            'Monitoring Status',
+            'Primary Service ID',
+            'Primary Install Type',
+            'Primary Installation Date',
+            'Primary Billing Day',
+            'Primary Currency',
+            'Primary Status',
+            'Primary Vendor',
+            'Primary Assignee Email',
+            'Primary CC Emails',
+            'Primary Notes',
+            'Secondary Account No',
+            'Secondary Bandwidth',
+            'Secondary Service ID',
+            'Secondary Install Type',
+            'Secondary Installation Date',
+            'Secondary Billing Day',
+            'Secondary Currency',
+            'Secondary Status',
+            'Secondary Vendor',
+            'Secondary Assignee Email',
+            'Secondary CC Emails',
+            'Secondary Notes',
         ];
     }
 
@@ -418,6 +551,10 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         foreach ($users as $index => $user) {
             $listsSheet->setCellValue('G'.($index + 2), $user->email);
         }
+        $listsSheet->setCellValue('H1', 'Monitoring Statuses');
+        foreach (['OPEN', 'PENDING', 'FOR APPLICATION', 'FOR TERMINATION', 'TEMPORARILY CLOSED', 'CLOSED'] as $index => $ms) {
+            $listsSheet->setCellValue('H'.($index + 2), $ms);
+        }
 
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Connectivity');
@@ -430,50 +567,84 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
 
         $today = now()->toDateString();
         $sampleStore = $stores->first();
-        $sheet->fromArray([[
-            $sampleStore?->code ?? 'CBTL-001',
-            'primary',
-            'PLDT',
-            '',
-            '6018360606',
-            '',
-            '50 Mbps',
-            'copper',
-            $today,
-            '',
-            '3080.00',
-            'PHP',
-            'active',
-            '',
-            '',
-            'Imported primary line',
-        ]], null, 'A2');
+        $sampleByHeader = [
+            'Branch Code' => $sampleStore?->code ?? 'CBTL-001',
+            'Address' => 'Sample address, City',
+            'Brand' => 'CBTL',
+            'Branch Name' => 'Sample Branch',
+            'Company' => 'Seventy 7 Seeds, Inc.',
+            'Company Applied With' => 'The Tablegroup Inc',
+            'Currently Installed Primary' => 'PLDT',
+            'Account No' => '6018360606',
+            'Bandwidth' => '50 Mbps',
+            'MRC (VAT inc)' => '3080.00',
+            'Secondary Telco' => 'Smartlink',
+            'Secondary MRC (VAT inc)' => '4256.00',
+            'Monitoring Status' => 'OPEN',
+            'Primary Install Type' => 'copper',
+            'Primary Installation Date' => $today,
+            'Primary Currency' => 'PHP',
+            'Primary Status' => 'active',
+            'Primary Notes' => 'Imported primary line',
+            'Secondary Install Type' => 'wireless',
+            'Secondary Currency' => 'PHP',
+            'Secondary Status' => 'active',
+        ];
+        $sampleRow = array_map(fn ($h) => $sampleByHeader[$h] ?? '', $headers);
+        $sheet->fromArray([$sampleRow], null, 'A2');
+
+        // Resolve the spreadsheet column letter for a given header name.
+        $colOf = function (string $name) use ($headers) {
+            $idx = array_search($name, $headers, true);
+            return $idx === false ? null : Coordinate::stringFromColumnIndex($idx + 1);
+        };
 
         $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
         $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
         $sheet->getStyle("A1:{$lastColumn}1")->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
-        $sheet->getStyle('I:I')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
-        $sheet->getStyle('K:K')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+        foreach (['Primary Installation Date', 'Secondary Installation Date'] as $dateHeader) {
+            if ($c = $colOf($dateHeader)) {
+                $sheet->getStyle("{$c}:{$c}")->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
+            }
+        }
+        foreach (['MRC (VAT inc)', 'Secondary MRC (VAT inc)'] as $mrcHeader) {
+            if ($c = $colOf($mrcHeader)) {
+                $sheet->getStyle("{$c}:{$c}")->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+            }
+        }
         $sheet->freezePane('A2');
 
         foreach (range(1, count($headers)) as $colIndex) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
         }
 
-        if ($stores->isNotEmpty()) {
-            $this->applyListValidation($sheet, 'A', sprintf('Lists!$A$2:$A$%d', $stores->count() + 1), false);
+        // Dropdowns (Lists: A=Stores, C=InstallTypes, D=Statuses, E=Currencies, F=Vendors, G=Assignees, H=MonitoringStatuses).
+        if ($stores->isNotEmpty() && ($c = $colOf('Branch Code'))) {
+            $this->applyListValidation($sheet, $c, sprintf('Lists!$A$2:$A$%d', $stores->count() + 1), false);
         }
-        $this->applyListValidation($sheet, 'B', 'Lists!$B$2:$B$3', false);
-        $this->applyListValidation($sheet, 'H', 'Lists!$C$2:$C$4', true);
-        $this->applyListValidation($sheet, 'M', 'Lists!$D$2:$D$4', true);
-        $this->applyListValidation($sheet, 'L', 'Lists!$E$2:$E$3', true);
+        if ($c = $colOf('Monitoring Status')) {
+            $this->applyListValidation($sheet, $c, 'Lists!$H$2:$H$7', true);
+        }
+        foreach (['Primary Install Type', 'Secondary Install Type'] as $h) {
+            if ($c = $colOf($h)) $this->applyListValidation($sheet, $c, 'Lists!$C$2:$C$4', true);
+        }
+        foreach (['Primary Status', 'Secondary Status'] as $h) {
+            if ($c = $colOf($h)) $this->applyListValidation($sheet, $c, 'Lists!$D$2:$D$4', true);
+        }
+        foreach (['Primary Currency', 'Secondary Currency'] as $h) {
+            if ($c = $colOf($h)) $this->applyListValidation($sheet, $c, 'Lists!$E$2:$E$3', true);
+        }
         if ($vendors->isNotEmpty()) {
-            $this->applyListValidation($sheet, 'D', sprintf('Lists!$F$2:$F$%d', $vendors->count() + 1), true);
+            foreach (['Primary Vendor', 'Secondary Vendor'] as $h) {
+                if ($c = $colOf($h)) $this->applyListValidation($sheet, $c, sprintf('Lists!$F$2:$F$%d', $vendors->count() + 1), true);
+            }
         }
         if ($users->isNotEmpty()) {
-            $this->applyListValidation($sheet, 'N', sprintf('Lists!$G$2:$G$%d', $users->count() + 1), true);
+            foreach (['Primary Assignee Email', 'Secondary Assignee Email'] as $h) {
+                if ($c = $colOf($h)) $this->applyListValidation($sheet, $c, sprintf('Lists!$G$2:$G$%d', $users->count() + 1), true);
+            }
         }
 
         $spreadsheet->setActiveSheetIndex(0);
@@ -498,14 +669,13 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
         $header = array_map(fn ($value) => trim((string) $value), array_shift($rows) ?? []);
         $expectedHeaders = $this->connectivityImportHeaders();
-        $missingHeaders = array_values(array_diff($expectedHeaders, $header));
 
-        if (! empty($missingHeaders)) {
+        if (! in_array('Branch Code', $header, true)) {
             return response()->json([
                 'created' => 0,
                 'updated' => 0,
                 'skipped' => 0,
-                'errors' => ['Template is missing required columns: '.implode(', ', $missingHeaders)],
+                'errors' => ['Template is missing the required "Branch Code" column.'],
             ], 422);
         }
 
@@ -522,76 +692,63 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         $rowNum = 1;
         $userId = $request->user()->id;
 
-        foreach ($rows as $line) {
-            $rowNum++;
-
-            if (empty(array_filter($line, fn ($value) => $value !== null && trim((string) $value) !== ''))) {
-                continue;
+        // Upsert a single provider line (primary|secondary) from a flat field map; skips when empty.
+        $upsert = function (Store $store, string $role, array $f) use ($vendorsByKey, $usersByEmail, $userId, $rowNum, &$created, &$updated, &$skipped, &$errors) {
+            if (($f['telco'] ?? '') === '' && ($f['mrc'] ?? '') === '') {
+                return; // nothing supplied for this role
             }
 
-            $data = [];
-            foreach ($expectedHeaders as $expectedHeader) {
-                $data[$expectedHeader] = $this->normalizeImportValue($line[$headerIndexes[$expectedHeader]] ?? null);
-            }
-
-            $store = $storesByCode->get(mb_strtolower(trim($data['store_code'])));
-            if (! $store) {
-                $errors[] = "Row {$rowNum}: store code '{$data['store_code']}' was not found.";
-                $skipped++;
-                continue;
-            }
-
-            $vendor = null;
-            if ($data['vendor_code_or_name'] !== '') {
-                $vendor = $vendorsByKey->get(mb_strtolower(trim($data['vendor_code_or_name'])));
+            $vendorId = null;
+            if (($f['vendor'] ?? '') !== '') {
+                $vendor = $vendorsByKey->get(mb_strtolower(trim($f['vendor'])));
                 if (! $vendor) {
-                    $errors[] = "Row {$rowNum}: vendor '{$data['vendor_code_or_name']}' was not found.";
+                    $errors[] = "Row {$rowNum} ({$role}): vendor '{$f['vendor']}' was not found.";
                     $skipped++;
-                    continue;
+                    return;
                 }
+                $vendorId = $vendor->id;
             }
 
-            $assignee = null;
-            if ($data['assignee_email'] !== '') {
-                $assignee = $usersByEmail->get(mb_strtolower($data['assignee_email']));
+            $assigneeId = null;
+            if (($f['assignee'] ?? '') !== '') {
+                $assignee = $usersByEmail->get(mb_strtolower($f['assignee']));
                 if (! $assignee) {
-                    $errors[] = "Row {$rowNum}: assignee email '{$data['assignee_email']}' was not found.";
+                    $errors[] = "Row {$rowNum} ({$role}): assignee '{$f['assignee']}' was not found.";
                     $skipped++;
-                    continue;
+                    return;
                 }
+                $assigneeId = $assignee->id;
             }
 
             $payload = [
                 'store_id' => $store->id,
-                'role' => strtolower($data['role']) ?: 'primary',
-                'vendor_id' => $vendor?->id,
-                'telco' => $data['telco'] ?: null,
-                'account_no' => $data['account_no'] ?: null,
-                'service_id' => $data['service_id'] ?: null,
-                'bandwidth' => $data['bandwidth'] ?: null,
-                'install_type' => $data['install_type'] ? strtolower($data['install_type']) : null,
-                'installation_date' => $this->normalizeImportDate($data['installation_date']),
-                'billing_day' => $data['billing_day'] !== '' ? (int) $data['billing_day'] : null,
-                'mrc' => $this->normalizeImportNumber($data['mrc'], 0),
-                'currency' => $data['currency'] ?: 'PHP',
-                'status' => $data['status'] ? strtolower($data['status']) : 'active',
-                'assignee_id' => $assignee?->id,
-                'cc_emails' => $data['cc_emails'] ?: null,
-                'notes' => $data['notes'] ?: null,
+                'role' => $role,
+                'vendor_id' => $vendorId,
+                'telco' => ($f['telco'] ?? '') ?: null,
+                'account_no' => ($f['account_no'] ?? '') ?: null,
+                'service_id' => ($f['service_id'] ?? '') ?: null,
+                'bandwidth' => ($f['bandwidth'] ?? '') ?: null,
+                'install_type' => ($f['install_type'] ?? '') ? strtolower($f['install_type']) : null,
+                'installation_date' => $this->normalizeImportDate($f['installation_date'] ?? ''),
+                'billing_day' => ($f['billing_day'] ?? '') !== '' ? (int) $f['billing_day'] : null,
+                'mrc' => $this->normalizeImportNumber($f['mrc'] ?? '', 0),
+                'currency' => ($f['currency'] ?? '') ?: 'PHP',
+                'status' => ($f['status'] ?? '') ? strtolower($f['status']) : 'active',
+                'assignee_id' => $assigneeId,
+                'cc_emails' => ($f['cc_emails'] ?? '') ?: null,
+                'notes' => ($f['notes'] ?? '') ?: null,
             ];
 
             $validator = Validator::make($payload, $this->serviceRules());
             if ($validator->fails()) {
-                $errors[] = "Row {$rowNum}: ".implode(', ', $validator->errors()->all());
+                $errors[] = "Row {$rowNum} ({$role}): ".implode(', ', $validator->errors()->all());
                 $skipped++;
-                continue;
+                return;
             }
 
-            // One primary / one secondary line per store — update in place on re-import.
             $existing = PaymentConnectivityService::where('store_id', $store->id)
-                ->where('role', $payload['role'])
+                ->where('role', $role)
                 ->first();
-
             if ($existing) {
                 $existing->update([...$payload, 'updated_by' => $userId]);
                 $updated++;
@@ -599,6 +756,82 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 PaymentConnectivityService::create([...$payload, 'created_by' => $userId, 'updated_by' => $userId]);
                 $created++;
             }
+        };
+
+        foreach ($rows as $line) {
+            $rowNum++;
+
+            if (empty(array_filter($line, fn ($value) => $value !== null && trim((string) $value) !== ''))) {
+                continue;
+            }
+
+            // Read every known header that is present in the uploaded file (absent columns => '').
+            $data = [];
+            foreach ($expectedHeaders as $h) {
+                $data[$h] = isset($headerIndexes[$h])
+                    ? $this->normalizeImportValue($line[$headerIndexes[$h]] ?? null)
+                    : '';
+            }
+
+            $store = $storesByCode->get(mb_strtolower(trim($data['Branch Code'])));
+            if (! $store) {
+                $errors[] = "Row {$rowNum}: branch code '{$data['Branch Code']}' was not found.";
+                $skipped++;
+                continue;
+            }
+
+            // Store-level identity — only overwrite when a value is provided.
+            $storeMap = [
+                'address' => 'Address',
+                'brand' => 'Brand',
+                'name' => 'Branch Name',
+                'legal_company' => 'Company',
+                'company_applied_with' => 'Company Applied With',
+                'monitoring_status' => 'Monitoring Status',
+            ];
+            $storeUpdates = [];
+            foreach ($storeMap as $col => $h) {
+                if (($data[$h] ?? '') !== '') {
+                    $storeUpdates[$col] = $data[$h];
+                }
+            }
+            if (! empty($storeUpdates)) {
+                $store->fill($storeUpdates)->save();
+            }
+
+            $upsert($store, 'primary', [
+                'telco' => $data['Currently Installed Primary'],
+                'account_no' => $data['Account No'],
+                'bandwidth' => $data['Bandwidth'],
+                'mrc' => $data['MRC (VAT inc)'],
+                'service_id' => $data['Primary Service ID'],
+                'install_type' => $data['Primary Install Type'],
+                'installation_date' => $data['Primary Installation Date'],
+                'billing_day' => $data['Primary Billing Day'],
+                'currency' => $data['Primary Currency'],
+                'status' => $data['Primary Status'],
+                'vendor' => $data['Primary Vendor'],
+                'assignee' => $data['Primary Assignee Email'],
+                'cc_emails' => $data['Primary CC Emails'],
+                'notes' => $data['Primary Notes'],
+            ]);
+
+            $upsert($store, 'secondary', [
+                'telco' => $data['Secondary Telco'],
+                'account_no' => $data['Secondary Account No'],
+                'bandwidth' => $data['Secondary Bandwidth'],
+                'mrc' => $data['Secondary MRC (VAT inc)'],
+                'service_id' => $data['Secondary Service ID'],
+                'install_type' => $data['Secondary Install Type'],
+                'installation_date' => $data['Secondary Installation Date'],
+                'billing_day' => $data['Secondary Billing Day'],
+                'currency' => $data['Secondary Currency'],
+                'status' => $data['Secondary Status'],
+                'vendor' => $data['Secondary Vendor'],
+                'assignee' => $data['Secondary Assignee Email'],
+                'cc_emails' => $data['Secondary CC Emails'],
+                'notes' => $data['Secondary Notes'],
+            ]);
         }
 
         return response()->json([

@@ -17,6 +17,7 @@ class Store extends Model
         'name',
         'address',
         'legal_company',
+        'company_applied_with',
         'monitoring_status',
         'sector',
         'area',
