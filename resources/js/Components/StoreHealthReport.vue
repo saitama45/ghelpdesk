@@ -259,10 +259,10 @@ const getAreaItemClass = (count, maxCols) => {
 <template>
     <div class="space-y-6 print:space-y-0">
         <!-- Filters Card -->
-        <div v-if="showFilters" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden">
+        <div v-if="showFilters" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 print:hidden dark:bg-gray-800 dark:border-gray-700">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Department</label>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1 dark:text-gray-300">Department</label>
                     <HierarchySelector
                         v-model="filterNodeId"
                         :nodes="hierarchicalOptions"
@@ -270,7 +270,7 @@ const getAreaItemClass = (count, maxCols) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">User</label>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1 dark:text-gray-300">User</label>
                     <Autocomplete
                         v-model="filterForm.user_id"
                         :options="usersWithLabel"
@@ -280,7 +280,7 @@ const getAreaItemClass = (count, maxCols) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Store</label>
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1 dark:text-gray-300">Store</label>
                     <Autocomplete
                         v-model="filterForm.store_id"
                         :options="storesWithLabel"
@@ -290,15 +290,15 @@ const getAreaItemClass = (count, maxCols) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1">As of Date</label>
-                    <input type="date" v-model="filterForm.as_of_date" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                    <label class="block text-xs font-bold text-gray-700 uppercase mb-1 dark:text-gray-300">As of Date</label>
+                    <input type="date" v-model="filterForm.as_of_date" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                 </div>
                 <div class="flex space-x-2">
                     <button @click="applyFilters" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center justify-center shadow-sm transition-colors">
                         <FunnelIcon class="w-4 h-4 mr-2" />
                         Generate
                     </button>
-                    <button @click="exportPDF" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200" title="Export PDF">
+                    <button @click="exportPDF" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700" title="Export PDF">
                         <DocumentArrowDownIcon class="w-5 h-5" />
                     </button>
                 </div>
@@ -306,13 +306,13 @@ const getAreaItemClass = (count, maxCols) => {
         </div>
 
         <!-- Legend Section -->
-        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
             <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-[10px] sm:text-xs">
-                <span class="font-black text-gray-700 uppercase tracking-widest">Legend:</span>
+                <span class="font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Legend:</span>
                 <div class="grid grid-cols-2 sm:flex sm:items-center gap-3 sm:gap-6">
                     <div class="flex items-center space-x-2">
                         <div class="w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold">
+                        <span class="text-gray-600 font-bold dark:text-gray-300">
                             <template v-if="(thresholds.threshold_green_min || 1) == (thresholds.threshold_green_max || 2)">
                                 {{ thresholds.threshold_green_min || 1 }}
                             </template>
@@ -324,7 +324,7 @@ const getAreaItemClass = (count, maxCols) => {
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-3 h-3 sm:w-4 sm:h-4 bg-yellow-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold">
+                        <span class="text-gray-600 font-bold dark:text-gray-300">
                             <template v-if="(thresholds.threshold_yellow_min || 3) == (thresholds.threshold_yellow_max || 3)">
                                 {{ thresholds.threshold_yellow_min || 3 }}
                             </template>
@@ -336,7 +336,7 @@ const getAreaItemClass = (count, maxCols) => {
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-3 h-3 sm:w-4 sm:h-4 bg-orange-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold">
+                        <span class="text-gray-600 font-bold dark:text-gray-300">
                             <template v-if="(thresholds.threshold_orange_min || 4) == (thresholds.threshold_orange_max || 4)">
                                 {{ thresholds.threshold_orange_min || 4 }}
                             </template>
@@ -348,7 +348,7 @@ const getAreaItemClass = (count, maxCols) => {
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-3 h-3 sm:w-4 sm:h-4 bg-red-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold">
+                        <span class="text-gray-600 font-bold dark:text-gray-300">
                             {{ thresholds.threshold_red_min || 5 }}+ ({{ thresholds.threshold_red_label || 'Critical' }})
                         </span>
                     </div>
@@ -359,27 +359,27 @@ const getAreaItemClass = (count, maxCols) => {
         <!-- Area Summary Section -->
         <div class="space-y-6 sm:space-y-8 mb-8">
             <!-- Corporate Technology -->
-            <div v-if="isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div v-if="isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">C O R P O R A T E &nbsp;&nbsp; T E C H N O L O G Y</span>
                 </div>
                 <div v-if="summary.ct?.length" :class="getAreaGridClass(summary.ct.length, 6)">
                     <div v-for="item in summary.ct" :key="item.store_id" :class="getAreaItemClass(summary.ct.length, 6)">
-                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
-                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">{{ item.store_code }}</span>
+                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ item.store_code }}</span>
                         </div>
                         <div class="p-2 text-center h-10 flex items-center justify-center">
                             <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.store_name">{{ item.store_name }}</span>
                         </div>
                         <button
                             @click="item.total_tickets > 0 ? fetchTickets(item.store_id) : null"
-                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
+                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
                             :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
                             <span class="grid grid-cols-2 gap-2 text-center">
-                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
-                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
-                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight">{{ item.store_count ?? 0 }}</span>
+                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-400">Affected Stores</span>
+                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight dark:text-gray-100">{{ item.store_count ?? 0 }}</span>
                                 </span>
                                 <span class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 shadow-sm">
                                     <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
@@ -390,46 +390,46 @@ const getAreaItemClass = (count, maxCols) => {
                                 <span
                                     v-for="health in healthSummaryItems"
                                     :key="health.key"
-                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1"
+                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 dark:bg-gray-900/50 dark:border-gray-700"
                                     :title="health.label"
                                 >
                                     <span class="flex items-center gap-1 min-w-0">
                                         <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
-                                        <span class="truncate text-[9px] font-bold text-gray-500">{{ health.label }}</span>
+                                        <span class="truncate text-[9px] font-bold text-gray-500 dark:text-gray-300">{{ health.label }}</span>
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-900">{{ healthCount(item, health.key) }}</span>
+                                    <span class="text-[10px] font-black text-gray-900 dark:text-gray-100">{{ healthCount(item, health.key) }}</span>
                                 </span>
                             </span>
                         </button>
                     </div>
                 </div>
-                <div v-else class="border-t border-gray-200 py-8 text-center text-sm italic text-gray-500">
+                <div v-else class="border-t border-gray-200 py-8 text-center text-sm italic text-gray-500 dark:text-gray-300 dark:border-gray-700">
                     No Corporate Technology store tickets found for this period.
                 </div>
             </div>
 
             <!-- North Area -->
-            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">N O R T H &nbsp;&nbsp; A R E A</span>
                 </div>
                 <div :class="getAreaGridClass(summary.north?.length || 0, 4)">
                     <div v-for="item in summary.north" :key="item.sector" :class="getAreaItemClass(summary.north?.length || 0, 4)">
-                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
-                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">Sector {{ item.sector }}</span>
+                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Sector {{ item.sector }}</span>
                         </div>
                         <div class="p-2 text-center h-10 flex items-center justify-center">
                             <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.user">{{ item.user }}</span>
                         </div>
                         <button 
                             @click="item.total_tickets > 0 ? fetchSectorTickets(item.sector) : null"
-                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
+                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
                             :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
                             <span class="grid grid-cols-2 gap-2 text-center">
-                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
-                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
-                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight">{{ item.store_count ?? 0 }}</span>
+                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-400">Affected Stores</span>
+                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight dark:text-gray-100">{{ item.store_count ?? 0 }}</span>
                                 </span>
                                 <span class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 shadow-sm">
                                     <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
@@ -440,14 +440,14 @@ const getAreaItemClass = (count, maxCols) => {
                                 <span
                                     v-for="health in healthSummaryItems"
                                     :key="health.key"
-                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1"
+                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 dark:bg-gray-900/50 dark:border-gray-700"
                                     :title="health.label"
                                 >
                                     <span class="flex items-center gap-1 min-w-0">
                                         <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
-                                        <span class="truncate text-[9px] font-bold text-gray-500">{{ health.label }}</span>
+                                        <span class="truncate text-[9px] font-bold text-gray-500 dark:text-gray-300">{{ health.label }}</span>
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-900">{{ healthCount(item, health.key) }}</span>
+                                    <span class="text-[10px] font-black text-gray-900 dark:text-gray-100">{{ healthCount(item, health.key) }}</span>
                                 </span>
                             </span>
                         </button>
@@ -456,27 +456,27 @@ const getAreaItemClass = (count, maxCols) => {
             </div>
 
             <!-- South Area -->
-            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">S O U T H &nbsp;&nbsp; A R E A</span>
                 </div>
                 <div :class="getAreaGridClass(summary.south?.length || 0, 4)">
                     <div v-for="item in summary.south" :key="item.sector" :class="getAreaItemClass(summary.south?.length || 0, 4)">
-                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200">
-                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider">Sector {{ item.sector }}</span>
+                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Sector {{ item.sector }}</span>
                         </div>
                         <div class="p-2 text-center h-10 flex items-center justify-center">
                             <span class="text-[10px] font-bold text-blue-600 truncate px-1" :title="item.user">{{ item.user }}</span>
                         </div>
                         <button 
                             @click="item.total_tickets > 0 ? fetchSectorTickets(item.sector) : null"
-                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900"
+                            class="py-3 px-3 transition-all shadow-inner text-center w-full bg-white border-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
                             :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
                         >
                             <span class="grid grid-cols-2 gap-2 text-center">
-                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
-                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400">Affected Stores</span>
-                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight">{{ item.store_count ?? 0 }}</span>
+                                <span class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <span class="block text-[9px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-400">Affected Stores</span>
+                                    <span class="block text-xl sm:text-2xl font-black text-gray-900 leading-tight dark:text-gray-100">{{ item.store_count ?? 0 }}</span>
                                 </span>
                                 <span class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 shadow-sm">
                                     <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
@@ -487,14 +487,14 @@ const getAreaItemClass = (count, maxCols) => {
                                 <span
                                     v-for="health in healthSummaryItems"
                                     :key="health.key"
-                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1"
+                                    class="flex items-center justify-between gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 dark:bg-gray-900/50 dark:border-gray-700"
                                     :title="health.label"
                                 >
                                     <span class="flex items-center gap-1 min-w-0">
                                         <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
-                                        <span class="truncate text-[9px] font-bold text-gray-500">{{ health.label }}</span>
+                                        <span class="truncate text-[9px] font-bold text-gray-500 dark:text-gray-300">{{ health.label }}</span>
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-900">{{ healthCount(item, health.key) }}</span>
+                                    <span class="text-[10px] font-black text-gray-900 dark:text-gray-100">{{ healthCount(item, health.key) }}</span>
                                 </span>
                             </span>
                         </button>
@@ -505,24 +505,24 @@ const getAreaItemClass = (count, maxCols) => {
 
         <!-- Report Content -->
         <div v-if="reportData.length > 0" :class="reportGridClass">
-            <div v-for="userData in reportData" :key="userData.id" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden break-inside-avoid">
-                <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-bold text-gray-900">{{ userData.name }}</h3>
+            <div v-for="userData in reportData" :key="userData.id" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden break-inside-avoid dark:bg-gray-800 dark:border-gray-700">
+                <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ userData.name }}</h3>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Store Code</th>
-                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">IT Area</th>
-                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket Count</th>
-                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/3">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Store Code</th>
+                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">IT Area</th>
+                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Ticket Count</th>
+                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/3 dark:text-gray-300">Status</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <tr v-for="store in userData.stores" :key="store.id" class="hover:bg-gray-50 transition-colors">
+                        <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                            <tr v-for="store in userData.stores" :key="store.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{{ store.code }}</td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ store.area }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">{{ store.area }}</td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-center">
                                     <button 
                                         v-if="store.ticket_count > 0"
@@ -534,7 +534,7 @@ const getAreaItemClass = (count, maxCols) => {
                                     <span v-else>{{ store.ticket_count }}</span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="w-full bg-gray-100 rounded-full h-4 overflow-hidden shadow-inner">
+                                    <div class="w-full bg-gray-100 rounded-full h-4 overflow-hidden shadow-inner dark:bg-gray-800">
                                         <div 
                                             class="h-full transition-all duration-500 shadow-sm"
                                             :class="getHealthStatus(store.ticket_count).color"
@@ -553,50 +553,50 @@ const getAreaItemClass = (count, maxCols) => {
         <Modal :show="showTicketsModal" @close="showTicketsModal = false" maxWidth="3xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         Tickets for {{ selectedStoreName }}
                         <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full" v-if="!modalLoading">
                             {{ selectedStoreTickets.length }}
                         </span>
                     </h2>
-                    <button @click="showTicketsModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <button @click="showTicketsModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
 
                 <div v-if="modalLoading" class="flex flex-col items-center justify-center py-12">
                     <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
-                    <p class="text-gray-500 text-sm">Loading tickets...</p>
+                    <p class="text-gray-500 text-sm dark:text-gray-300">Loading tickets...</p>
                 </div>
 
                 <div v-else class="max-h-[60vh] overflow-y-auto custom-scrollbar">
-                    <table class="min-w-full divide-y divide-gray-200" v-if="selectedStoreTickets.length > 0">
-                        <thead class="bg-gray-50 sticky top-0">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" v-if="selectedStoreTickets.length > 0">
+                        <thead class="bg-gray-50 sticky top-0 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket #</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Store</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Subject/Title</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Assignee</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Created</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Ticket #</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Store</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Subject/Title</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Assignee</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Created</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
+                        <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                             <tr v-for="ticket in selectedStoreTickets" :key="ticket.id" class="hover:bg-blue-50 transition-colors">
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-blue-600">
                                     <Link :href="route('tickets.edit', ticket.id)" class="hover:underline">
                                         {{ ticket.ticket_key }}
                                     </Link>
                                 </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium dark:text-gray-100">
                                     {{ ticket.store ? ticket.store.code : 'N/A' }}
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-900">
+                                <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                     <Link :href="route('tickets.edit', ticket.id)" class="hover:underline line-clamp-1">
                                         {{ ticket.title }}
                                     </Link>
                                 </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                                     {{ ticket.assignee ? ticket.assignee.name : 'Unassigned' }}
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap">
@@ -611,19 +611,19 @@ const getAreaItemClass = (count, maxCols) => {
                                         {{ getStatusLabel(ticket.status) }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                                <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
                                     {{ new Date(ticket.created_at).toLocaleDateString() }}
                                 </td>
                             </tr>
                         </tbody>
                     </table>
-                    <div v-else class="text-center py-12 text-gray-500 italic">
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">
                         No tickets found for this period.
                     </div>
                 </div>
 
                 <div class="mt-6 flex justify-end">
-                    <button @click="showTicketsModal = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium">
+                    <button @click="showTicketsModal = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Close
                     </button>
                 </div>

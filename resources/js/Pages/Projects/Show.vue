@@ -404,8 +404,8 @@ const getStatusColor = (status) => {
         <Modal :show="showEditProjectModal" @close="showEditProjectModal = false" maxWidth="4xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-xl font-bold text-gray-900">Edit Project Details</h2>
-                    <button @click="showEditProjectModal = false" class="text-gray-400 hover:text-gray-500">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Project Details</h2>
+                    <button @click="showEditProjectModal = false" class="text-gray-400 hover:text-gray-500 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
@@ -443,7 +443,7 @@ const getStatusColor = (status) => {
                                 <select 
                                     id="edit_status"
                                     v-model="editForm.status"
-                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600"
                                     required
                                 >
                                     <option value="Pending">Pending</option>
@@ -503,7 +503,7 @@ const getStatusColor = (status) => {
                                     <select
                                         id="edit_board_month"
                                         v-model.number="editForm.board_month"
-                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600"
                                     >
                                         <option v-for="month in monthOptions" :key="month.value" :value="month.value">{{ month.label }}</option>
                                     </select>
@@ -514,7 +514,7 @@ const getStatusColor = (status) => {
                                     <select
                                         id="edit_board_year"
                                         v-model.number="editForm.board_year"
-                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                        class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600"
                                     >
                                         <option v-for="year in boardYears" :key="year" :value="year">{{ year }}</option>
                                     </select>
@@ -529,13 +529,13 @@ const getStatusColor = (status) => {
                         <textarea 
                             id="edit_remarks" 
                             v-model="editForm.remarks" 
-                            class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm min-h-[100px]"
+                            class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm min-h-[100px] dark:border-gray-600"
                             placeholder="Add project remarks or updates..."
                         ></textarea>
                         <InputError :message="editForm.errors.remarks" />
                     </div>
 
-                    <div class="flex justify-end gap-3 pt-6 border-t border-gray-100">
+                    <div class="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-gray-700">
                         <SecondaryButton @click="showEditProjectModal = false" :disabled="editForm.processing">
                             Cancel
                         </SecondaryButton>
@@ -552,8 +552,8 @@ const getStatusColor = (status) => {
         <Modal :show="showManageTeamModal" @close="showManageTeamModal = false" maxWidth="4xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6">
-                    <h2 class="text-xl font-bold text-gray-900">Manage Project Team</h2>
-                    <button @click="showManageTeamModal = false" class="text-gray-400 hover:text-gray-500">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Manage Project Team</h2>
+                    <button @click="showManageTeamModal = false" class="text-gray-400 hover:text-gray-500 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
@@ -561,32 +561,32 @@ const getStatusColor = (status) => {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <!-- Current Team List -->
                     <div>
-                        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Current Members</h3>
+                        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 dark:text-gray-300">Current Members</h3>
                         <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                            <div v-for="member in teamMembers" :key="member.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group">
+                            <div v-for="member in teamMembers" :key="member.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex items-center min-w-0">
-                                    <div class="h-10 w-10 rounded-full bg-white shadow-sm border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0">
+                                    <div class="h-10 w-10 rounded-full bg-white shadow-sm border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                         {{ (member.user?.name || member.external_name || 'U').charAt(0) }}
                                     </div>
                                     <div class="ml-3 min-w-0">
-                                        <p class="text-sm font-bold text-gray-900 truncate">{{ member.user?.name || member.external_name }}</p>
-                                        <p class="text-[10px] text-gray-500 uppercase font-black">{{ member.role_type }}</p>
+                                        <p class="text-sm font-bold text-gray-900 truncate dark:text-gray-100">{{ member.user?.name || member.external_name }}</p>
+                                        <p class="text-[10px] text-gray-500 uppercase font-black dark:text-gray-300">{{ member.role_type }}</p>
                                         <p class="text-[10px] text-blue-600 font-black">{{ member.department || '-' }} / {{ member.sub_unit || '-' }}</p>
                                     </div>
                                 </div>
-                                <button @click="removeTeamMember(member.id)" class="p-1.5 text-gray-400 hover:text-red-600 transition-colors">
+                                <button @click="removeTeamMember(member.id)" class="p-1.5 text-gray-400 hover:text-red-600 transition-colors dark:text-gray-400">
                                     <TrashIcon class="w-5 h-5" />
                                 </button>
                             </div>
-                            <div v-if="!teamMembers.length" class="text-center py-8 text-gray-400 text-sm italic">
+                            <div v-if="!teamMembers.length" class="text-center py-8 text-gray-400 text-sm italic dark:text-gray-400">
                                 No team members assigned yet.
                             </div>
                         </div>
                     </div>
 
                     <!-- Add New Member Form -->
-                    <div class="bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
-                        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Add New Member</h3>
+                    <div class="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
+                        <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 dark:text-gray-300">Add New Member</h3>
                         <form @submit.prevent="addTeamMember" class="space-y-4">
                             <div>
                                 <InputLabel for="user_id" value="System User" />
@@ -603,10 +603,10 @@ const getStatusColor = (status) => {
 
                             <div class="relative py-2">
                                 <div class="absolute inset-0 flex items-center" aria-hidden="true">
-                                    <div class="w-full border-t border-gray-200"></div>
+                                    <div class="w-full border-t border-gray-200 dark:border-gray-700"></div>
                                 </div>
                                 <div class="relative flex justify-center text-[10px] uppercase font-black">
-                                    <span class="px-2 bg-gray-50 text-gray-400">Or External Name</span>
+                                    <span class="px-2 bg-gray-50 text-gray-400 dark:bg-gray-900/50 dark:text-gray-400">Or External Name</span>
                                 </div>
                             </div>
 
@@ -639,7 +639,7 @@ const getStatusColor = (status) => {
                                 <select 
                                     v-model="teamForm.role_type" 
                                     id="role_type"
-                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm"
+                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600"
                                     required
                                 >
                                     <option value="">Select role...</option>
@@ -662,11 +662,11 @@ const getStatusColor = (status) => {
                                 <div class="flex gap-4 mt-2">
                                     <label class="flex items-center">
                                         <input type="radio" v-model="teamForm.team_category" value="CASA Team" class="text-blue-600 focus:ring-blue-500" />
-                                        <span class="ml-2 text-sm text-gray-700">CASA Team</span>
+                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">CASA Team</span>
                                     </label>
                                     <label class="flex items-center">
                                         <input type="radio" v-model="teamForm.team_category" value="Extended Team" class="text-blue-600 focus:ring-blue-500" />
-                                        <span class="ml-2 text-sm text-gray-700">Extended</span>
+                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Extended</span>
                                     </label>
                                 </div>
                                 <InputError :message="teamForm.errors.team_category" />
@@ -683,7 +683,7 @@ const getStatusColor = (status) => {
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+                <div class="mt-8 pt-6 border-t border-gray-100 flex justify-end dark:border-gray-700">
                     <SecondaryButton @click="showManageTeamModal = false" class="px-8">
                         Done Managing Team
                     </SecondaryButton>
@@ -693,11 +693,11 @@ const getStatusColor = (status) => {
 
         <div class="space-y-8">
             <!-- Project Header Info -->
-            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gradient-to-r from-blue-600 to-indigo-700 h-2"></div>
                 <div class="p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div class="flex items-start">
-                        <Link :href="route('projects.index')" class="mr-6 p-3 rounded-xl bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all border border-gray-100">
+                        <Link :href="route('projects.index')" class="mr-6 p-3 rounded-xl bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all border border-gray-100 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                             <ChevronLeftIcon class="h-6 w-6" />
                         </Link>
                         <div>
@@ -710,11 +710,11 @@ const getStatusColor = (status) => {
                                 </span>
                             </div>
                             <div class="flex items-center gap-4">
-                                <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ project.name }}</h1>
+                                <h1 class="text-3xl font-black text-gray-900 tracking-tight dark:text-gray-100">{{ project.name }}</h1>
                                 <button 
                                     v-if="hasPermission('projects.edit')" 
                                     @click="openEditModal"
-                                    class="p-2 rounded-lg bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-gray-100"
+                                    class="p-2 rounded-lg bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-gray-100 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700"
                                     title="Edit Project Details"
                                 >
                                     <PencilIcon class="h-5 w-5" />
@@ -722,16 +722,16 @@ const getStatusColor = (status) => {
                             </div>
                         </div>
                     </div>
-                    <div class="flex items-center gap-8 px-8 border-l border-gray-100 hidden lg:flex">
+                    <div class="flex items-center gap-8 px-8 border-l border-gray-100 hidden lg:flex dark:border-gray-700">
                         <div class="text-center">
-                            <p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Overall Completion</p>
+                            <p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1 dark:text-gray-400">Overall Completion</p>
                             <div class="flex items-center justify-center text-emerald-600">
                                 <ChartBarIcon class="w-5 h-5 mr-2 opacity-50" />
                                 <p class="text-xl font-black">{{ projectProgress }}%</p>
                             </div>
                         </div>
                         <div class="text-center border-l border-gray-50 pl-8">
-                            <p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Target Go-Live</p>
+                            <p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1 dark:text-gray-400">Target Go-Live</p>
                             <div class="flex items-center justify-center text-blue-600">
                                 <CalendarIcon class="w-5 h-5 mr-2 opacity-50" />
                                 <p class="text-xl font-black">{{ formatDate(project.target_go_live) }}</p>
@@ -752,24 +752,24 @@ const getStatusColor = (status) => {
 
             <!-- Modern Navigation Tabs -->
             <div class="flex items-center justify-between">
-                <nav class="flex p-1.5 bg-gray-100 rounded-2xl w-fit">
+                <nav class="flex p-1.5 bg-gray-100 rounded-2xl w-fit dark:bg-gray-800">
                     <button 
                         @click="activeTab = 'overview'"
-                        :class="[activeTab === 'overview' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
+                        :class="[activeTab === 'overview' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
                     >
                         <InformationCircleIcon class="w-4 h-4 mr-2" />
                         Overview
                     </button>
                     <button 
                         @click="activeTab = 'gantt'"
-                        :class="[activeTab === 'gantt' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
+                        :class="[activeTab === 'gantt' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
                     >
                         <ChartBarIcon class="w-4 h-4 mr-2" />
                         Gantt Chart
                     </button>
                     <button 
                         @click="activeTab = 'assets'"
-                        :class="[activeTab === 'assets' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
+                        :class="[activeTab === 'assets' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
                     >
                         <CpuChipIcon class="w-4 h-4 mr-2" />
                         IT Assets Board
@@ -783,69 +783,69 @@ const getStatusColor = (status) => {
                 <div v-if="activeTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <!-- Dates Card -->
                     <div class="lg:col-span-2 space-y-6">
-                        <div class="bg-white shadow rounded-lg p-6 border border-gray-200">
-                            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <div class="bg-white shadow rounded-lg p-6 border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center dark:text-gray-100">
                                 <CalendarIcon class="w-5 h-5 mr-2 text-blue-600" />
                                 Project Timeline Milestones
                             </h3>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-500">Target Go-Live</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Target Go-Live</span>
                                     <span class="text-lg font-bold text-blue-700">{{ formatDate(project.target_go_live) }}</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-500">Store Turn-over</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Store Turn-over</span>
                                     <span class="text-base font-semibold">{{ formatDate(project.turn_over_date) }}</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-500">Training Dates</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Training Dates</span>
                                     <span class="text-base font-semibold">{{ formatDate(project.training_date) }}</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-500">Testing Date</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Testing Date</span>
                                     <span class="text-base font-semibold">{{ formatDate(project.testing_date) }}</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-500">Mock Service</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Mock Service</span>
                                     <span class="text-base font-semibold">{{ formatDate(project.mock_service_date) }}</span>
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-sm text-gray-500">Turn-over to Franchisee</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Turn-over to Franchisee</span>
                                     <span class="text-base font-semibold">{{ formatDate(project.turn_over_to_franchisee_date) }}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div v-if="project.remarks" class="bg-white shadow rounded-lg p-6 border border-gray-200">
-                            <h3 class="text-lg font-bold text-gray-900 mb-2">Remarks</h3>
-                            <p class="text-gray-700 whitespace-pre-line">{{ project.remarks }}</p>
+                        <div v-if="project.remarks" class="bg-white shadow rounded-lg p-6 border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-lg font-bold text-gray-900 mb-2 dark:text-gray-100">Remarks</h3>
+                            <p class="text-gray-700 whitespace-pre-line dark:text-gray-300">{{ project.remarks }}</p>
                         </div>
                     </div>
 
                     <!-- Team Card -->
                     <div class="space-y-6">
-                        <div class="bg-white shadow rounded-lg p-6 border border-gray-200">
-                            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                        <div class="bg-white shadow rounded-lg p-6 border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-lg font-bold text-gray-900 mb-4 flex items-center dark:text-gray-100">
                                 <UserGroupIcon class="w-5 h-5 mr-2 text-blue-600" />
                                 Project Team
                             </h3>
                             <div class="space-y-4">
                                 <div v-for="member in teamMembers" :key="member.id" class="flex items-center justify-between">
                                     <div class="flex items-center">
-                                        <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                                        <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                                             {{ (member.user?.name || member.external_name || 'U').charAt(0) }}
                                         </div>
                                         <div class="ml-3">
-                                            <p class="text-sm font-medium text-gray-900">{{ member.user?.name || member.external_name }}</p>
-                                            <p class="text-xs text-gray-500">{{ member.role_type }}</p>
+                                            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ member.user?.name || member.external_name }}</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-300">{{ member.role_type }}</p>
                                             <p class="text-[10px] font-bold text-blue-600">{{ member.department || '-' }} / {{ member.sub_unit || '-' }}</p>
                                         </div>
                                     </div>
-                                    <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
+                                    <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded dark:bg-gray-900/50 dark:text-gray-400">
                                         {{ member.team_category }}
                                     </span>
                                 </div>
-                                <button @click.stop="showManageTeamModal = true" class="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors">
+                                <button @click.stop="showManageTeamModal = true" class="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors dark:text-gray-300 dark:border-gray-600">
                                     Manage Team
                                 </button>
                             </div>
@@ -854,7 +854,7 @@ const getStatusColor = (status) => {
                 </div>
 
                 <!-- Gantt Chart Tab -->
-                <div v-if="activeTab === 'gantt'">
+                <div v-if="activeTab === 'gantt'" class="dark:bg-slate-950">
                     <ProjectGantt
                         :project="project"
                         :users="users"
@@ -871,4 +871,3 @@ const getStatusColor = (status) => {
         </div>
     </AppLayout>
 </template>
-

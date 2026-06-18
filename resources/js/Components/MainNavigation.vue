@@ -177,14 +177,14 @@ onUnmounted(() => {
                             <!-- Dropdown content -->
                             <div
                                 v-show="activeDropdown === item.name"
-                                class="absolute top-full left-0 -mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
+                                class="absolute top-full left-0 -mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50 dark:bg-gray-800 dark:border-gray-700"
                                 @mouseenter="keepDropdownOpen"
                                 @mouseleave="closeDropdown"
                             >
                                 <template v-for="dropdownItem in item.dropdownItems" :key="dropdownItem.name">
                                     <Link
                                         :href="dropdownItem.href"
-                                        class="block px-4 py-3 text-slate-700 hover:bg-gray-50 hover:text-slate-900 transition-colors duration-200"
+                                        class="block px-4 py-3 text-slate-700 hover:bg-gray-50 hover:text-slate-900 transition-colors duration-200 dark:hover:bg-gray-700"
                                         @click="closeDropdown"
                                     >
                                         {{ dropdownItem.name }}
@@ -199,7 +199,7 @@ onUnmounted(() => {
                 <div class="md:hidden">
                     <button
                         @click="toggleMobileMenu"
-                        class="text-slate-600 hover:text-slate-900 p-2 rounded-md hover:bg-gray-100 transition-colors"
+                        class="text-slate-600 hover:text-slate-900 p-2 rounded-md hover:bg-gray-100 transition-colors dark:hover:bg-gray-700"
                     >
                         <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path v-if="!isMobileMenuOpen" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -210,7 +210,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Mobile Navigation Menu -->
-            <div v-if="isMobileMenuOpen" class="md:hidden border-t border-gray-200">
+            <div v-if="isMobileMenuOpen" class="md:hidden border-t border-gray-200 dark:border-gray-700">
                 <div class="px-2 pt-2 pb-3 space-y-1">
                     <template v-for="item in navigationItems" :key="item.name">
                         <!-- Regular link -->
@@ -247,7 +247,7 @@ onUnmounted(() => {
                                     v-for="dropdownItem in item.dropdownItems"
                                     :key="dropdownItem.name"
                                     :href="dropdownItem.href"
-                                    class="block px-3 py-2 rounded-md text-sm text-slate-600 hover:text-slate-900 hover:bg-gray-50 transition-colors"
+                                    class="block px-3 py-2 rounded-md text-sm text-slate-600 hover:text-slate-900 hover:bg-gray-50 transition-colors dark:hover:bg-gray-700"
                                     @click="closeMobileMenu"
                                 >
                                     {{ dropdownItem.name }}

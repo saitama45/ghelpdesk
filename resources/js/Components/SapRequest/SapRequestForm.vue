@@ -146,12 +146,12 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
         <div v-if="!form.request_type_id" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <button v-for="rt in requestTypes" :key="rt.id" type="button"
                 @click="form.request_type_id = rt.id"
-                class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-teal-500 hover:shadow-teal-100/50 transition-all group">
+                class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-teal-500 hover:shadow-teal-100/50 transition-all group dark:bg-gray-800 dark:border-gray-700">
                 <div class="w-12 h-12 bg-teal-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-all">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 </div>
-                <h4 class="text-sm font-black text-gray-900 mb-1">{{ rt.name }}</h4>
-                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                <h4 class="text-sm font-black text-gray-900 mb-1 dark:text-gray-100">{{ rt.name }}</h4>
+                <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider dark:text-gray-400">
                     {{ rt.approval_levels > 0 ? `${rt.approval_levels} Approval Steps` : 'No Approval Required' }}
                 </p>
             </button>
@@ -159,25 +159,25 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
 
         <form v-else @submit.prevent="submit" class="space-y-8">
             <!-- Selected Type Info & Back Button -->
-            <div class="flex items-center justify-between bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-6 border border-gray-100">
+            <div class="flex items-center justify-between bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex items-center gap-4">
                     <div class="w-12 h-12 bg-teal-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-teal-100">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     </div>
                     <div>
-                        <h3 class="text-sm font-black text-gray-900">{{ selectedRequestType?.name }}</h3>
+                        <h3 class="text-sm font-black text-gray-900 dark:text-gray-100">{{ selectedRequestType?.name }}</h3>
                         <p class="text-xs text-teal-600 font-bold uppercase tracking-wider">Form is now ready</p>
                     </div>
                 </div>
                 <button type="button" @click="form.request_type_id = ''"
-                    class="px-4 py-2 text-xs font-black text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-all uppercase tracking-widest">
+                    class="px-4 py-2 text-xs font-black text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-xl transition-all uppercase tracking-widest dark:text-gray-400 dark:hover:bg-gray-700">
                     Change Type
                 </button>
             </div>
 
             <!-- Requester Info (public only) -->
-            <div v-if="isPublic" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100">
-                <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2">
+            <div v-if="isPublic" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2 dark:text-gray-200">
                     <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">1</span>
                     Your Information
                 </h3>
@@ -186,22 +186,22 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Full Name <span class="text-rose-500">*</span></label>
                         <input v-model="form.requester_name" type="text"
                             :class="form.errors.requester_name ? 'border-rose-400' : 'border-slate-200'"
-                            class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                         <p v-if="form.errors.requester_name" class="mt-1 text-xs text-rose-500 font-bold">{{ form.errors.requester_name }}</p>
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Email Address <span class="text-rose-500">*</span></label>
                         <input v-model="form.requester_email" type="email"
                             :class="form.errors.requester_email ? 'border-rose-400' : 'border-slate-200'"
-                            class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                         <p v-if="form.errors.requester_email" class="mt-1 text-xs text-rose-500 font-bold">{{ form.errors.requester_email }}</p>
                     </div>
                 </div>
             </div>
 
             <!-- Request Classification (Entity Only now) -->
-            <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100">
-                <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2">
+            <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2 dark:text-gray-200">
                     <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">{{ isPublic ? '2' : '1' }}</span>
                     Entity Selection
                 </h3>
@@ -209,7 +209,7 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Entity / Company <span class="text-rose-500">*</span></label>
                     <select v-model="form.company_id"
                         :class="form.errors.company_id ? 'border-rose-400' : 'border-slate-200'"
-                        class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                        class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
                         <option value="">Select entity...</option>
                         <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
                     </select>
@@ -234,8 +234,8 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
             </div>
 
             <!-- Dynamic Form Section -->
-            <div v-if="formReady" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100">
-                <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2">
+            <div v-if="formReady" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2 dark:text-gray-200">
                     <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">{{ isPublic ? '3' : '2' }}</span>
                     {{ selectedRequestType?.name }} Details
                 </h3>
@@ -271,7 +271,7 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
 
             <!-- Submit -->
             <div class="flex items-center justify-between gap-4">
-                <p class="text-xs text-gray-400 font-medium">Fields marked with <span class="text-rose-500 font-black">*</span> are required.</p>
+                <p class="text-xs text-gray-400 font-medium dark:text-gray-400">Fields marked with <span class="text-rose-500 font-black">*</span> are required.</p>
                 <button type="submit" :disabled="form.processing || !formReady"
                     class="px-10 py-4 bg-teal-600 text-white rounded-2xl font-black text-sm uppercase tracking-[0.15em] shadow-2xl shadow-teal-100 hover:bg-teal-700 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-3">
                     <svg v-if="form.processing" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -287,7 +287,7 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
         <Teleport to="body">
             <div v-if="showConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="onConfirmNo"></div>
-                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
+                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex items-center gap-4 mb-6">
                         <div class="w-12 h-12 bg-teal-100 rounded-2xl flex items-center justify-center flex-shrink-0">
                             <svg class="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -295,14 +295,14 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-black text-gray-900">Submit SAP Request</h3>
-                            <p class="text-sm text-gray-500 mt-0.5">Please review all details before confirming.</p>
+                            <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">Submit SAP Request</h3>
+                            <p class="text-sm text-gray-500 mt-0.5 dark:text-gray-300">Please review all details before confirming.</p>
                         </div>
                     </div>
-                    <p class="text-sm text-gray-600 mb-8">Are you sure you want to submit this SAP request? Once submitted, it will be sent for processing.</p>
+                    <p class="text-sm text-gray-600 mb-8 dark:text-gray-300">Are you sure you want to submit this SAP request? Once submitted, it will be sent for processing.</p>
                     <div class="flex gap-3">
                         <button type="button" @click="onConfirmNo"
-                                class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all">
+                                class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button type="button" @click="onConfirmYes"

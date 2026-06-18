@@ -5,11 +5,11 @@
 
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Units</p>
-                                <p class="text-2xl font-black text-gray-900 mt-1">{{ summary.total_qty }}</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Total Units</p>
+                                <p class="text-2xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ summary.total_qty }}</p>
                             </div>
                             <div class="p-3 bg-slate-50 rounded-lg">
                                 <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19,10 +19,10 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Received</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Received</p>
                                 <p class="text-2xl font-black text-emerald-600 mt-1">{{ summary.received_qty }}</p>
                             </div>
                             <div class="p-3 bg-emerald-50 rounded-lg">
@@ -33,10 +33,10 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">For Receiving</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">For Receiving</p>
                                 <p class="text-2xl font-black text-amber-600 mt-1">{{ summary.for_receiving_qty }}</p>
                             </div>
                             <div class="p-3 bg-amber-50 rounded-lg">
@@ -47,10 +47,10 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Records</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Total Records</p>
                                 <p class="text-2xl font-black text-blue-600 mt-1">{{ summary.total_records }}</p>
                             </div>
                             <div class="p-3 bg-blue-50 rounded-lg">
@@ -63,10 +63,10 @@
                 </div>
 
                 <!-- Filters Panel -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                     <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Destination</label>
                             <Autocomplete
                                 :model-value="filterForm.destination_location"
                                 :options="destinationOptions"
@@ -78,7 +78,7 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Category</label>
                             <Autocomplete
                                 :model-value="filterForm.category_id"
                                 :options="categoryOptions"
@@ -90,7 +90,7 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Status</label>
                             <MultiAutocomplete
                                 v-model="statusFilter"
                                 :options="statusOptions"
@@ -101,11 +101,11 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Search</label>
-                            <input v-model="pagination.search.value" type="text" placeholder="Search receiving no / location" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Search</label>
+                            <input v-model="pagination.search.value" type="text" placeholder="Search receiving no / location" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div class="flex items-end">
-                            <button @click="resetFilters" class="w-full px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">Reset</button>
+                            <button @click="resetFilters" class="w-full px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Reset</button>
                         </div>
                     </div>
                 </div>
@@ -126,44 +126,44 @@
                 >
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Receiving Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Receiving No.</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Receiving Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Receiving No.</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Items</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Route</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Qty</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="item in data" :key="item.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(item.receiving_date) }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{{ item.receiving_no || '—' }}</td>
+                        <tr v-for="item in data" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ formatDate(item.receiving_date) }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">{{ item.receiving_no || '—' }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                                       :class="getStatusBadgeClass(item.status)">
                                     {{ item.status }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
+                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                 <div class="flex flex-col">
-                                    <div class="font-semibold text-gray-900">{{ item.asset_count }} asset(s)</div>
-                                    <div class="text-xs text-gray-500">{{ item.record_count }} unit(s)</div>
+                                    <div class="font-semibold text-gray-900 dark:text-gray-100">{{ item.asset_count }} asset(s)</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ item.record_count }} unit(s)</div>
                                 </div>
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
+                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                 <div class="flex items-center space-x-2">
-                                    <span class="font-bold text-gray-600">{{ item.origin_location }}</span>
-                                    <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span class="font-bold text-gray-600 dark:text-gray-300">{{ item.origin_location }}</span>
+                                    <svg class="w-3 h-3 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                                     </svg>
                                     <span class="font-bold text-blue-600">{{ item.destination_location }}</span>
                                 </div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
-                                    {{ item.quantity }}<span class="text-gray-400 mx-1">/</span>{{ item.transferred_quantity }}
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold dark:bg-slate-800 dark:text-slate-100">
+                                    {{ item.quantity }}<span class="text-gray-400 mx-1 dark:text-gray-400">/</span>{{ item.transferred_quantity }}
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -171,7 +171,7 @@
                                     <button
                                         v-if="hasPermission('stock_receivings.post') && item.status === 'For Receiving'"
                                         @click="postReceiving(item)"
-                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
+                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors dark:text-emerald-300 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
                                         title="Post Receiving"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,7 +181,7 @@
                                     <button
                                         v-if="hasPermission('stock_receivings.post') && item.status === 'For Receiving'"
                                         @click="openDeclineModal(item)"
-                                        class="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-full transition-colors"
+                                        class="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-full transition-colors dark:text-orange-300 dark:hover:bg-orange-500/15 dark:hover:text-orange-200"
                                         title="Decline Receiving"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,7 +191,7 @@
                                     <button
                                         v-if="hasPermission('stock_receivings.edit') && item.status === 'For Receiving'"
                                         @click="editReceiving(item)"
-                                        class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
+                                        class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors dark:text-blue-300 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
                                         title="Edit"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -201,7 +201,7 @@
                                     <button
                                         v-else-if="['Received', 'Declined'].includes(item.status)"
                                         @click="viewReceiving(item)"
-                                        class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-full transition-colors"
+                                        class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-full transition-colors dark:text-gray-300 dark:hover:bg-gray-700"
                                         title="View"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -212,7 +212,7 @@
                                     <button
                                         v-if="hasPermission('stock_receivings.delete') && item.status === 'For Receiving'"
                                         @click="deleteReceiving(item)"
-                                        class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
+                                        class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors dark:text-red-300 dark:hover:bg-red-500/15 dark:hover:text-red-200"
                                         title="Delete"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,9 +231,9 @@
         <Modal :show="showModal" @close="closeModal" max-width="6xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-bold text-gray-900">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">
                         {{ readOnly ? 'View Receiving' : 'Receive Stock' }} —
-                        <span class="text-blue-600">{{ headerInfo.receiving_no }}</span>
+                        <span class="text-blue-600 dark:text-blue-400">{{ headerInfo.receiving_no }}</span>
                     </h3>
                     <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                           :class="getStatusBadgeClass(headerInfo.status)">
@@ -242,23 +242,23 @@
                 </div>
 
                 <form @submit.prevent="submitForm" class="space-y-4">
-                    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm dark:border-gray-700 dark:bg-gray-800/70">
                         <div>
-                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Receiving Date</p>
-                            <p class="font-bold text-gray-900 mt-0.5">{{ formatDate(headerInfo.receiving_date) }}</p>
+                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest dark:text-gray-300">Receiving Date</p>
+                            <p class="font-bold text-gray-900 mt-0.5 dark:text-gray-100">{{ formatDate(headerInfo.receiving_date) }}</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Origin</p>
-                            <p class="font-bold text-gray-900 mt-0.5">{{ headerInfo.origin_location }}</p>
+                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest dark:text-gray-300">Origin</p>
+                            <p class="font-bold text-gray-900 mt-0.5 dark:text-gray-100">{{ headerInfo.origin_location }}</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Destination</p>
-                            <p class="font-bold text-blue-600 mt-0.5">{{ headerInfo.destination_location }}</p>
+                            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest dark:text-gray-300">Destination</p>
+                            <p class="font-bold text-blue-600 mt-0.5 dark:text-blue-400">{{ headerInfo.destination_location }}</p>
                         </div>
                     </div>
 
                     <!-- Barcode scan strip (edit mode only) -->
-                    <div v-if="!readOnly" class="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                    <div v-if="!readOnly" class="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 dark:border-blue-400/30 dark:bg-blue-500/10">
                         <svg class="w-5 h-5 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m0 14v1M4.22 4.22l.707.707M18.364 18.364l.707.707M1 12h1m20 0h1M4.22 19.778l.707-.707M18.364 5.636l.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z" />
                         </svg>
@@ -271,13 +271,13 @@
                             @keydown.enter.prevent="handleScan()"
                             @paste="handlePaste"
                             placeholder="Scan barcode and press Enter"
-                            class="flex-1 rounded-lg border-gray-200 text-sm font-mono focus:ring-blue-500 focus:border-blue-500"
+                            class="flex-1 rounded-lg border-gray-200 text-sm font-mono focus:ring-blue-500 focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                             autocomplete="off"
                             spellcheck="false"
                         />
                         <transition name="fade">
                             <span v-if="scanFeedback"
-                                :class="scanFeedback.type === 'success' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'"
+                                :class="scanFeedback.type === 'success' ? 'text-green-700 bg-green-100 dark:bg-green-500/15 dark:text-green-300' : 'text-red-700 bg-red-100 dark:bg-red-500/15 dark:text-red-300'"
                                 class="px-2 py-1 rounded-lg text-xs font-black whitespace-nowrap">
                                 {{ scanFeedback.message }}
                             </span>
@@ -285,57 +285,57 @@
                     </div>
 
                     <!-- Scan progress -->
-                    <p v-if="!readOnly" class="text-xs font-bold text-gray-500">
+                    <p v-if="!readOnly" class="text-xs font-bold text-gray-500 dark:text-gray-300">
                         Verified: {{ verifiedIds.size }} / {{ itemRows.length }} items
                     </p>
 
                     <!-- Items grouped by asset -->
                     <template v-for="group in groupedItems" :key="group.asset.id">
-                        <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                        <div class="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between dark:bg-gray-900/50 dark:border-gray-700">
                                 <div>
-                                    <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest">{{ group.asset.item_code }}</h4>
-                                    <p class="text-[10px] text-gray-500">{{ group.asset.brand }} {{ group.asset.model }} — {{ group.asset.description }}</p>
+                                    <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">{{ group.asset.item_code }}</h4>
+                                    <p class="text-[10px] text-gray-500 dark:text-gray-300">{{ group.asset.brand }} {{ group.asset.model }} — {{ group.asset.description }}</p>
                                 </div>
-                                <span class="text-xs font-bold text-blue-600">{{ group.rows.length }} unit(s)</span>
+                                <span class="text-xs font-bold text-blue-600 dark:text-blue-400">{{ group.rows.length }} unit(s)</span>
                             </div>
                             <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
+                                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead class="bg-gray-50 dark:bg-gray-900/50">
                                         <tr>
-                                            <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Serial / Barcode</th>
-                                            <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500">Transferred</th>
-                                            <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500">Verified</th>
-                                            <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Condition</th>
-                                            <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Damage / Notes</th>
+                                            <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Serial / Barcode</th>
+                                            <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Transferred</th>
+                                            <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Verified</th>
+                                            <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Condition</th>
+                                            <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Damage / Notes</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="bg-white divide-y divide-gray-100">
+                                    <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
                                         <tr v-for="row in group.rows" :key="row.id">
                                             <td class="px-4 py-2">
-                                                <p class="text-sm font-bold text-gray-900">{{ row.serial_no || 'NO SERIAL' }}</p>
-                                                <p class="text-[10px] font-mono text-gray-500">{{ row.barcode }}</p>
+                                                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ row.serial_no || 'NO SERIAL' }}</p>
+                                                <p class="text-[10px] font-mono text-gray-500 dark:text-gray-300">{{ row.barcode }}</p>
                                             </td>
-                                            <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ row.transferred_quantity }}</td>
+                                            <td class="px-4 py-2 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ row.transferred_quantity }}</td>
                                             <td class="px-4 py-2 text-right">
                                                 <template v-if="!readOnly">
                                                     <span v-if="verifiedIds.has(row.id)"
-                                                        class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-black text-green-700">
+                                                        class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-black text-green-700 dark:bg-green-500/15 dark:text-green-300">
                                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
                                                         </svg>
                                                         1
                                                     </span>
-                                                    <span v-else class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-black text-gray-400">
+                                                    <span v-else class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-black text-gray-400 dark:bg-gray-800 dark:text-gray-400">
                                                         Pending
                                                     </span>
                                                 </template>
-                                                <span v-else class="text-sm font-bold text-gray-900">{{ row.received_quantity }}</span>
+                                                <span v-else class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ row.received_quantity }}</span>
                                             </td>
                                             <td class="px-4 py-2">
                                                 <select v-if="!readOnly"
                                                     v-model="row.condition"
-                                                    class="rounded-md border-gray-300 shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
+                                                    class="rounded-md border-gray-300 shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                                 >
                                                     <option value="Good">Good</option>
                                                     <option value="Damaged">Damaged</option>
@@ -353,9 +353,9 @@
                                                     v-model="row.damage_notes"
                                                     rows="1"
                                                     placeholder="Describe damage / missing"
-                                                    class="w-full text-xs rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                                    class="w-full text-xs rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 resize-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                                 ></textarea>
-                                                <span v-else-if="row.damage_notes" class="text-xs text-gray-600">{{ row.damage_notes }}</span>
+                                                <span v-else-if="row.damage_notes" class="text-xs text-gray-600 dark:text-gray-300">{{ row.damage_notes }}</span>
                                                 <span v-else class="text-xs text-gray-300 italic">—</span>
                                             </td>
                                         </tr>
@@ -366,12 +366,12 @@
                     </template>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Remarks</label>
-                        <textarea v-model="form.remarks" :disabled="readOnly" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none disabled:bg-gray-100"></textarea>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Remarks</label>
+                        <textarea v-model="form.remarks" :disabled="readOnly" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"></textarea>
                     </div>
 
                     <div class="flex justify-end space-x-3 mt-6">
-                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                             {{ readOnly ? 'Close' : 'Cancel' }}
                         </button>
                         <button v-if="!readOnly" type="submit"
@@ -387,27 +387,27 @@
         </Modal>
 
         <Modal :show="showDeclineModal" @close="closeDeclineModal" max-width="lg">
-            <div class="bg-white p-6">
+            <div class="bg-white p-6 dark:bg-gray-800">
                 <div class="mb-5">
-                    <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight">Decline Receiving</h3>
-                    <p class="mt-1 text-sm text-gray-500">
+                    <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight dark:text-gray-100">Decline Receiving</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">
                         This will return the transferred inventory to the origin location and close the receiving as declined.
                     </p>
                 </div>
 
-                <div v-if="declineTarget" class="mb-5 rounded-xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm">
-                    <div class="font-bold text-orange-900">{{ declineTarget.receiving_no || 'Pending Receiving' }}</div>
-                    <div class="mt-1 text-orange-700">
+                <div v-if="declineTarget" class="mb-5 rounded-xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm dark:bg-orange-500/10 dark:border-orange-500/30">
+                    <div class="font-bold text-orange-900 dark:text-orange-400">{{ declineTarget.receiving_no || 'Pending Receiving' }}</div>
+                    <div class="mt-1 text-orange-700 dark:text-orange-300">
                         {{ declineTarget.origin_location }} -> {{ declineTarget.destination_location }}
                         <span class="font-bold">({{ declineTarget.transferred_quantity }} qty)</span>
                     </div>
                 </div>
 
-                <label class="block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Reason</label>
+                <label class="block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500 dark:text-gray-300">Reason</label>
                 <textarea
                     v-model="declineReason"
                     rows="4"
-                    class="mt-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                    class="mt-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-orange-500 focus:ring-orange-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                     placeholder="Explain why this receiving is being declined..."
                 ></textarea>
 
@@ -415,7 +415,7 @@
                     <button
                         type="button"
                         @click="closeDeclineModal"
-                        class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-50"
+                        class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                     >
                         Cancel
                     </button>
@@ -527,9 +527,9 @@ const form = reactive({
 const itemRows = ref([]) // flat list of receiving rows
 
 const getStatusBadgeClass = (status) => {
-    if (status === 'Received') return 'bg-emerald-100 text-emerald-800'
-    if (status === 'Declined') return 'bg-orange-100 text-orange-800'
-    return 'bg-amber-100 text-amber-800'
+    if (status === 'Received') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+    if (status === 'Declined') return 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300'
+    return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
 }
 
 // Barcode scanner state

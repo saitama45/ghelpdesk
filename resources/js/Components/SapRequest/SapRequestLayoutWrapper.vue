@@ -20,14 +20,14 @@ const flash = computed(() => page.props.flash ?? {})
             
             <!-- Private Header (with Back Link) -->
             <div v-if="!isPublic" class="flex items-center gap-4 mb-8">
-                <Link :href="route('sap-requests.index')" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all">
+                <Link :href="route('sap-requests.index')" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all dark:text-gray-400 dark:hover:bg-gray-700">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
                 </Link>
                 <div>
-                    <h1 class="text-2xl font-black text-gray-900 tracking-tight">
+                    <h1 class="text-2xl font-black text-gray-900 tracking-tight dark:text-gray-100">
                         {{ isEdit ? `Edit SAP Request #${sapRequestId}` : 'New SAP Request' }}
                     </h1>
-                    <p class="text-sm text-gray-500 font-medium">Fill in the required fields for your SAP data creation request.</p>
+                    <p class="text-sm text-gray-500 font-medium dark:text-gray-300">Fill in the required fields for your SAP data creation request.</p>
                 </div>
             </div>
 
@@ -38,8 +38,8 @@ const flash = computed(() => page.props.flash ?? {})
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
                 </div>
-                <h1 class="text-4xl font-black text-gray-900 tracking-tight mb-3">SAP Request Form</h1>
-                <p class="text-base text-gray-500 font-medium max-w-lg mx-auto">
+                <h1 class="text-4xl font-black text-gray-900 tracking-tight mb-3 dark:text-gray-100">SAP Request Form</h1>
+                <p class="text-base text-gray-500 font-medium max-w-lg mx-auto dark:text-gray-300">
                     Submit your SAP data creation request. Our team will process it within 1–3 business days.
                 </p>
             </div>
@@ -66,7 +66,7 @@ const flash = computed(() => page.props.flash ?? {})
             <slot />
 
             <!-- Centralized Footer -->
-            <p v-if="isPublic" class="text-center text-xs text-gray-400 font-medium mt-8">
+            <p v-if="isPublic" class="text-center text-xs text-gray-400 font-medium mt-8 dark:text-gray-400">
                 Having trouble with this form? Contact IT Support.
             </p>
         </div>

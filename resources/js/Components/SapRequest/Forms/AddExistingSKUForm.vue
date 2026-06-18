@@ -31,10 +31,10 @@ function toggleToEntity(entity) {
         <div>
             <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">SAP Item Name <span class="text-rose-500">*</span></label>
             <input :value="modelValue.sap_item_name" @input="update('sap_item_name', $event.target.value)" type="text"
-                class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
         </div>
         <div>
-            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">FROM what Entity? <span class="text-rose-500">*</span> <span class="text-gray-400 font-normal normal-case">(one only)</span></label>
+            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">FROM what Entity? <span class="text-rose-500">*</span> <span class="text-gray-400 font-normal normal-case dark:text-gray-400">(one only)</span></label>
             <div class="flex flex-wrap gap-2">
                 <button v-for="e in ENTITIES" :key="e" type="button"
                     @click="update('from_entity', e)"
@@ -45,7 +45,7 @@ function toggleToEntity(entity) {
             </div>
         </div>
         <div>
-            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Which Entity to add to? <span class="text-rose-500">*</span> <span class="text-gray-400 font-normal normal-case">(can choose multiple)</span></label>
+            <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Which Entity to add to? <span class="text-rose-500">*</span> <span class="text-gray-400 font-normal normal-case dark:text-gray-400">(can choose multiple)</span></label>
             <div class="flex flex-wrap gap-2">
                 <button v-for="e in ENTITIES" :key="e" type="button"
                     @click="toggleToEntity(e)"

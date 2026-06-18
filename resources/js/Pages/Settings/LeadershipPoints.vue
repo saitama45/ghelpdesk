@@ -141,8 +141,8 @@ const levels = [
             <div class="flex items-center gap-3 mb-6">
                 <TrophyIcon class="w-7 h-7 text-yellow-500" />
                 <div>
-                    <h1 class="text-xl font-bold text-gray-900 dark:text-white">Leadership Points Settings</h1>
-                    <p class="text-sm text-gray-500">Configure how agents earn points, levels, and manage quests.</p>
+                    <h1 class="text-xl font-bold text-gray-900 dark:text-white dark:text-gray-100">Leadership Points Settings</h1>
+                    <p class="text-sm text-gray-500 dark:text-gray-300">Configure how agents earn points, levels, and manage quests.</p>
                 </div>
             </div>
 
@@ -168,99 +168,99 @@ const levels = [
 
                 <!-- Award Points -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1">Award Points</h2>
-                    <p class="text-sm text-gray-500 mb-5">Points awarded to the agent when a ticket is closed, based on resolution speed.</p>
+                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1 dark:text-gray-200">Award Points</h2>
+                    <p class="text-sm text-gray-500 mb-5 dark:text-gray-300">Points awarded to the agent when a ticket is closed, based on resolution speed.</p>
 
                     <div class="grid grid-cols-3 gap-4">
                         <div class="text-center">
-                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Fast (&lt; 1hr)</div>
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 dark:text-gray-300">Fast (&lt; 1hr)</div>
                             <input
                                 v-model.number="pointsForm['leadership.fast_points']"
                                 type="number"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">Points</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">Points</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">On Time (Within SLA)</div>
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 dark:text-gray-300">On Time (Within SLA)</div>
                             <input
                                 v-model.number="pointsForm['leadership.ontime_points']"
                                 type="number"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">Points</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">Points</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Late (Overdue)</div>
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 dark:text-gray-300">Late (Overdue)</div>
                             <input
                                 v-model.number="pointsForm['leadership.late_points']"
                                 type="number"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">Points</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">Points</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Bonus Points -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1">Bonus Points</h2>
-                    <p class="text-sm text-gray-500 mb-5">Additional points awarded based on resolution quality.</p>
+                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1 dark:text-gray-200">Bonus Points</h2>
+                    <p class="text-sm text-gray-500 mb-5 dark:text-gray-300">Additional points awarded based on resolution quality.</p>
 
                     <div class="grid grid-cols-3 gap-4">
                         <div class="text-center">
-                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">First Call Resolution</div>
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 dark:text-gray-300">First Call Resolution</div>
                             <input
                                 v-model.number="pointsForm['leadership.fcr_bonus']"
                                 type="number"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">Bonus Points</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">Bonus Points</div>
                         </div>
                         <div class="text-center">
                             <div class="text-xs font-medium text-green-600 uppercase tracking-wide mb-2">Happy Customer</div>
                             <input
                                 v-model.number="pointsForm['leadership.happy_customer_bonus']"
                                 type="number"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">Bonus Points</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">Bonus Points</div>
                         </div>
                         <div class="text-center">
                             <div class="text-xs font-medium text-red-500 uppercase tracking-wide mb-2">Unhappy Customer</div>
                             <input
                                 v-model.number="pointsForm['leadership.unhappy_customer_penalty']"
                                 type="number"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">Points (negative)</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">Points (negative)</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Agent Levels -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1">Agent Levels</h2>
-                    <p class="text-sm text-gray-500 mb-5">Set the cumulative points threshold required to reach each level.</p>
+                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1 dark:text-gray-200">Agent Levels</h2>
+                    <p class="text-sm text-gray-500 mb-5 dark:text-gray-300">Set the cumulative points threshold required to reach each level.</p>
 
                     <div class="grid grid-cols-3 sm:grid-cols-6 gap-4">
                         <div v-for="level in levels" :key="level.key" class="text-center">
-                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{{ level.label }}</div>
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2 dark:text-gray-300">{{ level.label }}</div>
                             <input
                                 v-model.number="pointsForm[level.key]"
                                 type="number"
                                 min="0"
-                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                class="w-full text-center rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100"
                             />
-                            <div class="text-xs text-gray-400 mt-1">pts</div>
+                            <div class="text-xs text-gray-400 mt-1 dark:text-gray-400">pts</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Trophies Info -->
                 <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1">Monthly Trophies</h2>
-                    <p class="text-sm text-gray-500 mb-4">Awarded automatically each month to the top agent per category.</p>
+                    <h2 class="text-base font-semibold text-gray-800 dark:text-white mb-1 dark:text-gray-200">Monthly Trophies</h2>
+                    <p class="text-sm text-gray-500 mb-4 dark:text-gray-300">Awarded automatically each month to the top agent per category.</p>
                     <div class="grid grid-cols-2 gap-3">
                         <div v-for="trophy in [
                             { icon: '🏆', name: 'Most Valuable Player', desc: 'Agent with the most overall points this month' },
@@ -268,11 +268,11 @@ const levels = [
                             { icon: '🧙', name: 'Wizard', desc: 'Agent with the highest First Call Resolution points' },
                             { icon: '🏎️', name: 'Speed Racer', desc: 'Agent with the most fast-resolution points' },
                         ]" :key="trophy.name"
-                            class="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
+                            class="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900 dark:bg-gray-900/50">
                             <span class="text-2xl">{{ trophy.icon }}</span>
                             <div>
-                                <div class="text-sm font-medium text-gray-800 dark:text-white">{{ trophy.name }}</div>
-                                <div class="text-xs text-gray-500">{{ trophy.desc }}</div>
+                                <div class="text-sm font-medium text-gray-800 dark:text-white dark:text-gray-200">{{ trophy.name }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-300">{{ trophy.desc }}</div>
                             </div>
                         </div>
                     </div>
@@ -290,8 +290,8 @@ const levels = [
             <div v-if="activeTab === 'quests'" class="space-y-4">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h2 class="text-base font-semibold text-gray-800 dark:text-white">Quests</h2>
-                        <p class="text-sm text-gray-500">Business-specific goals that challenge agents to achieve milestones.</p>
+                        <h2 class="text-base font-semibold text-gray-800 dark:text-white dark:text-gray-200">Quests</h2>
+                        <p class="text-sm text-gray-500 dark:text-gray-300">Business-specific goals that challenge agents to achieve milestones.</p>
                     </div>
                     <button
                         v-if="hasPermission('leadership_points.edit')"
@@ -321,20 +321,20 @@ const levels = [
                 >
                     <template #header>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Quest</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Criteria</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Target</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Bonus Pts</th>
-                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                            <th v-if="hasPermission('leadership_points.edit')" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Actions</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-300">Quest</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-300">Criteria</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-300">Target</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-300">Bonus Pts</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-300">Status</th>
+                            <th v-if="hasPermission('leadership_points.edit')" class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="row in data" :key="row.id" class="hover:bg-gray-50">
+                        <tr v-for="row in data" :key="row.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td class="px-4 py-3">
-                                <div class="font-medium text-gray-900 dark:text-white">{{ row.title }}</div>
-                                <div v-if="row.description" class="max-w-xs truncate text-xs text-gray-500">{{ row.description }}</div>
+                                <div class="font-medium text-gray-900 dark:text-white dark:text-gray-100">{{ row.title }}</div>
+                                <div v-if="row.description" class="max-w-xs truncate text-xs text-gray-500 dark:text-gray-300">{{ row.description }}</div>
                                 <div v-if="row.badge_name" class="mt-1 inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">
                                     <SparklesIcon class="h-3 w-3" /> {{ row.badge_name }}
                                 </div>
@@ -374,74 +374,74 @@ const levels = [
             <div v-if="showQuestModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
                 <div class="absolute inset-0 bg-black/50" @click="closeQuestModal" />
                 <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4">
-                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-white dark:text-gray-100">
                         {{ isEditingQuest ? 'Edit Quest' : 'New Quest' }}
                     </h3>
 
                     <div class="space-y-3">
                         <div>
-                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Title *</label>
+                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Title *</label>
                             <input v-model="questForm.title" type="text" placeholder="e.g. Earn Customer Love!"
-                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100" />
                         </div>
 
                         <div>
-                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Description</label>
+                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Description</label>
                             <textarea v-model="questForm.description" rows="2" placeholder="Describe the quest challenge…"
-                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-900/50 dark:text-gray-100" />
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Criteria *</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Criteria *</label>
                                 <select v-model="questForm.criteria_type"
-                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500">
+                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900/50 dark:text-gray-100">
                                     <option v-for="(label, val) in criteriaTypeLabels" :key="val" :value="val">{{ label }}</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Target Count *</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Target Count *</label>
                                 <input v-model.number="questForm.criteria_value" type="number" min="1"
-                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500" />
+                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900/50 dark:text-gray-100" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Badge Name</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Badge Name</label>
                                 <input v-model="questForm.badge_name" type="text" placeholder="e.g. Heart"
-                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500" />
+                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900/50 dark:text-gray-100" />
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Bonus Points *</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Bonus Points *</label>
                                 <input v-model.number="questForm.bonus_points" type="number"
-                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500" />
+                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900/50 dark:text-gray-100" />
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Starts At</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Starts At</label>
                                 <input v-model="questForm.starts_at" type="date"
-                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500" />
+                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900/50 dark:text-gray-100" />
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Ends At</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Ends At</label>
                                 <input v-model="questForm.ends_at" type="date"
-                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500" />
+                                    class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white text-sm py-2 px-3 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900/50 dark:text-gray-100" />
                             </div>
                         </div>
 
                         <div class="flex items-center gap-2">
                             <input id="is_active" v-model="questForm.is_active" type="checkbox"
-                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600" />
                             <label for="is_active" class="text-sm text-gray-700 dark:text-gray-300">Active</label>
                         </div>
                     </div>
 
                     <div class="flex justify-end gap-3 pt-2">
                         <button @click="closeQuestModal"
-                            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white transition-colors">
+                            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white transition-colors">
                             Cancel
                         </button>
                         <button @click="submitQuestForm"

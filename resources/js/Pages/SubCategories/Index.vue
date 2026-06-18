@@ -43,14 +43,14 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sub-Category</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Sub-Category</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="subcategory in data" :key="subcategory.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="subcategory in data" :key="subcategory.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="h-10 w-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
@@ -59,8 +59,8 @@
                                         </svg>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-medium text-gray-900">{{ subcategory.name }}</div>
-                                        <div class="text-sm text-gray-500">{{ subcategory.description || 'No description' }}</div>
+                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ subcategory.name }}</div>
+                                        <div class="text-sm text-gray-500 dark:text-gray-300">{{ subcategory.description || 'No description' }}</div>
                                     </div>
                                 </div>
                             </td>
@@ -104,22 +104,22 @@
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeImportModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">Import Sub-Categories</h3>
-                        <button @click="closeImportModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Sub-Categories</h3>
+                        <button @click="closeImportModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
                     <div class="space-y-4">
-                        <p class="text-sm text-gray-600">
+                        <p class="text-sm text-gray-600 dark:text-gray-300">
                             Import sub-categories in bulk using a CSV file. Columns: <span class="font-semibold">name</span>, <span class="font-semibold">description</span>, <span class="font-semibold">is_active</span> (1 or 0).
                         </p>
 
                         <!-- Template Download -->
-                        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
+                        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-600">
                             <a href="/sub-categories/template" class="flex items-center space-x-3 text-blue-600 hover:text-blue-800 transition-colors group">
                                 <div class="h-10 w-10 bg-blue-100 group-hover:bg-blue-200 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors">
                                     <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,29 +128,29 @@
                                 </div>
                                 <div>
                                     <div class="text-sm font-semibold">Download CSV Template</div>
-                                    <div class="text-xs text-gray-500">sub-categories-import-template.csv</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">sub-categories-import-template.csv</div>
                                 </div>
                             </a>
                         </div>
 
                         <!-- Divider -->
                         <div class="flex items-center space-x-3">
-                            <div class="flex-1 border-t border-gray-200"></div>
-                            <span class="text-xs text-gray-400 font-medium uppercase tracking-wider">Then Upload</span>
-                            <div class="flex-1 border-t border-gray-200"></div>
+                            <div class="flex-1 border-t border-gray-200 dark:border-gray-700"></div>
+                            <span class="text-xs text-gray-400 font-medium uppercase tracking-wider dark:text-gray-400">Then Upload</span>
+                            <div class="flex-1 border-t border-gray-200 dark:border-gray-700"></div>
                         </div>
 
                         <!-- File Upload -->
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Upload CSV File</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Upload CSV File</label>
                             <div v-if="!importFile"
                                  @click="importFileInput.click()"
-                                 class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 p-6 text-center cursor-pointer transition-colors">
-                                <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 p-6 text-center cursor-pointer transition-colors dark:bg-gray-900/50 dark:border-gray-600 dark:hover:bg-gray-700">
+                                <svg class="w-8 h-8 mx-auto text-gray-400 mb-2 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                 </svg>
-                                <p class="text-sm text-gray-600 font-medium">Click to choose a CSV file</p>
-                                <p class="text-xs text-gray-400 mt-1">CSV only, max 2MB</p>
+                                <p class="text-sm text-gray-600 font-medium dark:text-gray-300">Click to choose a CSV file</p>
+                                <p class="text-xs text-gray-400 mt-1 dark:text-gray-400">CSV only, max 2MB</p>
                             </div>
                             <div v-else class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                                 <div class="flex items-center space-x-2 min-w-0">
@@ -159,7 +159,7 @@
                                     </svg>
                                     <span class="text-sm font-medium text-green-800 truncate">{{ importFile.name }}</span>
                                 </div>
-                                <button @click="removeImportFile" type="button" class="text-gray-400 hover:text-red-500 transition-colors ml-2 flex-shrink-0">
+                                <button @click="removeImportFile" type="button" class="text-gray-400 hover:text-red-500 transition-colors ml-2 flex-shrink-0 dark:text-gray-400">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -189,7 +189,7 @@
 
                     <div class="flex justify-between pt-6 border-t mt-6">
                         <button type="button" @click="closeImportModal"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
                         <button type="button" @click="submitImport" :disabled="!importFile || isImporting"
@@ -209,12 +209,12 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ isEditing ? 'Edit Sub-Category' : 'Create Sub-Category' }}
                         </h3>
-                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -223,22 +223,22 @@
 
                     <form @submit.prevent="submitForm" class="space-y-5">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Category Name</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Sub-Category Name</label>
                             <input v-model="form.name" type="text" required
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Description</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Description</label>
                             <textarea v-model="form.description" rows="3"
-                                      class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                                      class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                         </div>
                         <div v-if="isEditing" class="flex items-center">
-                            <input v-model="form.is_active" type="checkbox" id="is_active_sub" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <label for="is_active_sub" class="ml-2 text-sm font-medium text-gray-700">Active Sub-Category</label>
+                            <input v-model="form.is_active" type="checkbox" id="is_active_sub" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
+                            <label for="is_active_sub" class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">Active Sub-Category</label>
                         </div>
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="closeModal" 
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
                             <button type="submit" 

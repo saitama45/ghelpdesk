@@ -1602,7 +1602,7 @@ onUnmounted(() => {
     <AppLayout content-class="max-w-none px-0 sm:px-0 lg:px-0">
         <template #header>Task Board</template>
 
-        <div class="flex h-[calc(100vh-6rem)] min-h-[680px] flex-col overflow-hidden text-gray-900" :style="boardStyle">
+        <div class="flex h-[calc(100vh-6rem)] min-h-[680px] flex-col overflow-hidden text-gray-900 dark:text-gray-100" :style="boardStyle">
             <header class="shrink-0 border-b border-white/10 bg-black/20 px-4 py-3 text-white backdrop-blur-md">
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div class="flex min-w-0 items-center gap-3">
@@ -1654,35 +1654,35 @@ onUnmounted(() => {
                 </div>
 
                 <div class="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
-                    <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-gray-800 shadow-sm">
-                        <FunnelIcon class="h-4 w-4 shrink-0 text-gray-400" />
+                    <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-gray-800 shadow-sm dark:text-gray-200">
+                        <FunnelIcon class="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-400" />
                         <input ref="filterInput" v-model="filters.keyword" type="search" class="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm focus:ring-0" placeholder="Filter cards...">
                     </div>
-                    <select v-model="filters.assignee_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
+                    <select v-model="filters.assignee_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
                         <option value="">All members</option>
                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                     </select>
-                    <select v-model="filters.label_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
+                    <select v-model="filters.label_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
                         <option value="">All labels</option>
                         <option v-for="label in localBoard.labels" :key="label.id" :value="label.id">{{ label.name || label.color }}</option>
                     </select>
-                    <select v-if="isProjectBoard" v-model="filters.milestone" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
+                    <select v-if="isProjectBoard" v-model="filters.milestone" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
                         <option value="">All milestones</option>
                         <option v-for="milestone in projectMilestones" :key="milestone" :value="milestone">{{ milestone }}</option>
                     </select>
-                    <select v-model="filters.due" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm">
+                    <select v-model="filters.due" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
                         <option value="">All due dates</option>
                         <option value="overdue">Overdue</option>
                         <option value="soon">Due soon</option>
                         <option value="complete">Complete</option>
                         <option value="none">No due date</option>
                     </select>
-                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm">
-                        <input v-model="filters.mine" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm dark:text-gray-300">
+                        <input v-model="filters.mine" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                         My cards
                     </label>
-                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm">
-                        <input v-model="filters.showArchived" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm dark:text-gray-300">
+                        <input v-model="filters.showArchived" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                         Archived
                     </label>
                     <button v-if="activeFilterCount" type="button" @click="clearFilters" class="h-10 rounded-lg bg-white/15 px-3 text-sm font-bold text-white hover:bg-white/20">
@@ -1696,14 +1696,14 @@ onUnmounted(() => {
                     <section
                         v-for="status in columnNames"
                         :key="columnFor(status)?.id ?? status"
-                        class="flex h-full w-[19rem] shrink-0 flex-col rounded-lg bg-gray-100 shadow-xl ring-1 ring-black/10"
+                        class="flex h-full w-[19rem] shrink-0 flex-col rounded-lg bg-gray-100 shadow-xl ring-1 ring-black/10 dark:bg-gray-800"
                         :class="dragOverColumnId === columnFor(status)?.id ? 'ring-2 ring-blue-400' : ''"
                         @dragover.prevent="dragOverStatus = status"
                         @dragleave="dragOverStatus = null"
                         @drop.prevent="moveDraggedCard(status)"
                     >
                         <div
-                            class="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-3"
+                            class="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 dark:border-gray-700"
                             @dragover.prevent="draggedColumnId ? (dragOverColumnId = columnFor(status)?.id) : null"
                             @drop.prevent="draggedColumnId ? dropColumn(columnFor(status)) : null"
                         >
@@ -1713,7 +1713,7 @@ onUnmounted(() => {
                                     v-model="columnForm.name"
                                     type="text"
                                     maxlength="60"
-                                    class="h-8 w-full rounded-md border-gray-300 text-sm font-bold shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    class="h-8 w-full rounded-md border-gray-300 text-sm font-bold shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                     @keydown.esc.prevent="cancelEditingColumn"
                                 >
                                 <div class="flex items-center justify-between gap-2">
@@ -1731,7 +1731,7 @@ onUnmounted(() => {
                                         <button type="button" :disabled="isSavingColumn" class="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50" title="Save" @click="saveColumn(columnFor(status))">
                                             <CheckIcon class="h-4 w-4" />
                                         </button>
-                                        <button type="button" class="rounded-md p-1.5 text-gray-400 hover:bg-gray-200" title="Cancel" @click="cancelEditingColumn">
+                                        <button type="button" class="rounded-md p-1.5 text-gray-400 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700" title="Cancel" @click="cancelEditingColumn">
                                             <XMarkIcon class="h-4 w-4" />
                                         </button>
                                     </div>
@@ -1750,14 +1750,14 @@ onUnmounted(() => {
                                     >
                                         {{ status }}
                                     </span>
-                                    <span class="text-xs font-bold text-gray-500">{{ visibleCardsForStatus(status).length }}</span>
+                                    <span class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ visibleCardsForStatus(status).length }}</span>
                                 </div>
                                 <div v-if="canEditBoard" class="relative shrink-0">
-                                    <button type="button" class="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700" title="Column options" @click.stop="toggleColumnMenu(columnFor(status).id)">
+                                    <button type="button" class="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700" title="Column options" @click.stop="toggleColumnMenu(columnFor(status).id)">
                                         <EllipsisHorizontalIcon class="h-4 w-4" />
                                     </button>
-                                    <div v-if="activeColumnMenu === columnFor(status)?.id" class="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl" @click.stop>
-                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50" @click="startEditingColumn(columnFor(status))">
+                                    <div v-if="activeColumnMenu === columnFor(status)?.id" class="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:bg-gray-800 dark:border-gray-700" @click.stop>
+                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700" @click="startEditingColumn(columnFor(status))">
                                             <PencilSquareIcon class="h-4 w-4" />
                                             Rename
                                         </button>
@@ -1775,7 +1775,7 @@ onUnmounted(() => {
                                 v-for="card in visibleCardsForStatus(status)"
                                 :key="card.id"
                                 draggable="true"
-                                class="group cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                                class="group cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md dark:bg-gray-800 dark:border-gray-700"
                                 :class="draggedCardId === card.id ? 'opacity-40' : ''"
                                 @click="selectedCardId = card.id"
                                 @dragstart="startDrag($event, card)"
@@ -1795,27 +1795,27 @@ onUnmounted(() => {
                                             {{ label.name || label.color }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold leading-snug text-gray-900">{{ card.title }}</h3>
+                                    <h3 class="text-sm font-bold leading-snug text-gray-900 dark:text-gray-100">{{ card.title }}</h3>
                                     <div v-if="card.project_task" class="mt-2 space-y-1">
                                         <div class="flex flex-wrap items-center gap-1.5 text-[10px] font-black uppercase tracking-wide">
                                             <span class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">{{ card.project_task.category || 'General' }}</span>
                                             <span class="rounded px-1.5 py-0.5" :class="card.project_task.is_subtask ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700'">
                                                 {{ card.project_task.is_subtask ? 'Sub-task' : 'Activity' }}
                                             </span>
-                                            <span class="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">{{ card.project_task.progress }}%</span>
+                                            <span class="rounded bg-gray-100 px-1.5 py-0.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ card.project_task.progress }}%</span>
                                         </div>
-                                        <p v-if="card.project_task.parent_task" class="truncate text-[11px] font-semibold text-gray-500">
+                                        <p v-if="card.project_task.parent_task" class="truncate text-[11px] font-semibold text-gray-500 dark:text-gray-300">
                                             Under {{ card.project_task.parent_task.name }}
                                         </p>
                                     </div>
-                                    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                                    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-300">
                                         <span v-if="card.due_at" class="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-bold" :class="dueBadgeClass(card)">
                                             <CalendarDaysIcon class="h-3.5 w-3.5" />
                                             <span class="text-[9px] uppercase tracking-wider opacity-75">Due</span>
                                             <span>·</span>
                                             {{ formatDate(card.due_at) }}
                                         </span>
-                                        <span v-if="card.checklist_totals?.total" class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 font-bold text-gray-700">
+                                        <span v-if="card.checklist_totals?.total" class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                                             <ClipboardDocumentCheckIcon class="h-3.5 w-3.5" />
                                             {{ card.checklist_totals.complete }}/{{ card.checklist_totals.total }}
                                         </span>
@@ -1829,7 +1829,7 @@ onUnmounted(() => {
                                         </span>
                                     </div>
                                     <div v-if="card.assignees?.length" class="mt-3 flex -space-x-2">
-                                        <div v-for="member in card.assignees.slice(0, 5)" :key="member.id" class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-gray-100 text-[10px] font-bold text-gray-700" :title="member.name">
+                                        <div v-for="member in card.assignees.slice(0, 5)" :key="member.id" class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-gray-100 text-[10px] font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300" :title="member.name">
                                             <img v-if="member.profile_photo" :src="'/serve-storage/' + member.profile_photo" class="h-full w-full object-cover" :alt="member.name">
                                             <span v-else>{{ initials(member.name) }}</span>
                                         </div>
@@ -1838,11 +1838,11 @@ onUnmounted(() => {
                             </article>
                         </div>
 
-                        <div v-if="canEditBoard" class="border-t border-gray-200 p-2">
+                        <div v-if="canEditBoard" class="border-t border-gray-200 p-2 dark:border-gray-700">
                             <button
                                 v-if="activeCardComposer !== status"
                                 type="button"
-                                class="inline-flex w-full items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900"
+                                class="inline-flex w-full items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700"
                                 @click="openCardComposer(status)"
                             >
                                 <PlusIcon class="h-4 w-4" />
@@ -1853,7 +1853,7 @@ onUnmounted(() => {
                                     :ref="(el) => setCardComposerInput(status, el)"
                                     v-model="newCardTitles[status]"
                                     rows="3"
-                                    class="w-full resize-none rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    class="w-full resize-none rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                     placeholder="Enter a title for this card..."
                                     @keydown.esc.prevent="closeCardComposer(status)"
                                     @keydown.ctrl.enter.prevent="createCard(status)"
@@ -1864,7 +1864,7 @@ onUnmounted(() => {
                                         <PlusIcon class="h-4 w-4" />
                                         {{ isCreatingCard ? 'Creating...' : 'Create' }}
                                     </button>
-                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600" @click="closeCardComposer(status)">
+                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="closeCardComposer(status)">
                                         <XMarkIcon class="h-5 w-5" />
                                     </button>
                                 </div>
@@ -1882,13 +1882,13 @@ onUnmounted(() => {
                             <PlusIcon class="h-4 w-4" />
                             Add Column
                         </button>
-                        <form v-else class="space-y-2 rounded-lg bg-white p-3 shadow-xl ring-1 ring-black/10" @submit.prevent="createColumn">
+                        <form v-else class="space-y-2 rounded-lg bg-white p-3 shadow-xl ring-1 ring-black/10 dark:bg-gray-800" @submit.prevent="createColumn">
                             <input
                                 ref="addColumnInput"
                                 v-model="newColumnForm.name"
                                 type="text"
                                 maxlength="60"
-                                class="w-full rounded-md border-gray-300 text-sm font-semibold shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                class="w-full rounded-md border-gray-300 text-sm font-semibold shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                 placeholder="Column name..."
                                 @keydown.esc.prevent="closeAddColumn"
                             >
@@ -1907,7 +1907,7 @@ onUnmounted(() => {
                                     <PlusIcon class="h-4 w-4" />
                                     {{ isSavingColumn ? 'Adding...' : 'Add' }}
                                 </button>
-                                <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600" @click="closeAddColumn">
+                                <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="closeAddColumn">
                                     <XMarkIcon class="h-5 w-5" />
                                 </button>
                             </div>
@@ -1917,16 +1917,16 @@ onUnmounted(() => {
             </main>
         </div>
 
-        <aside v-if="showBoardMenu" class="fixed right-0 top-0 z-50 flex h-screen w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-2xl">
-            <div class="flex items-center justify-between border-b border-gray-200 p-4">
-                <h2 class="text-lg font-bold text-gray-900">Board Menu</h2>
-                <button type="button" @click="showBoardMenu = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+        <aside v-if="showBoardMenu" class="fixed right-0 top-0 z-50 flex h-screen w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">
+            <div class="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Board Menu</h2>
+                <button type="button" @click="showBoardMenu = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                     <XMarkIcon class="h-5 w-5" />
                 </button>
             </div>
             <div class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-4">
                 <section v-if="isProjectBoard" class="space-y-3">
-                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Project</h3>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Project</h3>
                     <div class="rounded-lg border border-blue-100 bg-blue-50 p-3">
                         <p class="text-sm font-black text-blue-950">{{ localBoard.project?.name }}</p>
                         <p class="mt-1 text-xs font-semibold text-blue-700">{{ localBoard.project?.store?.name || 'No store' }}</p>
@@ -1942,9 +1942,9 @@ onUnmounted(() => {
                 </section>
 
                 <section v-if="localBoard.my_role === 'admin'" class="space-y-3">
-                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Settings</h3>
-                    <input v-model="boardForm.title" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <textarea v-model="boardForm.description" rows="3" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Settings</h3>
+                    <input v-model="boardForm.title" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
+                    <textarea v-model="boardForm.description" rows="3" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"></textarea>
                     <div class="flex flex-wrap gap-2">
                         <button
                             v-for="color in colorOptions"
@@ -1961,7 +1961,7 @@ onUnmounted(() => {
 
                 <section class="space-y-3">
                     <div class="flex items-center justify-between">
-                        <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Labels</h3>
+                        <h3 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Labels</h3>
                         <button v-if="canEditBoard" type="button" @click="showLabelModal = true" class="text-xs font-bold text-blue-600">Manage</button>
                     </div>
                     <div class="flex flex-wrap gap-2">
@@ -1972,22 +1972,22 @@ onUnmounted(() => {
                 </section>
 
                 <section class="space-y-3">
-                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500">Activity</h3>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Activity</h3>
                     <div class="space-y-3">
                         <div v-for="activity in localBoard.activities" :key="activity.id" class="flex gap-3">
-                            <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-600">
+                            <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                 <img v-if="activity.actor?.profile_photo" :src="'/serve-storage/' + activity.actor.profile_photo" class="h-full w-full object-cover" :alt="activity.actor.name">
                                 <span v-else>{{ initials(activity.actor?.name || 'System') }}</span>
                             </div>
                             <div class="min-w-0">
-                                <p class="text-sm text-gray-700"><span class="font-bold">{{ activity.actor?.name || 'System' }}</span> {{ activity.description }}</p>
-                                <p class="text-xs text-gray-400">{{ formatDateTime(activity.created_at) }}</p>
+                                <p class="text-sm text-gray-700 dark:text-gray-300"><span class="font-bold">{{ activity.actor?.name || 'System' }}</span> {{ activity.description }}</p>
+                                <p class="text-xs text-gray-400 dark:text-gray-400">{{ formatDateTime(activity.created_at) }}</p>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <section v-if="localBoard.closed_at || canDeleteBoard" class="space-y-3 border-t border-gray-100 pt-4">
+                <section v-if="localBoard.closed_at || canDeleteBoard" class="space-y-3 border-t border-gray-100 pt-4 dark:border-gray-700">
                     <button v-if="localBoard.closed_at" type="button" @click="restoreBoard" class="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">Reopen Board</button>
                     <button v-else-if="canDeleteBoard" type="button" @click="closeBoard" class="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700">Close Board</button>
                 </section>
@@ -1995,21 +1995,21 @@ onUnmounted(() => {
         </aside>
 
         <Modal :show="!!selectedCard" @close="closeSelectedCardModal" maxWidth="4xl">
-            <div v-if="selectedCard" class="max-h-[90vh] overflow-hidden rounded-lg bg-gray-50">
+            <div v-if="selectedCard" class="max-h-[90vh] overflow-hidden rounded-lg bg-gray-50 dark:bg-gray-900/50">
                 <div v-if="selectedCard.cover_type" class="h-36" :style="coverStyle(selectedCard)"></div>
-                <div class="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
+                <div class="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4 dark:bg-gray-800 dark:border-gray-700">
                     <div class="min-w-0">
-                        <input v-model="cardDraft.title" :disabled="!canEditBoard" class="w-full border-0 bg-transparent p-0 text-xl font-black text-gray-900 focus:ring-0">
-                        <p class="mt-1 text-xs font-bold text-gray-500">in {{ cardDraft.status || selectedCard.status }}</p>
+                        <input v-model="cardDraft.title" :disabled="!canEditBoard" class="w-full border-0 bg-transparent p-0 text-xl font-black text-gray-900 focus:ring-0 dark:text-gray-100">
+                        <p class="mt-1 text-xs font-bold text-gray-500 dark:text-gray-300">in {{ cardDraft.status || selectedCard.status }}</p>
                     </div>
-                    <button type="button" @click="closeSelectedCardModal" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <button type="button" @click="closeSelectedCardModal" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
 
                 <div class="custom-scrollbar grid max-h-[calc(90vh-7rem)] grid-cols-1 gap-6 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
                     <div class="space-y-6">
-                        <section v-if="selectedCard.project_task" class="rounded-lg border border-blue-100 bg-white p-4 shadow-sm">
+                        <section v-if="selectedCard.project_task" class="rounded-lg border border-blue-100 bg-white p-4 shadow-sm dark:bg-gray-800">
                             <div class="mb-3 flex items-center justify-between">
                                 <h3 class="text-sm font-black uppercase tracking-wider text-blue-900">Project Activity</h3>
                                 <button v-if="canEditBoard" type="button" @click="saveCardDetails({ closeModal: false })" :disabled="isSaving" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
@@ -2018,38 +2018,38 @@ onUnmounted(() => {
                             </div>
                             <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Milestone</label>
-                                    <input v-model="projectDraft.category" :disabled="!canEditBoard || selectedCard.project_task.is_subtask" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" @change="saveCardDetails({ closeModal: false, silent: true })">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Milestone</label>
+                                    <input v-model="projectDraft.category" :disabled="!canEditBoard || selectedCard.project_task.is_subtask" type="text" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50 dark:border-gray-600" @change="saveCardDetails({ closeModal: false, silent: true })">
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Progress</label>
-                                    <input v-model="projectDraft.progress" :disabled="!canEditBoard" type="number" min="0" max="100" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" @change="saveCardDetails({ closeModal: false, silent: true })">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Progress</label>
+                                    <input v-model="projectDraft.progress" :disabled="!canEditBoard" type="number" min="0" max="100" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" @change="saveCardDetails({ closeModal: false, silent: true })">
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Assigned</label>
-                                    <select v-model="projectDraft.assigned_to" :disabled="!canEditBoard || !!selectedCard.project_task.external_assignment" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" @change="saveCardDetails({ closeModal: false, silent: true })">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Assigned</label>
+                                    <select v-model="projectDraft.assigned_to" :disabled="!canEditBoard || !!selectedCard.project_task.external_assignment" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50 dark:border-gray-600" @change="saveCardDetails({ closeModal: false, silent: true })">
                                         <option value="">{{ selectedCard.project_task.external_assignment || 'Unassigned' }}</option>
                                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Support</label>
-                                    <select v-model="projectDraft.support_by" :disabled="!canEditBoard" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" @change="saveCardDetails({ closeModal: false, silent: true })">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Support</label>
+                                    <select v-model="projectDraft.support_by" :disabled="!canEditBoard" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" @change="saveCardDetails({ closeModal: false, silent: true })">
                                         <option value="">No support</option>
                                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                     </select>
                                 </div>
                             </div>
-                            <p v-if="selectedCard.project_task.parent_task" class="mt-3 text-xs font-semibold text-gray-500">
+                            <p v-if="selectedCard.project_task.parent_task" class="mt-3 text-xs font-semibold text-gray-500 dark:text-gray-300">
                                 Parent activity: {{ selectedCard.project_task.parent_task.name }}
                             </p>
                             <div v-if="canEditBoard && !selectedCard.project_task.parent_task_id" class="mt-4 border-t border-blue-50 pt-4">
                                 <form v-if="showSubTaskInput" class="flex gap-2" @submit.prevent="createSubTask">
-                                    <input v-model="newSubTaskTitle" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Add a sub-task under this activity">
+                                    <input v-model="newSubTaskTitle" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" placeholder="Add a sub-task under this activity">
                                     <button type="submit" :disabled="isCreatingSubTask || !newSubTaskTitle.trim()" class="rounded-lg bg-gray-900 px-4 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50">
                                         {{ isCreatingSubTask ? 'Adding...' : 'Add' }}
                                     </button>
-                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-gray-600" @click="showSubTaskInput = false; newSubTaskTitle = ''">
+                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-gray-600 dark:text-gray-400" @click="showSubTaskInput = false; newSubTaskTitle = ''">
                                         <XMarkIcon class="h-5 w-5" />
                                     </button>
                                 </form>
@@ -2060,48 +2060,48 @@ onUnmounted(() => {
                             </div>
                         </section>
 
-                        <section ref="detailsSectionRef" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <section ref="detailsSectionRef" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                             <div class="mb-3 flex items-center justify-between">
-                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Details</h3>
+                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Details</h3>
                                 <button v-if="canEditBoard" type="button" @click="saveCardDetails" :disabled="isSaving" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
                                     {{ isSaving ? 'Saving...' : 'Save' }}
                                 </button>
                             </div>
-                            <textarea v-model="cardDraft.description" :disabled="!canEditBoard" rows="5" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Description"></textarea>
+                            <textarea v-model="cardDraft.description" :disabled="!canEditBoard" rows="5" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" placeholder="Description"></textarea>
                             <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Status</label>
-                                    <select v-model="cardDraft.status" :disabled="!canEditBoard || !!selectedCard.archived_at" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Status</label>
+                                    <select v-model="cardDraft.status" :disabled="!canEditBoard || !!selectedCard.archived_at" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                         <option v-for="status in columnNames" :key="status" :value="status">{{ status }}</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Start</label>
-                                    <input v-model="cardDraft.start_at" :disabled="!canEditBoard" type="datetime-local" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Start</label>
+                                    <input v-model="cardDraft.start_at" :disabled="!canEditBoard" type="datetime-local" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                 </div>
                             </div>
                             <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Due</label>
-                                    <input v-model="cardDraft.due_at" :disabled="!canEditBoard" type="datetime-local" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Due</label>
+                                    <input v-model="cardDraft.due_at" :disabled="!canEditBoard" type="datetime-local" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                 </div>
                             </div>
-                            <label class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-gray-700">
-                                <input v-model="cardDraft.due_complete" :disabled="!canEditBoard" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                            <label class="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                <input v-model="cardDraft.due_complete" :disabled="!canEditBoard" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600">
                                 Mark complete
                             </label>
                         </section>
 
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                             <div class="mb-3 flex items-center justify-between">
-                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Checklists</h3>
+                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Checklists</h3>
                                 <form v-if="canEditBoard" class="flex gap-2" @submit.prevent="addChecklist">
-                                    <input v-model="newChecklistTitle" :disabled="isBulkPastingChecklistTarget()" type="text" maxlength="255" class="h-9 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" @paste="pasteChecklistTitles">
+                                    <input v-model="newChecklistTitle" :disabled="isBulkPastingChecklistTarget()" type="text" maxlength="255" class="h-9 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50 dark:border-gray-600" @paste="pasteChecklistTitles">
                                     <button type="submit" :disabled="isBulkPastingChecklistTarget()" class="rounded-lg bg-gray-900 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget() ? 'Adding...' : 'Add' }}</button>
                                 </form>
                             </div>
                             <div class="space-y-4">
-                                <div v-for="checklist in selectedCard.checklists" :key="checklist.id" class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                                <div v-for="checklist in selectedCard.checklists" :key="checklist.id" class="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <form v-if="editingChecklistId === checklist.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="updateChecklist(checklist)">
                                             <input
@@ -2110,22 +2110,22 @@ onUnmounted(() => {
                                                 :disabled="isUpdatingChecklist"
                                                 type="text"
                                                 maxlength="255"
-                                                class="h-9 min-w-0 flex-1 rounded-lg border-gray-300 text-sm font-bold text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                class="h-9 min-w-0 flex-1 rounded-lg border-gray-300 text-sm font-bold text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:text-gray-100 dark:border-gray-600"
                                                 @keydown.esc.prevent="cancelEditingChecklist"
                                             >
                                             <button type="submit" :disabled="isUpdatingChecklist || !editingChecklistTitle.trim()" title="Save checklist title" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
                                                 <CheckIcon class="h-4 w-4" />
                                             </button>
-                                            <button type="button" :disabled="isUpdatingChecklist" title="Cancel rename" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50" @click="cancelEditingChecklist">
+                                            <button type="button" :disabled="isUpdatingChecklist" title="Cancel rename" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700" @click="cancelEditingChecklist">
                                                 <XMarkIcon class="h-4 w-4" />
                                             </button>
                                         </form>
                                         <div v-else class="flex min-w-0 flex-1 items-center gap-2">
-                                            <button type="button" class="shrink-0 text-gray-400 hover:text-gray-600" @click="toggleChecklist(checklist.id)">
+                                            <button type="button" class="shrink-0 text-gray-400 hover:text-gray-600 dark:text-gray-400" @click="toggleChecklist(checklist.id)">
                                                 <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isChecklistOpen(checklist.id) ? '' : '-rotate-90'" />
                                             </button>
-                                            <h4 class="min-w-0 flex-1 cursor-pointer truncate text-sm font-bold text-gray-900" @click="toggleChecklist(checklist.id)">{{ checklist.title }}</h4>
-                                            <button v-if="canEditBoard" type="button" title="Rename checklist" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white hover:text-blue-600" @click="startEditingChecklist(checklist)">
+                                            <h4 class="min-w-0 flex-1 cursor-pointer truncate text-sm font-bold text-gray-900 dark:text-gray-100" @click="toggleChecklist(checklist.id)">{{ checklist.title }}</h4>
+                                            <button v-if="canEditBoard" type="button" title="Rename checklist" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white hover:text-blue-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="startEditingChecklist(checklist)">
                                                 <PencilSquareIcon class="h-4 w-4" />
                                             </button>
                                         </div>
@@ -2139,20 +2139,20 @@ onUnmounted(() => {
                                     </div>
                                     <div v-show="isChecklistOpen(checklist.id)" class="space-y-3">
                                         <div v-for="item in checklist.items" :key="item.id" class="space-y-2">
-                                            <div class="rounded-lg bg-white px-3 py-2 shadow-sm">
+                                            <div class="rounded-lg bg-white px-3 py-2 shadow-sm dark:bg-gray-800">
                                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                                                     <button type="button" @click="toggleChecklistItem(item)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="item.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
                                                         <CheckIcon v-if="item.is_complete" class="h-3.5 w-3.5" />
                                                     </button>
                                                     <span class="min-w-0 flex-1 text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
                                                     <div class="flex items-center gap-2">
-                                                        <button v-if="item.children?.length" type="button" class="text-gray-400 hover:text-gray-600" @click="toggleSubTaskItems(item.id)">
+                                                        <button v-if="item.children?.length" type="button" class="text-gray-400 hover:text-gray-600 dark:text-gray-400" @click="toggleSubTaskItems(item.id)">
                                                             <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isSubTaskOpen(item.id) ? '' : '-rotate-90'" />
                                                         </button>
                                                         <select
                                                             :value="item.assigned_to || ''"
                                                             :disabled="!canEditBoard"
-                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                                             @change="updateChecklistItemAssignee(item, $event.target.value)"
                                                         >
                                                             <option value="">Unassigned</option>
@@ -2169,8 +2169,8 @@ onUnmounted(() => {
                                                 </div>
                                             </div>
 
-                                            <div v-show="item.children?.length && isSubTaskOpen(item.id)" class="ml-5 space-y-2 border-l border-gray-200 pl-3">
-                                                <div v-for="child in item.children" :key="child.id" class="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center">
+                                            <div v-show="item.children?.length && isSubTaskOpen(item.id)" class="ml-5 space-y-2 border-l border-gray-200 pl-3 dark:border-gray-700">
+                                                <div v-for="child in item.children" :key="child.id" class="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center dark:bg-gray-800">
                                                     <button type="button" @click="toggleChecklistItem(child)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="child.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
                                                         <CheckIcon v-if="child.is_complete" class="h-3.5 w-3.5" />
                                                     </button>
@@ -2179,7 +2179,7 @@ onUnmounted(() => {
                                                         <select
                                                             :value="child.assigned_to || ''"
                                                             :disabled="!canEditBoard"
-                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                                             @change="updateChecklistItemAssignee(child, $event.target.value)"
                                                         >
                                                             <option value="">Unassigned</option>
@@ -2196,11 +2196,11 @@ onUnmounted(() => {
                                                 </div>
                                             </div>
 
-                                            <div v-if="canEditBoard" class="ml-5 border-l border-gray-200 pl-3">
+                                            <div v-if="canEditBoard" class="ml-5 border-l border-gray-200 pl-3 dark:border-gray-700">
                                                 <form v-if="showSubtaskItemInputs[item.id]" class="flex gap-2" @submit.prevent="addChecklistItem(checklist, item)">
-                                                    <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" :disabled="isBulkPastingChecklistTarget(checklist, item)" type="text" maxlength="255" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add a subtask..." @paste="pasteChecklistItems($event, checklist, item)">
+                                                    <input v-model="newChecklistItems[checklistInputKey(checklist, item)]" :disabled="isBulkPastingChecklistTarget(checklist, item)" type="text" maxlength="255" class="h-8 flex-1 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50 dark:border-gray-600" placeholder="Add a subtask..." @paste="pasteChecklistItems($event, checklist, item)">
                                                     <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist, item)" class="rounded-lg bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist, item) ? 'Adding...' : 'Add' }}</button>
-                                                    <button type="button" class="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" @click="showSubtaskItemInputs[item.id] = false; newChecklistItems[checklistInputKey(checklist, item)] = ''">
+                                                    <button type="button" class="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="showSubtaskItemInputs[item.id] = false; newChecklistItems[checklistInputKey(checklist, item)] = ''">
                                                         <XMarkIcon class="h-4 w-4" />
                                                     </button>
                                                 </form>
@@ -2213,13 +2213,13 @@ onUnmounted(() => {
                                     </div>
                                     <div v-if="canEditBoard && isChecklistOpen(checklist.id)" class="mt-2">
                                         <form v-if="showChecklistItemInputs[checklist.id]" class="flex gap-2" @submit.prevent="addChecklistItem(checklist)">
-                                            <input v-model="newChecklistItems[checklistInputKey(checklist)]" :disabled="isBulkPastingChecklistTarget(checklist)" type="text" maxlength="255" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50" placeholder="Add an item..." @paste="pasteChecklistItems($event, checklist)">
+                                            <input v-model="newChecklistItems[checklistInputKey(checklist)]" :disabled="isBulkPastingChecklistTarget(checklist)" type="text" maxlength="255" class="h-9 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50 dark:border-gray-600" placeholder="Add an item..." @paste="pasteChecklistItems($event, checklist)">
                                             <button type="submit" :disabled="isBulkPastingChecklistTarget(checklist)" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget(checklist) ? 'Adding...' : 'Add' }}</button>
-                                            <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600" @click="showChecklistItemInputs[checklist.id] = false; newChecklistItems[checklistInputKey(checklist)] = ''">
+                                            <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="showChecklistItemInputs[checklist.id] = false; newChecklistItems[checklistInputKey(checklist)] = ''">
                                                 <XMarkIcon class="h-4 w-4" />
                                             </button>
                                         </form>
-                                        <button v-else type="button" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800" @click="showChecklistItemInputs[checklist.id] = true">
+                                        <button v-else type="button" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-300 dark:hover:bg-gray-700" @click="showChecklistItemInputs[checklist.id] = true">
                                             <PlusIcon class="h-4 w-4" />
                                             Add an item
                                         </button>
@@ -2228,16 +2228,16 @@ onUnmounted(() => {
                             </div>
                         </section>
 
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                             <div class="mb-3 flex items-center justify-between">
-                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Attachments</h3>
-                                <button v-if="canEditBoard" type="button" @click="openAttachmentPicker" class="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200">
+                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Attachments</h3>
+                                <button v-if="canEditBoard" type="button" @click="openAttachmentPicker" class="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                     Add
                                 </button>
                                 <input ref="attachmentInput" type="file" class="hidden" @change="uploadAttachment">
                             </div>
                             <div class="space-y-2">
-                                <div v-for="attachment in selectedCard.attachments" :key="attachment.id" class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                                <div v-for="attachment in selectedCard.attachments" :key="attachment.id" class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:bg-gray-900/50 dark:border-gray-700">
                                     <a :href="assetUrl(attachment.file_storage_path)" target="_blank" class="flex min-w-0 items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-800">
                                         <LinkIcon class="h-4 w-4 shrink-0" />
                                         <span class="truncate">{{ attachment.file_name }}</span>
@@ -2249,39 +2249,39 @@ onUnmounted(() => {
                             </div>
                         </section>
 
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                             <button type="button" class="mb-3 flex w-full items-center gap-2 text-left" @click="activitySectionOpen = !activitySectionOpen">
-                                <ChevronDownIcon class="h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200" :class="activitySectionOpen ? '' : '-rotate-90'" />
-                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700">Comments and Activity</h3>
+                                <ChevronDownIcon class="h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 dark:text-gray-300" :class="activitySectionOpen ? '' : '-rotate-90'" />
+                                <h3 class="text-sm font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Comments and Activity</h3>
                             </button>
                             <div v-show="activitySectionOpen">
                             <form class="mb-4 flex gap-2" @submit.prevent="addComment">
-                                <input v-model="newComment" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Write a comment...">
+                                <input v-model="newComment" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" placeholder="Write a comment...">
                                 <button type="submit" class="rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Comment</button>
                             </form>
                             <div class="space-y-4">
                                 <div v-for="comment in selectedCard.comments" :key="comment.id" class="flex gap-3">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-600">
+                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                         <img v-if="comment.user?.profile_photo" :src="'/serve-storage/' + comment.user.profile_photo" class="h-full w-full object-cover" :alt="comment.user.name">
                                         <span v-else>{{ initials(comment.user?.name) }}</span>
                                     </div>
-                                    <div class="min-w-0 flex-1 rounded-lg bg-gray-50 p-3">
+                                    <div class="min-w-0 flex-1 rounded-lg bg-gray-50 p-3 dark:bg-gray-900/50">
                                         <div class="mb-1 flex items-center justify-between gap-2">
-                                            <p class="text-sm font-bold text-gray-900">{{ comment.user?.name }}</p>
+                                            <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ comment.user?.name }}</p>
                                             <button v-if="comment.user_id === authUser.id || canEditBoard" type="button" @click="deleteComment(comment)" class="text-xs font-bold text-red-600">Delete</button>
                                         </div>
-                                        <p class="whitespace-pre-line text-sm text-gray-700">{{ comment.comment_text }}</p>
-                                        <p class="mt-1 text-xs text-gray-400">{{ formatDateTime(comment.created_at) }}</p>
+                                        <p class="whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{{ comment.comment_text }}</p>
+                                        <p class="mt-1 text-xs text-gray-400 dark:text-gray-400">{{ formatDateTime(comment.created_at) }}</p>
                                     </div>
                                 </div>
                                 <div v-for="activity in selectedCard.activities" :key="'activity-' + activity.id" class="flex gap-3">
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-600">
+                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                         <img v-if="activity.actor?.profile_photo" :src="'/serve-storage/' + activity.actor.profile_photo" class="h-full w-full object-cover" :alt="activity.actor.name">
                                         <span v-else>{{ initials(activity.actor?.name || 'System') }}</span>
                                     </div>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-sm text-gray-700"><span class="font-bold">{{ activity.actor?.name || 'System' }}</span> {{ activity.description }}</p>
-                                        <p class="text-xs text-gray-400">{{ formatDateTime(activity.created_at) }}</p>
+                                        <p class="text-sm text-gray-700 dark:text-gray-300"><span class="font-bold">{{ activity.actor?.name || 'System' }}</span> {{ activity.description }}</p>
+                                        <p class="text-xs text-gray-400 dark:text-gray-400">{{ formatDateTime(activity.created_at) }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -2290,8 +2290,8 @@ onUnmounted(() => {
                     </div>
 
                     <aside class="space-y-4">
-                        <section v-if="!selectedCard.project_task" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                            <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">Members</h3>
+                        <section v-if="!selectedCard.project_task" class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Members</h3>
                             <div class="space-y-2">
                                 <button
                                     v-for="member in boardMembers"
@@ -2305,11 +2305,11 @@ onUnmounted(() => {
                                     @click="toggleCardAssignee(selectedCard, member)"
                                 >
                                     <span class="flex min-w-0 items-center gap-2">
-                                        <span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-700">
+                                        <span class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-[10px] font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                                             <img v-if="member.profile_photo" :src="'/serve-storage/' + member.profile_photo" class="h-full w-full object-cover" :alt="member.name">
                                             <span v-else>{{ initials(member.name) }}</span>
                                         </span>
-                                        <span class="truncate text-sm font-semibold text-gray-700">{{ member.name }}</span>
+                                        <span class="truncate text-sm font-semibold text-gray-700 dark:text-gray-300">{{ member.name }}</span>
                                     </span>
                                     <span
                                         v-if="isCardAssignedTo(selectedCard, member)"
@@ -2329,8 +2329,8 @@ onUnmounted(() => {
                             </div>
                         </section>
 
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                            <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">Labels</h3>
+                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Labels</h3>
                             <div class="space-y-2">
                                 <button
                                     v-for="label in localBoard.labels"
@@ -2346,15 +2346,15 @@ onUnmounted(() => {
                                     <CheckIcon v-if="selectedCard.labels?.some((item) => item.id === label.id)" class="h-4 w-4" />
                                 </button>
                             </div>
-                            <form v-if="canEditBoard" class="mt-3 grid grid-cols-[minmax(0,1fr)_2.5rem_auto] gap-2 border-t border-gray-100 pt-3" @submit.prevent="createLabel(selectedCard)">
-                                <input v-model="labelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="New label">
-                                <input v-model="labelForm.color" type="color" class="h-10 w-10 rounded-lg border border-gray-300 bg-white p-1">
+                            <form v-if="canEditBoard" class="mt-3 grid grid-cols-[minmax(0,1fr)_2.5rem_auto] gap-2 border-t border-gray-100 pt-3 dark:border-gray-700" @submit.prevent="createLabel(selectedCard)">
+                                <input v-model="labelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" placeholder="New label">
+                                <input v-model="labelForm.color" type="color" class="h-10 w-10 rounded-lg border border-gray-300 bg-white p-1 dark:bg-gray-800 dark:border-gray-600">
                                 <button type="submit" class="rounded-lg bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700">Add</button>
                             </form>
                         </section>
 
-                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-                            <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">Cover</h3>
+                        <section class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Cover</h3>
                             <div class="flex flex-wrap gap-2">
                                 <button
                                     v-for="color in colorOptions"
@@ -2366,18 +2366,18 @@ onUnmounted(() => {
                                     :style="{ background: color }"
                                     @click="cardDraft.cover_type = 'color'; cardDraft.cover_value = color; saveCardDetails({ closeModal: false })"
                                 ></button>
-                                <button v-if="canEditBoard" type="button" class="h-8 rounded-md border border-gray-200 px-3 text-xs font-bold text-gray-600" @click="cardDraft.cover_type = ''; cardDraft.cover_value = ''; saveCardDetails({ closeModal: false })">
+                                <button v-if="canEditBoard" type="button" class="h-8 rounded-md border border-gray-200 px-3 text-xs font-bold text-gray-600 dark:text-gray-300 dark:border-gray-700" @click="cardDraft.cover_type = ''; cardDraft.cover_value = ''; saveCardDetails({ closeModal: false })">
                                     None
                                 </button>
                             </div>
                         </section>
 
                         <section class="space-y-2">
-                            <button type="button" @click="toggleCardWatch(selectedCard)" class="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50">
+                            <button type="button" @click="toggleCardWatch(selectedCard)" class="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700">
                                 <EyeIcon class="h-4 w-4" />
                                 {{ selectedCard.watchers?.some((user) => user.id === authUser.id) ? 'Watching' : 'Watch' }}
                             </button>
-                            <button v-if="canEditBoard && !selectedCard.archived_at" type="button" @click="archiveCard(selectedCard)" class="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50">
+                            <button v-if="canEditBoard && !selectedCard.archived_at" type="button" @click="archiveCard(selectedCard)" class="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700">
                                 <ArchiveBoxIcon class="h-4 w-4" />
                                 Archive
                             </button>
@@ -2397,26 +2397,26 @@ onUnmounted(() => {
         <Modal :show="showMemberModal" @close="showMemberModal = false" maxWidth="4xl">
             <div class="p-6">
                 <div class="mb-6 flex items-center justify-between">
-                    <h2 class="text-xl font-bold text-gray-900">Board Members</h2>
-                    <button type="button" @click="showMemberModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Board Members</h2>
+                    <button type="button" @click="showMemberModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
 
                 <div class="space-y-3">
-                    <div v-for="member in boardMembers" :key="member.id" class="flex flex-col gap-3 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div v-for="member in boardMembers" :key="member.id" class="flex flex-col gap-3 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
                         <div class="flex min-w-0 items-center gap-3">
-                            <div class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-xs font-bold text-gray-700">
+                            <div class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                                 <img v-if="member.profile_photo" :src="'/serve-storage/' + member.profile_photo" class="h-full w-full object-cover" :alt="member.name">
                                 <span v-else>{{ initials(member.name) }}</span>
                             </div>
                             <div class="min-w-0">
-                                <p class="truncate text-sm font-bold text-gray-900">{{ member.name }}</p>
-                                <p class="truncate text-xs text-gray-500">{{ member.email }}</p>
+                                <p class="truncate text-sm font-bold text-gray-900 dark:text-gray-100">{{ member.name }}</p>
+                                <p class="truncate text-xs text-gray-500 dark:text-gray-300">{{ member.email }}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <select :value="member.role" :disabled="!canManageMembers" class="h-9 rounded-lg border-gray-300 text-xs font-semibold" @change="updateBoardMember(member, $event.target.value)">
+                            <select :value="member.role" :disabled="!canManageMembers" class="h-9 rounded-lg border-gray-300 text-xs font-semibold dark:border-gray-600" @change="updateBoardMember(member, $event.target.value)">
                                 <option value="admin">Admin</option>
                                 <option value="member">Member</option>
                                 <option value="observer">Observer</option>
@@ -2428,7 +2428,7 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <form v-if="canManageMembers && availableMembers.length" class="mt-6 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-[minmax(0,1fr)_9rem_auto]" @submit.prevent="addBoardMember">
+                <form v-if="canManageMembers && availableMembers.length" class="mt-6 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-[minmax(0,1fr)_9rem_auto] dark:border-gray-700" @submit.prevent="addBoardMember">
                     <MultiAutocomplete
                         v-model="memberForm.user_ids"
                         :options="availableMemberOptions"
@@ -2436,7 +2436,7 @@ onUnmounted(() => {
                         value-key="id"
                         placeholder="Select one or more members..."
                     />
-                    <select v-model="memberForm.role" class="h-10 rounded-lg border-gray-300 text-sm">
+                    <select v-model="memberForm.role" class="h-10 rounded-lg border-gray-300 text-sm dark:border-gray-600">
                         <option value="member">Member</option>
                         <option value="admin">Admin</option>
                         <option value="observer">Observer</option>
@@ -2449,18 +2449,18 @@ onUnmounted(() => {
         <Modal :show="showLabelModal" @close="showLabelModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="mb-6 flex items-center justify-between">
-                    <h2 class="text-xl font-bold text-gray-900">Labels</h2>
-                    <button type="button" @click="showLabelModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Labels</h2>
+                    <button type="button" @click="showLabelModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
                 <div class="space-y-2">
-                    <div v-for="label in localBoard.labels" :key="label.id" class="rounded-lg border border-gray-200 p-3">
+                    <div v-for="label in localBoard.labels" :key="label.id" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                         <form v-if="editingLabelId === label.id" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_3rem_auto_auto]" @submit.prevent="updateLabel(label)">
-                            <input v-model="editingLabelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm" placeholder="Label name">
-                            <input v-model="editingLabelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1">
+                            <input v-model="editingLabelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm dark:border-gray-600" placeholder="Label name">
+                            <input v-model="editingLabelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1 dark:bg-gray-800 dark:border-gray-600">
                             <button type="submit" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">Save</button>
-                            <button type="button" class="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200" @click="cancelEditingLabel">Cancel</button>
+                            <button type="button" class="rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700" @click="cancelEditingLabel">Cancel</button>
                         </form>
                         <div v-else class="flex items-center justify-between gap-3">
                             <span class="rounded-full border px-3 py-1 text-xs font-bold" :class="labelClass(label.color)" :style="labelStyle(label.color)">{{ label.name || label.color }}</span>
@@ -2471,9 +2471,9 @@ onUnmounted(() => {
                         </div>
                     </div>
                 </div>
-                <form v-if="canEditBoard" class="mt-5 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-[minmax(0,1fr)_3rem_auto]" @submit.prevent="createLabel">
-                    <input v-model="labelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm" placeholder="Label name">
-                    <input v-model="labelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1">
+                <form v-if="canEditBoard" class="mt-5 grid grid-cols-1 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-[minmax(0,1fr)_3rem_auto] dark:border-gray-700" @submit.prevent="createLabel">
+                    <input v-model="labelForm.name" type="text" required class="h-10 rounded-lg border-gray-300 text-sm dark:border-gray-600" placeholder="Label name">
+                    <input v-model="labelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1 dark:bg-gray-800 dark:border-gray-600">
                     <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Create</button>
                 </form>
             </div>

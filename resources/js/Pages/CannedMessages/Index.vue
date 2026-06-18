@@ -33,20 +33,20 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Content Preview</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Title</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Content Preview</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="message in data" :key="message.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="message in data" :key="message.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-medium text-gray-900">{{ message.title }}</div>
+                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ message.title }}</div>
                             </td>
                             <td class="px-6 py-4">
-                                <div class="text-sm text-gray-500 truncate max-w-md">{{ message.content }}</div>
+                                <div class="text-sm text-gray-500 truncate max-w-md dark:text-gray-300">{{ message.content }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span :class="message.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
@@ -88,12 +88,12 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ isEditing ? 'Edit Canned Message' : 'Create Canned Message' }}
                         </h3>
-                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -102,25 +102,25 @@
 
                     <form @submit.prevent="submitForm" class="space-y-5">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Title</label>
                             <input v-model="form.title" type="text" required
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                                    placeholder="e.g. Greeting">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Content</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Content</label>
                             <textarea v-model="form.content" required rows="8"
-                                      class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                      class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                                       placeholder="Enter the message template..."></textarea>
                         </div>
                         <div class="flex items-center">
-                            <input v-model="form.is_active" type="checkbox" id="is_active_canned" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <label for="is_active_canned" class="ml-2 text-sm font-bold text-gray-700">Active Message Template</label>
+                            <input v-model="form.is_active" type="checkbox" id="is_active_canned" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
+                            <label for="is_active_canned" class="ml-2 text-sm font-bold text-gray-700 dark:text-gray-300">Active Message Template</label>
                         </div>
 
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="closeModal" 
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
                             <button type="submit" 

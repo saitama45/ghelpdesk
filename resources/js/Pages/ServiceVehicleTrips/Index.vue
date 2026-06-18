@@ -5,27 +5,27 @@
 
                 <!-- Stat cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Pending Approval</p>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Pending Approval</p>
                         <p class="text-2xl font-black text-amber-600 mt-1">{{ summary.pending_approval }}</p>
                     </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Scheduled (next 7d)</p>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Scheduled (next 7d)</p>
                         <p class="text-2xl font-black text-blue-600 mt-1">{{ summary.scheduled_next_7d }}</p>
                     </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">In Progress</p>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">In Progress</p>
                         <p class="text-2xl font-black text-emerald-600 mt-1">{{ summary.in_progress }}</p>
                     </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Trips This Month</p>
-                        <p class="text-2xl font-black text-gray-900 mt-1">{{ summary.trips_this_month }}</p>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Trips This Month</p>
+                        <p class="text-2xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ summary.trips_this_month }}</p>
                     </div>
                 </div>
 
                 <!-- Tabs + Book button -->
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-1 inline-flex">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-1 inline-flex dark:bg-gray-800 dark:border-gray-700">
                         <button type="button" @click="activeTab = 'calendar'" :class="tabClass('calendar')">Calendar</button>
                         <button type="button" @click="activeTab = 'table'" :class="tabClass('table')">Table</button>
                         <button v-if="hasPermission('service_vehicle_trips.edit')" type="button" @click="activeTab = 'vehicles'" :class="tabClass('vehicles')">Vehicles</button>
@@ -36,45 +36,45 @@
                 </div>
 
                 <!-- Filters -->
-                <div v-if="activeTab !== 'vehicles'" class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <div v-if="activeTab !== 'vehicles'" class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 dark:bg-gray-800 dark:border-gray-700">
                     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                         <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Vehicle</label>
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Vehicle</label>
                             <Autocomplete v-model="filters.vehicle_id" :options="vehicleFilterOptions" placeholder="All vehicles" />
                         </div>
                         <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Driver</label>
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Driver</label>
                             <Autocomplete v-model="filters.driver_id" :options="driverFilterOptions" placeholder="All drivers" />
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</label>
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Status</label>
                             <MultiAutocomplete v-model="filters.statuses" :options="statusOptions" label-key="label" value-key="value" placeholder="All statuses..." />
                         </div>
                         <div v-if="activeTab === 'table'">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Search</label>
-                            <input v-model="filters.search" type="text" placeholder="Purpose, driver, plate..." class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Search</label>
+                            <input v-model="filters.search" type="text" placeholder="Purpose, driver, plate..." class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                     </div>
                     <div class="mt-3 flex justify-end">
-                        <button @click="resetFilters" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Reset</button>
+                        <button @click="resetFilters" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Reset</button>
                     </div>
                 </div>
 
                 <!-- Calendar tab -->
-                <div v-if="activeTab === 'calendar'" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div v-if="activeTab === 'calendar'" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-black text-gray-900 uppercase tracking-tight">{{ monthLabel }}</h2>
+                        <h2 class="text-lg font-black text-gray-900 uppercase tracking-tight dark:text-gray-100">{{ monthLabel }}</h2>
                         <div class="flex items-center gap-1">
-                            <button type="button" @click="navigateMonth(-1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600" title="Previous month">
+                            <button type="button" @click="navigateMonth(-1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-300 dark:hover:bg-gray-700" title="Previous month">
                                 <ChevronLeftIcon class="w-4 h-4" />
                             </button>
-                            <button type="button" @click="goToCurrentMonth" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg">Today</button>
-                            <button type="button" @click="navigateMonth(1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600" title="Next month">
+                            <button type="button" @click="goToCurrentMonth" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg dark:bg-gray-900/50 dark:text-gray-300 dark:hover:bg-gray-700">Today</button>
+                            <button type="button" @click="navigateMonth(1)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 dark:text-gray-300 dark:hover:bg-gray-700" title="Next month">
                                 <ChevronRightIcon class="w-4 h-4" />
                             </button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-7 gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1">
+                    <div class="grid grid-cols-7 gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1 dark:text-gray-400">
                         <div v-for="dow in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="dow" class="text-center py-1">{{ dow }}</div>
                     </div>
                     <div class="grid grid-cols-7 gap-1">
@@ -91,7 +91,7 @@
                         >
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-bold" :class="cell.inCurrentMonth ? 'text-gray-700' : 'text-gray-400'">{{ cell.day }}</span>
-                                <span v-if="cell.trips.length > 0" class="text-[9px] font-bold text-gray-400">{{ cell.trips.length }}</span>
+                                <span v-if="cell.trips.length > 0" class="text-[9px] font-bold text-gray-400 dark:text-gray-400">{{ cell.trips.length }}</span>
                             </div>
                             <button
                                 v-for="trip in cell.trips"
@@ -108,7 +108,7 @@
                         </div>
                     </div>
                     <!-- Legend -->
-                    <div class="mt-4 flex flex-wrap gap-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                    <div class="mt-4 flex flex-wrap gap-3 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">
                         <span v-for="opt in statusOptions" :key="opt.value" class="inline-flex items-center gap-1.5">
                             <span class="w-3 h-3 rounded" :class="legendDotClass(opt.value)"></span>
                             {{ opt.label }}
@@ -134,43 +134,43 @@
                 >
                     <template #header>
                         <tr>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Date</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Vehicle</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Driver</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Route</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Purpose of Travel</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Passengers</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Time</th>
-                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase">Status</th>
-                            <th class="px-4 py-3 text-right text-[10px] font-bold text-gray-500 uppercase">Actions</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Date</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Vehicle</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Driver</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Route</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Purpose of Travel</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Passengers</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Time</th>
+                            <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Status</th>
+                            <th class="px-4 py-3 text-right text-[10px] font-bold text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="trip in data" :key="trip.id" class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{{ formatDate(trip.date_used) }}</td>
-                            <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                        <tr v-for="trip in data" :key="trip.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap dark:text-gray-100">{{ formatDate(trip.date_used) }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap dark:text-gray-100">
                                 <div class="font-bold">{{ trip.vehicle?.name }}</div>
-                                <div class="text-xs text-gray-500 font-mono">{{ trip.vehicle?.plate_no }}</div>
+                                <div class="text-xs text-gray-500 font-mono dark:text-gray-300">{{ trip.vehicle?.plate_no }}</div>
                             </td>
-                            <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{{ trip.driver?.name }}</td>
-                            <td class="px-4 py-3 text-sm text-gray-900">
+                            <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap dark:text-gray-100">{{ trip.driver?.name }}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
                                 <div class="flex items-center gap-1.5 text-xs">
-                                    <span class="font-bold text-gray-700">{{ trip.start_point }}</span>
-                                    <ArrowRightIcon class="w-3 h-3 text-gray-400" />
+                                    <span class="font-bold text-gray-700 dark:text-gray-300">{{ trip.start_point }}</span>
+                                    <ArrowRightIcon class="w-3 h-3 text-gray-400 dark:text-gray-400" />
                                     <span class="font-bold text-blue-600">{{ trip.end_point }}</span>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-xs text-gray-700">
+                            <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
                                 <div class="max-w-[220px] whitespace-pre-line break-words font-semibold">
                                     {{ trip.purpose_of_travel || '—' }}
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-xs text-gray-700">
+                            <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-300">
                                 <div class="max-w-[220px] whitespace-pre-line break-words">
                                     {{ trip.passengers || '—' }}
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
+                            <td class="px-4 py-3 text-xs text-gray-700 whitespace-nowrap dark:text-gray-300">
                                 {{ formatTime(trip.planned_departure_time) }} – {{ formatTime(trip.planned_arrival_time) }}
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap">
@@ -180,7 +180,7 @@
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap text-right">
                                 <div class="flex justify-end space-x-1">
-                                    <button @click="openViewModal(trip)" title="View" class="p-2 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50">
+                                    <button @click="openViewModal(trip)" title="View" class="p-2 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700">
                                         <EyeIcon class="w-4 h-4" />
                                     </button>
                                 </div>
@@ -190,28 +190,28 @@
                 </DataTable>
 
                 <!-- Vehicles tab -->
-                <div v-if="activeTab === 'vehicles'" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div v-if="activeTab === 'vehicles'" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-black text-gray-900 uppercase tracking-tight">Service Vehicles</h2>
+                        <h2 class="text-lg font-black text-gray-900 uppercase tracking-tight dark:text-gray-100">Service Vehicles</h2>
                         <button @click="openVehicleModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap inline-flex items-center gap-1">
                             <PlusIcon class="w-3.5 h-3.5" /> Add Vehicle
                         </button>
                     </div>
-                    <table class="min-w-full divide-y divide-gray-100">
-                        <thead class="bg-gray-50">
+                    <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500">Name</th>
-                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500">Plate No</th>
-                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500">Capacity</th>
-                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500">Status</th>
-                                <th class="px-3 py-2 text-right text-[10px] font-bold uppercase text-gray-500">Actions</th>
+                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500 dark:text-slate-300">Name</th>
+                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500 dark:text-slate-300">Plate No</th>
+                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500 dark:text-slate-300">Capacity</th>
+                                <th class="px-3 py-2 text-left text-[10px] font-bold uppercase text-gray-500 dark:text-slate-300">Status</th>
+                                <th class="px-3 py-2 text-right text-[10px] font-bold uppercase text-gray-500 dark:text-slate-300">Actions</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <tr v-for="v in allVehicles" :key="v.id" class="hover:bg-gray-50">
-                                <td class="px-3 py-2 text-sm font-bold text-gray-900">{{ v.name }}</td>
-                                <td class="px-3 py-2 text-sm font-mono text-gray-700">{{ v.plate_no }}</td>
-                                <td class="px-3 py-2 text-sm text-gray-700">{{ v.capacity || '—' }}</td>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            <tr v-for="v in allVehicles" :key="v.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <td class="px-3 py-2 text-sm font-bold text-gray-900 dark:text-gray-100">{{ v.name }}</td>
+                                <td class="px-3 py-2 text-sm font-mono text-gray-700 dark:text-gray-300">{{ v.plate_no }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-300">{{ v.capacity || '—' }}</td>
                                 <td class="px-3 py-2"><span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider" :class="vehicleStatusClass(v.status)">{{ v.status }}</span></td>
                                 <td class="px-3 py-2 text-right">
                                     <div class="flex justify-end space-x-1">
@@ -225,7 +225,7 @@
                                 </td>
                             </tr>
                             <tr v-if="allVehicles.length === 0">
-                                <td colspan="5" class="px-3 py-6 text-center text-sm text-gray-400 italic">No vehicles yet. Add the first one to start booking trips.</td>
+                                <td colspan="5" class="px-3 py-6 text-center text-sm text-gray-400 italic dark:text-gray-400">No vehicles yet. Add the first one to start booking trips.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -238,7 +238,7 @@
         <Modal :show="tripModal.show" @close="closeTripModal" max-width="3xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight">{{ modalTitle }}</h3>
+                    <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight dark:text-gray-100">{{ modalTitle }}</h3>
                     <span v-if="tripModal.mode !== 'book' && tripModal.trip" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider" :class="chipClass(tripModal.trip.status)">
                         {{ tripModal.trip.status }}
                     </span>
@@ -251,43 +251,43 @@
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Vehicle <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Vehicle <span class="text-red-500">*</span></label>
                             <Autocomplete v-model="bookForm.service_vehicle_id" :options="vehicleOptions" placeholder="Select vehicle..." />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Driver <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Driver <span class="text-red-500">*</span></label>
                             <Autocomplete v-model="bookForm.driver_id" :options="driverOptions" placeholder="Select driver..." />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Date Used <span class="text-red-500">*</span></label>
-                            <input type="date" v-model="bookForm.date_used" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Date Used <span class="text-red-500">*</span></label>
+                            <input type="date" v-model="bookForm.date_used" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="block text-xs font-bold text-gray-600 mb-1">Planned Departure <span class="text-red-500">*</span></label>
-                                <input type="time" v-model="bookForm.planned_departure_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Planned Departure <span class="text-red-500">*</span></label>
+                                <input type="time" v-model="bookForm.planned_departure_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-600 mb-1">Planned Arrival <span class="text-red-500">*</span></label>
-                                <input type="time" v-model="bookForm.planned_arrival_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Planned Arrival <span class="text-red-500">*</span></label>
+                                <input type="time" v-model="bookForm.planned_arrival_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                             </div>
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Purpose of Travel <span class="text-red-500">*</span></label>
-                            <input type="text" v-model="bookForm.purpose_of_travel" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Purpose of Travel <span class="text-red-500">*</span></label>
+                            <input type="text" v-model="bookForm.purpose_of_travel" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Origin (Start) <span class="text-red-500">*</span></label>
-                            <input type="text" v-model="bookForm.start_point" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Origin (Start) <span class="text-red-500">*</span></label>
+                            <input type="text" v-model="bookForm.start_point" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Final Destination (End) <span class="text-red-500">*</span></label>
-                            <input type="text" v-model="bookForm.end_point" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Final Destination (End) <span class="text-red-500">*</span></label>
+                            <input type="text" v-model="bookForm.end_point" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div class="md:col-span-2 space-y-2">
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Waypoints (Stopovers)</label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Waypoints (Stopovers)</label>
                             <div v-for="(wp, index) in bookForm.waypoints" :key="index" class="flex items-center gap-2">
-                                <input type="text" v-model="bookForm.waypoints[index]" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Enter waypoint...">
+                                <input type="text" v-model="bookForm.waypoints[index]" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600" placeholder="Enter waypoint...">
                                 <button type="button" @click="bookForm.waypoints.splice(index, 1)" class="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Remove Waypoint">
                                     <TrashIcon class="w-4 h-4" />
                                 </button>
@@ -297,16 +297,16 @@
                             </button>
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Passengers (please enumerate)</label>
-                            <textarea v-model="bookForm.passengers" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none" placeholder="Juan dela Cruz, Maria Santos..."></textarea>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Passengers (please enumerate)</label>
+                            <textarea v-model="bookForm.passengers" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none dark:border-gray-600" placeholder="Juan dela Cruz, Maria Santos..."></textarea>
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Remarks</label>
-                            <textarea v-model="bookForm.remarks" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none"></textarea>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Remarks</label>
+                            <textarea v-model="bookForm.remarks" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none dark:border-gray-600"></textarea>
                         </div>
                     </div>
                     <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" @click="closeTripModal" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                        <button type="button" @click="closeTripModal" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                         <button type="submit" :disabled="conflict !== null || isSaving" class="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg">
                             {{ tripModal.mode === 'edit' ? 'Save Changes' : 'Submit for Approval' }}
                         </button>
@@ -318,59 +318,59 @@
 
                     <!-- Booking Details -->
                     <div>
-                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Booking Details</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Booking Details</p>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Date Used</p><p class="text-sm font-bold text-gray-900">{{ formatDate(tripModal.trip.date_used) || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Vehicle</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.vehicle ? `${tripModal.trip.vehicle.name} (${tripModal.trip.vehicle.plate_no})` : '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Driver</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.driver?.name || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Purpose of Travel</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.purpose_of_travel || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Origin (Start)</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.start_point || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Final Destination (End)</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.end_point || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Date Used</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatDate(tripModal.trip.date_used) || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Vehicle</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.vehicle ? `${tripModal.trip.vehicle.name} (${tripModal.trip.vehicle.plate_no})` : '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Driver</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.driver?.name || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Purpose of Travel</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.purpose_of_travel || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Origin (Start)</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.start_point || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Final Destination (End)</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.end_point || '—' }}</p></div>
                             <div v-if="tripModal.trip.waypoints && tripModal.trip.waypoints.length > 0" class="md:col-span-2">
-                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Waypoints</p>
-                                <ul class="list-disc list-inside text-sm font-bold text-gray-900 mt-1">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Waypoints</p>
+                                <ul class="list-disc list-inside text-sm font-bold text-gray-900 mt-1 dark:text-gray-100">
                                     <li v-for="(wp, idx) in tripModal.trip.waypoints" :key="idx">{{ wp }}</li>
                                 </ul>
                             </div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Planned Departure</p><p class="text-sm font-bold text-gray-900">{{ formatTime(tripModal.trip.planned_departure_time) || '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Planned Arrival</p><p class="text-sm font-bold text-gray-900">{{ formatTime(tripModal.trip.planned_arrival_time) || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Planned Departure</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatTime(tripModal.trip.planned_departure_time) || '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Planned Arrival</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatTime(tripModal.trip.planned_arrival_time) || '—' }}</p></div>
                         </div>
                         <div class="mt-3">
-                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Passengers</p>
-                            <p class="text-sm text-gray-700 whitespace-pre-line">{{ tripModal.trip.passengers || '—' }}</p>
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 dark:text-gray-300">Passengers</p>
+                            <p class="text-sm text-gray-700 whitespace-pre-line dark:text-gray-300">{{ tripModal.trip.passengers || '—' }}</p>
                         </div>
                     </div>
 
                     <!-- Completion Details (always visible) -->
-                    <div class="border-t border-gray-100 pt-4">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Completion Details</p>
+                    <div class="border-t border-gray-100 pt-4 dark:border-gray-700">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Completion Details</p>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Actual Departure</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.actual_departure_time ? formatTime(tripModal.trip.actual_departure_time) : '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Actual Arrival</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.actual_arrival_time ? formatTime(tripModal.trip.actual_arrival_time) : '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Odometer Before (km)</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.odometer_before != null ? Number(tripModal.trip.odometer_before).toLocaleString() : '—' }}</p></div>
-                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Odometer After (km)</p><p class="text-sm font-bold text-gray-900">{{ tripModal.trip.odometer_after != null ? Number(tripModal.trip.odometer_after).toLocaleString() : '—' }}</p></div>
-                            <div v-if="tripModal.trip.odometer_before != null && tripModal.trip.odometer_after != null"><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Distance Traveled</p><p class="text-sm font-bold text-gray-900">{{ (Number(tripModal.trip.odometer_after) - Number(tripModal.trip.odometer_before)).toLocaleString() }} km</p></div>
-                            <div v-if="tripModal.trip.acknowledged_at"><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500">Acknowledgement Signed</p><p class="text-sm font-bold text-gray-900">{{ formatDateTime(tripModal.trip.acknowledged_at) }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Actual Departure</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.actual_departure_time ? formatTime(tripModal.trip.actual_departure_time) : '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Actual Arrival</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.actual_arrival_time ? formatTime(tripModal.trip.actual_arrival_time) : '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Odometer Before (km)</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.odometer_before != null ? Number(tripModal.trip.odometer_before).toLocaleString() : '—' }}</p></div>
+                            <div><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Odometer After (km)</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.odometer_after != null ? Number(tripModal.trip.odometer_after).toLocaleString() : '—' }}</p></div>
+                            <div v-if="tripModal.trip.odometer_before != null && tripModal.trip.odometer_after != null"><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Distance Traveled</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ (Number(tripModal.trip.odometer_after) - Number(tripModal.trip.odometer_before)).toLocaleString() }} km</p></div>
+                            <div v-if="tripModal.trip.acknowledged_at"><p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Acknowledgement Signed</p><p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatDateTime(tripModal.trip.acknowledged_at) }}</p></div>
                         </div>
                         <div v-if="tripModal.trip.remarks" class="mt-3">
-                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Remarks</p>
-                            <p class="text-sm text-gray-700 whitespace-pre-line">{{ tripModal.trip.remarks }}</p>
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 dark:text-gray-300">Remarks</p>
+                            <p class="text-sm text-gray-700 whitespace-pre-line dark:text-gray-300">{{ tripModal.trip.remarks }}</p>
                         </div>
                         <div v-if="tripModal.trip.attachments && tripModal.trip.attachments.length > 0" class="mt-3">
-                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">Attachments ({{ tripModal.trip.attachments.length }})</p>
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1 dark:text-gray-300">Attachments ({{ tripModal.trip.attachments.length }})</p>
                             <ul class="space-y-1">
                                 <li v-for="att in tripModal.trip.attachments" :key="att.id" class="flex items-center gap-2 text-sm">
-                                    <PaperClipIcon class="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+                                    <PaperClipIcon class="w-3.5 h-3.5 flex-shrink-0 text-gray-400 dark:text-gray-400" />
                                     <a :href="`/storage/${att.file_storage_path}`" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline truncate">{{ att.file_name }}</a>
-                                    <span class="text-[10px] text-gray-400 whitespace-nowrap">({{ Math.round(att.file_size_bytes / 1024) }} KB)</span>
+                                    <span class="text-[10px] text-gray-400 whitespace-nowrap dark:text-gray-400">({{ Math.round(att.file_size_bytes / 1024) }} KB)</span>
                                 </li>
                             </ul>
                         </div>
                     </div>
 
                     <!-- Approval History -->
-                    <div v-if="tripModal.trip.approved_at || tripModal.trip.rejection_reason" class="border-t border-gray-100 pt-4 space-y-2">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Approval History</p>
+                    <div v-if="tripModal.trip.approved_at || tripModal.trip.rejection_reason" class="border-t border-gray-100 pt-4 space-y-2 dark:border-gray-700">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Approval History</p>
                         <div v-if="tripModal.trip.approved_at && tripModal.trip.status !== 'Rejected'" class="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs">
                             <p class="font-bold text-blue-800">Approved by {{ tripModal.trip.approver?.name || 'system' }} on {{ formatDateTime(tripModal.trip.approved_at) }}</p>
                         </div>
@@ -380,8 +380,8 @@
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap justify-end gap-2 pt-3 border-t border-gray-100">
-                        <button @click="closeTripModal" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
+                    <div class="flex flex-wrap justify-end gap-2 pt-3 border-t border-gray-100 dark:border-gray-700">
+                        <button @click="closeTripModal" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Close</button>
 
                         <button v-if="canApprove" @click="approveTrip" class="px-4 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">Approve</button>
                         <button v-if="canApprove" @click="openRejectModal" class="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg">Reject</button>
@@ -395,50 +395,50 @@
 
                 <!-- COMPLETE mode -->
                 <form v-else-if="tripModal.mode === 'complete' && tripModal.trip" @submit.prevent="submitCompletion" class="space-y-4">
-                    <p class="text-xs text-gray-500">Fill in the actuals after returning the vehicle. Photos for accidents or defects are optional.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-300">Fill in the actuals after returning the vehicle. Photos for accidents or defects are optional.</p>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Actual Departure <span class="text-red-500">*</span></label>
-                            <input type="time" v-model="completeForm.actual_departure_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Actual Departure <span class="text-red-500">*</span></label>
+                            <input type="time" v-model="completeForm.actual_departure_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Actual Arrival <span class="text-red-500">*</span></label>
-                            <input type="time" v-model="completeForm.actual_arrival_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Actual Arrival <span class="text-red-500">*</span></label>
+                            <input type="time" v-model="completeForm.actual_arrival_time" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Odometer Before <span class="text-red-500">*</span></label>
-                            <input type="number" v-model.number="completeForm.odometer_before" min="0" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Odometer Before <span class="text-red-500">*</span></label>
+                            <input type="number" v-model.number="completeForm.odometer_before" min="0" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Odometer After <span class="text-red-500">*</span></label>
-                            <input type="number" v-model.number="completeForm.odometer_after" :min="completeForm.odometer_before || 0" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Odometer After <span class="text-red-500">*</span></label>
+                            <input type="number" v-model.number="completeForm.odometer_after" :min="completeForm.odometer_before || 0" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Photos for accident reporting / defects (skip if N/A)</label>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Photos for accident reporting / defects (skip if N/A)</label>
                             <input type="file" multiple accept="image/*,.pdf" @change="onFilesChosen" class="text-xs">
-                            <p class="text-[10px] text-gray-400 mt-1">Up to 10 files, 10 MB each. Selected: {{ completeForm.attachments.length }}</p>
+                            <p class="text-[10px] text-gray-400 mt-1 dark:text-gray-400">Up to 10 files, 10 MB each. Selected: {{ completeForm.attachments.length }}</p>
                             <ul v-if="completeForm.attachments.length > 0" class="text-xs mt-1 space-y-0.5">
-                                <li v-for="(f, i) in completeForm.attachments" :key="i" class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 rounded">
+                                <li v-for="(f, i) in completeForm.attachments" :key="i" class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 rounded dark:bg-gray-900/50">
                                     <span class="truncate">{{ f.name }} ({{ Math.round(f.size/1024) }} KB)</span>
                                     <button type="button" @click="removeFile(i)" class="text-red-500 hover:text-red-700 text-[10px] font-bold">REMOVE</button>
                                 </li>
                             </ul>
                         </div>
                         <div class="md:col-span-2">
-                            <label class="block text-xs font-bold text-gray-600 mb-1">Remarks</label>
-                            <textarea v-model="completeForm.remarks" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none"></textarea>
+                            <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Remarks</label>
+                            <textarea v-model="completeForm.remarks" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none dark:border-gray-600"></textarea>
                         </div>
                     </div>
                     <div class="rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-900">
                         <p class="font-bold mb-1.5">Vehicle Use Responsibility Clause and Acknowledgement</p>
                         <p>I acknowledge and agree that I am responsible for any and all damage caused to the vehicle while it is under my operation, regardless of the cause, unless such damage is proven to be due to factors beyond my control and not related to negligence or misuse. I understand that I may be held financially liable for the cost of repairs or replacement as determined necessary by management.</p>
                         <label class="mt-2 inline-flex items-start gap-2 cursor-pointer">
-                            <input type="checkbox" v-model="completeForm.acknowledgement_accepted" required class="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                            <input type="checkbox" v-model="completeForm.acknowledgement_accepted" required class="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600">
                             <span class="font-bold">By ticking this, I confirm that I have read and accepted the responsibility outlined above. <span class="text-red-500">*</span></span>
                         </label>
                     </div>
                     <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" @click="tripModal.mode = 'view'" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Back</button>
+                        <button type="button" @click="tripModal.mode = 'view'" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Back</button>
                         <button type="submit" :disabled="!completeForm.acknowledgement_accepted || isSaving" class="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg">Mark as Completed</button>
                     </div>
                 </form>
@@ -448,11 +448,11 @@
         <!-- Reject modal -->
         <Modal :show="rejectModal.show" @close="rejectModal.show = false" max-width="md">
             <div class="p-6">
-                <h3 class="text-lg font-black text-gray-900 mb-3 uppercase tracking-tight">Reject Trip</h3>
-                <p class="text-sm text-gray-500 mb-3">Please provide a reason. The driver will see this.</p>
-                <textarea v-model="rejectModal.reason" rows="3" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none" placeholder="Reason for rejection..."></textarea>
+                <h3 class="text-lg font-black text-gray-900 mb-3 uppercase tracking-tight dark:text-gray-100">Reject Trip</h3>
+                <p class="text-sm text-gray-500 mb-3 dark:text-gray-300">Please provide a reason. The driver will see this.</p>
+                <textarea v-model="rejectModal.reason" rows="3" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none dark:border-gray-600" placeholder="Reason for rejection..."></textarea>
                 <div class="flex justify-end gap-2 mt-4">
-                    <button @click="rejectModal.show = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                    <button @click="rejectModal.show = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="confirmReject" :disabled="!rejectModal.reason.trim()" class="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg">Reject</button>
                 </div>
             </div>
@@ -461,30 +461,30 @@
         <!-- Vehicle CRUD modal -->
         <Modal :show="vehicleModal.show" @close="vehicleModal.show = false" max-width="md">
             <div class="p-6">
-                <h3 class="text-lg font-black text-gray-900 mb-4 uppercase tracking-tight">{{ vehicleModal.id ? 'Edit Vehicle' : 'Add Vehicle' }}</h3>
+                <h3 class="text-lg font-black text-gray-900 mb-4 uppercase tracking-tight dark:text-gray-100">{{ vehicleModal.id ? 'Edit Vehicle' : 'Add Vehicle' }}</h3>
                 <form @submit.prevent="saveVehicle" class="space-y-3">
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 mb-1">Name <span class="text-red-500">*</span></label>
-                        <input type="text" v-model="vehicleModal.form.name" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Name <span class="text-red-500">*</span></label>
+                        <input type="text" v-model="vehicleModal.form.name" required class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 mb-1">Plate No <span class="text-red-500">*</span></label>
-                        <input type="text" v-model="vehicleModal.form.plate_no" required class="w-full rounded-lg border-gray-300 text-sm font-mono focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Plate No <span class="text-red-500">*</span></label>
+                        <input type="text" v-model="vehicleModal.form.plate_no" required class="w-full rounded-lg border-gray-300 text-sm font-mono focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 mb-1">Capacity</label>
-                        <input type="number" v-model.number="vehicleModal.form.capacity" min="1" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Capacity</label>
+                        <input type="number" v-model.number="vehicleModal.form.capacity" min="1" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 mb-1">Status</label>
+                        <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Status</label>
                         <Autocomplete v-model="vehicleModal.form.status" :options="vehicleStatusOptions" />
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-600 mb-1">Notes</label>
-                        <textarea v-model="vehicleModal.form.notes" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none"></textarea>
+                        <label class="block text-xs font-bold text-gray-600 mb-1 dark:text-gray-300">Notes</label>
+                        <textarea v-model="vehicleModal.form.notes" rows="2" class="w-full rounded-lg border-gray-300 text-sm focus:ring-blue-500 focus:border-blue-500 resize-none dark:border-gray-600"></textarea>
                     </div>
                     <div class="flex justify-end gap-2 pt-2">
-                        <button type="button" @click="vehicleModal.show = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                        <button type="button" @click="vehicleModal.show = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                         <button type="submit" class="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg">{{ vehicleModal.id ? 'Save' : 'Add' }}</button>
                     </div>
                 </form>

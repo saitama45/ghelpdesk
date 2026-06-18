@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import ThemeToggle from '@/Components/ThemeToggle.vue';
 import Toast from '@/Components/Toast.vue';
 import { useToast } from '@/Composables/useToast.js';
 
@@ -25,7 +26,11 @@ watch(() => page.props.flash, () => {
 </script>
 
 <template>
-    <div class="min-h-screen bg-gray-50 flex flex-col relative overflow-x-hidden">
+    <div class="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col relative overflow-x-hidden">
+        <div class="fixed right-4 top-4 z-50">
+            <ThemeToggle />
+        </div>
+
         <!-- Optional: Simple Header/Nav can go here -->
         
         <!-- Main Content -->
@@ -34,7 +39,7 @@ watch(() => page.props.flash, () => {
         </main>
 
         <!-- Footer -->
-        <footer class="py-12 text-center text-gray-400 text-sm">
+        <footer class="py-12 text-center text-gray-400 text-sm dark:text-gray-400">
             &copy; 2026 TAS Support. All rights reserved.
         </footer>
 

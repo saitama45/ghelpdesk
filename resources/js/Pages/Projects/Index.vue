@@ -151,13 +151,13 @@ const formatDate = (dateString) => {
                 <div class="grid w-full grid-cols-1 gap-3 md:grid-cols-4">
                     <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" />
+                        <MagnifyingGlassIcon class="h-5 w-5 text-gray-400 dark:text-gray-400" />
                     </div>
                     <input 
                         v-model="searchQuery"
                         type="text" 
                         placeholder="Search projects or stores..." 
-                        class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:placeholder-gray-400"
                     >
                     </div>
 
@@ -172,7 +172,7 @@ const formatDate = (dateString) => {
                             v-if="statusFilter"
                             type="button"
                             @click.stop="updateFilter('status', null)"
-                            class="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                            class="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700"
                             title="Clear status filter"
                         >
                             <XMarkIcon class="h-4 w-4" />
@@ -190,7 +190,7 @@ const formatDate = (dateString) => {
                             v-if="storeFilter"
                             type="button"
                             @click.stop="updateFilter('store', null)"
-                            class="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                            class="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700"
                             title="Clear store filter"
                         >
                             <XMarkIcon class="h-4 w-4" />
@@ -200,7 +200,7 @@ const formatDate = (dateString) => {
                     <button
                         type="button"
                         @click="resetFilters"
-                        class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                        class="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     >
                         Reset
                     </button>
@@ -216,29 +216,29 @@ const formatDate = (dateString) => {
 
             <!-- Projects Grid -->
             <div v-if="visibleProjects.length > 0" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <div v-for="project in visibleProjects" :key="project.id" class="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                <div v-for="project in visibleProjects" :key="project.id" class="bg-white overflow-hidden shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200 dark:bg-gray-800 dark:border-gray-700">
                     <div class="p-5">
                         <div class="flex items-center justify-between mb-4">
                             <span :class="['inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border', getStatusColor(project.status)]">
                                 {{ project.status }}
                             </span>
-                            <span class="text-sm text-gray-500">Go-Live: {{ formatDate(project.target_go_live) }}</span>
+                            <span class="text-sm text-gray-500 dark:text-gray-300">Go-Live: {{ formatDate(project.target_go_live) }}</span>
                         </div>
                         
                         <Link :href="route('projects.show', project.id)" class="block group">
-                            <h3 class="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                            <h3 class="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors dark:text-gray-100">
                                 {{ project.name }}
                             </h3>
-                            <div class="mt-1 flex items-center text-sm text-gray-500">
-                                <BuildingStorefrontIcon class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                            <div class="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-300">
+                                <BuildingStorefrontIcon class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400 dark:text-gray-400" />
                                 {{ project.store?.name }}
                             </div>
                         </Link>
 
-                        <div class="mt-6 border-t border-gray-100 pt-4 flex items-center justify-between">
+                        <div class="mt-6 border-t border-gray-100 pt-4 flex items-center justify-between dark:border-gray-700">
                             <div class="flex flex-col">
-                                <span class="text-xs text-gray-400 uppercase font-semibold">Turn-over</span>
-                                <span class="text-sm font-medium text-gray-700">{{ formatDate(project.turn_over_date) }}</span>
+                                <span class="text-xs text-gray-400 uppercase font-semibold dark:text-gray-400">Turn-over</span>
+                                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ formatDate(project.turn_over_date) }}</span>
                             </div>
                             <div class="flex items-center gap-2">
                                 <button
@@ -246,7 +246,7 @@ const formatDate = (dateString) => {
                                     type="button"
                                     @click.prevent="deleteProject(project)"
                                     :disabled="deleting === project.id"
-                                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50 dark:text-gray-400"
                                     title="Delete project"
                                 >
                                     <TrashIcon class="h-4 w-4" />
@@ -255,7 +255,7 @@ const formatDate = (dateString) => {
                                     type="button"
                                     @click.prevent="duplicateProject(project)"
                                     :disabled="duplicating === project.id"
-                                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-indigo-600 transition-colors disabled:opacity-50 dark:text-gray-400"
                                     title="Duplicate project"
                                 >
                                     <DocumentDuplicateIcon class="h-4 w-4" />
@@ -275,10 +275,10 @@ const formatDate = (dateString) => {
             </div>
 
             <!-- Empty State -->
-            <div v-else class="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                <ClipboardDocumentListIcon class="mx-auto h-12 w-12 text-gray-400" />
-                <h3 class="mt-2 text-sm font-medium text-gray-900">No projects found</h3>
-                <p class="mt-1 text-sm text-gray-500">Get started by creating a new store opening project.</p>
+            <div v-else class="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300 dark:bg-gray-800 dark:border-gray-600">
+                <ClipboardDocumentListIcon class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400" />
+                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No projects found</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">Get started by creating a new store opening project.</p>
                 <div class="mt-6">
                     <Link
                         :href="route('projects.create')"
@@ -290,8 +290,8 @@ const formatDate = (dateString) => {
                 </div>
             </div>
 
-            <div v-if="hasPagination" class="mt-6 flex flex-col gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div class="text-sm text-gray-600">
+            <div v-if="hasPagination" class="mt-6 flex flex-col gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+                <div class="text-sm text-gray-600 dark:text-gray-300">
                     Showing {{ projects.from || 0 }} to {{ projects.to || 0 }} of {{ projects.total || 0 }} projects
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -299,18 +299,18 @@ const formatDate = (dateString) => {
                         v-if="projects.prev_page_url"
                         :href="projects.prev_page_url"
                         preserve-scroll
-                        class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                        class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     >
                         Previous
                     </Link>
                     <span
                         v-else
-                        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-400"
+                        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-400 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
                     >
                         Previous
                     </span>
 
-                    <span class="min-w-[110px] text-center text-sm font-semibold text-gray-700">
+                    <span class="min-w-[110px] text-center text-sm font-semibold text-gray-700 dark:text-gray-300">
                         Page {{ projects.current_page || 1 }} of {{ projects.last_page || 1 }}
                     </span>
 
@@ -318,13 +318,13 @@ const formatDate = (dateString) => {
                         v-if="projects.next_page_url"
                         :href="projects.next_page_url"
                         preserve-scroll
-                        class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+                        class="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     >
                         Next
                     </Link>
                     <span
                         v-else
-                        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-400"
+                        class="rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-400 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
                     >
                         Next
                     </span>

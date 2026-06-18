@@ -584,34 +584,34 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
 
 <template>
     <div
-        class="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col"
+        class="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col dark:bg-gray-800 dark:border-gray-700"
         :class="heightClass"
     >
         <!-- Calendar Header -->
         <div
-            class="border-b border-gray-200 flex flex-col gap-3 bg-white lg:flex-row lg:items-center lg:justify-between"
+            class="border-b border-gray-200 flex flex-col gap-3 bg-white lg:flex-row lg:items-center lg:justify-between dark:bg-gray-800 dark:border-gray-700"
             :class="compact ? 'p-3 lg:p-4' : 'p-6'"
         >
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center" :class="compact ? 'sm:gap-4' : 'sm:gap-6'">
                 <!-- Title -->
-                <h2 class="font-black text-gray-900 tracking-tight" :class="compact ? 'text-xl' : 'text-2xl'">
+                <h2 class="font-black text-gray-900 tracking-tight dark:text-gray-100" :class="compact ? 'text-xl' : 'text-2xl'">
                     <template v-if="calendarView === 'month'">
-                        {{ monthName }} <span class="text-gray-400 font-light">{{ currentYear }}</span>
+                        {{ monthName }} <span class="text-gray-400 font-light dark:text-gray-400">{{ currentYear }}</span>
                     </template>
                     <template v-else>
                         <span :class="compact ? 'text-lg' : 'text-xl'">{{ dayHeaderLabel }}</span>
                     </template>
                 </h2>
                 <!-- Navigation -->
-                <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner">
-                    <button @click="calendarView === 'month' ? prevMonth() : prevDay()" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200">
-                        <ChevronLeftIcon class="w-5 h-5 text-gray-600" />
+                <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner dark:bg-gray-800">
+                    <button @click="calendarView === 'month' ? prevMonth() : prevDay()" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 dark:hover:bg-gray-700">
+                        <ChevronLeftIcon class="w-5 h-5 text-gray-600 dark:text-gray-300" />
                     </button>
-                    <button @click="goToToday" class="px-4 py-2 text-sm font-bold text-gray-700 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 mx-1">
+                    <button @click="goToToday" class="px-4 py-2 text-sm font-bold text-gray-700 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 mx-1 dark:text-gray-300 dark:hover:bg-gray-700">
                         Today
                     </button>
-                    <button @click="calendarView === 'month' ? nextMonth() : nextDay()" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200">
-                        <ChevronRightIcon class="w-5 h-5 text-gray-600" />
+                    <button @click="calendarView === 'month' ? nextMonth() : nextDay()" class="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all duration-200 dark:hover:bg-gray-700">
+                        <ChevronRightIcon class="w-5 h-5 text-gray-600 dark:text-gray-300" />
                     </button>
                 </div>
             </div>
@@ -623,7 +623,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                         v-model="goToDateInput"
                         type="date"
                         @keydown.enter="goToDate"
-                        class="border border-gray-200 rounded-lg pl-3 pr-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white shadow-sm cursor-pointer"
+                        class="border border-gray-200 rounded-lg pl-3 pr-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white shadow-sm cursor-pointer dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                         title="Go to date"
                     />
                     <button
@@ -633,7 +633,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                 </div>
 
                 <!-- Month / Day view toggle -->
-                <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner">
+                <div class="flex items-center bg-gray-100 p-1 rounded-xl shadow-inner dark:bg-gray-800">
                     <button
                         @click="calendarView = 'month'"
                         class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200"
@@ -650,8 +650,8 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
         </div>
 
         <!-- Days of Week Header (month view only) -->
-        <div v-if="calendarView === 'month'" class="grid grid-cols-7 border-b border-gray-100 bg-gray-50/50">
-            <div v-for="day in days" :key="day" class="text-center text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]" :class="compact ? 'py-2' : 'py-3'">
+        <div v-if="calendarView === 'month'" class="grid grid-cols-7 border-b border-gray-100 bg-gray-50/50 dark:border-gray-700">
+            <div v-for="day in days" :key="day" class="text-center text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400" :class="compact ? 'py-2' : 'py-3'">
                 {{ day }}
             </div>
         </div>
@@ -665,7 +665,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
             <div
                 v-for="(week, wIndex) in weeks"
                 :key="wIndex"
-                class="grid grid-cols-7 border-b border-gray-100 bg-white min-h-0"
+                class="grid grid-cols-7 border-b border-gray-100 bg-white min-h-0 dark:bg-gray-800 dark:border-gray-700"
                 :class="compact ? '' : 'min-h-[140px]'"
             >
                 <div 
@@ -710,7 +710,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                         >
                             <div class="flex flex-col gap-0.5">
                                 <div class="font-black truncate flex items-center gap-1">
-                                    <span v-if="getEventStatus(event, day.date).isStart" class="w-1 h-1 rounded-full bg-white animate-pulse"></span>
+                                    <span v-if="getEventStatus(event, day.date).isStart" class="w-1 h-1 rounded-full bg-white animate-pulse dark:bg-gray-800"></span>
                                     <span
                                         v-if="isUrgentTicket(event)"
                                         class="inline-flex items-center px-1 rounded text-[8px] font-black bg-red-500 text-white leading-tight animate-pulse flex-shrink-0"
@@ -766,17 +766,17 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                 <!-- Hour rows -->
                 <template v-for="h in 24" :key="h - 1">
                     <div
-                        class="absolute w-full border-b border-gray-100 flex"
+                        class="absolute w-full border-b border-gray-100 flex dark:border-gray-700"
                         :style="{ top: `${(h - 1) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }"
                     >
                         <!-- Time label -->
                         <div class="w-16 shrink-0 flex items-start justify-end pr-3 pt-1">
-                            <span class="text-[10px] font-medium text-gray-400 select-none">
+                            <span class="text-[10px] font-medium text-gray-400 select-none dark:text-gray-400">
                                 {{ formatHourLabel(h - 1) }}
                             </span>
                         </div>
                         <!-- Hour lane background -->
-                        <div class="flex-1 border-l border-gray-100"></div>
+                        <div class="flex-1 border-l border-gray-100 dark:border-gray-700"></div>
                     </div>
                 </template>
 
@@ -838,7 +838,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                 <!-- Empty state -->
                 <div v-if="dailyEventsLayout.length === 0" class="absolute inset-0 flex items-center justify-center ml-16 pointer-events-none">
                     <div class="text-center pointer-events-auto">
-                        <p class="text-sm font-medium text-gray-400">No schedules for this day</p>
+                        <p class="text-sm font-medium text-gray-400 dark:text-gray-400">No schedules for this day</p>
                         <button
                             @click="emit('date-click', currentDayDate)"
                             class="mt-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
@@ -852,13 +852,13 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
         <Teleport to="body">
             <div v-if="showDayModal" class="fixed inset-0 z-[10000] flex items-center justify-center p-4">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-sm" @click="closeDayModal"></div>
-                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative animate-in fade-in zoom-in duration-200">
-                    <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative animate-in fade-in zoom-in duration-200 dark:bg-gray-800">
+                    <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 dark:border-gray-700">
                         <div>
-                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ monthName }}</p>
-                            <h3 class="text-lg font-black text-gray-900">{{ formatDateLong(selectedDayDate) }}</h3>
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest dark:text-gray-400">{{ monthName }}</p>
+                            <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">{{ formatDateLong(selectedDayDate) }}</h3>
                         </div>
-                        <button @click="closeDayModal" class="p-2 hover:bg-white rounded-full transition-colors text-gray-400">
+                        <button @click="closeDayModal" class="p-2 hover:bg-white rounded-full transition-colors text-gray-400 dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -866,8 +866,8 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                     </div>
                     <div class="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-2">
                         <!-- Unscheduled Users (No Schedule Plotted) -->
-                        <div v-if="unscheduledUsers.length > 0" class="mb-3 pb-3 border-b border-dashed border-gray-200">
-                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                        <div v-if="unscheduledUsers.length > 0" class="mb-3 pb-3 border-b border-dashed border-gray-200 dark:border-gray-700">
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 dark:text-gray-400">
                                 <span class="inline-block w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
                                 No Schedule Plotted ({{ unscheduledUsers.length }})
                             </p>
@@ -875,13 +875,13 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                 <div
                                     v-for="user in unscheduledUsers"
                                     :key="user.id"
-                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors group"
+                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors group dark:hover:bg-gray-700"
                                 >
-                                    <div class="w-2 h-2 rounded-full bg-gray-200 shrink-0"></div>
-                                    <span class="text-xs text-gray-600 font-medium flex-1 truncate">{{ user.name }}</span>
+                                    <div class="w-2 h-2 rounded-full bg-gray-200 shrink-0 dark:bg-gray-700"></div>
+                                    <span class="text-xs text-gray-600 font-medium flex-1 truncate dark:text-gray-300">{{ user.name }}</span>
                                     <span
                                         v-if="user.department_reference?.code"
-                                        class="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded shrink-0"
+                                        class="text-[10px] font-bold text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded shrink-0 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700"
                                     >{{ user.department_reference.code }}</span>
                                     <button
                                         @click.stop="() => { emit('add-schedule-for-user', { user, date: selectedDayDate }); closeDayModal(); }"
@@ -899,7 +899,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                             :key="group.status"
                             class="space-y-1.5 pt-1 first:pt-0"
                         >
-                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 dark:text-gray-400">
                                 <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="group.colorClass"></span>
                                 {{ group.label }} ({{ group.events.length }})
                             </p>
@@ -908,7 +908,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                 v-for="event in group.events"
                                 :key="event.id"
                                 @click="() => { emit('event-click', { event, date: selectedDayDate }); closeDayModal(); }"
-                                class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group"
+                                class="p-3 rounded-xl border border-transparent hover:border-gray-100 hover:bg-gray-50 transition-all cursor-pointer group dark:hover:bg-gray-700"
                                 :class="isUrgentTicket(event) ? 'border-l-2 !border-l-red-500 pl-2' : ''"
                             >
                                 <div class="flex items-start gap-3">
@@ -916,7 +916,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                     <div class="flex-1">
                                     <div class="flex justify-between items-start">
                                         <div class="flex items-center gap-1.5 flex-wrap">
-                                            <p class="text-sm font-bold text-gray-900">{{ event.user?.name }}</p>
+                                            <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ event.user?.name }}</p>
                                             <span
                                                 v-if="isUrgentTicket(event)"
                                                 class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-red-500 text-white animate-pulse"
@@ -927,10 +927,10 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                                 :class="getChipColor(event).split(' ')[0]"
                                             >{{ String(event.ticket.priority).toUpperCase() }}</span>
                                         </div>
-                                        <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 shrink-0 ml-2">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
+                                        <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 shrink-0 ml-2 dark:text-gray-400">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
                                     </div>
-                                    <p class="text-xs text-gray-500 font-medium">
-                                        {{ event.status || 'Unknown' }}<span v-if="event.ticket" class="ml-1 text-gray-400">[{{ event.ticket.ticket_key }}]</span>
+                                    <p class="text-xs text-gray-500 font-medium dark:text-gray-300">
+                                        {{ event.status || 'Unknown' }}<span v-if="event.ticket" class="ml-1 text-gray-400 dark:text-gray-400">[{{ event.ticket.ticket_key }}]</span>
                                     </p>
                                     <p v-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
                                     <div v-if="shouldShowTime(event.status) && (getActualTimesForDate(event, selectedDayDate).actual_time_in || getActualTimesForDate(event, selectedDayDate).actual_time_out)"
@@ -947,7 +947,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                             </div>
                         </div>
                     </div>
-                    <div class="p-4 bg-gray-50 border-t border-gray-100 text-center">
+                    <div class="p-4 bg-gray-50 border-t border-gray-100 text-center dark:bg-gray-900/50 dark:border-gray-700">
                         <button 
                             @click="() => { emit('date-click', selectedDayDate); closeDayModal(); }"
                             class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"

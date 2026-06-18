@@ -234,32 +234,32 @@ const handleClose = () => {
         <div v-if="show" class="fixed inset-0 z-[60] overflow-y-auto flex items-center justify-center p-4">
             <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="handleClose"></div>
 
-            <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-5xl p-0 border border-gray-100 transform transition-all max-h-[92vh] overflow-hidden flex flex-col">
+            <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-5xl p-0 border border-gray-100 transform transition-all max-h-[92vh] overflow-hidden flex flex-col dark:bg-gray-800 dark:border-gray-700">
 
                 <!-- Header -->
-                <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 shrink-0">
+                <div class="flex items-center justify-between px-8 py-6 border-b border-gray-100 shrink-0 dark:border-gray-700">
                     <div class="flex items-center gap-3">
                         <!-- Breadcrumb step indicator -->
                         <button v-if="step === 'map'" type="button" @click="backToSelect"
-                            class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all">
+                            class="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
                             </svg>
                         </button>
                         <div>
-                            <h3 class="text-xl font-black text-gray-900 tracking-tight">
+                            <h3 class="text-xl font-black text-gray-900 tracking-tight dark:text-gray-100">
                                 {{ step === 'select' ? 'Copy Record' : 'Map Fields' }}
                             </h3>
-                            <p class="text-xs text-gray-400 font-medium mt-0.5">
+                            <p class="text-xs text-gray-400 font-medium mt-0.5 dark:text-gray-400">
                                 <span v-if="step === 'select'">Select a destination module to copy this record to</span>
                                 <span v-else>
-                                    Copying to <span class="font-black text-gray-700">{{ selectedTarget?.item?.name }}</span>
+                                    Copying to <span class="font-black text-gray-700 dark:text-gray-300">{{ selectedTarget?.item?.name }}</span>
                                     — map source fields to destination fields
                                 </span>
                             </p>
                         </div>
                     </div>
-                    <button @click="handleClose" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all">
+                    <button @click="handleClose" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all dark:text-gray-400 dark:hover:bg-gray-700">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
@@ -267,7 +267,7 @@ const handleClose = () => {
                 </div>
 
                 <!-- Step indicators -->
-                <div class="flex items-center gap-2 px-8 py-3 bg-gray-50/70 border-b border-gray-100 shrink-0">
+                <div class="flex items-center gap-2 px-8 py-3 bg-gray-50/70 border-b border-gray-100 shrink-0 dark:border-gray-700">
                     <div class="flex items-center gap-1.5">
                         <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black"
                             :class="step === 'select' ? 'bg-indigo-600 text-white' : 'bg-emerald-500 text-white'">
@@ -277,7 +277,7 @@ const handleClose = () => {
                             Select Destination
                         </span>
                     </div>
-                    <div class="h-px flex-1 bg-gray-200 mx-1"></div>
+                    <div class="h-px flex-1 bg-gray-200 mx-1 dark:bg-gray-700"></div>
                     <div class="flex items-center gap-1.5">
                         <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black"
                             :class="step === 'map' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-400'">2</span>
@@ -299,12 +299,12 @@ const handleClose = () => {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
                                     </svg>
                                 </div>
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">SAP Requests</h4>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400">SAP Requests</h4>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 <button v-for="type in targets.sap_types" :key="'sap-'+type.id"
                                     @click="selectTarget('sap', type)"
-                                    class="p-4 bg-gray-50 hover:bg-blue-600 hover:text-white rounded-2xl border border-transparent text-left transition-all group">
+                                    class="p-4 bg-gray-50 hover:bg-blue-600 hover:text-white rounded-2xl border border-transparent text-left transition-all group dark:bg-gray-900/50">
                                     <p class="text-xs font-black">{{ type.name }}</p>
                                     <p class="text-[10px] mt-1 opacity-50 group-hover:opacity-80">
                                         {{ (type.form_schema?.fields?.length ?? 0) }} fields
@@ -324,12 +324,12 @@ const handleClose = () => {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
                                 </div>
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">POS Requests</h4>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400">POS Requests</h4>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 <button v-for="type in targets.pos_types" :key="'pos-'+type.id"
                                     @click="selectTarget('pos', type)"
-                                    class="p-4 bg-gray-50 hover:bg-purple-600 hover:text-white rounded-2xl border border-transparent text-left transition-all group">
+                                    class="p-4 bg-gray-50 hover:bg-purple-600 hover:text-white rounded-2xl border border-transparent text-left transition-all group dark:bg-gray-900/50">
                                     <p class="text-xs font-black">{{ type.name }}</p>
                                     <p class="text-[10px] mt-1 opacity-50 group-hover:opacity-80">
                                         {{ (type.form_schema?.fields?.length ?? 0) }} fields
@@ -349,12 +349,12 @@ const handleClose = () => {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                     </svg>
                                 </div>
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Dynamic Forms</h4>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400">Dynamic Forms</h4>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 <button v-for="form in targets.form_definitions" :key="'dyn-'+form.id"
                                     @click="selectTarget('dynamic', form)"
-                                    class="p-4 bg-gray-50 hover:bg-indigo-600 hover:text-white rounded-2xl border border-transparent text-left transition-all group">
+                                    class="p-4 bg-gray-50 hover:bg-indigo-600 hover:text-white rounded-2xl border border-transparent text-left transition-all group dark:bg-gray-900/50">
                                     <p class="text-xs font-black">{{ form.name }}</p>
                                     <p class="text-[10px] mt-1 opacity-50 group-hover:opacity-80">
                                         {{ (form.form_schema?.fields?.length ?? 0) }} fields
@@ -386,17 +386,17 @@ const handleClose = () => {
 
                         <!-- ── Header Fields ── -->
                         <div v-if="destFields.length > 0">
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2 dark:text-gray-400">
                                 <span class="inline-block w-2 h-2 rounded-full bg-indigo-400"></span>
                                 Header Fields ({{ destFields.length }})
                             </h4>
 
-                            <div class="rounded-2xl border border-gray-100 overflow-hidden">
+                            <div class="rounded-2xl border border-gray-100 overflow-hidden dark:border-gray-700">
                                 <!-- Table header -->
-                                <div class="grid grid-cols-[1fr_1fr_1fr] bg-gray-50 px-4 py-2.5 border-b border-gray-100">
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Destination Field</span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Map From Source</span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Preview / Custom Value</span>
+                                <div class="grid grid-cols-[1fr_1fr_1fr] bg-gray-50 px-4 py-2.5 border-b border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Destination Field</span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Map From Source</span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Preview / Custom Value</span>
                                 </div>
 
                                 <div class="divide-y divide-gray-50">
@@ -405,14 +405,14 @@ const handleClose = () => {
 
                                         <!-- Dest field label -->
                                         <div>
-                                            <p class="text-xs font-bold text-gray-800">{{ df.label }}</p>
-                                            <p class="text-[10px] text-gray-400 font-mono">{{ df.key }}</p>
+                                            <p class="text-xs font-bold text-gray-800 dark:text-gray-200">{{ df.label }}</p>
+                                            <p class="text-[10px] text-gray-400 font-mono dark:text-gray-400">{{ df.key }}</p>
                                         </div>
 
                                         <!-- Mapping dropdown -->
                                         <div class="pr-4">
                                             <select v-model="fieldMappings[df.key]"
-                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-indigo-400 focus:ring-0 bg-white">
+                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-indigo-400 focus:ring-0 bg-white dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                                 <option value="__none__">— Skip this field —</option>
                                                 <option v-for="sf in sourceFields" :key="sf.key" :value="sf.key">
                                                     {{ sf.label }} ({{ sf.key }})
@@ -429,9 +429,9 @@ const handleClose = () => {
                                                 v-model="customFieldValues[df.key]"
                                                 type="text"
                                                 placeholder="Enter value..."
-                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-indigo-400 focus:ring-0" />
+                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-indigo-400 focus:ring-0 dark:text-gray-300 dark:border-gray-700" />
                                             <span v-else
-                                                class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-lg block truncate max-w-full"
+                                                class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-lg block truncate max-w-full dark:bg-gray-800 dark:text-gray-300"
                                                 :title="getSourceDisplayValue(fieldMappings[df.key])">
                                                 {{ getSourceDisplayValue(fieldMappings[df.key]) }}
                                             </span>
@@ -443,20 +443,20 @@ const handleClose = () => {
 
                         <!-- ── Item Columns ── -->
                         <div v-if="destHasItems">
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-2 dark:text-gray-400">
                                 <span class="inline-block w-2 h-2 rounded-full bg-teal-400"></span>
                                 Line Item Columns ({{ destItemColumns.length }})
                             </h4>
-                            <p class="text-[10px] text-gray-400 mb-4">
-                                Source has <strong class="text-gray-600">{{ sourceItems.length }}</strong> item(s).
+                            <p class="text-[10px] text-gray-400 mb-4 dark:text-gray-400">
+                                Source has <strong class="text-gray-600 dark:text-gray-300">{{ sourceItems.length }}</strong> item(s).
                                 Column values shown are from the 1st item as a preview.
                             </p>
 
-                            <div class="rounded-2xl border border-gray-100 overflow-hidden">
-                                <div class="grid grid-cols-[1fr_1fr_1fr] bg-gray-50 px-4 py-2.5 border-b border-gray-100">
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Destination Column</span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Map From Source</span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sample Value</span>
+                            <div class="rounded-2xl border border-gray-100 overflow-hidden dark:border-gray-700">
+                                <div class="grid grid-cols-[1fr_1fr_1fr] bg-gray-50 px-4 py-2.5 border-b border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Destination Column</span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Map From Source</span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Sample Value</span>
                                 </div>
 
                                 <div class="divide-y divide-gray-50">
@@ -464,13 +464,13 @@ const handleClose = () => {
                                         class="grid grid-cols-[1fr_1fr_1fr] px-4 py-3 items-center hover:bg-gray-50/60 transition-colors">
 
                                         <div>
-                                            <p class="text-xs font-bold text-gray-800">{{ dc.label }}</p>
-                                            <p class="text-[10px] text-gray-400 font-mono">{{ dc.key }}</p>
+                                            <p class="text-xs font-bold text-gray-800 dark:text-gray-200">{{ dc.label }}</p>
+                                            <p class="text-[10px] text-gray-400 font-mono dark:text-gray-400">{{ dc.key }}</p>
                                         </div>
 
                                         <div class="pr-4">
                                             <select v-model="itemColMappings[dc.key]"
-                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-teal-400 focus:ring-0 bg-white">
+                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-teal-400 focus:ring-0 bg-white dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                                 <option value="__none__">— Skip this column —</option>
                                                 <option v-for="sc in sourceItemColumns" :key="sc.key" :value="sc.key">
                                                     {{ sc.label }} ({{ sc.key }})
@@ -486,9 +486,9 @@ const handleClose = () => {
                                                 v-model="customItemColValues[dc.key]"
                                                 type="text"
                                                 placeholder="Enter value for all rows..."
-                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-teal-400 focus:ring-0" />
+                                                class="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:border-teal-400 focus:ring-0 dark:text-gray-300 dark:border-gray-700" />
                                             <span v-else
-                                                class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-lg block truncate max-w-full"
+                                                class="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded-lg block truncate max-w-full dark:bg-gray-800 dark:text-gray-300"
                                                 :title="getSampleItemValue(itemColMappings[dc.key])">
                                                 {{ getSampleItemValue(itemColMappings[dc.key]) }}
                                             </span>
@@ -499,15 +499,15 @@ const handleClose = () => {
 
                             <!-- Items preview table -->
                             <div v-if="sourceItems.length > 0 && destItemColumns.length > 0" class="mt-4">
-                                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">
                                     Items Preview ({{ sourceItems.length }} row{{ sourceItems.length !== 1 ? 's' : '' }} will be copied)
                                 </p>
-                                <div class="overflow-x-auto rounded-xl border border-dashed border-gray-200">
+                                <div class="overflow-x-auto rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
                                     <table class="w-full text-[10px]">
                                         <thead>
-                                            <tr class="bg-gray-50">
+                                            <tr class="bg-gray-50 dark:bg-gray-900/50">
                                                 <th v-for="dc in destItemColumns" :key="dc.key"
-                                                    class="px-3 py-2 text-left font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                                                    class="px-3 py-2 text-left font-black text-gray-400 uppercase tracking-widest whitespace-nowrap dark:text-gray-400">
                                                     {{ dc.label }}
                                                 </th>
                                             </tr>
@@ -516,7 +516,7 @@ const handleClose = () => {
                                             <tr v-for="(srcItem, i) in sourceItems.slice(0, 5)" :key="i"
                                                 class="hover:bg-gray-50/60">
                                                 <td v-for="dc in destItemColumns" :key="dc.key"
-                                                    class="px-3 py-2 text-gray-600 font-medium whitespace-nowrap max-w-[120px] truncate">
+                                                    class="px-3 py-2 text-gray-600 font-medium whitespace-nowrap max-w-[120px] truncate dark:text-gray-300">
                                                     <template v-if="itemColMappings[dc.key] === '__none__'">
                                                         <span class="text-gray-300 italic">—</span>
                                                     </template>
@@ -529,7 +529,7 @@ const handleClose = () => {
                                                 </td>
                                             </tr>
                                             <tr v-if="sourceItems.length > 5">
-                                                <td :colspan="destItemColumns.length" class="px-3 py-2 text-center text-gray-400 italic">
+                                                <td :colspan="destItemColumns.length" class="px-3 py-2 text-center text-gray-400 italic dark:text-gray-400">
                                                     + {{ sourceItems.length - 5 }} more rows...
                                                 </td>
                                             </tr>
@@ -548,7 +548,7 @@ const handleClose = () => {
 
                         <!-- No schemas notice -->
                         <div v-if="destFields.length === 0 && !destHasItems"
-                            class="py-8 text-center text-gray-400">
+                            class="py-8 text-center text-gray-400 dark:text-gray-400">
                             <p class="text-sm font-bold">This destination has no schema-defined fields.</p>
                             <p class="text-xs mt-1">The record will be created with the requester and company info only.</p>
                         </div>
@@ -557,15 +557,15 @@ const handleClose = () => {
                 </div>
 
                 <!-- ── Footer ── -->
-                <div v-if="step === 'map'" class="px-8 py-5 border-t border-gray-100 bg-white flex items-center justify-between shrink-0">
+                <div v-if="step === 'map'" class="px-8 py-5 border-t border-gray-100 bg-white flex items-center justify-between shrink-0 dark:bg-gray-800 dark:border-gray-700">
                     <button type="button" @click="backToSelect"
-                        class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-all">
+                        class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-all dark:text-gray-300 dark:hover:bg-gray-700">
                         ← Back
                     </button>
                     <div class="flex items-center gap-3">
                         <div class="text-right">
-                            <p class="text-xs font-bold text-gray-700">Ready to copy to <span class="text-indigo-600">{{ selectedTarget?.item?.name }}</span></p>
-                            <p class="text-[10px] text-gray-400">
+                            <p class="text-xs font-bold text-gray-700 dark:text-gray-300">Ready to copy to <span class="text-indigo-600">{{ selectedTarget?.item?.name }}</span></p>
+                            <p class="text-[10px] text-gray-400 dark:text-gray-400">
                                 {{ Object.values(fieldMappings).filter(v => v !== '__none__').length }} field(s) mapped
                                 <template v-if="destHasItems">
                                     · {{ sourceItems.length }} item row(s)
@@ -589,7 +589,7 @@ const handleClose = () => {
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span class="text-sm font-black text-gray-900 uppercase tracking-widest">Saving to Database...</span>
+                        <span class="text-sm font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">Saving to Database...</span>
                     </div>
                 </div>
 

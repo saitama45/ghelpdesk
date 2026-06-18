@@ -174,7 +174,7 @@ import { h } from 'vue';
     <div ref="container" class="relative w-full">
         <!-- Dropdown Trigger (only if not inline) -->
         <div v-if="!inline" @click="toggleDropdown" 
-            class="flex items-center justify-between w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-all"
+            class="flex items-center justify-between w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-bold text-gray-700 shadow-sm cursor-pointer hover:border-gray-300 transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
             :class="{
                 'ring-2 ring-blue-500 border-blue-500': isOpen,
                 'opacity-60 cursor-not-allowed bg-gray-50 hover:border-gray-200': disabled
@@ -187,8 +187,8 @@ import { h } from 'vue';
                 </span>
             </div>
             <div class="flex items-center gap-1">
-                <XMarkIcon v-if="modelValue && !disabled" @click="clearSelection" class="w-4 h-4 text-gray-400 hover:text-gray-600 p-0.5" />
-                <ChevronRightIcon class="w-3.5 h-3.5 text-gray-400 transition-transform" :class="{'rotate-90': isOpen}" />
+                <XMarkIcon v-if="modelValue && !disabled" @click="clearSelection" class="w-4 h-4 text-gray-400 hover:text-gray-600 p-0.5 dark:text-gray-400" />
+                <ChevronRightIcon class="w-3.5 h-3.5 text-gray-400 transition-transform dark:text-gray-400" :class="{'rotate-90': isOpen}" />
             </div>
         </div>
 
@@ -199,8 +199,8 @@ import { h } from 'vue';
                 'absolute z-[100] mt-2 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden'
             ]"
         >
-            <div v-if="label" class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ label }}</span>
+            <div v-if="label" class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
+                <span class="text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-gray-300">{{ label }}</span>
                 <button v-if="modelValue" type="button" @click="selectNode('')" class="text-[10px] font-black text-blue-600 hover:underline">
                     Reset
                 </button>
@@ -215,7 +215,7 @@ import { h } from 'vue';
                     :expanded-states="expandedStates"
                 />
                 <div v-if="!nodes.length" class="p-8 text-center">
-                    <p class="text-xs text-gray-400 font-bold italic">No teams configured.</p>
+                    <p class="text-xs text-gray-400 font-bold italic dark:text-gray-400">No teams configured.</p>
                 </div>
             </div>
         </div>

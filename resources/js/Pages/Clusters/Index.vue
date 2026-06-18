@@ -33,14 +33,14 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cluster Name</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Cluster Name</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="cluster in data" :key="cluster.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="cluster in data" :key="cluster.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">
                                     {{ cluster.code }}
@@ -54,8 +54,8 @@
                                         </svg>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-medium text-gray-900">{{ cluster.name }}</div>
-                                        <div class="text-sm text-gray-500">
+                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ cluster.name }}</div>
+                                        <div class="text-sm text-gray-500 dark:text-gray-300">
                                             {{ cluster.stores?.length || 0 }} assigned store{{ (cluster.stores?.length || 0) !== 1 ? 's' : '' }}
                                         </div>
                                     </div>
@@ -104,15 +104,15 @@
         <div v-if="showAssignStoresModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeAssignStoresModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-900">Assign Stores</h3>
-                            <p class="text-sm text-gray-500">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Assign Stores</h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-300">
                                 {{ selectedClusterForStores?.name }} ({{ selectedClusterForStores?.code }})
                             </p>
                         </div>
-                        <button @click="closeAssignStoresModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeAssignStoresModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -121,7 +121,7 @@
 
                     <form @submit.prevent="submitAssignStores" class="space-y-5">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Stores</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Stores</label>
                             <MultiAutocomplete
                                 v-model="assignStoresForm.store_ids"
                                 :options="storeOptions"
@@ -129,7 +129,7 @@
                                 value-key="id"
                                 placeholder="Select one or more stores..."
                             />
-                            <p class="mt-2 text-xs text-gray-500">
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-300">
                                 Selected stores will be added to this cluster. Stores can belong to multiple clusters simultaneously.
                             </p>
                         </div>
@@ -138,7 +138,7 @@
                             <button
                                 type="button"
                                 @click="closeAssignStoresModal"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                             >
                                 Cancel
                             </button>
@@ -157,12 +157,12 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ isEditing ? 'Edit Cluster' : 'Create Cluster' }}
                         </h3>
-                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -171,21 +171,21 @@
 
                     <form @submit.prevent="submitForm" class="space-y-5">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cluster Code</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Cluster Code</label>
                             <input
                                 v-model="form.code"
                                 type="text"
                                 required
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                             >
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cluster Name</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Cluster Name</label>
                             <input
                                 v-model="form.name"
                                 type="text"
                                 required
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                             >
                         </div>
 
@@ -193,7 +193,7 @@
                             <button
                                 type="button"
                                 @click="closeModal"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                             >
                                 Cancel
                             </button>

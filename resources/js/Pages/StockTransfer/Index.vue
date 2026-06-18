@@ -5,11 +5,11 @@
 
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Units</p>
-                                <p class="text-2xl font-black text-gray-900 mt-1">{{ summary.total_qty }}</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Total Units</p>
+                                <p class="text-2xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ summary.total_qty }}</p>
                             </div>
                             <div class="p-3 bg-slate-50 rounded-lg">
                                 <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19,10 +19,10 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">In Transit</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">In Transit</p>
                                 <p class="text-2xl font-black text-emerald-600 mt-1">{{ summary.posted_qty }}</p>
                             </div>
                             <div class="p-3 bg-emerald-50 rounded-lg">
@@ -33,10 +33,10 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Pending Posts</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Pending Posts</p>
                                 <p class="text-2xl font-black text-amber-600 mt-1">{{ summary.for_posting_qty }}</p>
                             </div>
                             <div class="p-3 bg-amber-50 rounded-lg">
@@ -47,10 +47,10 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Records</p>
+                                <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Total Records</p>
                                 <p class="text-2xl font-black text-blue-600 mt-1">{{ summary.total_records }}</p>
                             </div>
                             <div class="p-3 bg-blue-50 rounded-lg">
@@ -63,10 +63,10 @@
                 </div>
 
                 <!-- Filters Panel -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 dark:bg-gray-800 dark:border-gray-700">
                     <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Origin Location</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Origin Location</label>
                             <Autocomplete
                                 :model-value="filterForm.location"
                                 :options="locationFilterOptions"
@@ -78,7 +78,7 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Destination Location</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Destination Location</label>
                             <Autocomplete
                                 :model-value="filterForm.destination_location"
                                 :options="destinationLocationFilterOptions"
@@ -90,7 +90,7 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Category</label>
                             <Autocomplete
                                 :model-value="filterForm.category_id"
                                 :options="categoryFilterOptions"
@@ -102,7 +102,7 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Status</label>
                             <MultiAutocomplete
                                 v-model="statusFilter"
                                 :options="statusOptions"
@@ -113,11 +113,11 @@
                             />
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Search</label>
-                            <input v-model="pagination.search.value" type="text" placeholder="Search No. / Requestor" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Search</label>
+                            <input v-model="pagination.search.value" type="text" placeholder="Search No. / Requestor" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div class="flex items-end">
-                            <button @click="resetFilters" class="w-full px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                            <button @click="resetFilters" class="w-full px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Reset
                             </button>
                         </div>
@@ -152,43 +152,43 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transfer Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transfer No.</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Transfer Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Transfer No.</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Items</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Route</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Qty</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="item in data" :key="item.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatDate(item.transfer_date) }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{{ item.transfer_no || '—' }}</td>
+                        <tr v-for="item in data" :key="item.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">{{ formatDate(item.transfer_date) }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 dark:text-gray-100">{{ item.transfer_no || '—' }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                 <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                                       :class="getStatusBadgeClass(item.status)">
                                     {{ item.status }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
+                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                 <div class="flex flex-col">
-                                    <div class="font-semibold text-gray-900">{{ item.asset_count }} asset(s)</div>
-                                    <div class="text-xs text-gray-500">{{ item.record_count }} unit(s)</div>
+                                    <div class="font-semibold text-gray-900 dark:text-gray-100">{{ item.asset_count }} asset(s)</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ item.record_count }} unit(s)</div>
                                 </div>
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900">
+                            <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                 <div class="flex items-center space-x-2">
-                                    <span class="font-bold text-gray-600">{{ item.origin_location }}</span>
-                                    <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span class="font-bold text-gray-600 dark:text-gray-300">{{ item.origin_location }}</span>
+                                    <svg class="w-3 h-3 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                                     </svg>
-                                    <span class="font-bold text-blue-600">{{ item.destination_location }}</span>
+                                    <span class="font-bold text-blue-600 dark:text-blue-400">{{ item.destination_location }}</span>
                                 </div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold dark:bg-slate-800 dark:text-slate-100">
                                     {{ item.quantity }}
                                 </span>
                             </td>
@@ -196,7 +196,7 @@
                                 <div class="flex justify-end space-x-1">
                                     <button
                                         @click="viewTransfer(item)"
-                                        class="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-full transition-colors"
+                                        class="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-full transition-colors dark:text-gray-300 dark:hover:bg-gray-700"
                                         title="View Details"
                                     >
                                         <EyeIcon class="w-4 h-4" />
@@ -204,7 +204,7 @@
                                     <button
                                         v-if="hasPermission('stock_transfers.post') && canPostTransfer(item.status)"
                                         @click="postTransfer(item)"
-                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
+                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors dark:text-emerald-300 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
                                         title="Post Transfer"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,7 +214,7 @@
                                     <button
                                         v-if="hasPermission('stock_transfers.edit') && canPostTransfer(item.status)"
                                         @click="editTransfer(item)"
-                                        class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
+                                        class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors dark:text-blue-300 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
                                         title="Edit"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,7 +224,7 @@
                                     <button
                                         v-if="hasPermission('stock_transfers.delete') && canPostTransfer(item.status)"
                                         @click="deleteTransfer(item)"
-                                        class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
+                                        class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors dark:text-red-300 dark:hover:bg-red-500/15 dark:hover:text-red-200"
                                         title="Delete"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -242,27 +242,27 @@
         <!-- Modal -->
         <Modal :show="showModal" @close="closeModal" max-width="6xl" :closeable="false">
             <div class="p-6">
-                <h3 class="text-lg font-bold text-gray-900 mb-4">{{ readOnlyMode ? 'View Stock Transfer' : (isEditing ? 'Edit Stock Transfer' : 'New Stock Transfer') }}</h3>
+                <h3 class="text-lg font-bold text-gray-900 mb-4 dark:text-gray-100">{{ readOnlyMode ? 'View Stock Transfer' : (isEditing ? 'Edit Stock Transfer' : 'New Stock Transfer') }}</h3>
                 <form @submit.prevent="submitForm" class="space-y-4">
-                    <p v-if="readOnlyMode" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                    <p v-if="readOnlyMode" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800 dark:border-blue-400/30 dark:bg-blue-500/15 dark:text-blue-200">
                         This transfer is read-only because it has already been posted or received.
                     </p>
                     <fieldset :disabled="readOnlyMode" class="space-y-4 disabled:opacity-90">
-                    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4">
+                    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 space-y-4 dark:border-gray-700 dark:bg-gray-800/70">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Transfer Date</label>
-                                <input type="date" v-model="form.transfer_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Transfer Date</label>
+                                <input type="date" v-model="form.transfer_date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Transfer No (Optional)</label>
-                                <input type="text" v-model="form.transfer_no" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Auto-generated if empty">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Transfer No (Optional)</label>
+                                <input type="text" v-model="form.transfer_no" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" placeholder="Auto-generated if empty">
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Origin Location</label>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Origin Location</label>
                                 <Autocomplete
                                     v-model="form.origin_location"
                                     :options="storeOptions"
@@ -274,7 +274,7 @@
                                 />
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Destination Location</label>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Destination Location</label>
                                 <Autocomplete
                                     v-model="form.destination_location"
                                     :options="storeOptions"
@@ -287,23 +287,23 @@
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Requested By</label>
-                            <input type="text" v-model="form.requested_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Requested By</label>
+                            <input type="text" v-model="form.requested_by" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                         </div>
 
                         <!-- Asset Item Table -->
                         <div>
                             <div class="flex items-center justify-between mb-1">
-                                <label class="block text-sm font-medium text-gray-700">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                     Asset Item (With SOH &gt; 0)
-                                    <span v-if="!form.origin_location" class="text-xs text-gray-400 font-normal ml-1">— select an origin location first</span>
+                                    <span v-if="!form.origin_location" class="text-xs text-gray-400 font-normal ml-1 dark:text-gray-400">— select an origin location first</span>
                                 </label>
                                 <span v-if="assetSelections.length > 0" class="text-xs font-bold text-blue-600 cursor-pointer hover:underline" @click="assetSelections = []">Clear ({{ assetSelections.length }} selected)</span>
                             </div>
-                            <div class="rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm">
-                                <div class="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                            <div class="rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                                <div class="px-3 py-2 bg-gray-50 border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="relative">
-                                        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                         </svg>
                                         <input
@@ -311,7 +311,7 @@
                                             type="text"
                                             placeholder="Search by code, brand or model..."
                                             :disabled="readOnlyMode || !form.origin_location"
-                                            class="w-full pl-8 pr-3 py-1.5 text-xs border-0 bg-transparent focus:ring-0 focus:outline-none placeholder-gray-400 disabled:opacity-40"
+                                            class="w-full pl-8 pr-3 py-1.5 text-xs border-0 bg-transparent focus:ring-0 focus:outline-none placeholder-gray-400 disabled:opacity-40 dark:text-gray-100"
                                         >
                                     </div>
                                 </div>
@@ -323,31 +323,31 @@
                                         </svg>
                                         <span class="text-xs text-blue-600 font-medium">Loading assets with stock...</span>
                                     </div>
-                                    <div v-else-if="!form.origin_location" class="py-6 text-center text-xs text-gray-400 italic">
+                                    <div v-else-if="!form.origin_location" class="py-6 text-center text-xs text-gray-400 italic dark:text-gray-400">
                                         Select an origin location to see available assets.
                                     </div>
-                                    <div v-else-if="filteredAssets.length === 0" class="py-6 text-center text-xs text-gray-400 italic">
+                                    <div v-else-if="filteredAssets.length === 0" class="py-6 text-center text-xs text-gray-400 italic dark:text-gray-400">
                                         No assets with stock found{{ assetSearch ? ' matching "' + assetSearch + '"' : '' }}.
                                     </div>
-                                    <table v-else class="min-w-full divide-y divide-gray-100">
-                                        <thead class="bg-gray-50 sticky top-0">
+                                    <table v-else class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
+                                        <thead class="bg-gray-50 sticky top-0 dark:bg-gray-900/50">
                                             <tr>
                                                 <th class="w-8 px-3 py-2"></th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500">Item Code</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500">Brand / Model</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500 hidden md:table-cell">Description</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500">Status</th>
-                                                <th class="px-3 py-2 text-right text-[10px] font-black uppercase text-gray-500">SOH</th>
-                                                <th class="px-3 py-2 text-right text-[10px] font-black uppercase text-gray-500">Transfer Qty</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Item Code</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Brand / Model</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500 hidden md:table-cell dark:text-slate-300">Description</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Status</th>
+                                                <th class="px-3 py-2 text-right text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">SOH</th>
+                                                <th class="px-3 py-2 text-right text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Transfer Qty</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-gray-100">
+                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                             <tr
                                                 v-for="asset in filteredAssets"
                                                 :key="asset.id"
                                                 class="transition-colors"
                                                 :class="[
-                                                    isAssetSelected(asset) ? 'bg-blue-50' : (asset.is_in_pending_transfer ? 'bg-amber-50/30' : 'hover:bg-gray-50'),
+                                                    isAssetSelected(asset) ? 'bg-blue-50 dark:bg-blue-500/15' : (asset.is_in_pending_transfer ? 'bg-amber-50/30 dark:bg-amber-500/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'),
                                                     (readOnlyMode || asset.is_in_pending_transfer) ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'
                                                 ]"
                                                 @click="!(readOnlyMode || asset.is_in_pending_transfer) && toggleAsset(asset)"
@@ -358,17 +358,17 @@
                                                         :checked="isAssetSelected(asset)"
                                                         @change="toggleAsset(asset)"
                                                         :disabled="readOnlyMode || asset.is_in_pending_transfer"
-                                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40"
+                                                        class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900"
                                                     >
                                                 </td>
-                                                <td class="px-3 py-2 text-xs font-bold text-gray-900 whitespace-nowrap">{{ asset.item_code }}</td>
-                                                <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{{ asset.brand }} {{ asset.model }}</td>
-                                                <td class="px-3 py-2 text-xs text-gray-500 hidden md:table-cell max-w-xs truncate">{{ asset.description }}</td>
+                                                <td class="px-3 py-2 text-xs font-bold text-gray-900 whitespace-nowrap dark:text-gray-100">{{ asset.item_code }}</td>
+                                                <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap dark:text-gray-300">{{ asset.brand }} {{ asset.model }}</td>
+                                                <td class="px-3 py-2 text-xs text-gray-500 hidden md:table-cell max-w-xs truncate dark:text-gray-300">{{ asset.description }}</td>
                                                 <td class="px-3 py-2 whitespace-nowrap">
-                                                    <span v-if="asset.is_in_pending_transfer" class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-tighter">
+                                                    <span v-if="asset.is_in_pending_transfer" class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-tighter dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/30">
                                                         For Posting
                                                     </span>
-                                                    <span v-else class="text-[10px] text-gray-400 font-medium">Available</span>
+                                                    <span v-else class="text-[10px] text-gray-400 font-medium dark:text-gray-400">Available</span>
                                                 </td>
                                                 <td class="px-3 py-2 text-right">
                                                     <span class="text-xs font-bold" :class="(asset.soh ?? 0) > 0 ? 'text-emerald-600' : 'text-red-500'">{{ asset.soh ?? '?' }}</span>
@@ -376,8 +376,8 @@
                                                 <td class="px-3 py-2 text-right" @click.stop>
                                                     <template v-if="isAssetSelected(asset)">
                                                         <template v-if="asset.type === 'Fixed'">
-                                                            <span v-if="getSelection(asset)?.isLoadingUnits" class="text-xs text-gray-400">...</span>
-                                                            <span v-else class="text-xs font-bold" :class="getSelection(asset)?.availableUnits.length > 0 ? 'text-blue-600' : 'text-red-400'">
+                                                            <span v-if="getSelection(asset)?.isLoadingUnits" class="text-xs text-gray-400 dark:text-gray-400">...</span>
+                                                            <span v-else class="text-xs font-bold" :class="getSelection(asset)?.availableUnits.length > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-400 dark:text-red-300'">
                                                                 {{ getSelection(asset)?.entries.length }}/{{ getSelection(asset)?.availableUnits.length }}
                                                             </span>
                                                         </template>
@@ -388,7 +388,7 @@
                                                             :max="asset.soh"
                                                             min="1"
                                                             :disabled="readOnlyMode || (asset.soh ?? 0) <= 1"
-                                                            class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                                            class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"
                                                         >
                                                     </template>
                                                 </td>
@@ -400,23 +400,23 @@
                         </div>
 
                         <!-- Selected Assets Panel -->
-                        <div v-if="assetSelections.length > 0" class="rounded-2xl border border-blue-100 bg-blue-50/40 overflow-hidden">
-                            <div class="px-4 py-2.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
-                                <span class="text-xs font-black text-blue-800 uppercase tracking-widest">Selected Assets</span>
-                                <span class="text-xs font-bold text-blue-600">{{ assetSelections.length }} asset(s) · {{ totalSelectedQty }} unit(s)</span>
+                        <div v-if="assetSelections.length > 0" class="rounded-2xl border border-blue-100 bg-blue-50/40 overflow-hidden dark:border-blue-400/30 dark:bg-blue-500/10">
+                            <div class="px-4 py-2.5 bg-blue-50 border-b border-blue-100 flex items-center justify-between dark:bg-blue-500/15 dark:border-blue-400/30">
+                                <span class="text-xs font-black text-blue-800 uppercase tracking-widest dark:text-blue-300">Selected Assets</span>
+                                <span class="text-xs font-bold text-blue-600 dark:text-blue-400">{{ assetSelections.length }} asset(s) · {{ totalSelectedQty }} unit(s)</span>
                             </div>
-                            <div class="divide-y divide-blue-100">
-                                <div v-for="sel in assetSelections" :key="sel.asset.id" class="bg-white">
+                            <div class="divide-y divide-blue-100 dark:divide-blue-400/30">
+                                <div v-for="sel in assetSelections" :key="sel.asset.id" class="bg-white dark:bg-gray-800">
                                     <!-- Asset summary row -->
                                     <div class="flex items-center gap-3 px-4 py-3">
                                         <div class="flex-1 min-w-0">
-                                            <p class="text-sm font-bold text-gray-900 truncate">{{ sel.asset.item_code }}</p>
-                                            <p class="text-xs text-gray-500 truncate">{{ sel.asset.brand }} {{ sel.asset.model }}</p>
+                                            <p class="text-sm font-bold text-gray-900 truncate dark:text-gray-100">{{ sel.asset.item_code }}</p>
+                                            <p class="text-xs text-gray-500 truncate dark:text-gray-300">{{ sel.asset.brand }} {{ sel.asset.model }}</p>
                                         </div>
                                         <!-- Non-Fixed: qty input -->
                                         <template v-if="sel.asset.type !== 'Fixed'">
                                             <div class="flex items-center gap-1.5">
-                                                <label class="text-[10px] font-bold text-gray-500 uppercase">Qty</label>
+                                                <label class="text-[10px] font-bold text-gray-500 uppercase dark:text-gray-300">Qty</label>
                                                 <input
                                                     type="number"
                                                     :value="sel.qty"
@@ -424,17 +424,17 @@
                                                     :max="sel.asset.soh"
                                                     min="1"
                                                     :disabled="readOnlyMode || (sel.asset.soh ?? 0) <= 1"
-                                                    class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                                    class="w-16 text-right rounded-md border-gray-300 shadow-sm text-xs font-bold focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"
                                                 >
                                             </div>
                                         </template>
                                         <template v-else>
-                                            <span v-if="sel.isLoadingUnits" class="text-xs text-gray-400 italic">Loading...</span>
-                                            <span v-else-if="readOnlyMode" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                                            <span v-if="sel.isLoadingUnits" class="text-xs text-gray-400 italic dark:text-gray-400">Loading...</span>
+                                            <span v-else-if="readOnlyMode" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200">
                                                 {{ sel.entries.length }} unit(s)
                                             </span>
                                             <span v-else class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold"
-                                                :class="sel.availableUnits.length > 0 ? (sel.entries.length > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600') : 'bg-red-50 text-red-500'">
+                                                :class="sel.availableUnits.length > 0 ? (sel.entries.length > 0 ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300') : 'bg-red-50 text-red-500 dark:bg-red-500/15 dark:text-red-300'">
                                                 {{ sel.availableUnits.length > 0 ? `${sel.entries.length}/${sel.availableUnits.filter(u => !u.is_reserved).length} units selected` : `No available units at ${form.origin_location}` }}
                                             </span>
                                         </template>
@@ -442,7 +442,7 @@
                                         <button
                                             type="button"
                                             @click="toggleAsset(sel.asset)"
-                                            class="p-1 text-gray-400 hover:text-red-500 rounded transition-colors flex-shrink-0"
+                                            class="p-1 text-gray-400 hover:text-red-500 rounded transition-colors flex-shrink-0 dark:text-gray-400"
                                             title="Remove"
                                         >
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -451,9 +451,9 @@
                                         </button>
                                     </div>
                                     <!-- Fixed asset unit picker — always expanded -->
-                                    <div v-if="sel.asset.type === 'Fixed' && (sel.availableUnits.length > 0 || sel.entries.length > 0)" class="border-t border-blue-50">
-                                        <table class="min-w-full divide-y divide-gray-100">
-                                            <thead class="bg-gray-50">
+                                    <div v-if="sel.asset.type === 'Fixed' && (sel.availableUnits.length > 0 || sel.entries.length > 0)" class="border-t border-blue-50 dark:border-blue-400/30">
+                                        <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
+                                            <thead class="bg-gray-50 dark:bg-gray-900/50">
                                                 <tr>
                                                     <th v-if="!readOnlyMode" class="px-4 py-2 text-left">
                                                         <label class="inline-flex items-center gap-2 cursor-pointer select-none">
@@ -462,23 +462,23 @@
                                                                 :indeterminate.prop="isSomeUnitsSelected(sel)"
                                                                 @change="toggleAllUnits(sel, $event.target.checked)"
                                                                 :disabled="selectableUnits(sel).length === 0"
-                                                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed">
-                                                            <span class="text-[10px] font-black uppercase text-gray-500">Pick All</span>
+                                                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-900">
+                                                            <span class="text-[10px] font-black uppercase text-gray-500 dark:text-gray-300">Pick All</span>
                                                         </label>
                                                     </th>
-                                                    <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500">Serial No / Barcode</th>
-                                                    <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500">Cost</th>
+                                                    <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Serial No / Barcode</th>
+                                                    <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Cost</th>
                                                 </tr>
                                             </thead>
-                                            <tbody class="bg-white divide-y divide-gray-100">
+                                            <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
                                                 <!-- View mode: show entries directly (works even when SOH = 0) -->
                                                 <template v-if="readOnlyMode">
-                                                    <tr v-for="(entry, ei) in sel.entries" :key="ei" class="hover:bg-blue-50/50">
+                                                    <tr v-for="(entry, ei) in sel.entries" :key="ei" class="hover:bg-blue-50/50 dark:hover:bg-blue-500/10">
                                                         <td class="px-4 py-2">
-                                                            <p class="text-sm font-bold text-gray-900">{{ entry.serial_no || 'NO SERIAL' }}</p>
-                                                            <p class="text-[10px] font-mono text-gray-500">{{ entry.barcode }}</p>
+                                                            <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ entry.serial_no || 'NO SERIAL' }}</p>
+                                                            <p class="text-[10px] font-mono text-gray-500 dark:text-gray-300">{{ entry.barcode }}</p>
                                                         </td>
-                                                        <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ Number(entry.cost).toLocaleString() }}</td>
+                                                        <td class="px-4 py-2 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ Number(entry.cost).toLocaleString() }}</td>
                                                     </tr>
                                                 </template>
                                                 <!-- Edit mode: show available units with checkboxes -->
@@ -486,8 +486,8 @@
                                                     <tr v-for="unit in sel.availableUnits" :key="unit.id"
                                                         class="transition-colors"
                                                         :class="[
-                                                            unit.is_reserved ? 'bg-amber-50/50 opacity-70 cursor-not-allowed' : 'hover:bg-blue-50/50 cursor-pointer',
-                                                            isUnitSelected(sel, unit) ? 'bg-blue-50/70' : ''
+                                                            unit.is_reserved ? 'bg-amber-50/50 opacity-70 cursor-not-allowed dark:bg-amber-900/20' : 'hover:bg-blue-50/50 cursor-pointer dark:hover:bg-blue-500/10',
+                                                            isUnitSelected(sel, unit) ? 'bg-blue-50/70 dark:bg-blue-500/20' : ''
                                                         ]"
                                                         @click="!unit.is_reserved && toggleUnit(sel, unit)"
                                                     >
@@ -496,16 +496,16 @@
                                                                 :checked="isUnitSelected(sel, unit)"
                                                                 @change="toggleUnit(sel, unit)"
                                                                 :disabled="unit.is_reserved"
-                                                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                                                                class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-900">
                                                         </td>
                                                         <td class="px-4 py-2">
-                                                            <p class="text-sm font-bold text-gray-900">{{ unit.serial_no || 'NO SERIAL' }}</p>
-                                                            <p class="text-[10px] font-mono text-gray-500">{{ unit.barcode }}</p>
-                                                            <p v-if="unit.is_reserved" class="text-[10px] font-semibold text-amber-600 mt-0.5">
+                                                            <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ unit.serial_no || 'NO SERIAL' }}</p>
+                                                            <p class="text-[10px] font-mono text-gray-500 dark:text-gray-300">{{ unit.barcode }}</p>
+                                                            <p v-if="unit.is_reserved" class="text-[10px] font-semibold text-amber-600 mt-0.5 dark:text-amber-400">
                                                                 Reserved · {{ unit.reserved_in || 'Pending Transfer' }}
                                                             </p>
                                                         </td>
-                                                        <td class="px-4 py-2 text-right text-sm font-bold text-gray-700">{{ Number(unit.cost).toLocaleString() }}</td>
+                                                        <td class="px-4 py-2 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ Number(unit.cost).toLocaleString() }}</td>
                                                     </tr>
                                                 </template>
                                             </tbody>
@@ -516,15 +516,15 @@
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Remarks</label>
-                            <textarea v-model="form.memo_remarks" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none"></textarea>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Remarks</label>
+                            <textarea v-model="form.memo_remarks" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"></textarea>
                         </div>
                     </div>
 
                     </fieldset>
 
                     <div class="flex justify-end space-x-3 mt-6">
-                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">{{ readOnlyMode ? 'Close' : 'Cancel' }}</button>
+                        <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">{{ readOnlyMode ? 'Close' : 'Cancel' }}</button>
                         <button v-if="!readOnlyMode" type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700" :disabled="form.processing || assetSelections.length === 0">
                             {{ isEditing ? 'Update Transfer' : 'Save Transfer' }}
                         </button>
@@ -632,10 +632,10 @@ const currentId = ref(null)
 
 const canPostTransfer = (status) => String(status || '').trim().toLowerCase() === 'for posting'
 const getStatusBadgeClass = (status) => {
-    if (status === 'Posted') return 'bg-emerald-100 text-emerald-800'
-    if (status === 'Received') return 'bg-blue-100 text-blue-800'
-    if (status === 'Declined') return 'bg-orange-100 text-orange-800'
-    return 'bg-amber-100 text-amber-800'
+    if (status === 'Posted') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+    if (status === 'Received') return 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300'
+    if (status === 'Declined') return 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300'
+    return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
 }
 
 const viewTransfer = async (item) => {

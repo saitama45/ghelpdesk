@@ -1,26 +1,26 @@
 <template>
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 relative w-full">
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 relative w-full dark:bg-slate-900 dark:border-slate-700">
         <!-- Loading Overlay -->
-        <div v-if="isLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg">
+        <div v-if="isLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 rounded-lg dark:bg-slate-900/80">
             <div class="flex flex-col items-center space-y-3">
                 <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p class="text-sm text-gray-600">Loading data...</p>
+                <p class="text-sm text-gray-600 dark:text-gray-300">Loading data...</p>
             </div>
         </div>
         <!-- Header with Search and Actions -->
-        <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50 dark:bg-slate-800/70 dark:border-slate-700">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div class="flex items-center space-x-4">
                     <div>
-                        <h3 class="text-lg font-semibold text-gray-900">{{ title }}</h3>
-                        <p v-if="subtitle" class="text-sm text-gray-600">{{ subtitle }}</p>
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ title }}</h3>
+                        <p v-if="subtitle" class="text-sm text-gray-600 dark:text-gray-300">{{ subtitle }}</p>
                     </div>
                 </div>
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <!-- Search Box -->
                     <div v-if="showSearch" class="relative w-full sm:min-w-64">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg class="h-4 w-4 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
@@ -29,10 +29,10 @@
                             @input="$emit('update:search', $event.target.value)"
                             type="text"
                             :placeholder="searchPlaceholder"
-                            class="block w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            class="block w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
                         />
                         <div v-if="isLoading" class="absolute inset-y-0 right-0 pr-3 flex items-center">
-                            <svg class="animate-spin h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24">
+                            <svg class="animate-spin h-4 w-4 text-gray-400 dark:text-gray-400" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
@@ -47,36 +47,36 @@
         </div>
 
         <!-- Optional Filters Row -->
-        <div v-if="$slots.filters" class="px-4 sm:px-6 py-3 border-b border-gray-200 bg-gray-50/60">
+        <div v-if="$slots.filters" class="px-4 sm:px-6 py-3 border-b border-gray-200 bg-gray-50/60 dark:bg-slate-900/60 dark:border-slate-700">
             <slot name="filters"></slot>
         </div>
 
         <!-- Table Content -->
         <div class="-mx-0" :class="{ 'overflow-x-auto': !freezeHeader }">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50" :class="{ 'sticky top-0 z-20 shadow-sm': freezeHeader }">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+                <thead class="bg-gray-50 dark:bg-slate-800/80" :class="{ 'sticky top-0 z-20 shadow-sm': freezeHeader }">
                     <slot name="header"></slot>
                 </thead>
-                <tbody class="divide-y divide-gray-200">
+                <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
                     <slot name="body" :data="data" :isLoading="isLoading"></slot>
                 </tbody>
             </table>
             
             <!-- Empty State -->
             <div v-if="!isLoading && data.length === 0" class="text-center py-12 px-4">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <h3 class="mt-2 text-sm font-medium text-gray-900">No records found</h3>
-                <p class="mt-1 text-sm text-gray-500">{{ emptyMessage }}</p>
+                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No records found</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">{{ emptyMessage }}</p>
             </div>
         </div>
 
         <!-- Pagination Footer -->
-        <div class="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div class="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50 dark:bg-slate-800/70 dark:border-slate-700">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <!-- Records Info -->
-                <div class="flex items-center justify-center md:justify-start text-sm text-gray-700 font-medium">
+                <div class="flex items-center justify-center md:justify-start text-sm text-gray-700 font-medium dark:text-gray-300">
                     <span>{{ showingText }}</span>
                 </div>
 
@@ -84,11 +84,11 @@
                 <div class="flex flex-col sm:flex-row items-center justify-center gap-8">
                     <!-- Per Page Selector -->
                     <div class="flex items-center space-x-2 text-sm">
-                        <span class="text-gray-700 font-medium">Show</span>
+                        <span class="text-gray-700 font-medium dark:text-gray-300">Show</span>
                         <select
                             :value="perPage"
                             @change="changePerPage(parseInt($event.target.value))"
-                            class="border border-gray-300 rounded-lg pl-3 pr-10 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm transition-all"
+                            class="border border-gray-300 rounded-lg pl-3 pr-10 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 shadow-sm transition-all dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700"
                         >
                             <option v-if="![10, 15, 20, 25, 50, 100].includes(perPage)" :value="perPage">{{ perPage }}</option>
                             <option value="10">10</option>
@@ -98,7 +98,7 @@
                             <option value="50">50</option>
                             <option value="100">100</option>
                         </select>
-                        <span class="text-gray-700 font-medium whitespace-nowrap">per page</span>
+                        <span class="text-gray-700 font-medium whitespace-nowrap dark:text-gray-300">per page</span>
                     </div>
 
                     <!-- Page Navigation -->
@@ -107,7 +107,7 @@
                         <button
                             @click="goToPage(currentPage - 1)"
                             :disabled="currentPage <= 1"
-                            class="px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                            class="px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                         >
                             Prev
                         </button>
@@ -122,12 +122,12 @@
                                         'px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm border rounded-md transition-colors min-w-[32px]',
                                         page === currentPage
                                             ? 'bg-blue-600 text-white border-blue-600'
-                                            : 'border-gray-300 hover:bg-gray-50'
+                                            : 'border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
                                     ]"
                                 >
                                     {{ page }}
                                 </button>
-                                <span v-else class="px-1 text-sm text-gray-500">...</span>
+                                <span v-else class="px-1 text-sm text-gray-500 dark:text-gray-300">...</span>
                             </template>
                         </div>
 
@@ -135,7 +135,7 @@
                         <button
                             @click="goToPage(currentPage + 1)"
                             :disabled="currentPage >= lastPage"
-                            class="px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                            class="px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                         >
                             Next
                         </button>

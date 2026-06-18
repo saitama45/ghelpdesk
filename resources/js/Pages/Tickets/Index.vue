@@ -1091,11 +1091,11 @@ const getPriorityLabel = (priority) => {
 const getPriorityColor = (priority) => {
     const p = String(priority || '').toLowerCase();
     switch (p) {
-        case 'urgent': return 'border-red-500 text-black bg-white';
-        case 'high': return 'border-orange-400 text-black bg-white';
-        case 'medium': return 'border-yellow-400 text-black bg-white';
-        case 'low': return 'border-green-500 text-black bg-white';
-        default: return 'border-slate-300 text-black bg-white';
+        case 'urgent': return 'border-red-500 text-black bg-white dark:bg-slate-900 dark:text-red-100';
+        case 'high': return 'border-orange-400 text-black bg-white dark:bg-slate-900 dark:text-orange-100';
+        case 'medium': return 'border-yellow-400 text-black bg-white dark:bg-slate-900 dark:text-yellow-100';
+        case 'low': return 'border-green-500 text-black bg-white dark:bg-slate-900 dark:text-green-100';
+        default: return 'border-slate-300 text-black bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
     }
 };
 
@@ -1105,14 +1105,14 @@ const getPriorityBorder = (priority) => {
 
 const getStatusColor = (status) => {
     switch (status) {
-        case 'open': return 'border-blue-500 text-black bg-white';
-        case 'for_schedule': return 'border-teal-500 text-black bg-white';
-        case 'in_progress': return 'border-violet-500 text-black bg-white';
-        case 'resolved': return 'border-green-500 text-black bg-white';
-        case 'closed': return 'border-slate-400 text-black bg-white';
-        case 'waiting_service_provider': return 'border-orange-400 text-black bg-white';
-        case 'waiting_client_feedback': return 'border-sky-500 text-black bg-white';
-        default: return 'border-slate-300 text-black bg-white';
+        case 'open': return 'border-blue-500 text-black bg-white dark:bg-slate-900 dark:text-blue-100';
+        case 'for_schedule': return 'border-teal-500 text-black bg-white dark:bg-slate-900 dark:text-teal-100';
+        case 'in_progress': return 'border-violet-500 text-black bg-white dark:bg-slate-900 dark:text-violet-100';
+        case 'resolved': return 'border-green-500 text-black bg-white dark:bg-slate-900 dark:text-green-100';
+        case 'closed': return 'border-slate-400 text-black bg-white dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100';
+        case 'waiting_service_provider': return 'border-orange-400 text-black bg-white dark:bg-slate-900 dark:text-orange-100';
+        case 'waiting_client_feedback': return 'border-sky-500 text-black bg-white dark:bg-slate-900 dark:text-sky-100';
+        default: return 'border-slate-300 text-black bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
     }
 };
 
@@ -1126,17 +1126,17 @@ const getStatusLabel = (status) => {
 };
 
 const getSlaRowClass = (ticket) => {
-    if (!ticket.sla_metric) return 'border-l-transparent hover:bg-slate-50';
+    if (!ticket.sla_metric) return 'border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/70';
     
     const isBreached = ticket.sla_metric.is_response_breached || ticket.sla_metric.is_resolution_breached;
     const isAllMet = ticket.sla_metric.first_response_at && ticket.sla_metric.resolved_at;
     
-    if (isBreached) return 'border-l-transparent hover:bg-slate-50';
-    if (isAllMet) return 'border-l-transparent hover:bg-slate-50';
+    if (isBreached) return 'border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/70';
+    if (isAllMet) return 'border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/70';
 
     const priority = ticket.item?.priority?.toLowerCase() || ticket.priority?.toLowerCase();
 
-    return getPriorityBorder(priority) + ' hover:bg-slate-50';
+    return getPriorityBorder(priority) + ' hover:bg-slate-50 dark:hover:bg-slate-800/70';
 };
 
 const formatItemName = (item) => {
@@ -1471,7 +1471,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'No Target',
-            toneClass: 'border-gray-300 bg-white text-black',
+            toneClass: 'border-gray-300 bg-white text-black dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100',
             dotClass: 'bg-gray-300',
         };
     }
@@ -1480,7 +1480,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'Breached',
-            toneClass: 'border-red-500 bg-white text-black',
+            toneClass: 'border-red-500 bg-white text-black dark:bg-slate-900 dark:text-red-100',
             dotClass: 'bg-red-500',
         };
     }
@@ -1489,7 +1489,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'Met',
-            toneClass: 'border-emerald-500 bg-white text-black',
+            toneClass: 'border-emerald-500 bg-white text-black dark:bg-slate-900 dark:text-emerald-100',
             dotClass: 'bg-emerald-500',
         };
     }
@@ -1498,7 +1498,7 @@ const getSlaState = (ticket, type) => {
         return {
             label: isResponse ? 'Response' : 'Resolution',
             value: 'Due Soon',
-            toneClass: 'border-amber-500 bg-white text-black',
+            toneClass: 'border-amber-500 bg-white text-black dark:bg-slate-900 dark:text-amber-100',
             dotClass: 'bg-amber-500',
         };
     }
@@ -1506,7 +1506,7 @@ const getSlaState = (ticket, type) => {
     return {
         label: isResponse ? 'Response' : 'Resolution',
         value: 'Pending',
-        toneClass: 'border-blue-500 bg-white text-black',
+        toneClass: 'border-blue-500 bg-white text-black dark:bg-slate-900 dark:text-blue-100',
         dotClass: 'bg-blue-500',
     };
 };
@@ -1704,11 +1704,11 @@ const requesterTabs = computed(() => {
             </section>
 
             <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
-                <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85">
+                <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/30 dark:supports-[backdrop-filter]:bg-slate-900/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
                         <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-7">
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Status</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Status</label>
                                 <MultiAutocomplete
                                     :model-value="filterStatus"
                                     :options="statusOptions"
@@ -1721,11 +1721,11 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Ticket Type</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Ticket Type</label>
                                 <select
                                     v-model="filterTicketScope"
                                     @change="handleTicketScopeChange"
-                                    class="h-[38px] rounded-lg border-slate-300 text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    class="h-[38px] rounded-lg border-slate-300 bg-white text-sm font-semibold text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                                 >
                                     <option v-for="option in ticketScopeOptions" :key="option.value" :value="option.value">
                                         {{ option.label }}
@@ -1734,7 +1734,7 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div v-if="hierarchicalOptions.length > 0" class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Department</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Department</label>
                                 <HierarchySelector
                                     v-model="filterNodeId"
                                     :nodes="hierarchicalOptions"
@@ -1744,7 +1744,7 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Assignee</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Assignee</label>
                                 <MultiAutocomplete
                                     :model-value="filterAssignee"
                                     :options="assigneeOptions"
@@ -1757,7 +1757,7 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Location</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Location</label>
                                 <MultiAutocomplete
                                     :model-value="filterStore"
                                     :options="storesWithLabel"
@@ -1770,22 +1770,22 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">From</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">From</label>
                                 <input
                                     v-model="filterStartDate"
                                     type="date"
                                     @change="applyFilter"
-                                    class="h-[38px] rounded-lg border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    class="h-[38px] rounded-lg border-slate-300 bg-white text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                                 >
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">To</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">To</label>
                                 <input
                                     v-model="filterEndDate"
                                     type="date"
                                     @change="applyFilter"
-                                    class="h-[38px] rounded-lg border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                    class="h-[38px] rounded-lg border-slate-300 bg-white text-sm text-slate-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                                 >
                             </div>
                         </div>
@@ -1793,7 +1793,7 @@ const requesterTabs = computed(() => {
                         <div class="flex flex-wrap items-center gap-2 xl:justify-end">
                             <button
                                 @click="clearFilters"
-                                class="flex-1 sm:flex-none inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
+                                class="flex-1 sm:flex-none inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
                             >
                                 Reset
                             </button>
@@ -1811,23 +1811,23 @@ const requesterTabs = computed(() => {
                         </div>
                     </div>
 
-                    <div class="mt-2 sm:mt-4 flex flex-col gap-2 sm:gap-3 border-t border-slate-100 pt-2 sm:pt-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="mt-2 sm:mt-4 flex flex-col gap-2 sm:gap-3 border-t border-slate-100 pt-2 sm:pt-4 lg:flex-row lg:items-center lg:justify-between dark:border-slate-800">
                         <div class="flex flex-wrap gap-1.5 sm:gap-2">
                             <span
                                 v-if="!hasActiveFilters"
-                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-slate-600"
+                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                             >
                                 No filters
                             </span>
                             <span
                                 v-for="badge in activeFilterBadges"
                                 :key="badge"
-                                class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-blue-700"
+                                class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/15 dark:text-blue-200"
                             >
                                 {{ badge }}
                             </span>
                         </div>
-                        <div class="hidden sm:block text-xs font-medium text-slate-500">
+                        <div class="hidden sm:block text-xs font-medium text-slate-500 dark:text-slate-300">
                             Filters apply without changing existing ticket logic or workflow behavior.
                         </div>
                     </div>
@@ -1880,7 +1880,7 @@ const requesterTabs = computed(() => {
                                     <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Assignee</label>
                                     <select
                                         v-model="bulkForm.assignee_id"
-                                        class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                        class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                     >
                                         <option value="">-- Unchanged --</option>
                                         <option v-for="p in staff" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -1891,7 +1891,7 @@ const requesterTabs = computed(() => {
                                     <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Status</label>
                                     <select
                                         v-model="bulkForm.status"
-                                        class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 capitalize"
+                                        class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 capitalize dark:border-gray-600"
                                     >
                                         <option value="">-- Unchanged --</option>
                                         <option v-for="s in bulkStatuses" :key="s" :value="s">{{ getStatusLabel(s) }}</option>
@@ -1903,7 +1903,7 @@ const requesterTabs = computed(() => {
                                 <button
                                     v-if="selectedIds.length > 0 && hasPermission('tickets.edit')"
                                     @click="openBulkResponseModal"
-                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:bg-gray-800"
                                 >
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -1913,7 +1913,7 @@ const requesterTabs = computed(() => {
                                 <button
                                     v-if="canCreateChildTickets && hasPermission('tickets.edit')"
                                     @click="openBulkChildModal"
-                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50 dark:bg-gray-800"
                                 >
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -1923,7 +1923,7 @@ const requesterTabs = computed(() => {
                                 <button
                                     v-if="selectedIds.length === 1 && hasPermission('tickets.edit')"
                                     @click="openSplitModal"
-                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-50 dark:bg-gray-800"
                                 >
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
@@ -1933,7 +1933,7 @@ const requesterTabs = computed(() => {
                                 <button
                                     v-if="selectedIds.length > 1 && hasPermission('tickets.edit')"
                                     @click="openMergeModal"
-                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 transition-colors hover:bg-violet-50 dark:bg-gray-800"
                                 >
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -1944,7 +1944,7 @@ const requesterTabs = computed(() => {
                                     v-if="hasPermission('tickets.delete')"
                                     @click="submitBulkArchive"
                                     :disabled="isBulkArchiving"
-                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
+                                    class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50 dark:bg-gray-800"
                                 >
                                     <svg v-if="isBulkArchiving" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -1957,7 +1957,7 @@ const requesterTabs = computed(() => {
                                 </button>
                                 <button
                                     @click="selectedIds = []"
-                                    class="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                                    class="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:bg-gray-800"
                                 >
                                     Clear
                                 </button>
@@ -2001,7 +2001,7 @@ const requesterTabs = computed(() => {
                     <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
                         <template #trigger>
                             <button
-                                class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                                class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                                 title="Customize Columns"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2011,14 +2011,14 @@ const requesterTabs = computed(() => {
                             </button>
                         </template>
                         <template #content>
-                            <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                            <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 dark:text-gray-400 dark:border-gray-700">
                                 Visible Columns
                             </div>
                             <div class="p-2 space-y-1">
                                 <label
                                     v-for="col in tableColumns"
                                     :key="col.key"
-                                    class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                                    class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer dark:hover:bg-gray-700"
                                     :class="col.locked ? 'opacity-50 cursor-not-allowed' : ''"
                                     @click.stop
                                 >
@@ -2027,9 +2027,9 @@ const requesterTabs = computed(() => {
                                         :checked="col.visible"
                                         :disabled="col.locked"
                                         @change="toggleColumn(col)"
-                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
+                                        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2 dark:border-gray-600"
                                     >
-                                    <span class="text-sm font-semibold text-gray-700">{{ col.label }}</span>
+                                    <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ col.label }}</span>
                                 </label>
                             </div>
                         </template>
@@ -2054,19 +2054,19 @@ const requesterTabs = computed(() => {
                                 type="checkbox"
                                 :checked="allSelected"
                                 @change="toggleAll"
-                                class="cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                class="cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
                             >
                         </th>
-                        <th v-if="isColumnVisible('ticket')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
-                        <th v-if="isColumnVisible('assignee')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Assignee</th>
-                        <th v-if="isColumnVisible('queue_detail')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Location / Item</th>
-                        <th v-if="isColumnVisible('sla_health')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Health</th>
-                        <th v-if="isColumnVisible('created')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Created</th>
-                        <th v-if="isColumnVisible('sla_timer')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">SLA Timer</th>
-                        <th v-if="isColumnVisible('responded_time')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Responded Time</th>
-                        <th v-if="isColumnVisible('resolved_date')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Resolved Date</th>
-                        <th v-if="isColumnVisible('feedback')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Feedback</th>
-                        <th v-if="isColumnVisible('rating')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Rating</th>
+                        <th v-if="isColumnVisible('ticket')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Ticket</th>
+                        <th v-if="isColumnVisible('assignee')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Assignee</th>
+                        <th v-if="isColumnVisible('queue_detail')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Location / Item</th>
+                        <th v-if="isColumnVisible('sla_health')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">SLA Health</th>
+                        <th v-if="isColumnVisible('created')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Created</th>
+                        <th v-if="isColumnVisible('sla_timer')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">SLA Timer</th>
+                        <th v-if="isColumnVisible('responded_time')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Responded Time</th>
+                        <th v-if="isColumnVisible('resolved_date')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Resolved Date</th>
+                        <th v-if="isColumnVisible('feedback')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Feedback</th>
+                        <th v-if="isColumnVisible('rating')" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Rating</th>
                     </tr>
                 </template>
 
@@ -2089,13 +2089,13 @@ const requesterTabs = computed(() => {
                                 type="checkbox"
                                 :value="ticket.id"
                                 v-model="selectedIds"
-                                class="mt-1 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                class="mt-1 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
                             >
                         </td>
                         <td v-if="isColumnVisible('ticket')" class="px-4 py-5 align-top">
                             <div class="min-w-[240px] max-w-[360px] space-y-3">
                                 <div class="flex flex-wrap items-start gap-2">
-                                    <span class="inline-flex rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black tracking-wide text-black shadow-sm">
+                                    <span class="inline-flex rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black tracking-wide text-black shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                                         {{ ticket.ticket_key }}
                                     </span>
                                     <span v-if="ticket.parent_id" class="inline-flex rounded-full border border-indigo-300 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
@@ -2110,19 +2110,19 @@ const requesterTabs = computed(() => {
                                 </div>
 
                                 <div class="space-y-1.5">
-                                    <div class="break-words text-sm font-bold leading-5 text-black">
+                                    <div class="break-words text-sm font-bold leading-5 text-black dark:text-slate-100">
                                         {{ ticket.title }}
                                     </div>
                                 </div>
 
-                                <div v-if="ticket.parent" class="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
-                                    <div class="mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-700">Parent Ticket</div>
-                                    <div class="text-xs font-bold text-indigo-900">{{ ticket.parent.ticket_key }}</div>
-                                    <div class="mt-1 break-words text-xs leading-5 text-indigo-900">{{ ticket.parent.title }}</div>
+                                <div v-if="ticket.parent" class="rounded-xl border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-400/30 dark:bg-indigo-500/15">
+                                    <div class="mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200">Parent Ticket</div>
+                                    <div class="text-xs font-bold text-indigo-900 dark:text-indigo-100">{{ ticket.parent.ticket_key }}</div>
+                                    <div class="mt-1 break-words text-xs leading-5 text-indigo-900 dark:text-indigo-100">{{ ticket.parent.title }}</div>
                                 </div>
 
-                                <div @click.stop="openRequesterTicketsModal(ticket)" class="rounded-xl border border-slate-300 bg-white p-3 cursor-pointer hover:bg-slate-50 transition-colors" title="View Requester's Tickets">
-                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black flex justify-between items-center">
+                                <div @click.stop="openRequesterTicketsModal(ticket)" class="rounded-xl border border-slate-300 bg-white p-3 cursor-pointer hover:bg-slate-50 transition-colors dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" title="View Requester's Tickets">
+                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black flex justify-between items-center dark:text-slate-300">
                                         <span>Requester</span>
                                         <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                     </div>
@@ -2130,24 +2130,24 @@ const requesterTabs = computed(() => {
                                         <div v-if="ticket.reporter.profile_photo" class="h-7 w-7 overflow-hidden rounded-full border border-slate-200">
                                             <img :src="'/serve-storage/' + ticket.reporter.profile_photo" class="h-full w-full object-cover" :alt="ticket.reporter.name">
                                         </div>
-                                        <div v-else class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-black">
+                                        <div v-else class="flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-black dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
                                             {{ ticket.reporter.name.charAt(0) }}
                                         </div>
-                                        <span class="break-words font-semibold text-black">{{ ticket.reporter.name }}</span>
+                                        <span class="break-words font-semibold text-black dark:text-slate-100">{{ ticket.reporter.name }}</span>
                                     </div>
-                                    <div v-else class="break-words text-sm font-semibold text-black">{{ getReporterLabel(ticket) }}</div>
-                                    <div v-if="ticket.sender_email" class="mt-1 break-all text-[11px] text-black">{{ ticket.sender_email }}</div>
+                                    <div v-else class="break-words text-sm font-semibold text-black dark:text-slate-100">{{ getReporterLabel(ticket) }}</div>
+                                    <div v-if="ticket.sender_email" class="mt-1 break-all text-[11px] text-black dark:text-slate-300">{{ ticket.sender_email }}</div>
                                 </div>
 
-                                <div v-if="ticket.children?.length" class="rounded-xl border border-blue-300 bg-white p-3">
-                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black">Child Tickets</div>
+                                <div v-if="ticket.children?.length" class="rounded-xl border border-blue-300 bg-white p-3 dark:border-blue-400/30 dark:bg-slate-900">
+                                    <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black dark:text-slate-300">Child Tickets</div>
                                     <div class="space-y-2">
                                         <div v-for="child in ticket.children" :key="child.id" class="flex items-start justify-between gap-3 text-xs">
                                             <div class="min-w-0">
-                                                <div class="font-bold text-black">{{ child.ticket_key }}</div>
-                                                <div class="break-words text-black">{{ child.title }}</div>
+                                                <div class="font-bold text-black dark:text-slate-100">{{ child.ticket_key }}</div>
+                                                <div class="break-words text-black dark:text-slate-200">{{ child.title }}</div>
                                             </div>
-                                            <div class="shrink-0 text-right text-[11px] text-black">
+                                            <div class="shrink-0 text-right text-[11px] text-black dark:text-slate-300">
                                                 {{ child.assignee?.name || 'Unassigned' }}
                                             </div>
                                         </div>
@@ -2165,8 +2165,8 @@ const requesterTabs = computed(() => {
                                         {{ ticket.assignee.name.charAt(0) }}
                                     </div>
                                     <div>
-                                        <div class="font-semibold text-black">{{ ticket.assignee.name }}</div>
-                                        <div v-if="assigneeSectorLabel(ticket.assignee)" class="text-[10px] font-black text-slate-400">
+                                        <div class="font-semibold text-black dark:text-slate-100">{{ ticket.assignee.name }}</div>
+                                        <div v-if="assigneeSectorLabel(ticket.assignee)" class="text-[10px] font-black text-slate-400 dark:text-slate-300">
                                             {{ assigneeSectorLabel(ticket.assignee) }}
                                         </div>
                                     </div>
@@ -2175,11 +2175,11 @@ const requesterTabs = computed(() => {
                                     v-else-if="hasPermission('tickets.assign')"
                                     type="button"
                                     @click.stop="acceptTicket(ticket)"
-                                    class="inline-flex items-center rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-xs font-bold text-blue-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white focus:outline-none"
+                                    class="inline-flex items-center rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-xs font-bold text-blue-600 shadow-sm transition-all hover:bg-blue-600 hover:text-white focus:outline-none dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white"
                                 >
                                     Accept Ticket
                                 </button>
-                                <div v-else class="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black">
+                                <div v-else class="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-black dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                                     Unassigned
                                 </div>
                             </div>
@@ -2187,12 +2187,12 @@ const requesterTabs = computed(() => {
                         <td v-if="isColumnVisible('queue_detail')" class="px-4 py-5 align-top">
                             <div class="min-w-[180px] max-w-[240px] space-y-3 text-sm">
                                 <div>
-                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Store</div>
-                                    <div class="mt-1 break-words font-semibold text-black">{{ ticket.store ? ticket.store.name : '-' }}</div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-300">Store</div>
+                                    <div class="mt-1 break-words font-semibold text-black dark:text-slate-100">{{ ticket.store ? ticket.store.name : '-' }}</div>
                                 </div>
                                 <div>
-                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Item</div>
-                                    <div class="mt-1 break-words text-xs leading-5 text-black">
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-300">Item</div>
+                                    <div class="mt-1 break-words text-xs leading-5 text-black dark:text-slate-200">
                                         {{ formatItemName(ticket.item) }}
                                         <span v-if="isCctvTicket(ticket)"
                                               class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-100 align-middle">
@@ -2219,42 +2219,42 @@ const requesterTabs = computed(() => {
                                     </div>
                                 </div>
                             </div>
-                            <div v-else class="inline-flex rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-black">
+                            <div v-else class="inline-flex rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-black dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                                 No SLA target
                             </div>
                         </td>
-                        <td v-if="isColumnVisible('created')" class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('created')" class="px-4 py-5 align-top text-sm text-black dark:text-slate-200">
                             <div class="min-w-[132px]">
-                                <div class="font-medium text-black">{{ formatDate(ticket.created_at) }}</div>
+                                <div class="font-medium text-black dark:text-slate-100">{{ formatDate(ticket.created_at) }}</div>
                             </div>
                         </td>
-                        <td v-if="isColumnVisible('sla_timer')" class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('sla_timer')" class="px-4 py-5 align-top text-sm text-black dark:text-slate-200">
                             <div v-if="ticket.sla_metric" class="space-y-1 min-w-[140px]">
-                                <div v-if="ticket.sla_metric.response_target_at" class="whitespace-nowrap"><span class="font-bold text-gray-500 text-xs mr-1">Res:</span>{{ formatDate(ticket.sla_metric.response_target_at) }}</div>
-                                <div v-if="ticket.sla_metric.resolution_target_at" class="whitespace-nowrap"><span class="font-bold text-gray-500 text-xs mr-1">Sol:</span>{{ formatDate(ticket.sla_metric.resolution_target_at) }}</div>
+                                <div v-if="ticket.sla_metric.response_target_at" class="whitespace-nowrap"><span class="font-bold text-gray-500 text-xs mr-1 dark:text-gray-300">Res:</span>{{ formatDate(ticket.sla_metric.response_target_at) }}</div>
+                                <div v-if="ticket.sla_metric.resolution_target_at" class="whitespace-nowrap"><span class="font-bold text-gray-500 text-xs mr-1 dark:text-gray-300">Sol:</span>{{ formatDate(ticket.sla_metric.resolution_target_at) }}</div>
                             </div>
-                            <span v-else class="text-gray-400 italic">No Target</span>
+                            <span v-else class="text-gray-400 italic dark:text-gray-400">No Target</span>
                         </td>
-                        <td v-if="isColumnVisible('responded_time')" class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('responded_time')" class="px-4 py-5 align-top text-sm text-black dark:text-slate-200">
                             <span v-if="ticket.sla_metric?.first_response_at" class="whitespace-nowrap">{{ formatDate(ticket.sla_metric.first_response_at) }}</span>
-                            <span v-else class="text-gray-400 italic">Not Responded</span>
+                            <span v-else class="text-gray-400 italic dark:text-gray-400">Not Responded</span>
                         </td>
-                        <td v-if="isColumnVisible('resolved_date')" class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('resolved_date')" class="px-4 py-5 align-top text-sm text-black dark:text-slate-200">
                             <span v-if="ticket.sla_metric?.resolved_at" class="whitespace-nowrap">{{ formatDate(ticket.sla_metric.resolved_at) }}</span>
                             <span v-else-if="ticket.status === 'closed'" class="whitespace-nowrap">{{ formatDate(ticket.updated_at) }}</span>
-                            <span v-else class="text-gray-400 italic">Not Resolved</span>
+                            <span v-else class="text-gray-400 italic dark:text-gray-400">Not Resolved</span>
                         </td>
-                        <td v-if="isColumnVisible('feedback')" class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('feedback')" class="px-4 py-5 align-top text-sm text-black dark:text-slate-200">
                             <div v-if="ticket.survey?.feedback" class="min-w-[200px] max-w-[400px] whitespace-normal break-words">
                                 {{ ticket.survey.feedback }}
                             </div>
-                            <span v-else class="text-gray-400 italic">None</span>
+                            <span v-else class="text-gray-400 italic dark:text-gray-400">None</span>
                         </td>
-                        <td v-if="isColumnVisible('rating')" class="px-4 py-5 align-top text-sm text-black">
+                        <td v-if="isColumnVisible('rating')" class="px-4 py-5 align-top text-sm text-black dark:text-slate-200">
                             <div v-if="ticket.survey?.rating" class="flex gap-1">
                                 <span v-for="i in 4" :key="i" class="text-[10px]" :class="i <= ticket.survey.rating ? 'text-yellow-400' : 'text-gray-200'">⭐</span>
                             </div>
-                            <span v-else class="text-gray-400 italic">None</span>
+                            <span v-else class="text-gray-400 italic dark:text-gray-400">None</span>
                         </td>
                     </tr>
                 </template>
@@ -2265,13 +2265,13 @@ const requesterTabs = computed(() => {
         <div v-if="showCreateModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showCreateModal = false"></div>
-                <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-100">
+                <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">Create New Ticket</h3>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Create New Ticket</h3>
                         
                         <div class="flex flex-col items-end">
-                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
-                            <select v-model="createForm.status" required class="bg-gray-50 border-none rounded-lg text-xs font-bold capitalize focus:ring-0 cursor-pointer shadow-sm" :class="getStatusColor(createForm.status)">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Status</label>
+                            <select v-model="createForm.status" required class="bg-gray-50 border-none rounded-lg text-xs font-bold capitalize focus:ring-0 cursor-pointer shadow-sm dark:bg-gray-900/50" :class="getStatusColor(createForm.status)">
                                 <option v-for="s in statuses" :key="s" :value="s">{{ getStatusLabel(s) }}</option>
                             </select>
                          </div>
@@ -2280,28 +2280,28 @@ const requesterTabs = computed(() => {
                     <form @submit.prevent="createTicket" class="space-y-5">
                         
                         <!-- Requester Configuration -->
-                        <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                        <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4 dark:bg-gray-900/50 dark:border-gray-700">
                             <label v-if="!isUserRole" class="flex items-center space-x-3 cursor-pointer">
                                 <div class="relative">
                                     <input type="checkbox" v-model="createForm.is_self_requester" class="sr-only peer">
-                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
                                 </div>
-                                <span class="text-sm font-bold text-gray-700">I am the requester</span>
+                                <span class="text-sm font-bold text-gray-700 dark:text-gray-300">I am the requester</span>
                             </label>
 
-                            <div v-if="!createForm.is_self_requester" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-200">
+                            <div v-if="!createForm.is_self_requester" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-gray-700">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
-                                    <input v-model="createForm.sender_name" type="text" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Requester Name</label>
+                                    <input v-model="createForm.sender_name" type="text" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
-                                    <input v-model="createForm.sender_email" type="email" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Requester Email</label>
+                                    <input v-model="createForm.sender_email" type="email" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                             </div>
 
-                            <div class="pt-2 border-t border-gray-200">
-                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Department</label>
+                            <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Department</label>
                                 <input
                                     v-model="createForm.department"
                                     type="text"
@@ -2309,7 +2309,7 @@ const requesterTabs = computed(() => {
                                     maxlength="255"
                                     :readonly="createForm.is_self_requester"
                                     :class="createForm.is_self_requester ? 'bg-gray-100 cursor-not-allowed' : ''"
-                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                                     placeholder="Department"
                                 >
                                 <datalist id="ticket-departments-list">
@@ -2321,23 +2321,23 @@ const requesterTabs = computed(() => {
                                 <label class="flex items-center space-x-3 cursor-pointer">
                                     <div class="relative">
                                         <input type="checkbox" v-model="createForm.notify_requester" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
                                     </div>
-                                    <span class="text-xs font-medium text-gray-600">Send email notification to requester</span>
+                                    <span class="text-xs font-medium text-gray-600 dark:text-gray-300">Send email notification to requester</span>
                                 </label>
                             </div>
                         </div>
 
                         <div v-if="availableCompanies.length > 0">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Company</label>
-                            <select v-model="createForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Company</label>
+                            <select v-model="createForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 <option value="">Select Company</option>
                                 <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
                             </select>
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store</label>
                             <Autocomplete
                                 v-model="createForm.store_id"
                                 :options="storesWithLabel"
@@ -2348,7 +2348,7 @@ const requesterTabs = computed(() => {
                         </div>
                         
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item</label>
                             <Autocomplete
                                 v-model="createForm.item_id"
                                 :options="items"
@@ -2360,7 +2360,7 @@ const requesterTabs = computed(() => {
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Vendor Escalation</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Vendor Escalation</label>
                             <Autocomplete
                                 v-model="createForm.vendor_id"
                                 :options="vendors"
@@ -2372,32 +2372,32 @@ const requesterTabs = computed(() => {
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Title</label>
-                            <input v-model="createForm.title" type="text" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Title</label>
+                            <input v-model="createForm.title" type="text" maxlength="255" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Description</label>
-                            <textarea v-model="createForm.description" rows="4" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Description</label>
+                            <textarea v-model="createForm.description" rows="4" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                         </div>
-                        <div v-if="createForm.item_id" class="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
+                        <div v-if="createForm.item_id" class="p-3 bg-gray-50 rounded-lg border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Priority</label>
                             <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(createForm.priority)">
                                 {{ getPriorityLabel(createForm.priority) }}
                             </span>
                         </div>
 
                         <div v-if="hasPermission('tickets.assign')">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assign To</label>
-                            <select v-model="createForm.assignee_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Assign To</label>
+                            <select v-model="createForm.assignee_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 <option value="">Unassigned</option>
                                 <option v-for="person in staff" :key="person.id" :value="person.id">{{ person.name }}</option>
                             </select>
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Attachments</label>
-                            <input ref="fileInput" type="file" multiple @change="handleFileSelect" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            <div v-if="createForm.attachments.length > 0" class="mt-2 text-xs text-gray-600">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Attachments</label>
+                            <input ref="fileInput" type="file" multiple @change="handleFileSelect" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
+                            <div v-if="createForm.attachments.length > 0" class="mt-2 text-xs text-gray-600 dark:text-gray-300">
                                 <p class="font-medium mb-1">Selected files:</p>
                                 <div class="space-y-1">
                                     <div v-for="(file, index) in createForm.attachments" :key="index">
@@ -2407,7 +2407,7 @@ const requesterTabs = computed(() => {
                             </div>
                         </div>
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-                            <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="isSubmitting" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all">Create Ticket</button>
                         </div>
                     </form>
@@ -2419,31 +2419,31 @@ const requesterTabs = computed(() => {
         <div v-if="showAcceptModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showAcceptModal = false"></div>
-                <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 relative border border-gray-100">
+                <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 relative border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold text-gray-900">Accept Ticket</h3>
-                        <button @click="showAcceptModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Accept Ticket</h3>
+                        <button @click="showAcceptModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
                         </button>
                     </div>
 
-                    <p v-if="acceptingTicket" class="text-xs text-gray-500 mb-5 bg-gray-50 rounded-lg p-3 border border-gray-100 truncate">
-                        <span class="font-black text-gray-700">{{ acceptingTicket.ticket_key }}</span>
+                    <p v-if="acceptingTicket" class="text-xs text-gray-500 mb-5 bg-gray-50 rounded-lg p-3 border border-gray-100 truncate dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
+                        <span class="font-black text-gray-700 dark:text-gray-300">{{ acceptingTicket.ticket_key }}</span>
                         — {{ acceptingTicket.title }}
                     </p>
 
                     <div class="space-y-4">
                         <div v-if="availableCompanies.length > 0">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Company <span class="text-red-500">*</span></label>
-                            <select v-model="acceptForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Company <span class="text-red-500">*</span></label>
+                            <select v-model="acceptForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 <option value="">Select Company</option>
                                 <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store <span class="text-red-500">*</span></label>
                             <Autocomplete
                                 v-model="acceptForm.store_id"
                                 :options="storesWithLabel"
@@ -2453,7 +2453,7 @@ const requesterTabs = computed(() => {
                             />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item <span class="text-red-500">*</span></label>
                             <Autocomplete
                                 v-model="acceptForm.item_id"
                                 :options="items"
@@ -2464,13 +2464,13 @@ const requesterTabs = computed(() => {
                             />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Department</label>
                             <input
                                 v-model="acceptForm.department"
                                 type="text"
                                 list="accept-ticket-departments-list"
                                 maxlength="255"
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                                 placeholder="Department"
                             >
                             <datalist id="accept-ticket-departments-list">
@@ -2480,7 +2480,7 @@ const requesterTabs = computed(() => {
                     </div>
 
                     <div class="flex justify-end space-x-3 pt-5 border-t mt-5">
-                        <button type="button" @click="showAcceptModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                        <button type="button" @click="showAcceptModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                         <button
                             type="button"
                             @click="submitAcceptTicket"
@@ -2498,15 +2498,15 @@ const requesterTabs = computed(() => {
         <div v-if="showBulkResponseModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-8">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeBulkResponseModal"></div>
-                <div class="relative flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
+                <div class="relative flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-gray-100 bg-white p-6 shadow-2xl dark:bg-gray-800 dark:border-gray-700">
                     <div class="mb-6 flex items-start justify-between gap-4">
                         <div>
-                            <h3 class="text-xl font-bold uppercase tracking-widest text-gray-900">Bulk Response</h3>
-                            <p class="mt-1 text-sm text-gray-600">
+                            <h3 class="text-xl font-bold uppercase tracking-widest text-gray-900 dark:text-gray-100">Bulk Response</h3>
+                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
                                 Send one public response to {{ selectedIds.length }} selected ticket(s).
                             </p>
                         </div>
-                        <button @click="closeBulkResponseModal" class="text-gray-400 transition-colors hover:text-gray-600">
+                        <button @click="closeBulkResponseModal" class="text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
@@ -2519,26 +2519,26 @@ const requesterTabs = computed(() => {
                         </div>
 
                         <div class="min-h-0 flex-1 overflow-y-auto pr-1">
-                            <label class="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Response</label>
+                            <label class="mb-2 block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500 dark:text-gray-300">Response</label>
                             <textarea
                                 v-model="bulkResponseForm.comment_text"
                                 rows="8"
-                                class="block w-full resize-y rounded-xl border-gray-300 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                class="block w-full resize-y rounded-xl border-gray-300 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:text-gray-300 dark:border-gray-600"
                                 placeholder="Write your response..."
                                 @paste="handleBulkResponsePaste"
                             ></textarea>
 
                             <div v-if="bulkResponseForm.attachments.length > 0" class="mt-4 space-y-2">
-                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">Attachments</div>
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500 dark:text-gray-300">Attachments</div>
                                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div
                                         v-for="(file, index) in bulkResponseForm.attachments"
                                         :key="`${file.name}-${file.size}-${index}`"
-                                        class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+                                        class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:bg-gray-900/50 dark:border-gray-700"
                                     >
                                         <div class="min-w-0">
-                                            <div class="truncate text-sm font-semibold text-gray-800">{{ file.name }}</div>
-                                            <div class="text-xs text-gray-500">{{ formatFileSize(file.size) }}</div>
+                                            <div class="truncate text-sm font-semibold text-gray-800 dark:text-gray-200">{{ file.name }}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-300">{{ formatFileSize(file.size) }}</div>
                                         </div>
                                         <button type="button" @click="removeBulkResponseAttachment(index)" class="shrink-0 rounded-full bg-red-500 p-1 text-white shadow-sm transition-colors hover:bg-red-600">
                                             <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2571,10 +2571,10 @@ const requesterTabs = computed(() => {
                                         </svg>
                                     </button>
 
-                                    <div v-if="showBulkCannedMessages" class="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
-                                        <div class="flex items-center justify-between border-b bg-gray-50 p-2">
-                                            <span class="text-xs font-bold uppercase tracking-wider text-gray-700">Canned Messages</span>
-                                            <button type="button" @click="showBulkCannedMessages = false" class="text-gray-400 hover:text-gray-600">
+                                    <div v-if="showBulkCannedMessages" class="absolute bottom-full left-0 z-50 mb-2 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:bg-gray-800 dark:border-gray-700">
+                                        <div class="flex items-center justify-between border-b bg-gray-50 p-2 dark:bg-gray-900/50">
+                                            <span class="text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">Canned Messages</span>
+                                            <button type="button" @click="showBulkCannedMessages = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                                 </svg>
@@ -2590,10 +2590,10 @@ const requesterTabs = computed(() => {
                                                     class="w-full border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-blue-50"
                                                 >
                                                     <div class="mb-1 text-xs font-bold text-blue-700">{{ message.title }}</div>
-                                                    <div class="line-clamp-2 text-[10px] text-gray-600">{{ message.content }}</div>
+                                                    <div class="line-clamp-2 text-[10px] text-gray-600 dark:text-gray-300">{{ message.content }}</div>
                                                 </button>
                                             </template>
-                                            <div v-else class="px-4 py-8 text-center text-xs italic text-gray-500">
+                                            <div v-else class="px-4 py-8 text-center text-xs italic text-gray-500 dark:text-gray-300">
                                                 No canned messages found.
                                             </div>
                                         </div>
@@ -2602,7 +2602,7 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
-                                <button type="button" @click="closeBulkResponseModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-200">
+                                <button type="button" @click="closeBulkResponseModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                     Cancel
                                 </button>
                                 <button
@@ -2627,40 +2627,40 @@ const requesterTabs = computed(() => {
         <div v-if="showBulkChildModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-8">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showBulkChildModal = false"></div>
-                <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 relative border border-gray-100 max-h-[90vh] flex flex-col">
+                <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 relative border border-gray-100 max-h-[90vh] flex flex-col dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900 uppercase tracking-widest">Bulk Create Child Tickets</h3>
-                        <button @click="showBulkChildModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-xl font-bold text-gray-900 uppercase tracking-widest dark:text-gray-100">Bulk Create Child Tickets</h3>
+                        <button @click="showBulkChildModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
                         </button>
                     </div>
 
-                    <p class="text-sm text-gray-600 bg-teal-50 p-3 rounded-lg border border-teal-100 mb-6 shrink-0">
+                    <p class="text-sm text-gray-600 bg-teal-50 p-3 rounded-lg border border-teal-100 mb-6 shrink-0 dark:text-gray-300">
                         Set individual schedules for **{{ selectedIds.length }}** parent tickets. Child tickets will be created and both parent and child will be set to "For Schedule".
                     </p>
 
                     <form @submit.prevent="submitBulkChild" class="space-y-8 overflow-y-auto px-1 custom-scrollbar">
                         <div v-for="(ticketForm, index) in bulkChildForm.tickets" :key="ticketForm.parent_id" 
-                             class="p-5 border border-gray-200 rounded-xl space-y-5 bg-gray-50/50 hover:border-teal-200 transition-colors">
+                             class="p-5 border border-gray-200 rounded-xl space-y-5 bg-gray-50/50 hover:border-teal-200 transition-colors dark:border-gray-700">
                             
                             <!-- Header with Ticket Info -->
-                            <div class="flex justify-between items-center border-b border-gray-200 pb-3">
+                            <div class="flex justify-between items-center border-b border-gray-200 pb-3 dark:border-gray-700">
                                 <div class="flex items-center gap-3">
                                     <span class="px-2 py-1 bg-teal-600 text-white text-[10px] font-black rounded uppercase shadow-sm">{{ ticketForm.ticket_key }}</span>
-                                    <span class="text-sm font-bold text-gray-900 truncate max-w-[500px]">{{ ticketForm.title }}</span>
+                                    <span class="text-sm font-bold text-gray-900 truncate max-w-[500px] dark:text-gray-100">{{ ticketForm.title }}</span>
                                 </div>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Assigned User</label>
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 dark:text-gray-300">Assigned User</label>
                                     <Autocomplete v-model="bulkChildForm.tickets[index].user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." size="sm" />
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Schedule Status</label>
-                                    <select v-model="bulkChildForm.tickets[index].status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 dark:text-gray-300">Schedule Status</label>
+                                    <select v-model="bulkChildForm.tickets[index].status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-800 dark:border-gray-600">
                                         <option v-for="status in ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday']" :key="status" :value="status">{{ status }}</option>
                                     </select>
                                 </div>
@@ -2668,46 +2668,46 @@ const requesterTabs = computed(() => {
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Start Time</label>
-                                    <input v-model="bulkChildForm.tickets[index].start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 dark:text-gray-300">Start Time</label>
+                                    <input v-model="bulkChildForm.tickets[index].start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-800 dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">End Time</label>
-                                    <input v-model="bulkChildForm.tickets[index].end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 dark:text-gray-300">End Time</label>
+                                    <input v-model="bulkChildForm.tickets[index].end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-800 dark:border-gray-600">
                                 </div>
                             </div>
 
                             <!-- Additional Times (Collapsible or always visible) -->
-                            <div class="p-4 bg-white rounded-lg border border-gray-100 space-y-4 shadow-sm">
+                            <div class="p-4 bg-white rounded-lg border border-gray-100 space-y-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                                 <h4 class="text-[10px] font-black text-teal-600 uppercase tracking-widest">Additional Activity Windows</h4>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div class="space-y-2">
-                                        <label class="block text-[10px] font-bold text-gray-600 uppercase">Pickup Time</label>
+                                        <label class="block text-[10px] font-bold text-gray-600 uppercase dark:text-gray-300">Pickup Time</label>
                                         <div class="flex items-center space-x-2">
-                                            <input v-model="bulkChildForm.tickets[index].pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
-                                            <span class="text-gray-400">-</span>
-                                            <input v-model="bulkChildForm.tickets[index].pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
+                                            <input v-model="bulkChildForm.tickets[index].pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs dark:border-gray-700">
+                                            <span class="text-gray-400 dark:text-gray-400">-</span>
+                                            <input v-model="bulkChildForm.tickets[index].pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs dark:border-gray-700">
                                         </div>
                                     </div>
                                     <div class="space-y-2">
-                                        <label class="block text-[10px] font-bold text-gray-600 uppercase">Backlogs Time</label>
+                                        <label class="block text-[10px] font-bold text-gray-600 uppercase dark:text-gray-300">Backlogs Time</label>
                                         <div class="flex items-center space-x-2">
-                                            <input v-model="bulkChildForm.tickets[index].backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
-                                            <span class="text-gray-400">-</span>
-                                            <input v-model="bulkChildForm.tickets[index].backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs">
+                                            <input v-model="bulkChildForm.tickets[index].backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs dark:border-gray-700">
+                                            <span class="text-gray-400 dark:text-gray-400">-</span>
+                                            <input v-model="bulkChildForm.tickets[index].backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs dark:border-gray-700">
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div>
-                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">Remarks</label>
-                                <textarea v-model="bulkChildForm.tickets[index].remarks" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white" placeholder="Specific activity details for this child ticket..."></textarea>
+                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 dark:text-gray-300">Remarks</label>
+                                <textarea v-model="bulkChildForm.tickets[index].remarks" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-800 dark:border-gray-600" placeholder="Specific activity details for this child ticket..."></textarea>
                             </div>
                         </div>
 
-                        <div class="flex justify-end space-x-3 pt-6 border-t mt-8 sticky bottom-0 bg-white pb-2">
-                            <button type="button" @click="showBulkChildModal = false" class="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                        <div class="flex justify-end space-x-3 pt-6 border-t mt-8 sticky bottom-0 bg-white pb-2 dark:bg-gray-800">
+                            <button type="button" @click="showBulkChildModal = false" class="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="bulkChildForm.processing" class="px-8 py-2.5 bg-teal-600 text-white text-sm font-black rounded-lg hover:bg-teal-700 shadow-lg disabled:opacity-50 transition-all uppercase tracking-widest">
                                 Create {{ selectedIds.length }} Child Tickets
                             </button>
@@ -2721,10 +2721,10 @@ const requesterTabs = computed(() => {
         <div v-if="showSplitModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showSplitModal = false"></div>
-                <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative border border-gray-100">
+                <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">Split Ticket</h3>
-                        <button @click="showSplitModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Split Ticket</h3>
+                        <button @click="showSplitModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
@@ -2732,19 +2732,19 @@ const requesterTabs = computed(() => {
                     </div>
 
                     <form @submit.prevent="submitSplit" class="space-y-6">
-                        <p class="text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                        <p class="text-sm text-gray-600 bg-yellow-50 p-3 rounded-lg border border-yellow-100 dark:text-gray-300">
                             Splitting will update the original ticket's title and create new tickets for each additional concern listed below.
                         </p>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Original Ticket Concern (Current)</label>
-                            <input v-model="splitForm.original_title" type="text" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Original Ticket Concern (Current)</label>
+                            <input v-model="splitForm.original_title" type="text" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
 
                         <div class="space-y-4">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Concerns (New Tickets)</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Additional Concerns (New Tickets)</label>
                             <div v-for="(title, index) in splitForm.new_titles" :key="index" class="flex gap-2">
-                                <input v-model="splitForm.new_titles[index]" type="text" placeholder="Enter new ticket subject..." class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                <input v-model="splitForm.new_titles[index]" type="text" placeholder="Enter new ticket subject..." class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 <button type="button" @click="removeSplitConcern(index)" class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -2760,7 +2760,7 @@ const requesterTabs = computed(() => {
                         </div>
 
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-                            <button type="button" @click="showSplitModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="button" @click="showSplitModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="splitForm.processing" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all">
                                 Split into {{ splitForm.new_titles.length + 1 }} Tickets
                             </button>
@@ -2774,10 +2774,10 @@ const requesterTabs = computed(() => {
         <div v-if="showMergeModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showMergeModal = false"></div>
-                <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative border border-gray-100">
+                <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">Merge Tickets</h3>
-                        <button @click="showMergeModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Merge Tickets</h3>
+                        <button @click="showMergeModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
@@ -2785,26 +2785,26 @@ const requesterTabs = computed(() => {
                     </div>
 
                     <form @submit.prevent="submitMerge" class="space-y-6">
-                        <p class="text-sm text-gray-600 bg-purple-50 p-3 rounded-lg border border-purple-100">
+                        <p class="text-sm text-gray-600 bg-purple-50 p-3 rounded-lg border border-purple-100 dark:text-gray-300">
                             Select the **Parent Ticket** to retain. All other tickets will be closed and linked to the parent. Requesters will be notified.
                         </p>
 
                         <div class="space-y-3">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Select Parent Ticket</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Select Parent Ticket</label>
                             <div v-for="ticket in getSelectedTickets" :key="ticket.id" 
                                  class="flex items-center p-3 rounded-lg border cursor-pointer transition-all"
                                  :class="mergeForm.parent_id === ticket.id ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-gray-200 hover:border-gray-300'"
                                  @click="mergeForm.parent_id = ticket.id">
-                                <input type="radio" :value="ticket.id" v-model="mergeForm.parent_id" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer">
+                                <input type="radio" :value="ticket.id" v-model="mergeForm.parent_id" class="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer dark:border-gray-600">
                                 <div class="ml-3 flex-1">
                                     <div class="text-xs font-bold text-blue-600">{{ ticket.ticket_key }}</div>
-                                    <div class="text-sm font-semibold text-gray-900">{{ ticket.title }}</div>
+                                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ ticket.title }}</div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-                            <button type="button" @click="showMergeModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="button" @click="showMergeModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="mergeForm.processing" class="px-6 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 shadow-md disabled:opacity-50 transition-all">
                                 Merge {{ selectedIds.length }} Tickets
                             </button>
@@ -2818,13 +2818,13 @@ const requesterTabs = computed(() => {
         <div v-if="showRequesterModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeRequesterModal"></div>
-                <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 relative border border-gray-100 flex flex-col max-h-[90vh]">
+                <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 relative border border-gray-100 flex flex-col max-h-[90vh] dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6 pb-4 border-b">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-900">Tickets for {{ requesterModalData?.name }}</h3>
-                            <div class="text-sm text-gray-500">{{ requesterModalData?.email }}</div>
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Tickets for {{ requesterModalData?.name }}</h3>
+                            <div class="text-sm text-gray-500 dark:text-gray-300">{{ requesterModalData?.email }}</div>
                         </div>
-                        <button @click="closeRequesterModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeRequesterModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
@@ -2833,7 +2833,7 @@ const requesterTabs = computed(() => {
 
                     <div class="flex flex-col flex-1 overflow-hidden">
                         <!-- Tabs -->
-                        <div class="flex space-x-1 overflow-x-auto border-b border-gray-200 mb-4 pb-px">
+                        <div class="flex space-x-1 overflow-x-auto border-b border-gray-200 mb-4 pb-px dark:border-gray-700">
                             <button
                                 v-for="tab in requesterTabs"
                                 :key="tab.id"
@@ -2853,7 +2853,7 @@ const requesterTabs = computed(() => {
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
                             </div>
-                            <div v-else-if="filteredRequesterTickets.length === 0" class="text-center py-12 text-gray-500">
+                            <div v-else-if="filteredRequesterTickets.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-300">
                                 No tickets found for this status.
                             </div>
                             <div v-else class="space-y-3 pr-2">
@@ -2865,8 +2865,8 @@ const requesterTabs = computed(() => {
                                                 {{ getStatusLabel(t.status) }}
                                             </span>
                                         </div>
-                                        <div class="font-semibold text-gray-900 group-hover:text-blue-700">{{ t.title }}</div>
-                                        <div class="text-xs text-gray-500 mt-1 flex items-center gap-3">
+                                        <div class="font-semibold text-gray-900 group-hover:text-blue-700 dark:text-gray-100">{{ t.title }}</div>
+                                        <div class="text-xs text-gray-500 mt-1 flex items-center gap-3 dark:text-gray-300">
                                             <span>Created: {{ formatDate(t.created_at) }}</span>
                                             <span>Assignee: {{ t.assignee?.name || 'Unassigned' }}</span>
                                         </div>
@@ -2886,13 +2886,13 @@ const requesterTabs = computed(() => {
     <div v-if="showExportModal" class="fixed inset-0 z-50 overflow-y-auto">
         <div class="flex items-center justify-center min-h-screen px-4 py-6">
             <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeExportModal"></div>
-            <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100">
+            <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex justify-between items-center mb-5">
                     <div>
-                        <h3 class="text-lg font-bold text-gray-900">Export Options</h3>
-                        <p class="text-xs text-gray-500 mt-0.5">Apply additional filters before exporting to Excel</p>
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Export Options</h3>
+                        <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Apply additional filters before exporting to Excel</p>
                     </div>
-                    <button @click="closeExportModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <button @click="closeExportModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -2902,17 +2902,17 @@ const requesterTabs = computed(() => {
                 <div class="space-y-4">
                     <!-- Date Range -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Date Range (Created)</label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 dark:text-gray-300">Date Range (Created)</label>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <span class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">From</span>
+                                <span class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 dark:text-gray-400">From</span>
                                 <input type="date" v-model="exportFrom"
-                                       class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                       class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600" />
                             </div>
                             <div>
-                                <span class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">To</span>
+                                <span class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 dark:text-gray-400">To</span>
                                 <input type="date" v-model="exportTo" :min="exportFrom"
-                                       class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                       class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-800 dark:border-gray-600" />
                             </div>
                         </div>
                     </div>
@@ -2921,9 +2921,9 @@ const requesterTabs = computed(() => {
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
                             <div class="flex items-center gap-2">
-                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Filter By</label>
+                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Filter By</label>
                                 <select v-model="exportFieldMode"
-                                        class="bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-700 pl-2 pr-7 py-1 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+                                        class="bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-700 pl-2 pr-7 py-1 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600">
                                     <option value="sub_category">SubCategory</option>
                                     <option value="item">Item / Concern</option>
                                 </select>
@@ -2954,7 +2954,7 @@ const requesterTabs = computed(() => {
                     <!-- Requester -->
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Requester</label>
+                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Requester</label>
                             <button v-if="exportFilterRequester" type="button" @click="exportFilterRequester = ''"
                                     class="text-xs font-semibold text-red-500 hover:text-red-700">Clear</button>
                         </div>
@@ -2970,7 +2970,7 @@ const requesterTabs = computed(() => {
 
                     <!-- Priority -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Priority Level</label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Priority Level</label>
                         <div class="flex flex-wrap gap-2">
                             <label v-for="p in ['Low','Medium','High','Urgent']" :key="p"
                                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs font-semibold transition-colors"
@@ -2986,7 +2986,7 @@ const requesterTabs = computed(() => {
                     <!-- Concern Type -->
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Concern Type</label>
+                            <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Concern Type</label>
                             <button v-if="exportFilterConcernType" type="button" @click="exportFilterConcernType = ''"
                                     class="text-xs font-semibold text-red-500 hover:text-red-700">Clear</button>
                         </div>
@@ -3000,9 +3000,9 @@ const requesterTabs = computed(() => {
                     </div>
                 </div>
 
-                <div class="flex justify-between items-center pt-5 mt-5 border-t border-gray-100">
+                <div class="flex justify-between items-center pt-5 mt-5 border-t border-gray-100 dark:border-gray-700">
                     <button type="button" @click="closeExportModal"
-                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Cancel
                     </button>
                     <button type="button" @click="exportToExcel"

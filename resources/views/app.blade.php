@@ -25,6 +25,21 @@
         @routes
         @vite(['resources/js/app.js'])
         @inertiaHead
+
+        <!-- Theme (dark/light) anti-flash: applied before paint to avoid FOUC -->
+        <script>
+            (function () {
+                try {
+                    var key = 'ghelpdesk.theme';
+                    var stored = window.localStorage.getItem(key);
+                    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    var useDark = stored === 'dark' || ((stored === null || stored === 'system') && prefersDark);
+                    document.documentElement.classList.toggle('dark', useDark);
+                } catch (e) {
+                    // Ignore storage/media failures so the page still renders.
+                }
+            })();
+        </script>
     </head>
     <body class="font-sans antialiased">
         @inertia

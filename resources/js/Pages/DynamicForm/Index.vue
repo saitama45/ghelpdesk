@@ -333,17 +333,17 @@ const getDisplayValue = (record, col) => {
 }
 
 const STATUS_COLORS = {
-    'Open': 'bg-blue-100 text-blue-700',
-    'Approved': 'bg-emerald-100 text-emerald-700',
-    'Cancelled': 'bg-rose-100 text-rose-700',
-    'Rejected': 'bg-red-100 text-red-700',
-    'In Progress': 'bg-amber-100 text-amber-700',
+    'Open': 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200 dark:border dark:border-blue-400/30',
+    'Approved': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border dark:border-emerald-400/30',
+    'Cancelled': 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200 dark:border dark:border-rose-400/30',
+    'Rejected': 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-200 dark:border dark:border-red-400/30',
+    'In Progress': 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200 dark:border dark:border-amber-400/30',
 }
 
 function statusClass(s) {
-    if (!s) return 'bg-gray-100 text-gray-500'
-    if (s.startsWith('Approved Level')) return 'bg-indigo-100 text-indigo-700'
-    return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500'
+    if (!s) return 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-300 dark:border dark:border-slate-700'
+    if (s.startsWith('Approved Level')) return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200 dark:border dark:border-indigo-400/30'
+    return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-300 dark:border dark:border-slate-700'
 }
 
 const ticketPlaceholder = (record) => {
@@ -356,24 +356,24 @@ const getStageDisplay = (record) => {
         ? record.data._checklist_tasks.length
         : Number(record.request_type ? record.request_type.approval_levels : props.form.approval_levels)
 
-    if (totalLevels === 0) return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase' }
+    if (totalLevels === 0) return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase dark:text-slate-400' }
     
     if (isChecklist) {
         const completed = new Set((record.approvals || []).map(a => Number(a.level))).size
         return {
             label: `${completed} / ${totalLevels}`,
-            class: 'text-xs font-black text-teal-600 bg-teal-50 px-3 py-0.5 rounded-full border border-teal-100',
+            class: 'text-xs font-black text-teal-600 bg-teal-50 px-3 py-0.5 rounded-full border border-teal-100 dark:bg-teal-500/15 dark:text-teal-200 dark:border-teal-400/30',
             isBadge: true,
         }
     } else {
-        if (record.status === 'Approved') return { label: `${totalLevels} / ${totalLevels}`, class: 'text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-100', isBadge: true }
-        if (record.status === 'Rejected') return { label: 'Rejected', class: 'text-[10px] font-black text-red-600 uppercase tracking-widest' }
-        if (record.status === 'Cancelled') return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest' }
+        if (record.status === 'Approved') return { label: `${totalLevels} / ${totalLevels}`, class: 'text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-0.5 rounded-full border border-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-400/30', isBadge: true }
+        if (record.status === 'Rejected') return { label: 'Rejected', class: 'text-[10px] font-black text-red-600 uppercase tracking-widest dark:text-red-300' }
+        if (record.status === 'Cancelled') return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest dark:text-rose-300' }
 
         const current = Number(record.current_approval_level || 1)
         return {
             label: `${current - 1} / ${totalLevels}`,
-            class: 'text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100',
+            class: 'text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:border-indigo-400/30',
             isBadge: true,
         }
     }
@@ -389,8 +389,8 @@ const getStageDisplay = (record) => {
                 <!-- Header with Tile Toggle -->
                 <div class="flex items-center justify-between mb-8">
                     <div>
-                        <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ form.name }}</h1>
-                        <p class="text-sm text-gray-500 font-medium mt-1">{{ form.description || 'Submit and track your requests.' }}</p>
+                        <h1 class="text-3xl font-black text-gray-900 tracking-tight dark:text-gray-100">{{ form.name }}</h1>
+                        <p class="text-sm text-gray-500 font-medium mt-1 dark:text-gray-300">{{ form.description || 'Submit and track your requests.' }}</p>
                     </div>
                     <button v-if="hasPermission(form.slug + '.create')" 
                         @click="showCreateSection = !showCreateSection"
@@ -406,36 +406,36 @@ const getStageDisplay = (record) => {
                 <!-- Tile Selection Section -->
                 <div v-if="showCreateSection" class="mb-10 animate-in fade-in slide-in-from-top-4 duration-300">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="h-px flex-1 bg-gray-200"></div>
-                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Select Request Type</h2>
-                        <div class="h-px flex-1 bg-gray-200"></div>
+                        <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
+                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400">Select Request Type</h2>
+                        <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
                     </div>
                     
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <!-- Default Form Tile (if it has fields) -->
                         <button v-if="form.form_schema?.fields?.length"
                             @click="openCreateModal(null)"
-                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group">
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group dark:bg-gray-800 dark:border-gray-700">
                             <div class="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-all">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </div>
-                            <h4 class="text-sm font-black text-gray-900 mb-1">{{ defaultFormTileTitle }}</h4>
-                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Default Schema</p>
+                            <h4 class="text-sm font-black text-gray-900 mb-1 dark:text-gray-100">{{ defaultFormTileTitle }}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider dark:text-gray-400">Default Schema</p>
                         </button>
 
                         <!-- Request Type Tiles -->
                         <button v-for="rt in form.request_types" :key="rt.id"
                             @click="openCreateModal(rt)"
-                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group">
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group dark:bg-gray-800 dark:border-gray-700">
                             <div class="w-12 h-12 bg-teal-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-all">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                                 </svg>
                             </div>
-                            <h4 class="text-sm font-black text-gray-900 mb-1">{{ rt.name }}</h4>
-                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                            <h4 class="text-sm font-black text-gray-900 mb-1 dark:text-gray-100">{{ rt.name }}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider dark:text-gray-400">
                                 {{ rt.approval_levels > 0 ? `${rt.approval_levels} Approval Steps` : 'No Approval Required' }}
                             </p>
                         </button>
@@ -459,7 +459,7 @@ const getStageDisplay = (record) => {
                     <template #actions>
                         <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
                             <template #trigger>
-                                <button class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap">
+                                <button class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
                                     </svg>
@@ -467,26 +467,26 @@ const getStageDisplay = (record) => {
                                 </button>
                             </template>
                             <template #content>
-                                <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">Visible Columns</div>
-                                <div class="p-2 border-b border-gray-100">
-                                    <label class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer" @click.stop>
+                                <div class="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-widest border-b border-gray-100 dark:text-slate-300 dark:border-gray-700">Visible Columns</div>
+                                <div class="p-2 border-b border-gray-100 dark:border-gray-700">
+                                    <label class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer dark:hover:bg-gray-700" @click.stop>
                                         <input type="checkbox"
                                             :checked="allToggleableVisible"
                                             :indeterminate="!allToggleableVisible && someToggleableVisible"
                                             @change="toggleAllColumns"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
-                                        <span class="text-sm font-bold text-gray-600">Select All</span>
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2 dark:border-gray-600">
+                                        <span class="text-sm font-bold text-gray-600 dark:text-slate-200">Select All</span>
                                     </label>
                                 </div>
                                 <div class="p-2 space-y-1">
                                     <label v-for="col in columnConfig" :key="col.key"
-                                        class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                                        class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer dark:hover:bg-gray-700"
                                         :class="col.locked ? 'opacity-50 cursor-not-allowed' : ''"
                                         @click.stop>
                                         <input type="checkbox" :checked="col.visible" :disabled="col.locked"
                                             @change="toggleColumn(col)"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
-                                        <span class="text-sm font-semibold text-gray-700">{{ col.label }}</span>
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2 dark:border-gray-600">
+                                        <span class="text-sm font-semibold text-gray-700 dark:text-slate-200">{{ col.label }}</span>
                                     </label>
                                 </div>
                             </template>
@@ -494,54 +494,54 @@ const getStageDisplay = (record) => {
                     </template>
 
                     <template #header>
-                        <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th v-if="isColumnVisible('id')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">ID#</th>
-                            <th v-if="isColumnVisible('ticket')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Ticket#</th>
-                            <th v-if="isColumnVisible('request_type')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Request Type</th>
+                        <tr class="bg-gray-50/80 backdrop-blur-sm dark:bg-slate-800/80">
+                            <th v-if="isColumnVisible('id')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">ID#</th>
+                            <th v-if="isColumnVisible('ticket')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Ticket#</th>
+                            <th v-if="isColumnVisible('request_type')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Request Type</th>
                             <template v-for="col in tableColumns" :key="col.key">
-                                <th v-if="isColumnVisible(col.key)" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                <th v-if="isColumnVisible(col.key)" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">
                                     {{ col.label }}
                                 </th>
                             </template>
-                            <th v-if="isColumnVisible('stage')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Stage</th>
-                            <th v-if="isColumnVisible('status')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Status</th>
-                            <th v-if="isColumnVisible('created_by')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Created By</th>
-                            <th v-if="isColumnVisible('actions')" class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
+                            <th v-if="isColumnVisible('stage')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center dark:text-slate-300">Stage</th>
+                            <th v-if="isColumnVisible('status')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest text-center dark:text-slate-300">Status</th>
+                            <th v-if="isColumnVisible('created_by')" class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Created By</th>
+                            <th v-if="isColumnVisible('actions')" class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
                         <tr v-for="record in data" :key="record.id"
-                            class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
+                            class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0 dark:border-slate-700 dark:hover:bg-slate-800/70 dark:hover:shadow-black/20"
                         >
                             <td v-if="isColumnVisible('id')" class="px-6 py-5 whitespace-nowrap">
-                                <span class="text-xs font-black text-gray-500">#{{ record.id }}</span>
+                                <span class="text-xs font-black text-gray-500 dark:text-slate-300">#{{ record.id }}</span>
                             </td>
                             <td v-if="isColumnVisible('ticket')" class="px-6 py-5 whitespace-nowrap">
                                 <Link
                                     v-if="record.ticket"
                                     :href="route('tickets.edit', record.ticket.id)"
-                                    class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                    class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white"
                                 >
                                     {{ record.ticket.ticket_key }}
                                 </Link>
                                 <span
                                     v-else
                                     class="text-[10px] font-black uppercase italic"
-                                    :class="record.status === 'Approved' ? 'text-rose-400' : 'text-gray-300'"
+                                    :class="record.status === 'Approved' ? 'text-rose-400 dark:text-rose-300' : 'text-gray-300 dark:text-slate-400'"
                                 >
                                     {{ ticketPlaceholder(record) }}
                                 </span>
                             </td>
                             <td v-if="isColumnVisible('request_type')" class="px-6 py-5 whitespace-nowrap">
-                                <span v-if="record.request_type" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tight">
+                                <span v-if="record.request_type" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-black bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tight dark:bg-teal-500/15 dark:text-teal-200 dark:border-teal-400/30">
                                     {{ record.request_type.name }}
                                 </span>
-                                <span v-else class="text-xs text-gray-400 font-bold uppercase tracking-widest">Standard</span>
+                                <span v-else class="text-xs text-gray-500 font-bold uppercase tracking-widest dark:text-slate-300">Standard</span>
                             </td>
                             <template v-for="col in tableColumns" :key="col.key">
                                 <td v-if="isColumnVisible(col.key)" class="px-6 py-5 whitespace-nowrap text-left">
-                                    <div class="text-sm font-medium text-gray-900">
+                                    <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">
                                         {{ getDisplayValue(record, col) }}
                                     </div>
                                 </td>
@@ -562,8 +562,8 @@ const getStageDisplay = (record) => {
                                 </span>
                             </td>
                             <td v-if="isColumnVisible('created_by')" class="px-6 py-5 whitespace-nowrap text-left">
-                                <div class="text-sm text-gray-500">{{ record.creator?.name || 'System' }}</div>
-                                <div class="text-[10px] text-gray-400">{{ new Date(record.created_at).toLocaleDateString() }}</div>
+                                <div class="text-sm font-semibold text-gray-600 dark:text-slate-200">{{ record.creator?.name || 'System' }}</div>
+                                <div class="text-[10px] text-gray-500 dark:text-slate-300">{{ new Date(record.created_at).toLocaleDateString() }}</div>
                             </td>
                             <td v-if="isColumnVisible('actions')" class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end items-center space-x-2">
@@ -617,15 +617,15 @@ const getStageDisplay = (record) => {
             <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-start justify-center p-3 sm:p-6">
                 <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
                 
-                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] border border-gray-100 transform transition-all flex flex-col overflow-hidden">
-                    <div class="flex justify-between items-start gap-4 px-5 py-5 sm:px-8 sm:py-6 border-b border-gray-100 bg-white">
+                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] border border-gray-100 transform transition-all flex flex-col overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex justify-between items-start gap-4 px-5 py-5 sm:px-8 sm:py-6 border-b border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700">
                         <div class="min-w-0">
-                            <h3 class="text-2xl font-black text-gray-900 tracking-tight">
+                            <h3 class="text-2xl font-black text-gray-900 tracking-tight dark:text-gray-100">
                                 {{ isEditing ? 'Update ' + form.name : 'New ' + (selectedRequestType ? selectedRequestType.name : form.name) }}
                             </h3>
-                            <p class="text-sm text-gray-500 mt-1">Please fill in the required information.</p>
+                            <p class="text-sm text-gray-500 mt-1 dark:text-gray-300">Please fill in the required information.</p>
                         </div>
-                        <button @click="closeModal" class="flex-shrink-0 p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300">
+                        <button @click="closeModal" class="flex-shrink-0 p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300 dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -660,9 +660,9 @@ const getStageDisplay = (record) => {
                             />
                         </div>
 
-                        <div class="flex space-x-4 px-5 py-5 sm:px-8 sm:py-6 border-t border-gray-100 bg-white">
+                        <div class="flex space-x-4 px-5 py-5 sm:px-8 sm:py-6 border-t border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700">
                             <button type="button" @click="closeModal" 
-                                    class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all duration-300">
+                                    class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all duration-300 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
                             <button type="submit" 

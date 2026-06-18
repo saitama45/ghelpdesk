@@ -12,6 +12,8 @@ import { usePermission } from '@/Composables/usePermission.js';
 import UserStatus from '@/Components/UserStatus.vue';
 import { usePresence } from '@/Composables/usePresence.js';
 import NotificationBell from '@/Components/NotificationBell.vue';
+import ThemeToggle from '@/Components/ThemeToggle.vue';
+import { useTheme } from '@/Composables/useTheme.js';
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
@@ -29,6 +31,7 @@ const sidebarOpen = ref(false);
 const isSidebarCollapsed = ref(false);
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'ghelpdesk.sidebarCollapsed';
 const { init: initPresence, destroy: destroyPresence, currentStatus } = usePresence();
+const { init: initTheme } = useTheme();
 
 const loadSidebarCollapsedState = () => {
     try {
@@ -88,6 +91,7 @@ onMounted(() => {
     document.addEventListener('click', handleClickOutside);
     checkFlashMessages();
     initPresence();
+    initTheme();
 });
 
 watch(isSidebarCollapsed, (isCollapsed) => {
@@ -113,7 +117,7 @@ const isCurrentRoute = (routeName) => {
 </script>
 
 <template>
-    <div class="h-screen bg-gray-50 flex overflow-hidden relative">
+    <div class="h-screen bg-gray-50 flex overflow-hidden relative dark:bg-gray-950">
         <!-- Sidebar -->
         <Sidebar 
             :is-collapsed="isSidebarCollapsed" 
@@ -125,13 +129,13 @@ const isCurrentRoute = (routeName) => {
         <!-- Main Content Area -->
         <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden w-full">
             <!-- Top Navigation -->
-            <div class="sticky top-0 z-40 bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
+            <div class="sticky top-0 z-40 bg-white shadow-sm border-b border-gray-200 flex-shrink-0 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
                     <!-- Left side: Mobile menu button and Logo -->
                     <div class="flex items-center flex-1 lg:flex-none">
                         <button
                             @click.stop="sidebarOpen = !sidebarOpen"
-                            class="lg:hidden p-2 -ml-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                            class="lg:hidden p-2 -ml-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 dark:text-gray-400 dark:hover:bg-gray-700"
                         >
                             <span class="sr-only">Open sidebar</span>
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -141,12 +145,12 @@ const isCurrentRoute = (routeName) => {
                         
                         <div class="lg:hidden flex items-center ml-2">
                             <ApplicationLogo class="h-8 w-8 text-blue-600" />
-                            <span class="ml-2 text-lg font-bold text-gray-900 truncate">TAS</span>
+                            <span class="ml-2 text-lg font-bold text-gray-900 truncate dark:text-gray-100">TAS</span>
                         </div>
 
                         <!-- Desktop Page Title -->
                         <div class="hidden lg:block">
-                            <h1 class="text-lg font-semibold text-gray-900 truncate">
+                            <h1 class="text-lg font-semibold text-gray-900 truncate dark:text-gray-100">
                                 <slot name="header"></slot>
                             </h1>
                         </div>
@@ -154,7 +158,7 @@ const isCurrentRoute = (routeName) => {
 
                     <!-- Page Title (Mobile only, centered if possible) -->
                     <div class="lg:hidden flex-1 flex justify-center px-2">
-                        <h1 class="text-sm font-semibold text-gray-900 truncate max-w-[150px]">
+                        <h1 class="text-sm font-semibold text-gray-900 truncate max-w-[150px] dark:text-gray-100">
                             <slot name="header"></slot>
                         </h1>
                     </div>
@@ -162,6 +166,9 @@ const isCurrentRoute = (routeName) => {
                     <!-- Right side -->
                     <div class="flex items-center space-x-2 flex-1 justify-end">
                         <GlobalSearch class="hidden sm:block" />
+
+                        <!-- Theme toggle -->
+                        <ThemeToggle />
 
                         <!-- Knowledge Base Portal Button -->
                         <Link :href="route('knowledge-base.portal')" 
@@ -179,10 +186,10 @@ const isCurrentRoute = (routeName) => {
                         <div class="relative ml-2" ref="userMenuRef">
                             <button
                                 @click="userMenuOpen = !userMenuOpen"
-                                class="flex items-center space-x-2 p-1 sm:p-2 text-sm rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                class="flex items-center space-x-2 p-1 sm:p-2 text-sm rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:hover:bg-gray-700"
                             >
                                 <div class="relative">
-                                    <div v-if="user.profile_photo" class="h-8 w-8 rounded-full overflow-hidden border border-gray-200">
+                                    <div v-if="user.profile_photo" class="h-8 w-8 rounded-full overflow-hidden border border-gray-200 dark:border-gray-700">
                                         <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover" :alt="user.name">
                                     </div>
                                     <div v-else class="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
@@ -190,24 +197,24 @@ const isCurrentRoute = (routeName) => {
                                     </div>
                                     <UserStatus :status="currentStatus" size="lg" class="absolute -bottom-0.5 -right-0.5 border-2 border-white" />
                                 </div>
-                                <span class="hidden md:block text-gray-700 font-medium">{{ user.name }}</span>
-                                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <span class="hidden md:block text-gray-700 font-medium dark:text-gray-300">{{ user.name }}</span>
+                                <svg class="h-4 w-4 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
 
                             <!-- Dropdown -->
-                            <div v-show="userMenuOpen" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50">
-                                <div class="px-4 py-2 text-xs text-gray-500 md:hidden border-b border-gray-100">
-                                    Logged in as <span class="font-bold text-gray-900 block truncate">{{ user.name }}</span>
+                            <div v-show="userMenuOpen" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50 dark:bg-gray-800">
+                                <div class="px-4 py-2 text-xs text-gray-500 md:hidden border-b border-gray-100 dark:text-gray-300 dark:border-gray-700">
+                                    Logged in as <span class="font-bold text-gray-900 block truncate dark:text-gray-100">{{ user.name }}</span>
                                 </div>
-                                <Link :href="route('profile.edit')" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                    <svg class="w-4 h-4 inline mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <Link :href="route('profile.edit')" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">
+                                    <svg class="w-4 h-4 inline mr-2 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                     </svg>
                                     Profile
                                 </Link>
-                                <hr class="my-1 border-gray-100">
+                                <hr class="my-1 border-gray-100 dark:border-gray-700">
                                 <button @click="logout" class="flex items-center w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">
                                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -221,7 +228,7 @@ const isCurrentRoute = (routeName) => {
             </div>
 
             <!-- Page Content -->
-            <main scroll-region class="flex-1 bg-gray-50" :class="mainClass">
+            <main scroll-region class="flex-1 bg-gray-50 dark:bg-gray-950" :class="mainClass">
                 <div class="py-4 sm:py-6">
                     <div :class="contentClass">
                         <slot />

@@ -436,10 +436,10 @@ const calculateDays = (start, end) => {
 
 const getStatusStyles = (status) => {
     switch (status) {
-        case 'Done': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-        case 'Ongoing': return 'bg-sky-100 text-sky-700 border-sky-200';
-        case 'Pending': return 'bg-amber-100 text-amber-700 border-amber-200';
-        default: return 'bg-slate-100 text-slate-700 border-slate-200';
+        case 'Done': return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-400/30';
+        case 'Ongoing': return 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-500/15 dark:text-sky-200 dark:border-sky-400/30';
+        case 'Pending': return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-400/30';
+        default: return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600';
     }
 };
 
@@ -710,46 +710,46 @@ const isWeekend = (date) => {
 </script>
 
 <template>
-    <div class="bg-slate-50 rounded-xl border border-slate-200 shadow-xl flex flex-col h-[750px] overflow-hidden">
+    <div class="bg-slate-50 rounded-xl border border-slate-200 shadow-xl flex flex-col h-[750px] overflow-hidden dark:border-slate-700 dark:bg-slate-950 dark:shadow-black/30">
         <!-- Modern Toolbar -->
-        <div class="bg-white px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div class="bg-white px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 dark:border-slate-700 dark:bg-slate-900">
             <div class="flex items-center space-x-4">
-                <div class="p-2 bg-indigo-50 rounded-lg">
-                    <CalendarIcon class="w-6 h-6 text-indigo-600" />
+                <div class="p-2 bg-indigo-50 rounded-lg dark:bg-indigo-500/15">
+                    <CalendarIcon class="w-6 h-6 text-indigo-600 dark:text-indigo-300" />
                 </div>
                 <div>
-                    <h3 class="text-lg font-bold text-slate-900">Project Timeline</h3>
-                    <p class="text-xs text-slate-500 font-medium">Manage tasks and schedule visualize</p>
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">Project Timeline</h3>
+                    <p class="text-xs text-slate-500 font-medium dark:text-slate-300">Manage tasks and schedule visualize</p>
                 </div>
             </div>
 
             <!-- Stats Summary -->
-            <div class="hidden lg:flex items-center space-x-6 px-6 border-l border-r border-slate-100">
+            <div class="hidden lg:flex items-center space-x-6 px-6 border-l border-r border-slate-100 dark:border-slate-700">
                 <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Completion</p>
-                    <p class="text-sm font-bold text-slate-900">{{ stats.progress }}%</p>
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-300">Completion</p>
+                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.progress }}%</p>
                 </div>
-                <div class="h-8 w-px bg-slate-100"></div>
+                <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
                 <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400">Total Tasks</p>
-                    <p class="text-sm font-bold text-slate-900">{{ stats.total }}</p>
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-300">Total Tasks</p>
+                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.total }}</p>
                 </div>
-                <div class="h-8 w-px bg-slate-100"></div>
+                <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
                 <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-500">Done</p>
-                    <p class="text-sm font-bold text-slate-900">{{ stats.completed }}</p>
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-500 dark:text-emerald-300">Done</p>
+                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.completed }}</p>
                 </div>
             </div>
 
             <div class="flex items-center space-x-2">
                 <button @click="applyActivityTemplates" 
-                        class="inline-flex items-center px-4 py-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95 disabled:opacity-50"
+                        class="inline-flex items-center px-4 py-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95 disabled:opacity-50 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
                         :disabled="isApplyingTemplates"
                 >
                     <DocumentDuplicateIcon class="w-4 h-4 mr-2" />
                     {{ isApplyingTemplates ? 'Applying...' : 'Apply Templates' }}
                 </button>
-                <button @click="showFilters = !showFilters" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                <button @click="showFilters = !showFilters" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200">
                     <FunnelIcon class="w-5 h-5" />
                 </button>
                 <button 
@@ -770,48 +770,48 @@ const isWeekend = (date) => {
             leave-from-class="transform translate-y-0 opacity-100"
             leave-to-class="transform -translate-y-4 opacity-0"
         >
-            <div v-if="isAddingTask" class="p-6 bg-indigo-50/30 border-b border-indigo-100 z-30">
+            <div v-if="isAddingTask" class="p-6 bg-indigo-50/30 border-b border-indigo-100 z-30 dark:border-indigo-400/20 dark:bg-indigo-500/10">
                 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h4 class="text-sm font-black text-indigo-950 uppercase tracking-widest">{{ formTitle }}</h4>
-                        <p v-if="activeParentTask" class="mt-1 text-xs font-semibold text-slate-500">
+                        <h4 class="text-sm font-black text-indigo-950 uppercase tracking-widest dark:text-indigo-100">{{ formTitle }}</h4>
+                        <p v-if="activeParentTask" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
                             Under {{ activeParentTask.name }} in {{ activeMilestone }}
                         </p>
-                        <p v-else-if="activeMilestone" class="mt-1 text-xs font-semibold text-slate-500">
+                        <p v-else-if="activeMilestone" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
                             Milestone: {{ activeMilestone }}
                         </p>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-x-8 gap-y-4 items-end">
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Milestone</label>
-                        <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Milestone</label>
+                        <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
                         <div v-if="form.errors.category" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.category }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">{{ activityFieldLabel }}</label>
-                        <input v-model="form.name" type="text" placeholder="What needs to be done?" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">{{ activityFieldLabel }}</label>
+                        <input v-model="form.name" type="text" placeholder="What needs to be done?" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="form.errors.name" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.name }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Responsible</label>
-                        <select v-model="form.assigned_to" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Responsible</label>
+                        <select v-model="form.assigned_to" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                             <option value="">Unassigned</option>
                             <option v-for="member in projectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                         </select>
                         <div v-if="form.errors.assigned_to" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.assigned_to }}</div>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Progress</label>
-                        <input v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Progress</label>
+                        <input v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="form.errors.progress" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.progress }}</div>
                     </div>
                     <div class="md:col-span-3">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1">Timeline</label>
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Timeline</label>
                         <div class="flex items-center space-x-2">
-                            <input v-model="form.start_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500">
-                            <span class="text-slate-400">to</span>
-                            <input v-model="form.end_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500">
+                            <input v-model="form.start_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                            <span class="text-slate-400 dark:text-slate-300">to</span>
+                            <input v-model="form.end_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         </div>
                         <div v-if="form.errors.start_date || form.errors.end_date" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.start_date || form.errors.end_date }}</div>
                     </div>
@@ -819,7 +819,7 @@ const isWeekend = (date) => {
                         <button @click="saveTask" :disabled="form.processing" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
                             {{ saveButtonLabel }}
                         </button>
-                        <button @click="closeForm" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap">
+                        <button @click="closeForm" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                             Cancel
                         </button>
                     </div>
@@ -828,34 +828,34 @@ const isWeekend = (date) => {
         </transition>
 
         <!-- Main Workspace: Unified Scroll -->
-        <div class="flex-1 overflow-auto relative bg-[#fafbfc]" ref="mainWorkspaceRef">
+        <div class="flex-1 overflow-auto relative bg-[#fafbfc] dark:bg-slate-950" ref="mainWorkspaceRef">
             <div :style="{ width: (480 + timelineDays.length * 48) + 'px' }" class="relative min-h-full">
                 
                 <!-- STICKY HEADER ROW -->
-                <div class="sticky top-0 z-50 flex h-14 bg-white border-b border-slate-200">
+                <div class="sticky top-0 z-50 flex h-14 bg-white border-b border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                     <!-- Left Header -->
-                    <div class="sticky left-0 z-50 w-[480px] h-full flex items-center bg-slate-50 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
+                    <div class="sticky left-0 z-50 w-[480px] h-full flex items-center bg-slate-50 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:shadow-black/20">
                         <div class="w-1/2">Activity</div>
                         <div class="w-1/4 px-2 text-center">Responsible</div>
                         <div class="w-1/4 pl-2 pr-6 text-right">Status</div>
                     </div>
                     <!-- Right Header (Timeline) -->
                     <div class="flex-1 flex flex-col z-0">
-                        <div class="h-7 flex items-center px-4 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest relative bg-white">
+                        <div class="h-7 flex items-center px-4 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest relative bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                             <template v-for="(day, idx) in timelineDays" :key="'m'+idx">
                                 <div v-if="day.getDate() === 1 || idx === 0" 
                                      class="absolute flex items-center space-x-2"
                                      :style="{ left: (idx * 48 + 16) + 'px' }">
-                                    <span class="text-slate-900">{{ day.toLocaleString('en-US', { month: 'short' }) }}</span>
-                                    <span class="text-slate-300">{{ day.getFullYear() }}</span>
+                                    <span class="text-slate-900 dark:text-slate-100">{{ day.toLocaleString('en-US', { month: 'short' }) }}</span>
+                                    <span class="text-slate-300 dark:text-slate-400">{{ day.getFullYear() }}</span>
                                 </div>
                             </template>
                         </div>
-                        <div class="h-7 flex text-[10px] font-bold text-slate-500 bg-white">
+                        <div class="h-7 flex text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-900 dark:text-slate-300">
                             <div v-for="(day, idx) in timelineDays" :key="idx" 
-                                 class="flex-shrink-0 w-12 flex items-center justify-center border-r border-slate-100"
+                                 class="flex-shrink-0 w-12 flex items-center justify-center border-r border-slate-100 dark:border-slate-800"
                                  :class="[
-                                    isWeekend(day) ? 'bg-slate-50/50 text-slate-300' : 'text-slate-400',
+                                    isWeekend(day) ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-800/60 dark:text-slate-400' : 'text-slate-400 dark:text-slate-300',
                                     isToday(day) ? 'bg-indigo-600 text-white z-20 rounded-t-sm shadow-lg' : ''
                                  ]">
                                 {{ day.getDate() }}
@@ -870,10 +870,10 @@ const isWeekend = (date) => {
                     <div class="absolute inset-0 flex pointer-events-none z-0">
                          <div class="w-[480px] flex-shrink-0"></div>
                          <div v-for="(day, idx) in timelineDays" :key="'grid'+idx" 
-                             class="flex-shrink-0 w-12 border-r border-slate-100 h-full"
+                             class="flex-shrink-0 w-12 border-r border-slate-100 h-full dark:border-slate-800"
                              :class="[
-                                isWeekend(day) ? 'bg-slate-50/10' : '',
-                                isToday(day) ? 'bg-indigo-50/20' : ''
+                                isWeekend(day) ? 'bg-slate-50/10 dark:bg-slate-800/30' : '',
+                                isToday(day) ? 'bg-indigo-50/20 dark:bg-indigo-500/10' : ''
                              ]">
                         </div>
                     </div>
@@ -889,28 +889,28 @@ const isWeekend = (date) => {
                     <template v-for="(tasks, category) in groupedTasks" :key="category">
                         <!-- Category Row -->
                         <div class="flex sticky top-14 z-30">
-                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]">
+                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
                                 <div class="flex items-center space-x-2">
-                                    <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90" />
-                                    <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider">{{ category }}</span>
-                                    <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold">{{ visibleTaskCount(tasks) }}</span>
+                                    <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90 dark:text-slate-300" />
+                                    <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider dark:text-slate-100">{{ category }}</span>
+                                    <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
                                 </div>
                                 <div class="flex items-center gap-1.5">
                                     <button type="button"
                                             @click.stop="openActivityForm(category)"
-                                            class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors">
+                                            class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15">
                                         <PlusIcon class="w-3.5 h-3.5 mr-1" />
                                         Add Activity
                                     </button>
                                     <button type="button"
                                             @click.stop="deleteMilestone(category, tasks)"
-                                            class="p-1.5 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                            class="p-1.5 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors dark:border-red-400/30 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/15"
                                             title="Delete Milestone">
                                         <TrashIcon class="w-3.5 h-3.5" />
                                     </button>
                                 </div>
                             </div>
-                            <div class="flex-1 h-10 bg-slate-100/30 border-b border-slate-200"></div>
+                            <div class="flex-1 h-10 bg-slate-100/30 border-b border-slate-200 dark:border-slate-700 dark:bg-slate-800/40"></div>
                         </div>
 
                         <!-- Task Rows -->
@@ -919,18 +919,18 @@ const isWeekend = (date) => {
                                  @dragover.prevent="handleTaskDragOver(row.task)"
                                  @drop.prevent="handleTaskDrop(row.task)"
                                  :class="[
-                                    dragOverTaskId === row.task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200' : '',
+                                     dragOverTaskId === row.task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-500/10 dark:ring-indigo-400/30' : '',
                                     row.isSubTask ? 'min-h-[3rem]' : 'min-h-[3.5rem]'
                                  ]"
-                                 class="flex border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10">
+                                  class="flex border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10 dark:border-slate-800 dark:hover:bg-indigo-500/5">
                                 
                                 <!-- Left Task Info (Sticky) -->
-                                <div class="sticky left-0 z-30 w-[480px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)]"
-                                     :class="row.isSubTask ? 'bg-slate-50 group-hover:bg-slate-100/70' : 'bg-white group-hover:bg-slate-50'">
+                                <div class="sticky left-0 z-30 w-[480px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:shadow-black/20"
+                                     :class="row.isSubTask ? 'bg-slate-50 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
                                     <div class="w-1/2 flex items-center space-x-3 py-2" :class="row.isSubTask ? 'pl-9 pr-4' : 'px-4'">
                                         <div class="relative flex-shrink-0" @click.stop>
                                             <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                                                 :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 group-hover:border-indigo-300'">
+                                                  :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-200 group-hover:border-indigo-300 dark:border-slate-700 dark:group-hover:border-indigo-400'">
                                                 <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
                                             </div>
                                         </div>
@@ -939,24 +939,24 @@ const isWeekend = (date) => {
                                                     draggable="true"
                                                     @dragstart="handleTaskDragStart(row.task)"
                                                     @dragend="handleTaskDragEnd"
-                                                    class="h-full px-1.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors"
+                                                     class="h-full px-1.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors dark:text-slate-500 dark:hover:text-indigo-300"
                                                     title="Drag to reorder task">
                                                 <ArrowsPointingOutIcon class="w-4 h-4" />
                                             </button>
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center justify-between mb-0.5">
-                                                <div class="font-bold text-slate-700 whitespace-normal break-words leading-tight mr-2"
+                                                <div class="font-bold text-slate-700 whitespace-normal break-words leading-tight mr-2 dark:text-slate-100"
                                                      :class="row.isSubTask ? 'text-[12px]' : 'text-[13px]'">
-                                                    <span v-if="row.isSubTask" class="mr-1 text-[10px] font-black text-slate-400 uppercase">Sub</span>
+                                                    <span v-if="row.isSubTask" class="mr-1 text-[10px] font-black text-slate-400 uppercase dark:text-slate-300">Sub</span>
                                                     {{ row.task.name }}
                                                 </div>
-                                                <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0">{{ row.task.progress }}%</span>
+                                                <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0 dark:text-slate-300">{{ row.task.progress }}%</span>
                                             </div>
                                             <div v-if="!row.isSubTask && taskOrganizationLabel(row.task)" class="mb-1 truncate text-[10px] font-black uppercase tracking-wider text-indigo-500">
                                                 {{ taskOrganizationLabel(row.task) }}
                                             </div>
-                                            <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                                            <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden dark:bg-slate-800">
                                                 <div class="h-full transition-all duration-500" 
                                                      :class="getBarColorClass(row.task.status)" 
                                                      :style="{ width: row.task.progress + '%' }"></div>
@@ -964,10 +964,10 @@ const isWeekend = (date) => {
                                         </div>
                                     </div>
                                     <div class="w-1/4 px-2 text-center py-2">
-                                         <div v-if="getAssigneeName(row.task)" class="mx-auto h-7 w-7 rounded-lg bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-200" :title="getAssigneeName(row.task)">
+                                         <div v-if="getAssigneeName(row.task)" class="mx-auto h-7 w-7 rounded-lg bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-200 dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-200" :title="getAssigneeName(row.task)">
                                             {{ getAssigneeInitial(row.task) }}
                                         </div>
-                                        <div v-else class="mx-auto h-7 w-7 rounded-lg border border-dashed border-slate-200 flex items-center justify-center text-slate-300">?</div>
+                                        <div v-else class="mx-auto h-7 w-7 rounded-lg border border-dashed border-slate-200 flex items-center justify-center text-slate-300 dark:border-slate-700 dark:text-slate-500">?</div>
                                     </div>
                                     <div class="w-1/4 pl-2 pr-6 flex items-center justify-end gap-2 group/actions relative py-2">
                                         <div class="flex-shrink-0">
@@ -1021,7 +1021,7 @@ const isWeekend = (date) => {
         </div>
 
         <!-- Footer / Shortcuts -->
-        <div class="h-10 bg-white border-t border-slate-200 px-6 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+        <div class="h-10 bg-white border-t border-slate-200 px-6 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-widest dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
             <div class="flex items-center space-x-6">
                 <div class="flex items-center space-x-2">
                     <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
@@ -1032,7 +1032,7 @@ const isWeekend = (date) => {
                     <span>Completed</span>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <div class="w-2 h-2 rounded-full bg-slate-200"></div>
+                    <div class="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-600"></div>
                     <span>Weekend</span>
                 </div>
             </div>
@@ -1044,35 +1044,35 @@ const isWeekend = (date) => {
 
         <!-- Template Selection Modal -->
         <Modal :show="showTemplateModal" @close="showTemplateModal = false" maxWidth="lg">
-            <div class="p-6">
+            <div class="p-6 dark:bg-slate-900">
                 <div class="flex justify-between items-center mb-6">
-                    <h3 class="text-xl font-bold text-slate-900">Apply Activity Template</h3>
-                    <button @click="showTemplateModal = false" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">Apply Activity Template</h3>
+                    <button @click="showTemplateModal = false" class="text-slate-400 hover:text-slate-600 transition-colors dark:text-slate-400 dark:hover:text-slate-200">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
 
                 <div class="space-y-4">
-                    <p class="text-sm text-slate-600">Select a predefined activity blueprint to apply to this project. This will automatically create the associated tasks.</p>
+                    <p class="text-sm text-slate-600 dark:text-slate-300">Select a predefined activity blueprint to apply to this project. This will automatically create the associated tasks.</p>
                     
                     <div class="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                         <label v-for="template in projectTemplates" :key="template.id" 
                                :class="[
-                                   'relative flex items-center p-4 cursor-pointer rounded-xl border-2 transition-all',
-                                   selectedTemplateId === template.id 
-                                       ? 'border-indigo-600 bg-indigo-50 shadow-md' 
-                                       : 'border-slate-100 hover:border-slate-200 bg-white'
-                               ]"
+                                    'relative flex items-center p-4 cursor-pointer rounded-xl border-2 transition-all',
+                                    selectedTemplateId === template.id 
+                                        ? 'border-indigo-600 bg-indigo-50 shadow-md dark:border-indigo-400 dark:bg-indigo-500/15' 
+                                        : 'border-slate-100 hover:border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600'
+                                ]"
                         >
                             <input type="radio" :value="template.id" v-model="selectedTemplateId" class="sr-only">
                             <div class="flex-1">
                                 <div class="flex items-center justify-between mb-1">
-                                    <span class="text-sm font-bold text-slate-900">{{ template.name }}</span>
-                                    <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase rounded">{{ template.project_type }}</span>
+                                    <span class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ template.name }}</span>
+                                    <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase rounded dark:bg-indigo-500/15 dark:text-indigo-200">{{ template.project_type }}</span>
                                 </div>
-                                <div class="flex items-center text-xs text-slate-500 font-medium space-x-3">
+                                <div class="flex items-center text-xs text-slate-500 font-medium space-x-3 dark:text-slate-300">
                                     <span>{{ template.activities_count }} activity rows</span>
-                                    <span class="h-1 w-1 bg-slate-300 rounded-full"></span>
+                                    <span class="h-1 w-1 bg-slate-300 rounded-full dark:bg-slate-600"></span>
                                     <span>{{ template.store_class }} Class</span>
                                 </div>
                             </div>
@@ -1083,7 +1083,7 @@ const isWeekend = (date) => {
                     </div>
                 </div>
 
-                <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
+                <div class="flex justify-end space-x-3 pt-6 border-t mt-6 dark:border-slate-700">
                     <SecondaryButton @click="showTemplateModal = false">
                         Cancel
                     </SecondaryButton>

@@ -1,21 +1,21 @@
 <template>
     <AppLayout :title="isEditing ? 'Edit Article' : 'Create Article'">
         <template #header>
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight dark:text-gray-200">
                 {{ isEditing ? 'Edit Article' : 'Create Article' }}
             </h2>
         </template>
 
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg p-6">
+                <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg p-6 dark:bg-gray-800">
                     <form @submit.prevent="submit" class="space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <!-- Title -->
                             <div class="col-span-2 md:col-span-1">
-                                <label class="block text-sm font-medium text-gray-700">Title</label>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
                                 <input v-model="form.title" type="text" required
-                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
+                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm dark:border-gray-600"
                                     placeholder="Enter article title">
                                 <div v-if="form.errors.title" class="text-red-500 text-xs mt-1">{{ form.errors.title }}</div>
                             </div>
@@ -23,7 +23,7 @@
                             <!-- Category Autocomplete -->
                             <div class="col-span-2 md:col-span-1">
                                 <div class="flex items-center justify-between">
-                                    <label class="block text-sm font-medium text-gray-700">Category</label>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
                                     <button 
                                         type="button" 
                                         @click="showManageCategories = true"
@@ -39,20 +39,20 @@
                                 <div class="relative mt-1">
                                     <input v-model="form.category_name" type="text" required
                                         list="kb-categories-list"
-                                        class="block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm"
+                                        class="block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm dark:border-gray-600"
                                         placeholder="Type or select a category">
                                     <datalist id="kb-categories-list">
                                         <option v-for="cat in categories" :key="cat.id" :value="cat.name"></option>
                                     </datalist>
                                 </div>
-                                <p class="text-[10px] text-gray-500 mt-1 italic">Type a new name to create a new category automatically.</p>
+                                <p class="text-[10px] text-gray-500 mt-1 italic dark:text-gray-300">Type a new name to create a new category automatically.</p>
                                 <div v-if="form.errors.category_name" class="text-red-500 text-xs mt-1">{{ form.errors.category_name }}</div>
                             </div>
                         </div>
 
                         <!-- Content (Quill Editor) -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Content</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Content</label>
                             <div class="quill-container border rounded-md min-h-[400px]">
                                 <QuillEditor 
                                     v-model:content="form.content" 
@@ -68,14 +68,14 @@
                         <!-- Publishing -->
                         <div class="flex items-center space-x-4">
                             <label class="inline-flex items-center cursor-pointer">
-                                <input type="checkbox" v-model="form.is_published" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
-                                <span class="ml-2 text-sm font-medium text-gray-700">Publish this article</span>
+                                <input type="checkbox" v-model="form.is_published" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 dark:border-gray-600">
+                                <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">Publish this article</span>
                             </label>
                         </div>
 
                         <!-- Actions -->
                         <div class="flex items-center justify-end space-x-3 pt-6 border-t">
-                            <Link :href="route('kb-articles.index')" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">
+                            <Link :href="route('kb-articles.index')" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                 Cancel
                             </Link>
                             <button type="submit" 
@@ -93,13 +93,13 @@
         <div v-if="showManageCategories" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showManageCategories = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md p-6 border border-gray-100">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6 border-b pb-4">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-900">Manage Categories</h3>
-                            <p class="text-xs text-gray-500 mt-1 uppercase font-black">Clean up typos or duplicates</p>
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Manage Categories</h3>
+                            <p class="text-xs text-gray-500 mt-1 uppercase font-black dark:text-gray-300">Clean up typos or duplicates</p>
                         </div>
-                        <button @click="showManageCategories = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showManageCategories = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -108,11 +108,11 @@
 
                     <div class="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                         <div class="space-y-2">
-                            <div v-for="cat in categories" :key="cat.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group">
-                                <span class="text-sm font-medium text-gray-700">{{ cat.name }}</span>
+                            <div v-for="cat in categories" :key="cat.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group dark:bg-gray-900/50 dark:hover:bg-gray-700">
+                                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ cat.name }}</span>
                                 <button 
                                     @click="deleteCategory(cat)"
-                                    class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                                    class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100 dark:text-gray-400"
                                     title="Delete Category"
                                 >
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +123,7 @@
                         </div>
                         
                         <div v-if="categories.length === 0" class="text-center py-8">
-                            <p class="text-sm text-gray-400">No categories found</p>
+                            <p class="text-sm text-gray-400 dark:text-gray-400">No categories found</p>
                         </div>
                     </div>
 

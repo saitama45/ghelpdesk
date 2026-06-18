@@ -198,10 +198,10 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
             <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
                 <div class="grid grid-cols-1 gap-6 lg:grid-cols-4">
                     <!-- Directory Sidebar -->
-                    <div class="lg:col-span-1 overflow-hidden bg-white shadow-sm sm:rounded-lg border border-gray-200 flex flex-col max-h-[calc(100vh-200px)]">
-                        <div class="p-6 text-gray-900 border-b border-gray-100 flex-shrink-0">
+                    <div class="lg:col-span-1 overflow-hidden bg-white shadow-sm sm:rounded-lg border border-gray-200 flex flex-col max-h-[calc(100vh-200px)] dark:bg-gray-800 dark:border-gray-700">
+                        <div class="p-6 text-gray-900 border-b border-gray-100 flex-shrink-0 dark:text-gray-100 dark:border-gray-700">
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-bold text-gray-700 uppercase tracking-wider text-xs">Directory</h3>
+                                <h3 class="text-lg font-bold text-gray-700 uppercase tracking-wider text-xs dark:text-gray-300">Directory</h3>
                                 <button @click="handleRefresh" class="p-1.5 rounded-full text-blue-500 hover:bg-blue-50" :class="{'animate-spin': isRefreshing}">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -209,8 +209,8 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
                                 </button>
                             </div>
                             <div class="mb-2">
-                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1">Filter Sub-Unit</label>
-                                <select v-model="subUnitFilter" class="block w-full border-gray-200 rounded-lg text-[11px] font-bold py-2 bg-gray-50">
+                                <label class="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1 dark:text-gray-400">Filter Sub-Unit</label>
+                                <select v-model="subUnitFilter" class="block w-full border-gray-200 rounded-lg text-[11px] font-bold py-2 bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
                                     <option v-for="option in subUnitOptions" :key="option" :value="option">{{ option }}</option>
                                 </select>
                             </div>
@@ -220,21 +220,21 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
                             <div v-for="(users, unit) in groupedUsers" :key="unit" class="space-y-2">
                                 <div class="flex items-center space-x-2 px-2">
                                     <span class="h-1.5 w-1.5 bg-blue-400 rounded-full"></span>
-                                    <h4 class="text-[11px] font-black text-blue-900 uppercase tracking-widest opacity-60">{{ unit }}</h4>
+                                    <h4 class="text-[11px] font-black text-blue-900 uppercase tracking-widest opacity-60 dark:text-blue-200">{{ unit }}</h4>
                                 </div>
                                 <div class="space-y-1">
                                     <div v-for="user in users" :key="user.id" @click="fetchUserStats(user.id)"
                                         class="group flex cursor-pointer items-center justify-between p-2 rounded-lg border border-transparent transition-all"
-                                        :class="selectedUserId === user.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-50'"
+                                        :class="selectedUserId === user.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'"
                                     >
                                         <div class="flex items-center min-w-0">
                                             <UserStatus :status="user.status" size="sm" class="mr-2" />
                                             <div class="truncate">
-                                                <div class="text-xs font-bold" :class="selectedUserId === user.id ? 'text-white' : 'text-gray-700'">{{ user.name }}</div>
+                                                <div class="text-xs font-bold" :class="selectedUserId === user.id ? 'text-white' : 'text-gray-700 dark:text-gray-200'">{{ user.name }}</div>
                                                 <div class="text-[9px] uppercase font-black opacity-60">{{ user.status }}</div>
                                             </div>
                                         </div>
-                                        <div v-if="user.status !== 'offline'" class="text-[9px] font-mono px-1.5 py-0.5 rounded" :class="selectedUserId === user.id ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-500'">
+                                        <div v-if="user.status !== 'offline'" class="text-[9px] font-mono px-1.5 py-0.5 rounded" :class="selectedUserId === user.id ? 'bg-blue-700 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300'">
                                             {{ formatSimpleDuration(user.duration_current_status) }}
                                         </div>
                                     </div>
@@ -244,15 +244,15 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
                     </div>
 
                     <!-- Stats View -->
-                    <div class="lg:col-span-3 overflow-hidden bg-white shadow-sm sm:rounded-lg border border-gray-200">
-                        <div class="p-8 text-gray-900 h-full flex flex-col">
+                    <div class="lg:col-span-3 overflow-hidden bg-white shadow-sm sm:rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+                        <div class="p-8 text-gray-900 h-full flex flex-col dark:text-gray-100">
                             <div v-if="selectedUser" class="animate-in fade-in slide-in-from-right-4 duration-300">
-                                <div class="flex items-center justify-between mb-10 pb-6 border-b border-gray-50">
+                                <div class="flex items-center justify-between mb-10 pb-6 border-b border-gray-50 dark:border-gray-700">
                                     <div class="flex items-center">
                                         <UserStatus :status="selectedUser.status" size="xl" class="mr-5" />
                                         <div>
-                                            <h3 class="text-3xl font-black text-gray-900 tracking-tight">{{ selectedUser.name }}</h3>
-                                            <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1">
+                                            <h3 class="text-3xl font-black text-gray-900 tracking-tight dark:text-gray-100">{{ selectedUser.name }}</h3>
+                                            <p class="text-gray-400 text-xs font-bold uppercase tracking-widest mt-1 dark:text-gray-400">
                                                 {{ selectedUser.sub_unit }} &bull; First Seen Today: {{ statsData.first_login_today ? new Date(statsData.first_login_today).toLocaleTimeString() : 'N/A' }}
                                             </p>
                                         </div>
@@ -261,37 +261,37 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
 
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                                     <!-- Time Online -->
-                                    <div class="p-6 bg-gradient-to-br from-green-50 to-white border border-green-100 rounded-[2rem] shadow-sm">
-                                        <div class="text-green-600 text-[9px] font-black uppercase tracking-widest mb-3 flex items-center">
+                                    <div class="p-6 bg-gradient-to-br from-green-50 to-white border border-green-100 rounded-[2rem] shadow-sm dark:from-green-900/20 dark:to-gray-800 dark:border-green-900/30">
+                                        <div class="text-green-600 text-[9px] font-black uppercase tracking-widest mb-3 flex items-center dark:text-green-400">
                                             <span class="h-1.5 w-1.5 bg-green-500 rounded-full mr-2"></span>
                                             Time Online
                                         </div>
-                                        <div class="text-2xl font-black text-gray-800 tabular-nums mb-1">
+                                        <div class="text-2xl font-black text-gray-800 tabular-nums mb-1 dark:text-gray-200">
                                             {{ formatTimeOnline(statsData.first_login_today, statsData.last_logout_at, selectedUser.status) }}
                                         </div>
-                                        <div class="text-[9px] text-gray-400 font-bold uppercase">From first login today</div>
+                                        <div class="text-[9px] text-gray-400 font-bold uppercase dark:text-gray-400">From first login today</div>
                                     </div>
                                     
                                     <!-- Time Idle -->
-                                    <div class="p-6 bg-gradient-to-br from-orange-50 to-white border border-orange-100 rounded-[2rem] shadow-sm">
-                                        <div class="text-orange-600 text-[9px] font-black uppercase tracking-widest mb-3 flex items-center">
+                                    <div class="p-6 bg-gradient-to-br from-orange-50 to-white border border-orange-100 rounded-[2rem] shadow-sm dark:from-orange-900/20 dark:to-gray-800 dark:border-orange-900/30">
+                                        <div class="text-orange-600 text-[9px] font-black uppercase tracking-widest mb-3 flex items-center dark:text-orange-400">
                                             <span class="h-1.5 w-1.5 bg-orange-500 rounded-full mr-2"></span>
                                             Time Idle
                                         </div>
-                                        <div class="text-2xl font-black text-gray-800 tabular-nums mb-1">
+                                        <div class="text-2xl font-black text-gray-800 tabular-nums mb-1 dark:text-gray-200">
                                             {{ formatTimeIdle(statsData, selectedUser.status) }}
                                         </div>
-                                        <div class="text-[9px] text-gray-400 font-bold uppercase italic">Since last online status</div>
+                                        <div class="text-[9px] text-gray-400 font-bold uppercase italic dark:text-gray-400">Since last online status</div>
                                     </div>
 
                                     <!-- Time Offline -->
-                                    <div class="p-6 bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-[2rem] shadow-sm">
-                                        <div class="text-gray-500 text-[9px] font-black uppercase tracking-widest mb-3 flex items-center">
+                                    <div class="p-6 bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-[2rem] shadow-sm dark:from-gray-800 dark:to-gray-900 dark:border-gray-700">
+                                        <div class="text-gray-500 text-[9px] font-black uppercase tracking-widest mb-3 flex items-center dark:text-gray-300">
                                             <span class="h-1.5 w-1.5 bg-gray-400 rounded-full mr-2"></span>
                                             Time Offline
                                         </div>
-                                        <div class="text-2xl font-black text-gray-800 tabular-nums mb-1">{{ formatTimeOffline(statsData.last_logout_at, selectedUser.status) }}</div>
-                                        <div class="text-[9px] text-gray-400 font-bold uppercase italic">Since last session ended</div>
+                                        <div class="text-2xl font-black text-gray-800 tabular-nums mb-1 dark:text-gray-200">{{ formatTimeOffline(statsData.last_logout_at, selectedUser.status) }}</div>
+                                        <div class="text-[9px] text-gray-400 font-bold uppercase italic dark:text-gray-400">Since last session ended</div>
                                     </div>
                                 </div>
 
@@ -307,8 +307,8 @@ watch(() => selectedUser.value?.status, (newStatus, oldStatus) => {
                                 </div>
                             </div>
                             <div v-else class="flex flex-1 flex-col items-center justify-center text-gray-300">
-                                <div class="bg-gray-50 p-10 rounded-full border border-gray-100 mb-8"><svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-24 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" /></svg></div>
-                                <h3 class="text-xl font-black text-gray-900 tracking-widest uppercase">Select a User</h3>
+                                <div class="bg-gray-50 p-10 rounded-full border border-gray-100 mb-8 dark:bg-gray-900/50 dark:border-gray-700"><svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-24 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" /></svg></div>
+                                <h3 class="text-xl font-black text-gray-900 tracking-widest uppercase dark:text-gray-100">Select a User</h3>
                             </div>
                         </div>
                     </div>

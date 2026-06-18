@@ -336,15 +336,15 @@ const getFileUrl = (value) => {
 
 <template>
     <AppLayout :title="`SAP Request #${sapRequest.id}`">
-        <div class="py-12 bg-gray-50 min-h-screen">
+        <div class="py-12 bg-gray-50 min-h-screen dark:bg-gray-900/50">
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
 
                 <!-- Back -->
                 <div class="flex items-center gap-3 mb-6">
-                    <Link :href="route('sap-requests.index')" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all">
+                    <Link :href="route('sap-requests.index')" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all dark:text-gray-400 dark:hover:bg-gray-700">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
                     </Link>
-                    <span class="text-sm font-bold text-gray-400">Back to SAP Requests</span>
+                    <span class="text-sm font-bold text-gray-400 dark:text-gray-400">Back to SAP Requests</span>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -353,38 +353,38 @@ const getFileUrl = (value) => {
                     <div class="lg:col-span-2 space-y-8">
 
                         <!-- Header Card -->
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden">
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                             <div class="absolute top-0 right-0 p-8">
                                 <span :class="statusClass(sapRequest.status)" class="px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
                                     {{ sapRequest.status }}
                                 </span>
                             </div>
-                            <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-8 flex items-center gap-3">
+                            <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-8 flex items-center gap-3 dark:text-gray-100">
                                 <span class="text-teal-600">#{{ sapRequest.id }}</span>
                                 {{ sapRequest.request_type?.name }}
                             </h1>
                             <div class="grid grid-cols-2 md:grid-cols-3 gap-8">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Entity</label>
-                                    <p class="text-base font-bold text-gray-900">{{ sapRequest.company?.name }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Entity</label>
+                                    <p class="text-base font-bold text-gray-900 dark:text-gray-100">{{ sapRequest.company?.name }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Requester</label>
-                                    <p class="text-base font-bold text-gray-900">{{ sapRequest.user?.name ?? sapRequest.requester_name ?? 'Public Submission' }}</p>
-                                    <p class="text-xs text-gray-400 font-medium">{{ sapRequest.user?.email ?? sapRequest.requester_email }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Requester</label>
+                                    <p class="text-base font-bold text-gray-900 dark:text-gray-100">{{ sapRequest.user?.name ?? sapRequest.requester_name ?? 'Public Submission' }}</p>
+                                    <p class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ sapRequest.user?.email ?? sapRequest.requester_email }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Submitted</label>
-                                    <p class="text-sm font-mono font-black text-gray-600">{{ fmt(sapRequest.created_at) }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Submitted</label>
+                                    <p class="text-sm font-mono font-black text-gray-600 dark:text-gray-300">{{ fmt(sapRequest.created_at) }}</p>
                                 </div>
                                 <div v-if="sapRequest.ticket">
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Linked Ticket</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Linked Ticket</label>
                                     <Link :href="route('tickets.edit', sapRequest.ticket.id)" class="text-sm font-black text-teal-600 hover:text-teal-800 font-mono">
                                         {{ sapRequest.ticket.ticket_key }}
                                     </Link>
                                 </div>
                                 <div v-if="hasPermission('sap_requests.edit') && sapRequest.status === 'Open'">
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Actions</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Actions</label>
                                     <Link :href="route('sap-requests.edit', sapRequest.id)" class="inline-flex items-center text-xs font-black text-amber-600 hover:text-amber-800">
                                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2.5 0 113.536 3.536L12 14.036H3v-3.572L16.732 3.732z"/></svg>
                                         Edit Request
@@ -394,14 +394,14 @@ const getFileUrl = (value) => {
                         </div>
 
                         <!-- Form Data Card -->
-                        <div v-if="Object.keys(formData).length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-xl font-black text-gray-900 mb-6">Request Details</h3>
+                        <div v-if="Object.keys(formData).length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-xl font-black text-gray-900 mb-6 dark:text-gray-100">Request Details</h3>
                             <dl class="divide-y divide-gray-50">
                                 <div v-for="(value, key) in formData" :key="key" class="flex items-start justify-between py-4">
-                                    <dt class="text-xs font-black text-gray-400 uppercase tracking-widest w-1/3">
+                                    <dt class="text-xs font-black text-gray-400 uppercase tracking-widest w-1/3 dark:text-gray-400">
                                         {{ String(key).replace(/_/g, ' ') }}
                                     </dt>
-                                    <dd class="text-sm font-semibold text-gray-900 text-right w-2/3">
+                                    <dd class="text-sm font-semibold text-gray-900 text-right w-2/3 dark:text-gray-100">
                                         <template v-if="isFileField(key)">
                                             <div v-if="isFileArray(value)" class="flex flex-col items-end gap-1">
                                                 <a v-for="(file, fi) in value" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" :download="getFileName(file)" class="inline-flex items-center text-teal-600 hover:text-teal-800 hover:underline">
@@ -424,15 +424,15 @@ const getFileUrl = (value) => {
                         </div>
 
                         <!-- Items Card (for New Item Request / New BOM) -->
-                        <div v-if="items.length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-xl font-black text-gray-900 mb-6">Items ({{ items.length }})</h3>
+                        <div v-if="items.length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-xl font-black text-gray-900 mb-6 dark:text-gray-100">Items ({{ items.length }})</h3>
                             <div class="space-y-4">
-                                <div v-for="(item, i) in items" :key="item.id" class="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                                <div v-for="(item, i) in items" :key="item.id" class="bg-gray-50 rounded-2xl p-6 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
                                     <p class="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-4">Item #{{ i + 1 }}</p>
                                     <dl class="grid grid-cols-2 md:grid-cols-3 gap-4">
                                         <div v-for="(val, k) in item.item_data" :key="k">
-                                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{{ String(k).replace(/_/g, ' ') }}</dt>
-                                            <dd class="text-sm font-semibold text-gray-900">
+                                            <dt class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5 dark:text-gray-400">{{ String(k).replace(/_/g, ' ') }}</dt>
+                                            <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">
                                                 <template v-if="isFileField(k, true)">
                                                     <div v-if="isFileArray(val)" class="flex flex-col gap-1">
                                                         <a v-for="(file, fi) in val" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" :download="getFileName(file)" class="inline-flex items-center text-teal-600 hover:text-teal-800 hover:underline">
@@ -459,33 +459,33 @@ const getFileUrl = (value) => {
 
                     <!-- Right: Approval Sidebar -->
                     <div class="space-y-8">
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                             <div class="flex items-center justify-between mb-8">
-                                <h3 class="text-lg font-black text-gray-900">Approval Pulse</h3>
+                                <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">Approval Pulse</h3>
                                 <span v-if="sapRequest.status === 'Approved'" class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-widest">Finalized</span>
-                                <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest">No Approval Needed</span>
+                                <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300">No Approval Needed</span>
                             </div>
 
                             <!-- Linked Ticket Status & SLA -->
-                            <div v-if="sapRequest.ticket" class="mb-8 bg-gray-50 rounded-2xl border border-gray-100 p-5">
+                            <div v-if="sapRequest.ticket" class="mb-8 bg-gray-50 rounded-2xl border border-gray-100 p-5 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex items-center justify-between mb-4">
-                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Linked Ticket Status</h4>
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Linked Ticket Status</h4>
                                     <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest" :class="ticketStatusClass(sapRequest.ticket.status)">
                                         {{ sapRequest.ticket.status.replace(/_/g, ' ') }}
                                     </span>
                                 </div>
                                 
                                 <div v-if="sapRequest.ticket.sla_metric" class="space-y-3">
-                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Ticket SLA</h4>
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4 dark:text-gray-400">Ticket SLA</h4>
                                     <!-- Response SLA -->
                                     <div class="p-3 rounded-xl border" :class="sapRequest.ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (sapRequest.ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response Target</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Response Target</span>
                                             <span v-if="sapRequest.ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
                                             <span v-else-if="sapRequest.ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
                                             <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ sapRequest.ticket.sla_metric.first_response_at ? fmt(sapRequest.ticket.sla_metric.first_response_at) : (sapRequest.ticket.sla_metric.response_target_at ? fmt(sapRequest.ticket.sla_metric.response_target_at) : 'No target') }}
                                         </div>
                                     </div>
@@ -493,12 +493,12 @@ const getFileUrl = (value) => {
                                     <!-- Resolution SLA -->
                                     <div class="p-3 rounded-xl border" :class="sapRequest.ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (sapRequest.ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution Target</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Resolution Target</span>
                                             <span v-if="sapRequest.ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
                                             <span v-else-if="sapRequest.ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
                                             <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ sapRequest.ticket.sla_metric.resolved_at ? fmt(sapRequest.ticket.sla_metric.resolved_at) : (sapRequest.ticket.sla_metric.resolution_target_at ? fmt(sapRequest.ticket.sla_metric.resolution_target_at) : 'No target') }}
                                         </div>
                                     </div>
@@ -510,8 +510,8 @@ const getFileUrl = (value) => {
                                 <div class="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                                     <svg class="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 </div>
-                                <p class="text-sm font-bold text-gray-700">Direct to SAP Data Officer</p>
-                                <p class="text-xs text-gray-400 mt-1">This request type requires no approval and goes directly to the encoder.</p>
+                                <p class="text-sm font-bold text-gray-700 dark:text-gray-300">Direct to SAP Data Officer</p>
+                                <p class="text-xs text-gray-400 mt-1 dark:text-gray-400">This request type requires no approval and goes directly to the encoder.</p>
                             </div>
 
                             <!-- Approval stages -->
@@ -536,16 +536,16 @@ const getFileUrl = (value) => {
                                                     {{ fmt(getApprovalForLevel(lvl).created_at) }}
                                                 </span>
                                             </div>
-                                            <div v-if="getApprovalForLevel(lvl)" class="mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 relative overflow-hidden">
+                                            <div v-if="getApprovalForLevel(lvl)" class="mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 relative overflow-hidden dark:bg-gray-900/50 dark:border-gray-700">
                                                 <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
                                                 <div class="flex items-center mb-1">
                                                     <div class="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center text-[9px] font-black text-teal-600 mr-2 capitalize">
                                                         {{ getApprovalForLevel(lvl).user?.name?.charAt(0) ?? '?' }}
                                                     </div>
-                                                    <span class="text-xs font-black text-gray-900">{{ getApprovalForLevel(lvl).user?.name ?? 'Unknown' }}</span>
+                                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ getApprovalForLevel(lvl).user?.name ?? 'Unknown' }}</span>
                                                 </div>
-                                                <p v-if="getApprovalForLevel(lvl).remarks" class="text-[11px] text-gray-600 italic">"{{ getApprovalForLevel(lvl).remarks }}"</p>
-                                                <p v-else class="text-[9px] text-gray-400 font-bold uppercase">Approved without remarks</p>
+                                                <p v-if="getApprovalForLevel(lvl).remarks" class="text-[11px] text-gray-600 italic dark:text-gray-300">"{{ getApprovalForLevel(lvl).remarks }}"</p>
+                                                <p v-else class="text-[9px] text-gray-400 font-bold uppercase dark:text-gray-400">Approved without remarks</p>
                                             </div>
                                             <div v-else-if="Number(lvl) === Number(sapRequest.current_approval_level)" class="mt-3 p-4 bg-teal-50/50 rounded-2xl border-2 border-dashed border-teal-200">
                                                 <div class="flex items-center justify-between">
@@ -571,25 +571,25 @@ const getFileUrl = (value) => {
                                                         <span
                                                             v-for="approver in assignedApproversByLevel[Number(lvl)]"
                                                             :key="approver.id"
-                                                            class="px-2.5 py-1 rounded-full bg-white text-teal-700 border border-teal-200 text-[10px] font-bold"
+                                                            class="px-2.5 py-1 rounded-full bg-white text-teal-700 border border-teal-200 text-[10px] font-bold dark:bg-gray-800"
                                                         >
                                                             {{ approver.name }}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic">Locked</div>
+                                            <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic dark:text-gray-400">Locked</div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Approve Action -->
-                            <div v-if="canApprove" class="mt-10 pt-8 border-t border-gray-100 relative">
-                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-teal-500 uppercase tracking-[0.3em]">Your Decision</div>
+                            <div v-if="canApprove" class="mt-10 pt-8 border-t border-gray-100 relative dark:border-gray-700">
+                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-teal-500 uppercase tracking-[0.3em] dark:bg-gray-800">Your Decision</div>
 
                                 <!-- Approver Fields -->
-                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">
+                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm dark:bg-gray-800">
                                     <h4 class="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
                                     <DynamicFormRenderer
                                         :fields="approverFields"
@@ -602,11 +602,11 @@ const getFileUrl = (value) => {
                                 </div>
 
                                 <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add approval/rejection remarks..."
-                                    class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-4 text-sm font-medium focus:bg-white focus:border-teal-500 focus:ring-0 transition-all mb-4"></textarea>
+                                    class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-4 text-sm font-medium focus:bg-white focus:border-teal-500 focus:ring-0 transition-all mb-4 dark:bg-gray-900/50 dark:border-gray-700"></textarea>
                                 
                                 <div class="flex flex-col sm:flex-row gap-4">
                                     <button @click="submitReject" :disabled="approvalForm.processing"
-                                        class="flex-1 py-4 bg-white text-red-600 border-2 border-red-100 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-red-50 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center">
+                                        class="flex-1 py-4 bg-white text-red-600 border-2 border-red-100 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-red-50 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center dark:bg-gray-800">
                                         Reject Request
                                     </button>
                                     <button @click="submitApproval" :disabled="approvalForm.processing"

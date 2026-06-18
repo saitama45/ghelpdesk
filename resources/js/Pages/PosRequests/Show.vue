@@ -330,57 +330,57 @@ const formatDateTime = (dateStr) => {
 
 <template>
     <AppLayout :title="`POS Request #${posRequest.id}`">
-        <div class="py-12 bg-gray-50 min-h-screen">
+        <div class="py-12 bg-gray-50 min-h-screen dark:bg-gray-900/50">
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     
                     <!-- Left: Request Details (2 cols) -->
                     <div class="lg:col-span-2 space-y-8">
                         <!-- Header Detail Card -->
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden">
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                             <div class="absolute top-0 right-0 p-8">
                                 <span :class="getStatusBadgeClass(posRequest.status)" class="px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-[0.2em] shadow-lg text-center min-w-[150px]">
                                     {{ posRequest.status }}
                                 </span>
                             </div>
 
-                            <h1 class="text-4xl font-black text-gray-900 tracking-tighter mb-10 flex items-center">
+                            <h1 class="text-4xl font-black text-gray-900 tracking-tighter mb-10 flex items-center dark:text-gray-100">
                                 <span class="text-indigo-600 mr-3">#{{ posRequest.id }}</span>
                                 {{ posRequest.request_type.name }}
                             </h1>
 
                             <div class="grid grid-cols-2 md:grid-cols-5 gap-10">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Company</label>
-                                    <p class="text-lg font-bold text-gray-900">{{ posRequest.company.name }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Company</label>
+                                    <p class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ posRequest.company.name }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Requester</label>
-                                    <p class="text-lg font-bold text-gray-900">{{ posRequest.user ? posRequest.user.name : (posRequest.requester_name || 'Public Submission') }}</p>
-                                    <p v-if="!posRequest.user && posRequest.requester_email" class="text-[10px] text-gray-400 font-bold">{{ posRequest.requester_email }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Requester</label>
+                                    <p class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ posRequest.user ? posRequest.user.name : (posRequest.requester_name || 'Public Submission') }}</p>
+                                    <p v-if="!posRequest.user && posRequest.requester_email" class="text-[10px] text-gray-400 font-bold dark:text-gray-400">{{ posRequest.requester_email }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Requested Date</label>
-                                    <p class="text-lg font-mono font-black text-gray-600">{{ formatDateTime(posRequest.created_at) }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Requested Date</label>
+                                    <p class="text-lg font-mono font-black text-gray-600 dark:text-gray-300">{{ formatDateTime(posRequest.created_at) }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Launch Date</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Launch Date</label>
                                     <p class="text-lg font-mono font-black text-indigo-600">{{ posRequest.launch_date }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Effectivity</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Effectivity</label>
                                     <p class="text-lg font-mono font-black text-emerald-600">{{ posRequest.effectivity_date }}</p>
                                 </div>
                             </div>
 
-                            <div class="mt-10 pt-10 border-t border-gray-100">
-                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Stores Covered</label>
+                            <div class="mt-10 pt-10 border-t border-gray-100 dark:border-gray-700">
+                                <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 dark:text-gray-300">Stores Covered</label>
                                 <div class="flex flex-wrap gap-2">
                                     <template v-if="coversAllStores">
                                         <span class="px-6 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase italic tracking-widest shadow-lg shadow-indigo-100">All Stores</span>
                                     </template>
                                     <template v-else>
-                                        <span v-for="code in visibleStoresCovered" :key="code" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200">
+                                        <span v-for="code in visibleStoresCovered" :key="code" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                             {{ code }}
                                         </span>
                                         <button
@@ -398,12 +398,12 @@ const formatDateTime = (dateStr) => {
 
                         <!-- Regular Schema Fields (non-tabular) -->
                         <div v-if="schemaFields.length > 0 && Object.keys(regularFormData).length > 0"
-                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-2xl font-black text-gray-900 mb-8">Form Details</h3>
+                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-2xl font-black text-gray-900 mb-8 dark:text-gray-100">Form Details</h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                                <div v-for="field in schemaFields" :key="field.key" class="bg-gray-50 rounded-2xl p-5">
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">{{ field.label }}</label>
-                                    <div class="text-sm font-bold text-gray-900">
+                                <div v-for="field in schemaFields" :key="field.key" class="bg-gray-50 rounded-2xl p-5 dark:bg-gray-900/50">
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 dark:text-gray-400">{{ field.label }}</label>
+                                    <div class="text-sm font-bold text-gray-900 dark:text-gray-100">
                                         <template v-if="isFileField(field.key)">
                                             <div v-if="isFileArray(regularFormData[field.key])" class="flex flex-col gap-1">
                                                 <a v-for="(file, fi) in regularFormData[field.key]" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" :download="getFileName(file)" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
@@ -427,21 +427,21 @@ const formatDateTime = (dateStr) => {
 
                         <!-- Line Items — Schema-driven (dynamic columns) -->
                         <div v-if="hasSchemaItems"
-                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
+                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                             <div class="flex items-center justify-between mb-8">
-                                <h3 class="text-2xl font-black text-gray-900">Line Items</h3>
+                                <h3 class="text-2xl font-black text-gray-900 dark:text-gray-100">Line Items</h3>
                                 <span class="px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-widest">
                                     {{ lineItems.length }} {{ lineItems.length === 1 ? 'Item' : 'Items' }}
                                 </span>
                             </div>
 
-                            <div v-if="lineItems.length === 0" class="text-center py-12 text-gray-400 font-bold text-sm italic">
+                            <div v-if="lineItems.length === 0" class="text-center py-12 text-gray-400 font-bold text-sm italic dark:text-gray-400">
                                 No line items recorded.
                             </div>
                             <div v-else class="overflow-x-auto custom-scrollbar">
                                 <table class="w-full border-separate border-spacing-y-3 min-w-max">
                                     <thead>
-                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left">
+                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left dark:text-slate-300">
                                             <th class="px-4 pb-4 text-center">#</th>
                                             <th v-for="col in schemaItemsColumns" :key="col.key" class="px-4 pb-4 whitespace-nowrap">
                                                 {{ col.label }}
@@ -450,12 +450,12 @@ const formatDateTime = (dateStr) => {
                                     </thead>
                                     <tbody>
                                         <tr v-for="(item, idx) in lineItems" :key="idx"
-                                            class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
-                                            <td class="px-4 py-5 rounded-l-2xl text-center text-[10px] font-black text-gray-400">
+                                            class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group dark:bg-slate-900/70 dark:hover:bg-slate-800 dark:hover:shadow-black/20">
+                                            <td class="px-4 py-5 rounded-l-2xl text-center text-[10px] font-black text-gray-400 dark:text-slate-400">
                                                 {{ idx + 1 }}
                                             </td>
                                             <td v-for="col in schemaItemsColumns" :key="col.key"
-                                                class="px-4 py-5 last:rounded-r-2xl text-sm font-bold text-gray-700 whitespace-nowrap">
+                                                class="px-4 py-5 last:rounded-r-2xl text-sm font-bold text-gray-700 whitespace-nowrap dark:text-slate-100">
                                                 <template v-if="isFileField(col.key, true)">
                                                     <div v-if="isFileArray(item[col.key])" class="flex flex-col gap-1">
                                                         <a v-for="(file, fi) in item[col.key]" :key="fi" :href="getFileUrl(file)" target="_blank" :download="getFileName(file)" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
@@ -481,12 +481,12 @@ const formatDateTime = (dateStr) => {
 
                         <!-- Line Items — Hard-coded fallback (legacy types) -->
                         <div v-else-if="!hasSchema && posRequest.details?.length > 0"
-                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-2xl font-black text-gray-900 mb-8">Detailed Configuration</h3>
+                             class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-2xl font-black text-gray-900 mb-8 dark:text-gray-100">Detailed Configuration</h3>
                             <div class="overflow-x-auto custom-scrollbar">
                                 <table class="w-full border-separate border-spacing-y-3">
                                     <thead>
-                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left">
+                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left dark:text-slate-300">
                                             <th class="px-6 pb-4">Product</th>
                                             <th class="px-6 pb-4">POS Alias</th>
                                             <th class="px-6 pb-4 text-center">Price Type</th>
@@ -502,30 +502,30 @@ const formatDateTime = (dateStr) => {
                                     </thead>
                                     <tbody>
                                         <tr v-for="item in posRequest.details" :key="item.id"
-                                            class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
+                                            class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group dark:bg-slate-900/70 dark:hover:bg-slate-800 dark:hover:shadow-black/20">
                                             <td class="px-6 py-5 rounded-l-2xl">
-                                                <div class="font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{{ item.product_name }}</div>
+                                                <div class="font-black text-gray-900 group-hover:text-indigo-600 transition-colors dark:text-slate-100 dark:group-hover:text-indigo-200">{{ item.product_name }}</div>
                                             </td>
-                                            <td class="px-6 py-5 font-bold text-gray-700">{{ item.pos_name }}</td>
+                                            <td class="px-6 py-5 font-bold text-gray-700 dark:text-slate-200">{{ item.pos_name }}</td>
                                             <td class="px-6 py-5 text-center">
-                                                <span class="px-3 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black uppercase text-gray-600 shadow-sm">
+                                                <span class="px-3 py-1 bg-white border border-gray-200 rounded-lg text-[10px] font-black uppercase text-gray-600 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                                                     {{ getLabel('price_type', item.price_type) }}
                                                 </span>
                                             </td>
-                                            <td class="px-6 py-5 text-center font-black text-indigo-600">
+                                            <td class="px-6 py-5 text-center font-black text-indigo-600 dark:text-indigo-300">
                                                 {{ item.price_amount ? Number(item.price_amount).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-' }}
                                             </td>
-                                            <td class="px-6 py-5 font-bold text-gray-700">{{ getLabel('category', item.category) }}</td>
-                                            <td class="px-6 py-5 font-mono text-xs font-black">{{ item.item_code }}</td>
+                                            <td class="px-6 py-5 font-bold text-gray-700 dark:text-slate-200">{{ getLabel('category', item.category) }}</td>
+                                            <td class="px-6 py-5 font-mono text-xs font-black text-gray-700 dark:text-slate-100">{{ item.item_code }}</td>
                                             <td class="px-6 py-5">
-                                                <div class="text-[11px] text-gray-600 font-medium max-w-[200px] truncate" :title="item.remarks_mechanics">
+                                                <div class="text-[11px] text-gray-600 font-medium max-w-[200px] truncate dark:text-slate-200" :title="item.remarks_mechanics">
                                                     {{ item.remarks_mechanics || '-' }}
                                                 </div>
                                             </td>
-                                            <td class="px-6 py-5 text-center font-bold text-gray-600">{{ item.sc || '-' }}</td>
-                                            <td class="px-6 py-5 text-center font-bold text-gray-600">{{ item.local_tax || '-' }}</td>
-                                            <td class="px-6 py-5 text-center font-bold text-gray-600">{{ getLabel('mgr_meal', item.mgr_meal) }}</td>
-                                            <td class="px-6 py-5 text-center rounded-r-2xl font-bold text-gray-500">{{ item.printer }}</td>
+                                            <td class="px-6 py-5 text-center font-bold text-gray-600 dark:text-slate-200">{{ item.sc || '-' }}</td>
+                                            <td class="px-6 py-5 text-center font-bold text-gray-600 dark:text-slate-200">{{ item.local_tax || '-' }}</td>
+                                            <td class="px-6 py-5 text-center font-bold text-gray-600 dark:text-slate-200">{{ getLabel('mgr_meal', item.mgr_meal) }}</td>
+                                            <td class="px-6 py-5 text-center rounded-r-2xl font-bold text-gray-500 dark:text-slate-300">{{ item.printer }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -536,46 +536,46 @@ const formatDateTime = (dateStr) => {
                     <!-- Right: Approval Sidebar (1 col) -->
                     <div class="space-y-8">
                         <!-- Approval Pulse Tracker -->
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                             <div class="flex items-center justify-between mb-10">
-                                <h3 class="text-xl font-black text-gray-900 tracking-tight">Approval Pulse</h3>
+                                <h3 class="text-xl font-black text-gray-900 tracking-tight dark:text-gray-100">Approval Pulse</h3>
                                 <span v-if="posRequest.status === 'Approved'" class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-widest">
                                     Finalized
                                 </span>
                             </div>
 
                             <!-- Linked Ticket Status & SLA -->
-                            <div v-if="posRequest.ticket" class="mb-8 bg-gray-50 rounded-2xl border border-gray-100 p-5">
+                            <div v-if="posRequest.ticket" class="mb-8 bg-gray-50 rounded-2xl border border-gray-100 p-5 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex items-center justify-between mb-4">
-                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Linked Ticket Status</h4>
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Linked Ticket Status</h4>
                                     <span class="px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest" :class="ticketStatusClass(posRequest.ticket.status)">
                                         {{ posRequest.ticket.status.replace(/_/g, ' ') }}
                                     </span>
                                 </div>
 
                                 <div v-if="posRequest.ticket.sla_metric" class="space-y-3">
-                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Ticket SLA</h4>
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4 dark:text-gray-400">Ticket SLA</h4>
                                     <!-- Response Target -->
                                     <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (posRequest.ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response Target</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Response Target</span>
                                             <span v-if="posRequest.ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
                                             <span v-else-if="posRequest.ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
                                             <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ posRequest.ticket.sla_metric.first_response_at ? formatDateTime(posRequest.ticket.sla_metric.first_response_at) : (posRequest.ticket.sla_metric.response_target_at ? formatDateTime(posRequest.ticket.sla_metric.response_target_at) : 'No target') }}
                                         </div>
                                     </div>
                                     <!-- Resolution Target -->
                                     <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (posRequest.ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution Target</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Resolution Target</span>
                                             <span v-if="posRequest.ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
                                             <span v-else-if="posRequest.ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
                                             <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ posRequest.ticket.sla_metric.resolved_at ? formatDateTime(posRequest.ticket.sla_metric.resolved_at) : (posRequest.ticket.sla_metric.resolution_target_at ? formatDateTime(posRequest.ticket.sla_metric.resolution_target_at) : 'No target') }}
                                         </div>
                                     </div>
@@ -610,18 +610,18 @@ const formatDateTime = (dateStr) => {
                                             </div>
 
                                             <!-- Approval Detail Card -->
-                                            <div v-if="getApprovalForLevel(lvl)" class="mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
+                                            <div v-if="getApprovalForLevel(lvl)" class="mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group dark:bg-gray-900/50 dark:border-gray-700">
                                                 <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
                                                 <div class="flex items-center mb-2">
                                                     <div class="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-black text-indigo-600 mr-2 capitalize">
                                                         {{ getApprovalForLevel(lvl).user?.name?.charAt(0) || '?' }}
                                                     </div>
-                                                    <span class="text-xs font-black text-gray-900">{{ getApprovalForLevel(lvl).user?.name || 'Unknown User' }}</span>
+                                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ getApprovalForLevel(lvl).user?.name || 'Unknown User' }}</span>
                                                 </div>
-                                                <p v-if="getApprovalForLevel(lvl).remarks" class="text-[11px] text-gray-700 italic font-medium leading-relaxed">
+                                                <p v-if="getApprovalForLevel(lvl).remarks" class="text-[11px] text-gray-700 italic font-medium leading-relaxed dark:text-gray-300">
                                                     "{{ getApprovalForLevel(lvl).remarks }}"
                                                 </p>
-                                                <p v-else class="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Approved without remarks</p>
+                                                <p v-else class="text-[9px] text-gray-400 font-bold uppercase tracking-tighter dark:text-gray-400">Approved without remarks</p>
                                             </div>
 
                                             <!-- Pending State -->
@@ -651,7 +651,7 @@ const formatDateTime = (dateStr) => {
                                                         <span
                                                             v-for="approver in assignedApproversByLevel[Number(lvl)]"
                                                             :key="approver.id"
-                                                            class="px-2.5 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold"
+                                                            class="px-2.5 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold dark:bg-gray-800"
                                                         >
                                                             {{ approver.name }}
                                                         </span>
@@ -660,7 +660,7 @@ const formatDateTime = (dateStr) => {
                                             </div>
 
                                             <!-- Future State -->
-                                            <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic">
+                                            <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic dark:text-gray-400">
                                                 Locked
                                             </div>
                                         </div>
@@ -669,11 +669,11 @@ const formatDateTime = (dateStr) => {
                             </div>
 
                             <!-- Action Area -->
-                            <div v-if="canApprove" class="mt-12 pt-10 border-t border-gray-100 relative">
-                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">Your Decision</div>
+                            <div v-if="canApprove" class="mt-12 pt-10 border-t border-gray-100 relative dark:border-gray-700">
+                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em] dark:bg-gray-800">Your Decision</div>
 
                                 <!-- Approver Fields -->
-                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">
+                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm dark:bg-gray-800">
                                     <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
                                     <DynamicFormRenderer
                                         :fields="approverFields"
@@ -688,11 +688,11 @@ const formatDateTime = (dateStr) => {
                                 <div class="mb-6">
                                     <label class="block text-[9px] font-black text-slate-600 uppercase tracking-widest mb-3 ml-1">Approval/Rejection Remarks</label>
                                     <textarea v-model="approvalForm.remarks" rows="3" :placeholder="`Add comments for Stage ${posRequest.current_approval_level}...`" 
-                                              class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 text-sm font-medium focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all shadow-inner text-gray-900"></textarea>
+                                              class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-5 text-sm font-medium focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all shadow-inner text-gray-900 dark:bg-gray-900/50 dark:text-gray-100 dark:border-gray-700"></textarea>
                                 </div>
                                 <div class="flex flex-col sm:flex-row gap-4">
                                     <button @click="submitReject" :disabled="approvalForm.processing"
-                                            class="flex-1 py-4 bg-white text-red-600 border-2 border-red-100 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-red-50 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center">
+                                            class="flex-1 py-4 bg-white text-red-600 border-2 border-red-100 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-red-50 transform hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-50 text-center dark:bg-gray-800">
                                         Reject Request
                                     </button>
                                     <button @click="submitApproval" :disabled="approvalForm.processing"
@@ -710,15 +710,15 @@ const formatDateTime = (dateStr) => {
         <div v-if="showStoresCoveredModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeStoresCoveredModal"></div>
-                <div class="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl p-8 border border-gray-100">
+                <div class="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex items-start justify-between gap-4 mb-6">
                         <div>
-                            <h3 class="text-2xl font-black text-gray-900">Stores Covered</h3>
-                            <p class="mt-1 text-xs font-bold uppercase tracking-widest text-gray-400">
+                            <h3 class="text-2xl font-black text-gray-900 dark:text-gray-100">Stores Covered</h3>
+                            <p class="mt-1 text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-400">
                                 {{ storesCovered.length }} {{ storesCovered.length === 1 ? 'Store' : 'Stores' }}
                             </p>
                         </div>
-                        <button @click="closeStoresCoveredModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeStoresCoveredModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -727,7 +727,7 @@ const formatDateTime = (dateStr) => {
 
                     <div class="max-h-[60vh] overflow-y-auto pr-1">
                         <div class="flex flex-wrap gap-2">
-                            <span v-for="code in storesCovered" :key="`modal-${code}`" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200">
+                            <span v-for="code in storesCovered" :key="`modal-${code}`" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                 {{ code }}
                             </span>
                         </div>

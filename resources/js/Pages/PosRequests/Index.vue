@@ -78,21 +78,21 @@ const getStatusLabel = (request) => {
 
 const getStatusClass = (request) => {
     const status = request.ticket ? request.ticket.status : request.status
-    if (status.startsWith('Approved Level')) return 'bg-blue-50 text-blue-700 border-blue-100'
+    if (status.startsWith('Approved Level')) return 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/15 dark:text-blue-200 dark:border-blue-400/30'
     
     switch (status) {
-        case 'Approved': return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+        case 'Approved': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-400/30'
         case 'Open': 
-        case 'open': return 'bg-blue-100 text-blue-800 border-blue-200'
-        case 'Rejected': return 'bg-red-100 text-red-800 border-red-200'
-        case 'Cancelled': return 'bg-rose-100 text-rose-800 border-rose-200'
-        case 'for_schedule': return 'bg-teal-50 text-teal-700 border-teal-100'
-        case 'in_progress': return 'bg-purple-50 text-purple-700 border-purple-100'
-        case 'resolved': return 'bg-green-100 text-green-800 border-green-200'
-        case 'closed': return 'bg-gray-100 text-gray-600 border-gray-200'
-        case 'waiting_service_provider': return 'bg-orange-50 text-orange-700 border-orange-100'
-        case 'waiting_client_feedback': return 'bg-blue-50 text-blue-700 border-blue-100'
-        default: return 'bg-amber-100 text-amber-800 border-amber-200'
+        case 'open': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:border-blue-400/30'
+        case 'Rejected': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-500/15 dark:text-red-200 dark:border-red-400/30'
+        case 'Cancelled': return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:border-rose-400/30'
+        case 'for_schedule': return 'bg-teal-50 text-teal-700 border-teal-100 dark:bg-teal-500/15 dark:text-teal-200 dark:border-teal-400/30'
+        case 'in_progress': return 'bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-500/15 dark:text-purple-200 dark:border-purple-400/30'
+        case 'resolved': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-500/15 dark:text-green-200 dark:border-green-400/30'
+        case 'closed': return 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600'
+        case 'waiting_service_provider': return 'bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-500/15 dark:text-orange-200 dark:border-orange-400/30'
+        case 'waiting_client_feedback': return 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/15 dark:text-blue-200 dark:border-blue-400/30'
+        default: return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-400/30'
     }
 }
 
@@ -101,32 +101,32 @@ const getStageDisplay = (request) => {
     const totalLevels = Number(request.request_type?.approval_levels ?? 0)
 
     if (requestStatus === 'Rejected') {
-        return { label: 'Rejected', class: 'text-[10px] font-black text-red-600 uppercase tracking-widest' }
+        return { label: 'Rejected', class: 'text-[10px] font-black text-red-600 uppercase tracking-widest dark:text-red-300' }
     }
 
     if (requestStatus === 'Cancelled') {
-        return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest' }
+        return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest dark:text-rose-300' }
     }
 
     if (requestStatus === 'Approved' || request.ticket) {
-        return { label: 'Completed', class: 'text-[10px] font-black text-emerald-600 uppercase tracking-widest' }
+        return { label: 'Completed', class: 'text-[10px] font-black text-emerald-600 uppercase tracking-widest dark:text-emerald-300' }
     }
 
     if (totalLevels > 0) {
         return {
             label: `${Number(request.current_approval_level ?? 0)} / ${totalLevels}`,
-            class: 'text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100',
+            class: 'text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-0.5 rounded-full border border-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:border-indigo-400/30',
             isBadge: true,
         }
     }
 
-    return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase' }
+    return { label: 'N/A', class: 'text-[10px] font-black text-gray-300 uppercase dark:text-slate-400' }
 }
 </script>
 
 <template>
     <AppLayout title="POS Requests" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
-        <div class="py-6 bg-gray-50/50 min-h-screen">
+        <div class="py-6 bg-gray-50/50 min-h-screen dark:bg-slate-950">
                 <DataTable
                     title="POS Request Management"
                     subtitle="Track and manage point-of-sale configuration requests"
@@ -144,14 +144,14 @@ const getStageDisplay = (request) => {
                 >
                     <template #actions>
                         <div class="flex items-center space-x-4">
-                            <select v-model="entityDeptId" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
+                            <select v-model="entityDeptId" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700">
                                 <option value="">All Entity/Dept.</option>
                                 <option v-for="company in companies" :key="company.id" :value="String(company.id)">
                                     {{ company.name }}
                                 </option>
                             </select>
 
-                            <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
+                            <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm dark:bg-slate-900 dark:text-slate-100 dark:border-slate-700">
                                 <option value="">All Statuses</option>
                                 <option v-if="props.isApprover" value="for_my_approval" class="font-bold text-indigo-700">For My Approval</option>
                                 <option value="Open">Open</option>
@@ -178,59 +178,59 @@ const getStageDisplay = (request) => {
                     </template>
 
                     <template #header>
-                        <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Request Info</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Requested By</th>
-                            <th class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Entity/Dept.</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Requested Date</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Launch Date</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Stage</th>
-                            <th class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
-                            <th class="px-6 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                        <tr class="bg-gray-50/80 backdrop-blur-sm dark:bg-slate-800/80">
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Request Info</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Ticket#</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Requested By</th>
+                            <th class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Entity/Dept.</th>
+                            <th class="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Requested Date</th>
+                            <th class="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Launch Date</th>
+                            <th class="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Stage</th>
+                            <th class="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Status</th>
+                            <th class="px-6 py-4 text-right text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="request in data" :key="request.id" class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/30 transition-all duration-300 border-b border-gray-100 last:border-0">
+                        <tr v-for="request in data" :key="request.id" class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/30 transition-all duration-300 border-b border-gray-100 last:border-0 dark:border-slate-700 dark:hover:bg-slate-800/70 dark:hover:shadow-black/20">
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <div class="flex items-center">
-                                    <div class="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500">
+                                    <div class="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 dark:bg-indigo-500/15 dark:text-indigo-200">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{{ request.request_type.name }}</div>
-                                        <div class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: #{{ request.id }}</div>
+                                        <div class="text-sm font-black text-gray-900 group-hover:text-indigo-600 transition-colors dark:text-slate-100 dark:group-hover:text-indigo-200">{{ request.request_type.name }}</div>
+                                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter dark:text-slate-300">ID: #{{ request.id }}</div>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <div v-if="request.ticket">
-                                    <Link :href="route('tickets.edit', request.ticket.id)" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                    <Link :href="route('tickets.edit', request.ticket.id)" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white">
                                         <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                         </svg>
                                         {{ request.ticket.ticket_key }}
                                     </Link>
                                 </div>
-                                <span v-else class="text-[10px] font-black text-gray-300 uppercase italic">Pending</span>
+                                <span v-else class="text-[10px] font-black text-gray-400 uppercase italic dark:text-slate-400">Pending</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
                                 <div class="flex flex-col">
-                                    <span class="text-sm font-bold text-gray-900">{{ request.user ? request.user.name : (request.requester_name || 'Public Submission') }}</span>
-                                    <span v-if="!request.user && request.requester_email" class="text-[10px] text-gray-400 font-medium">{{ request.requester_email }}</span>
+                                    <span class="text-sm font-bold text-gray-900 dark:text-slate-100">{{ request.user ? request.user.name : (request.requester_name || 'Public Submission') }}</span>
+                                    <span v-if="!request.user && request.requester_email" class="text-[10px] text-gray-500 font-medium dark:text-slate-300">{{ request.requester_email }}</span>
                                 </div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
-                                <span class="text-sm font-bold text-gray-600">{{ request.company.name }}</span>
+                                <span class="text-sm font-bold text-gray-600 dark:text-slate-200">{{ request.company.name }}</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
-                                <span class="text-xs font-bold text-gray-500">{{ new Date(request.created_at).toLocaleDateString() }}</span>
+                                <span class="text-xs font-bold text-gray-500 dark:text-slate-300">{{ new Date(request.created_at).toLocaleDateString() }}</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
-                                <span class="text-sm font-mono font-bold text-gray-900">{{ request.launch_date }}</span>
+                                <span class="text-sm font-mono font-bold text-gray-900 dark:text-slate-100">{{ request.launch_date }}</span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-center">
                                 <span v-if="!getStageDisplay(request).isBadge" :class="getStageDisplay(request).class">

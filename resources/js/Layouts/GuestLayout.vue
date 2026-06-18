@@ -1,10 +1,15 @@
 <script setup>
 import ApplicationLogo from '@/Components/ApplicationLogo.vue';
+import ThemeToggle from '@/Components/ThemeToggle.vue';
 import { Link } from '@inertiajs/vue3';
 </script>
 
 <template>
     <div class="min-h-screen flex font-sans">
+        <div class="fixed right-4 top-4 z-50">
+            <ThemeToggle />
+        </div>
+
         <!-- Left Panel - Branding -->
         <div class="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center">
             <!-- Background photo -->
@@ -25,7 +30,7 @@ import { Link } from '@inertiajs/vue3';
                         <!-- Outer glow ring -->
                         <div class="absolute inset-0 bg-white/10 blur-xl rounded-full"></div>
                         <!-- Blob background -->
-                        <div class="absolute inset-0 bg-white shadow-2xl shadow-white/20" style="border-radius: 62% 38% 46% 54% / 60% 44% 56% 40%;"></div>
+                        <div class="absolute inset-0 bg-white shadow-2xl shadow-white/20 dark:bg-gray-800" style="border-radius: 62% 38% 46% 54% / 60% 44% 56% 40%;"></div>
                         <ApplicationLogo class="relative z-10 h-4/5 w-4/5" />
                     </div>
 
@@ -106,7 +111,7 @@ import { Link } from '@inertiajs/vue3';
         </div>
 
         <!-- Right Panel - Login Form -->
-        <div class="flex-1 flex flex-col justify-center items-center bg-gray-50 px-6 py-12 lg:px-24 relative">
+        <div class="flex-1 flex flex-col justify-center items-center bg-gray-50 px-6 py-12 lg:px-24 relative dark:bg-gray-950">
             <!-- Mobile: photo background + dark overlay (hidden on lg where the left panel shows the photo) -->
             <div class="absolute inset-0 z-0 lg:hidden bg-cover bg-center bg-no-repeat" style="background-image: url('/images/background_login.jpg');"></div>
             <div class="absolute inset-0 z-0 lg:hidden bg-slate-900/70 backdrop-blur-sm"></div>
@@ -124,7 +129,7 @@ import { Link } from '@inertiajs/vue3';
                 </div>
 
                 <!-- Form Container -->
-                <div class="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 p-8 sm:p-10">
+                <div class="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 p-8 sm:p-10 dark:bg-gray-800">
                     <slot />
                 </div>
 

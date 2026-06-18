@@ -33,28 +33,28 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Title</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Category</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Author</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Views</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="article in data" :key="article.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="article in data" :key="article.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4">
-                                <div class="text-sm font-medium text-gray-900">{{ article.title }}</div>
-                                <div class="text-xs text-gray-500">Last updated: {{ formatDate(article.updated_at) }}</div>
+                                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ article.title }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-300">Last updated: {{ formatDate(article.updated_at) }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full dark:bg-gray-800 dark:text-gray-200">
                                     {{ article.category?.name }}
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900">{{ article.author?.name }}</div>
+                                <div class="text-sm text-gray-900 dark:text-gray-100">{{ article.author?.name }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span :class="article.is_published ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'" 
@@ -62,7 +62,7 @@
                                     {{ article.is_published ? 'Published' : 'Draft' }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center dark:text-gray-300">
                                 {{ article.views }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

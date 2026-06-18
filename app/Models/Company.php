@@ -10,6 +10,7 @@ class Company extends Model
         'name',
         'code',
         'description',
+        'logo',
         'is_active',
     ];
 

@@ -66,11 +66,11 @@ const severityClasses = {
         <!-- Bell button -->
         <button
             @click.stop="isOpen = !isOpen"
-            class="relative p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="relative p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 dark:hover:bg-gray-700"
             title="Notifications"
         >
             <!-- Bell icon -->
-            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
@@ -87,12 +87,12 @@ const severityClasses = {
         <!-- Dropdown panel -->
         <div
             v-if="isOpen"
-            class="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden"
+            class="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden dark:bg-gray-800 dark:border-gray-700"
         >
             <!-- Header -->
-            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                <span class="text-sm font-bold text-gray-700">Notifications</span>
-                <span class="text-xs text-gray-400 font-medium">{{ total }} active</span>
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
+                <span class="text-sm font-bold text-gray-700 dark:text-gray-300">Notifications</span>
+                <span class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ total }} active</span>
             </div>
 
             <!-- Empty state -->
@@ -101,7 +101,7 @@ const severityClasses = {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p class="text-sm text-gray-400 italic font-medium">All clear — no notifications</p>
+                <p class="text-sm text-gray-400 italic font-medium dark:text-gray-400">All clear — no notifications</p>
             </div>
 
             <!-- Notification rows -->
@@ -111,7 +111,7 @@ const severityClasses = {
                     :key="n.type"
                     :href="route(n.route)"
                     @click="isOpen = false"
-                    class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors dark:hover:bg-gray-700"
                 >
                     <!-- Icon container -->
                     <div
@@ -148,8 +148,8 @@ const severityClasses = {
 
                     <!-- Text -->
                     <div class="min-w-0 flex-1">
-                        <p class="text-sm font-semibold text-gray-800 truncate">{{ n.title }}</p>
-                        <p class="text-xs text-gray-500 mt-0.5">{{ n.message }}</p>
+                        <p class="text-sm font-semibold text-gray-800 truncate dark:text-gray-200">{{ n.title }}</p>
+                        <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">{{ n.message }}</p>
                     </div>
 
                     <!-- Count badge for tickets/points -->
@@ -168,8 +168,8 @@ const severityClasses = {
             </div>
 
             <!-- Footer hint -->
-            <div class="px-4 py-2 border-t border-gray-100 bg-gray-50">
-                <p class="text-[10px] text-gray-400 text-center font-medium uppercase tracking-wide">
+            <div class="px-4 py-2 border-t border-gray-100 bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
+                <p class="text-[10px] text-gray-400 text-center font-medium uppercase tracking-wide dark:text-gray-400">
                     Updates every 60 seconds
                 </p>
             </div>

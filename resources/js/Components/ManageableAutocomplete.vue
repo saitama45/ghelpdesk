@@ -192,13 +192,13 @@ const deleteOption = async (option, e) => {
             type="button"
             :disabled="disabled"
             @click="openDropdown"
-            class="w-full flex items-center justify-between bg-white border border-gray-300 rounded-md shadow-sm px-3 py-2 text-left text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-150"
+            class="w-full flex items-center justify-between bg-white border border-gray-300 rounded-md shadow-sm px-3 py-2 text-left text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all duration-150 dark:bg-gray-800 dark:border-gray-600"
             :class="disabled ? 'bg-gray-50 text-gray-400 cursor-not-allowed' : 'hover:border-blue-400 cursor-pointer'"
         >
-            <span :class="displayLabel ? 'text-gray-900' : 'text-gray-400'">
+            <span :class="displayLabel ? 'text-gray-900 dark:text-slate-100' : 'text-gray-400 dark:text-slate-400'">
                 {{ displayLabel || placeholder }}
             </span>
-            <svg class="h-4 w-4 text-gray-400 shrink-0 ml-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <svg class="h-4 w-4 text-gray-400 shrink-0 ml-2 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
         </button>
@@ -215,16 +215,16 @@ const deleteOption = async (option, e) => {
             <div
                 v-if="isOpen"
                 :id="`mau-dropdown-${optionType}`"
-                class="fixed z-[9999] bg-white border border-gray-200 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+                class="fixed z-[9999] bg-white border border-gray-200 rounded-xl shadow-2xl flex flex-col overflow-hidden dark:bg-gray-800 dark:border-gray-700"
                 :style="{ top: dropdownStyle.top, left: dropdownStyle.left, width: dropdownStyle.width, maxHeight: dropdownStyle.maxHeight, bottom: dropdownStyle.bottom }"
             >
                     <!-- Search -->
-                    <div class="px-2 pt-2 pb-1 border-b border-gray-100">
+                    <div class="px-2 pt-2 pb-1 border-b border-gray-100 dark:border-gray-700">
                         <input
                             ref="searchRef"
                             v-model="searchQuery"
                             type="text"
-                            class="w-full text-xs border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-300"
+                            class="w-full text-xs border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-400"
                             placeholder="Search..."
                             @keydown.esc="closeDropdown"
                         />
@@ -235,7 +235,7 @@ const deleteOption = async (option, e) => {
                         <li
                             v-for="option in filteredOptions"
                             :key="option.id"
-                            class="group flex items-center px-1 hover:bg-blue-50 transition-colors cursor-pointer"
+                            class="group flex items-center px-1 hover:bg-blue-50 transition-colors cursor-pointer dark:hover:bg-blue-500/15"
                             @click="select(option)"
                         >
                             <span
@@ -252,7 +252,7 @@ const deleteOption = async (option, e) => {
                                     v-if="canEdit"
                                     type="button"
                                     @click="startEdit(option, $event)"
-                                    class="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                    class="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors dark:text-slate-300 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
                                     title="Edit"
                                 >
                                     <PencilSquareIcon class="w-3.5 h-3.5" />
@@ -261,27 +261,27 @@ const deleteOption = async (option, e) => {
                                     v-if="canDelete"
                                     type="button"
                                     @click="deleteOption(option, $event)"
-                                    class="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    class="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors dark:text-slate-300 dark:hover:bg-red-500/15 dark:hover:text-red-200"
                                     title="Delete"
                                 >
                                     <TrashIcon class="w-3.5 h-3.5" />
                                 </button>
                             </div>
                         </li>
-                        <li v-if="filteredOptions.length === 0 && mode !== 'add'" class="px-3 py-3 text-xs text-gray-400 text-center italic">
+                        <li v-if="filteredOptions.length === 0 && mode !== 'add'" class="px-3 py-3 text-xs text-gray-400 text-center italic dark:text-gray-400">
                             No options found
                         </li>
                     </ul>
 
                     <!-- Inline edit form -->
-                    <div v-if="mode === 'edit'" class="px-2 py-2 border-t border-gray-100 bg-blue-50/50">
+                    <div v-if="mode === 'edit'" class="px-2 py-2 border-t border-gray-100 bg-blue-50/50 dark:border-slate-700 dark:bg-blue-500/10">
                         <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1.5">Edit Option</p>
                         <div class="flex items-center gap-1.5">
                             <input
                                 ref="inlineLabelRef"
                                 v-model="inlineLabel"
                                 type="text"
-                                class="flex-1 text-xs border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-blue-500 focus:border-blue-500"
+                                class="flex-1 text-xs border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-blue-500 focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="Option label..."
                                 @keydown.enter.prevent="saveOption"
                                 @keydown.esc="cancelInline"
@@ -291,7 +291,7 @@ const deleteOption = async (option, e) => {
                                 <CheckIcon class="w-3.5 h-3.5" />
                             </button>
                             <button type="button" @click="cancelInline"
-                                class="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-colors">
+                                class="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 <XMarkIcon class="w-3.5 h-3.5" />
                             </button>
                         </div>
@@ -299,14 +299,14 @@ const deleteOption = async (option, e) => {
                     </div>
 
                     <!-- Inline add form -->
-                    <div v-else-if="mode === 'add'" class="px-2 py-2 border-t border-gray-100 bg-green-50/50">
+                    <div v-else-if="mode === 'add'" class="px-2 py-2 border-t border-gray-100 bg-green-50/50 dark:border-slate-700 dark:bg-green-500/10">
                         <p class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-1.5">Add New Option</p>
                         <div class="flex items-center gap-1.5">
                             <input
                                 ref="inlineLabelRef"
                                 v-model="inlineLabel"
                                 type="text"
-                                class="flex-1 text-xs border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-green-500 focus:border-green-500"
+                                class="flex-1 text-xs border-gray-200 rounded-lg px-2.5 py-1.5 focus:ring-green-500 focus:border-green-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                                 placeholder="New option label..."
                                 @keydown.enter.prevent="saveOption"
                                 @keydown.esc="cancelInline"
@@ -316,7 +316,7 @@ const deleteOption = async (option, e) => {
                                 <CheckIcon class="w-3.5 h-3.5" />
                             </button>
                             <button type="button" @click="cancelInline"
-                                class="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-colors">
+                                class="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 <XMarkIcon class="w-3.5 h-3.5" />
                             </button>
                         </div>
@@ -324,11 +324,11 @@ const deleteOption = async (option, e) => {
                     </div>
 
                     <!-- Add new button (only shown when user has create permission) -->
-                    <div v-else-if="canCreate" class="border-t border-gray-100">
+                    <div v-else-if="canCreate" class="border-t border-gray-100 dark:border-gray-700">
                         <button
                             type="button"
                             @click="startAdd"
-                            class="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors"
+                            class="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors dark:text-blue-300 dark:hover:bg-blue-500/15"
                         >
                             <PlusIcon class="w-3.5 h-3.5" />
                             Add new option

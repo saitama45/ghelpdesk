@@ -541,7 +541,7 @@ const syncEmails = () => {
     <AppLayout>
         <template #header>
             <div class="flex items-center space-x-2">
-                <Cog6ToothIcon class="w-6 h-6 text-gray-500" />
+                <Cog6ToothIcon class="w-6 h-6 text-gray-500 dark:text-gray-300" />
                 <span>System Settings</span>
             </div>
         </template>
@@ -577,14 +577,14 @@ const syncEmails = () => {
             <!-- Content Area -->
             <div class="flex-1 max-w-4xl">
                 <form @submit.prevent="submit">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                         
                         <!-- Tab Header -->
-                        <div class="px-6 py-5 bg-gray-50 border-b border-gray-200">
-                            <h2 class="text-xl font-black text-gray-900">
+                        <div class="px-6 py-5 bg-gray-50 border-b border-gray-200 dark:bg-gray-800/80 dark:border-gray-700">
+                            <h2 class="text-xl font-black text-gray-900 dark:text-gray-100">
                                 {{ currentTab.name }}
                             </h2>
-                            <p class="text-sm text-gray-500 mt-1">
+                            <p class="text-sm text-gray-500 mt-1 dark:text-gray-300">
                                 {{ currentTab.description }}
                             </p>
                         </div>
@@ -602,7 +602,7 @@ const syncEmails = () => {
                                             Inbound Mail (IMAP)
                                         </h3>
                                         <div class="flex items-center space-x-2">
-                                            <div v-if="settings.last_email_sync_at" class="flex items-center text-[10px] font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                                            <div v-if="settings.last_email_sync_at" class="flex items-center text-[10px] font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full dark:bg-gray-800 dark:text-gray-400">
                                                 <ClockIcon class="w-3 h-3 mr-1" />
                                                 Last sync: {{ settings.last_email_sync_at }}
                                             </div>
@@ -635,7 +635,7 @@ const syncEmails = () => {
                                             </div>
                                             <div>
                                                 <InputLabel for="imap_encryption" value="Encryption" />
-                                                <select v-model="form.imap_encryption" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm">
+                                                <select v-model="form.imap_encryption" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm dark:border-gray-600">
                                                     <option value="ssl">SSL</option>
                                                     <option value="tls">TLS</option>
                                                     <option value="notls">None</option>
@@ -646,18 +646,18 @@ const syncEmails = () => {
                                             <InputLabel for="imap_password" value="IMAP Password / App Password" />
                                             <div class="relative mt-1">
                                                 <TextInput id="imap_password" :type="showImapPassword ? 'text' : 'password'" class="block w-full pr-10" v-model="form.imap_password" placeholder="••••••••••••" />
-                                                <button type="button" @click="showImapPassword = !showImapPassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <button type="button" @click="showImapPassword = !showImapPassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:text-gray-400">
                                                     <EyeIcon v-if="!showImapPassword" class="h-5 w-5" />
                                                     <EyeSlashIcon v-else class="h-5 w-5" />
                                                 </button>
                                             </div>
                                             <div class="mt-4 flex items-center justify-between">
-                                                <p class="text-[10px] text-gray-500 italic">For Gmail accounts, please generate and use a 16-character App Password.</p>
+                                                <p class="text-[10px] text-gray-500 italic dark:text-gray-300">For Gmail accounts, please generate and use a 16-character App Password.</p>
                                                 <button 
                                                     type="button" 
                                                     @click="testConnection" 
                                                     :disabled="testingConnection"
-                                                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150"
+                                                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                                                 >
                                                     <span v-if="testingConnection">Testing...</span>
                                                     <span v-else>Test Connection</span>
@@ -673,7 +673,7 @@ const syncEmails = () => {
                                     </div>
                                 </section>
 
-                                <div class="border-t border-gray-100"></div>
+                                <div class="border-t border-gray-100 dark:border-gray-700"></div>
 
                                 <!-- Outbound (SMTP) -->
                                 <section>
@@ -694,7 +694,7 @@ const syncEmails = () => {
                                         </div>
                                         <div>
                                             <InputLabel for="mail_mailer" value="Mail Driver" />
-                                            <select v-model="form.mail_mailer" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm">
+                                            <select v-model="form.mail_mailer" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm dark:border-gray-600">
                                                 <option value="smtp">SMTP</option>
                                                 <option value="log">Log (Testing)</option>
                                                 <option value="sendmail">Sendmail</option>
@@ -711,7 +711,7 @@ const syncEmails = () => {
                                             </div>
                                             <div>
                                                 <InputLabel for="mail_encryption" value="Encryption" />
-                                                <select v-model="form.mail_encryption" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm">
+                                                <select v-model="form.mail_encryption" class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm dark:border-gray-600">
                                                     <option value="tls">TLS</option>
                                                     <option value="ssl">SSL</option>
                                                     <option value="none">None</option>
@@ -726,7 +726,7 @@ const syncEmails = () => {
                                             <InputLabel for="mail_password" value="SMTP Password" />
                                             <div class="relative mt-1">
                                                 <TextInput id="mail_password" :type="showMailPassword ? 'text' : 'password'" class="block w-full pr-10" v-model="form.mail_password" />
-                                                <button type="button" @click="showMailPassword = !showMailPassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <button type="button" @click="showMailPassword = !showMailPassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:text-gray-400">
                                                     <EyeIcon v-if="!showMailPassword" class="h-5 w-5" />
                                                     <EyeSlashIcon v-else class="h-5 w-5" />
                                                 </button>
@@ -776,7 +776,7 @@ const syncEmails = () => {
                                     </div>
                                 </section>
 
-                                <div class="border-t border-gray-100"></div>
+                                <div class="border-t border-gray-100 dark:border-gray-700"></div>
 
                                 <section>
                                     <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-6 flex items-center">
@@ -791,119 +791,119 @@ const syncEmails = () => {
                                             {{ day }}
                                         </label>
                                     </div>
-                                    <p class="mt-4 text-[10px] text-gray-400 italic">These days are used to calculate SLA deadlines and response times for {{ selectedSubUnit === 'global' ? 'all tickets by default' : `tickets assigned to ${getScopeLabel(selectedSubUnit)}` }}.</p>
+                                    <p class="mt-4 text-[10px] text-gray-400 italic dark:text-gray-400">These days are used to calculate SLA deadlines and response times for {{ selectedSubUnit === 'global' ? 'all tickets by default' : `tickets assigned to ${getScopeLabel(selectedSubUnit)}` }}.</p>
                                     <InputError class="mt-2" :message="form.errors[currentWorkingDaysKey]" />
                                 </section>
                             </div>
 
                             <!-- SLA Targets Tab -->
                             <div v-if="activeTab === 'sla_targets'" class="space-y-8">
-                                <div class="p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-start mb-4">
+                                <div class="p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-start mb-4 dark:bg-blue-900/20 dark:border-blue-800">
                                     <ShieldCheckIcon class="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-                                    <p class="text-xs text-blue-700 leading-relaxed">
+                                    <p class="text-xs text-blue-700 leading-relaxed dark:text-blue-300">
                                         Configure global SLA targets based on ticket priority. These targets will be applied to all new tickets regardless of their category.
                                     </p>
                                 </div>
 
                                 <div class="space-y-6">
                                     <!-- Urgent / P1 -->
-                                    <div class="p-4 bg-red-50 rounded-xl border border-red-100 space-y-4">
+                                    <div class="p-4 bg-red-50 rounded-xl border border-red-100 space-y-4 dark:bg-red-900/20 dark:border-red-800">
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center space-x-2">
                                                 <div class="w-3 h-3 rounded-full bg-red-600 shadow-sm animate-pulse"></div>
-                                                <span class="text-xs font-black text-red-700 uppercase tracking-widest">Urgent Priority</span>
+                                                <span class="text-xs font-black text-red-700 uppercase tracking-widest dark:text-red-400">Urgent Priority</span>
                                             </div>
-                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-red-200" v-model="form.sla_urgent_label" placeholder="P1" />
+                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-red-200 dark:!bg-gray-800 dark:border-red-800 dark:text-gray-200" v-model="form.sla_urgent_label" placeholder="P1" />
                                         </div>
                                         <div class="grid grid-cols-2 gap-6">
                                             <div>
-                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-red-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-red-100" v-model="form.sla_urgent_response" />
+                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-red-600 dark:text-red-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-red-100 dark:border-red-800" v-model="form.sla_urgent_response" />
                                             </div>
                                             <div>
-                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-red-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-red-100" v-model="form.sla_urgent_resolution" />
+                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-red-600 dark:text-red-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-red-100 dark:border-red-800" v-model="form.sla_urgent_resolution" />
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- High / P2 -->
-                                    <div class="p-4 bg-orange-50 rounded-xl border border-orange-100 space-y-4">
+                                    <div class="p-4 bg-orange-50 rounded-xl border border-orange-100 space-y-4 dark:bg-orange-900/20 dark:border-orange-800">
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center space-x-2">
                                                 <div class="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></div>
-                                                <span class="text-xs font-black text-orange-700 uppercase tracking-widest">High Priority</span>
+                                                <span class="text-xs font-black text-orange-700 uppercase tracking-widest dark:text-orange-400">High Priority</span>
                                             </div>
-                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-orange-200" v-model="form.sla_high_label" placeholder="P2" />
+                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-orange-200 dark:!bg-gray-800 dark:border-orange-800 dark:text-gray-200" v-model="form.sla_high_label" placeholder="P2" />
                                         </div>
                                         <div class="grid grid-cols-2 gap-6">
                                             <div>
-                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-orange-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-orange-100" v-model="form.sla_high_response" />
+                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-orange-600 dark:text-orange-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-orange-100 dark:border-orange-800" v-model="form.sla_high_response" />
                                             </div>
                                             <div>
-                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-orange-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-orange-100" v-model="form.sla_high_resolution" />
+                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-orange-600 dark:text-orange-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-orange-100 dark:border-orange-800" v-model="form.sla_high_resolution" />
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- Medium / P3 -->
-                                    <div class="p-4 bg-yellow-50 rounded-xl border border-yellow-100 space-y-4">
+                                    <div class="p-4 bg-yellow-50 rounded-xl border border-yellow-100 space-y-4 dark:bg-yellow-900/20 dark:border-yellow-800">
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center space-x-2">
                                                 <div class="w-3 h-3 rounded-full bg-yellow-400 shadow-sm"></div>
-                                                <span class="text-xs font-black text-yellow-700 uppercase tracking-widest">Medium Priority</span>
+                                                <span class="text-xs font-black text-yellow-700 uppercase tracking-widest dark:text-yellow-400">Medium Priority</span>
                                             </div>
-                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-yellow-200" v-model="form.sla_medium_label" placeholder="P3" />
+                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-yellow-200 dark:!bg-gray-800 dark:border-yellow-800 dark:text-gray-200" v-model="form.sla_medium_label" placeholder="P3" />
                                         </div>
                                         <div class="grid grid-cols-2 gap-6">
                                             <div>
-                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-yellow-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-yellow-100" v-model="form.sla_medium_response" />
+                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-yellow-600 dark:text-yellow-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-yellow-100 dark:border-yellow-800" v-model="form.sla_medium_response" />
                                             </div>
                                             <div>
-                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-yellow-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-yellow-100" v-model="form.sla_medium_resolution" />
+                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-yellow-600 dark:text-yellow-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-yellow-100 dark:border-yellow-800" v-model="form.sla_medium_resolution" />
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- Low / P4 -->
-                                    <div class="p-4 bg-green-50 rounded-xl border border-green-100 space-y-4">
+                                    <div class="p-4 bg-green-50 rounded-xl border border-green-100 space-y-4 dark:bg-green-900/20 dark:border-green-800">
                                         <div class="flex items-center justify-between">
                                             <div class="flex items-center space-x-2">
                                                 <div class="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
-                                                <span class="text-xs font-black text-green-700 uppercase tracking-widest">Low Priority</span>
+                                                <span class="text-xs font-black text-green-700 uppercase tracking-widest dark:text-green-400">Low Priority</span>
                                             </div>
-                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-green-200" v-model="form.sla_low_label" placeholder="P4" />
+                                            <TextInput type="text" class="!w-20 !py-1 !text-center !font-bold !bg-white border-green-200 dark:!bg-gray-800 dark:border-green-800 dark:text-gray-200" v-model="form.sla_low_label" placeholder="P4" />
                                         </div>
                                         <div class="grid grid-cols-2 gap-6">
                                             <div>
-                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-green-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-green-100" v-model="form.sla_low_response" />
+                                                <InputLabel value="Response Target (Hours)" class="!text-[10px] uppercase text-green-600 dark:text-green-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-green-100 dark:border-green-800" v-model="form.sla_low_response" />
                                             </div>
                                             <div>
-                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-green-600" />
-                                                <TextInput type="number" class="mt-1 block w-full border-green-100" v-model="form.sla_low_resolution" />
+                                                <InputLabel value="Resolution Target (Hours)" class="!text-[10px] uppercase text-green-600 dark:text-green-400" />
+                                                <TextInput type="number" class="mt-1 block w-full border-green-100 dark:border-green-800" v-model="form.sla_low_resolution" />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- Auto-close Configuration -->
-                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4">
+                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-4 dark:bg-gray-800/80 dark:border-gray-700">
                                     <div class="flex items-center space-x-2">
-                                        <ClockIcon class="w-4 h-4 text-gray-500" />
-                                        <span class="text-xs font-black text-gray-700 uppercase tracking-widest">Auto-Close Resolved Tickets</span>
+                                        <ClockIcon class="w-4 h-4 text-gray-500 dark:text-gray-300" />
+                                        <span class="text-xs font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Auto-Close Resolved Tickets</span>
                                     </div>
                                     <div class="max-w-xs">
-                                        <InputLabel value="Hours before closing Resolved tickets" class="!text-[10px] uppercase text-gray-600" />
+                                        <InputLabel value="Hours before closing Resolved tickets" class="!text-[10px] uppercase text-gray-600 dark:text-gray-300" />
                                         <div class="flex items-center space-x-3 mt-1">
                                             <TextInput type="number" class="block w-full" v-model="form.auto_close_resolved_hours" />
-                                            <span class="text-xs font-bold text-gray-400">Hours</span>
+                                            <span class="text-xs font-bold text-gray-400 dark:text-gray-400">Hours</span>
                                         </div>
-                                        <p class="mt-2 text-[9px] text-gray-400 italic">
+                                        <p class="mt-2 text-[9px] text-gray-400 italic dark:text-gray-400">
                                             Resolved tickets will automatically change to "Closed" after these hours, respecting global business hours and working days.
                                         </p>
                                     </div>
@@ -943,7 +943,7 @@ const syncEmails = () => {
                                                 <select
                                                     id="ticket_retention_unit"
                                                     v-model="form.ticket_retention_unit"
-                                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm"
+                                                    class="mt-1 block w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm text-sm dark:border-gray-600"
                                                 >
                                                     <option value="months">Months</option>
                                                     <option value="years">Years</option>
@@ -972,12 +972,12 @@ const syncEmails = () => {
                                                 v-model="form.google_maps_api_key"
                                                 placeholder="AIzaSy..."
                                             />
-                                            <button type="button" @click="showMapsKey = !showMapsKey" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                            <button type="button" @click="showMapsKey = !showMapsKey" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:text-gray-400">
                                                 <EyeIcon v-if="!showMapsKey" class="h-5 w-5" />
                                                 <EyeSlashIcon v-else class="h-5 w-5" />
                                             </button>
                                         </div>
-                                        <p class="mt-2 text-[10px] text-gray-500 italic">This key is used for Store Geofencing and DTR location verification.</p>
+                                        <p class="mt-2 text-[10px] text-gray-500 italic dark:text-gray-300">This key is used for Store Geofencing and DTR location verification.</p>
                                         <InputError class="mt-2" :message="form.errors.google_maps_api_key" />
                                     </div>
                                 </section>
@@ -1004,7 +1004,7 @@ const syncEmails = () => {
                                     </div>
                                 </div>
 
-                                <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start mb-8">
+                                <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start mb-8 dark:bg-purple-900/20 dark:border-purple-800">
                                     <AdjustmentsHorizontalIcon class="w-5 h-5 text-purple-600 mt-0.5 mr-3 flex-shrink-0" />
                                     <p class="text-xs text-purple-700 leading-relaxed">
                                         Define how the system categorizes store health based on the number of open tickets. These thresholds will reflect across the <strong>Store Management</strong> and <strong>Health Reports</strong>.
@@ -1013,11 +1013,11 @@ const syncEmails = () => {
 
                                 <div class="space-y-4">
                                     <!-- Green -->
-                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 dark:bg-gray-800/80 dark:border-gray-700">
                                         <div class="col-span-1">
                                             <div class="flex items-center space-x-2 mb-2">
                                                 <div class="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
-                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Healthy</span>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">Healthy</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
                                             <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'min')]" />
@@ -1033,11 +1033,11 @@ const syncEmails = () => {
                                     </div>
 
                                     <!-- Yellow -->
-                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 dark:bg-gray-800/80 dark:border-gray-700">
                                         <div class="col-span-1">
                                             <div class="flex items-center space-x-2 mb-2">
                                                 <div class="w-3 h-3 rounded-full bg-yellow-500 shadow-sm"></div>
-                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Warning</span>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">Warning</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
                                             <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'min')]" />
@@ -1053,11 +1053,11 @@ const syncEmails = () => {
                                     </div>
 
                                     <!-- Orange -->
-                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 dark:bg-gray-800/80 dark:border-gray-700">
                                         <div class="col-span-1">
                                             <div class="flex items-center space-x-2 mb-2">
                                                 <div class="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></div>
-                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">At-risk</span>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">At-risk</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
                                             <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'min')]" />
@@ -1073,11 +1073,11 @@ const syncEmails = () => {
                                     </div>
 
                                     <!-- Red -->
-                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end bg-gray-50 p-4 rounded-xl border border-gray-200 dark:bg-gray-800/80 dark:border-gray-700">
                                         <div class="col-span-1">
                                             <div class="flex items-center space-x-2 mb-2">
                                                 <div class="w-3 h-3 rounded-full bg-red-500 shadow-sm"></div>
-                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider">Critical</span>
+                                                <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">Critical</span>
                                             </div>
                                             <InputLabel value="Min (and up)" class="!text-[9px] uppercase" />
                                             <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('red', 'min')]" />
@@ -1088,18 +1088,18 @@ const syncEmails = () => {
                                         </div>
                                     </div>
 
-                                    <div class="border-t border-gray-100 my-6"></div>
+                                    <div class="border-t border-gray-100 my-6 dark:border-gray-700"></div>
 
                                     <!-- Waiting Aging Alarm -->
-                                    <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                                    <div class="bg-orange-50 p-4 rounded-xl border border-orange-100 dark:bg-orange-900/20 dark:border-orange-800">
                                         <div class="flex items-center space-x-2 mb-4">
                                             <ClockIcon class="w-4 h-4 text-orange-600" />
-                                            <span class="text-xs font-black text-orange-700 uppercase tracking-widest">Waiting Status Aging Alarm</span>
+                                            <span class="text-xs font-black text-orange-700 uppercase tracking-widest dark:text-orange-400">Waiting Status Aging Alarm</span>
                                         </div>
                                         <div class="max-w-xs">
-                                            <InputLabel value="Aging Days threshold" class="!text-[10px] uppercase text-orange-600" />
+                                            <InputLabel value="Aging Days threshold" class="!text-[10px] uppercase text-orange-600 dark:text-orange-400" />
                                             <div class="flex items-center space-x-3 mt-1">
-                                                <TextInput type="number" class="block w-full border-orange-200 focus:border-orange-500 focus:ring-orange-500" v-model="form.waiting_aging_alarm_days" />
+                                                <TextInput type="number" class="block w-full border-orange-200 focus:border-orange-500 focus:ring-orange-500 dark:border-orange-800" v-model="form.waiting_aging_alarm_days" />
                                                 <span class="text-xs font-bold text-orange-400">Days</span>
                                             </div>
                                             <p class="mt-2 text-[9px] text-orange-400 italic">
@@ -1112,7 +1112,7 @@ const syncEmails = () => {
 
                             <!-- Sidebar Layout Tab -->
                             <div v-if="activeTab === 'sidebar_layout'" class="p-6 space-y-5">
-                                <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex items-start space-x-3">
+                                <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex items-start space-x-3 dark:bg-indigo-900/20 dark:border-indigo-800">
                                     <Bars3BottomLeftIcon class="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
                                     <div>
                                         <p class="text-sm font-black text-indigo-900">Sidebar Menu Layout</p>
@@ -1128,31 +1128,31 @@ const syncEmails = () => {
                                     class="space-y-2"
                                 >
                                     <template #item="{ element: section }">
-                                        <div class="border border-gray-200 rounded-lg overflow-hidden select-none">
-                                            <div class="flex items-center bg-gray-50 px-4 py-3 gap-3">
-                                                <span class="section-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to reorder">
+                                        <div class="border border-gray-200 rounded-lg overflow-hidden select-none dark:border-gray-700">
+                                            <div class="flex items-center bg-gray-50 px-4 py-3 gap-3 dark:bg-gray-800/80">
+                                                <span class="section-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 dark:text-gray-400" title="Drag to reorder">
                                                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
                                                 </span>
                                                 <input 
                                                     type="text" 
                                                     v-model="section.label" 
-                                                    class="flex-1 bg-transparent border-transparent focus:border-indigo-300 focus:ring-0 text-sm font-semibold text-gray-800 rounded px-2 py-1 transition-all"
+                                                    class="flex-1 bg-transparent border-transparent focus:border-indigo-300 focus:ring-0 text-sm font-semibold text-gray-800 rounded px-2 py-1 transition-all dark:text-gray-200"
                                                     placeholder="Section Name"
                                                 >
                                                 <button
                                                     v-if="(sidebarState.children[section.id] || []).length > 0"
                                                     type="button"
                                                     @click="toggleSidebarSection(section.id)"
-                                                    class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                                                    class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors dark:text-gray-300 dark:hover:bg-gray-700"
                                                 >
                                                     <span>Sub-items</span>
                                                     <ChevronDownIcon v-if="expandedSidebarSection === section.id" class="w-3.5 h-3.5" />
                                                     <ChevronRightIcon v-else class="w-3.5 h-3.5" />
                                                 </button>
-                                                <span v-else class="text-xs text-gray-400 italic px-2">No sub-items</span>
+                                                <span v-else class="text-xs text-gray-400 italic px-2 dark:text-gray-400">No sub-items</span>
                                             </div>
 
-                                            <div v-if="expandedSidebarSection === section.id" class="px-4 py-3 bg-white border-t border-gray-100">
+                                            <div v-if="expandedSidebarSection === section.id" class="px-4 py-3 bg-white border-t border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                                                 <draggable
                                                     v-model="expandedChildItems"
                                                     item-key="id"
@@ -1161,14 +1161,14 @@ const syncEmails = () => {
                                                     class="space-y-1"
                                                 >
                                                     <template #item="{ element: child }">
-                                                        <div class="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 select-none">
-                                                            <span class="child-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0" title="Drag to reorder">
+                                                        <div class="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 select-none dark:bg-gray-800/80">
+                                                            <span class="child-drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 flex-shrink-0 dark:text-gray-400" title="Drag to reorder">
                                                                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
                                                             </span>
                                                             <input 
                                                                 type="text" 
                                                                 v-model="child.label" 
-                                                                class="flex-1 bg-transparent border-transparent focus:border-indigo-300 focus:ring-0 text-sm text-gray-700 rounded px-2 py-1 transition-all"
+                                                                class="flex-1 bg-transparent border-transparent focus:border-indigo-300 focus:ring-0 text-sm text-gray-700 rounded px-2 py-1 transition-all dark:text-gray-300"
                                                                 placeholder="Item Name"
                                                             >
                                                         </div>
@@ -1190,7 +1190,7 @@ const syncEmails = () => {
                                     <button
                                         type="button"
                                         @click="resetSidebarLayout"
-                                        class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition-colors"
+                                        class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                                     >
                                         Reset to Default
                                     </button>
@@ -1226,14 +1226,14 @@ const syncEmails = () => {
                                             <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold tabular-nums">{{ autoRules.length }}</span>
                                         </h3>
                                         <div class="relative flex-1">
-                                            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
                                             </svg>
                                             <input
                                                 type="text"
                                                 v-model="rulesListSearch"
                                                 placeholder="Filter rules by email…"
-                                                class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                                class="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 dark:border-gray-700"
                                             />
                                         </div>
                                         <button
@@ -1247,41 +1247,41 @@ const syncEmails = () => {
                                     </div>
 
                                     <!-- Rules table -->
-                                    <div class="border border-gray-200 rounded-xl overflow-hidden">
+                                    <div class="border border-gray-200 rounded-xl overflow-hidden dark:border-gray-700">
                                         <!-- Column headers -->
-                                        <div class="grid grid-cols-[1fr_140px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2">
-                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Requester Email</span>
-                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider">Assignees</span>
-                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider text-right">Actions</span>
+                                        <div class="grid grid-cols-[1fr_140px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2 dark:bg-gray-800/80 dark:border-gray-700">
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Requester Email</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Assignees</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider text-right dark:text-gray-300">Actions</span>
                                         </div>
 
                                         <!-- Empty state -->
-                                        <div v-if="autoRules.length === 0" class="py-10 flex flex-col items-center gap-2 text-gray-400">
+                                        <div v-if="autoRules.length === 0" class="py-10 flex flex-col items-center gap-2 text-gray-400 dark:text-gray-400">
                                             <UserGroupIcon class="w-8 h-8 opacity-30" />
                                             <p class="text-sm italic">No rules yet. Click "+ Add Rule" to get started.</p>
                                         </div>
 
                                         <!-- No search results -->
-                                        <div v-else-if="filteredRuleIndexes.length === 0" class="py-8 text-center text-sm text-gray-400 italic">
+                                        <div v-else-if="filteredRuleIndexes.length === 0" class="py-8 text-center text-sm text-gray-400 italic dark:text-gray-400">
                                             No rules match "<span class="font-semibold">{{ rulesListSearch }}</span>".
                                         </div>
 
                                         <!-- Rule rows -->
                                         <div v-else>
-                                            <div v-for="i in filteredRuleIndexes" :key="i" class="border-b border-gray-100 last:border-b-0">
+                                            <div v-for="i in filteredRuleIndexes" :key="i" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700">
                                                 <!-- Collapsed row -->
                                                 <div
                                                     :class="[
                                                         'grid grid-cols-[1fr_140px_72px] items-center px-4 py-3 gap-3 cursor-pointer transition-colors select-none',
-                                                        editingRuleIndex === i ? 'bg-blue-50' : 'hover:bg-gray-50'
+                                                        editingRuleIndex === i ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                                                     ]"
                                                     @click="toggleEditRule(i)"
                                                 >
                                                     <!-- Email -->
                                                     <div class="min-w-0 flex items-center gap-2">
                                                         <div :class="['w-1.5 h-1.5 rounded-full flex-shrink-0', autoRules[i].assignee_ids.length > 0 ? 'bg-green-400' : 'bg-orange-400']"></div>
-                                                        <span v-if="autoRules[i].email" class="text-sm font-medium text-gray-800 truncate">{{ autoRules[i].email }}</span>
-                                                        <span v-else class="text-sm italic text-gray-400">No email set</span>
+                                                        <span v-if="autoRules[i].email" class="text-sm font-medium text-gray-800 truncate dark:text-gray-200">{{ autoRules[i].email }}</span>
+                                                        <span v-else class="text-sm italic text-gray-400 dark:text-gray-400">No email set</span>
                                                     </div>
 
                                                     <!-- Assignee avatars -->
@@ -1299,7 +1299,7 @@ const syncEmails = () => {
                                                                 :title="getAgent(id)?.name ?? `User #${id}`"
                                                                 class="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-[9px] font-black -ml-1 first:ml-0 ring-2 ring-white"
                                                             >{{ getAgentInitials(id) }}</div>
-                                                            <span v-if="autoRules[i].assignee_ids.length > 4" class="ml-1 text-[10px] font-bold text-gray-500">+{{ autoRules[i].assignee_ids.length - 4 }}</span>
+                                                            <span v-if="autoRules[i].assignee_ids.length > 4" class="ml-1 text-[10px] font-bold text-gray-500 dark:text-gray-300">+{{ autoRules[i].assignee_ids.length - 4 }}</span>
                                                         </template>
                                                     </div>
 
@@ -1314,7 +1314,7 @@ const syncEmails = () => {
                                                         <button
                                                             type="button"
                                                             @click.stop="removeAutoRule(i)"
-                                                            class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                            class="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors dark:text-gray-400"
                                                             title="Delete rule"
                                                         >
                                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1325,10 +1325,10 @@ const syncEmails = () => {
                                                 </div>
 
                                                 <!-- Inline editor (expanded) -->
-                                                <div v-if="editingRuleIndex === i" class="bg-blue-50/60 border-t border-blue-100 px-5 py-4 space-y-4">
+                                                <div v-if="editingRuleIndex === i" class="bg-blue-50/60 border-t border-blue-100 px-5 py-4 space-y-4 dark:bg-blue-900/10 dark:border-blue-800">
                                                     <!-- Email input -->
                                                     <div class="max-w-sm">
-                                                        <InputLabel :for="`rule_email_${i}`" value="Requester Email (exact match)" class="!text-[10px] uppercase text-gray-500" />
+                                                        <InputLabel :for="`rule_email_${i}`" value="Requester Email (exact match)" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
                                                         <TextInput
                                                             :id="`rule_email_${i}`"
                                                             type="email"
@@ -1340,42 +1340,42 @@ const syncEmails = () => {
 
                                                     <!-- Assignee picker with drag-to-reorder -->
                                                     <div>
-                                                        <InputLabel value="Round-Robin Assignees" class="!text-[10px] uppercase text-gray-500" />
-                                                        <p class="text-[10px] text-gray-400 mt-0.5 mb-2">Add agents below, then drag <svg class="inline w-3 h-3 mb-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg> to set the rotation order.</p>
+                                                        <InputLabel value="Round-Robin Assignees" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
+                                                        <p class="text-[10px] text-gray-400 mt-0.5 mb-2 dark:text-gray-400">Add agents below, then drag <svg class="inline w-3 h-3 mb-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg> to set the rotation order.</p>
 
                                                         <!-- Search to add -->
                                                         <div class="relative max-w-lg">
-                                                            <div class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
-                                                                <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                                                            <div class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all dark:bg-gray-800 dark:border-gray-600">
+                                                                <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
                                                                 <input
                                                                     type="text"
                                                                     v-model="ruleSearchQueries[i]"
                                                                     @focus="openDropdown(`rule-${i}`)"
                                                                     @blur="closeDropdown"
                                                                     placeholder="Search and add agents by name or email…"
-                                                                    class="flex-1 border-0 outline-none text-xs text-gray-700 bg-transparent placeholder-gray-400"
+                                                                    class="flex-1 border-0 outline-none text-xs text-gray-700 bg-transparent placeholder-gray-400 dark:text-gray-300"
                                                                 />
                                                             </div>
                                                             <!-- Dropdown -->
-                                                            <div v-if="activeDropdown === `rule-${i}`" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                                                            <div v-if="activeDropdown === `rule-${i}`" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                                                                 <div class="max-h-52 overflow-y-auto">
                                                                     <button
                                                                         v-for="agent in filteredStaffForIds(autoRules[i].assignee_ids, ruleSearchQueries[i])"
                                                                         :key="agent.id"
                                                                         type="button"
                                                                         @mousedown.prevent="selectRuleAssignee(autoRules[i], i, agent.id)"
-                                                                        class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                                                                        class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 dark:hover:bg-blue-900/20 dark:border-gray-700"
                                                                     >
                                                                         <div class="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
                                                                             {{ agent.name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) }}
                                                                         </div>
                                                                         <div class="flex-1 min-w-0">
-                                                                            <p class="text-xs font-semibold text-gray-900 truncate">{{ agent.name }}</p>
-                                                                            <p class="text-[10px] text-gray-400 truncate">{{ agent.email }}</p>
+                                                                            <p class="text-xs font-semibold text-gray-900 truncate dark:text-gray-100">{{ agent.name }}</p>
+                                                                            <p class="text-[10px] text-gray-400 truncate dark:text-gray-400">{{ agent.email }}</p>
                                                                         </div>
                                                                         <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                                                                     </button>
-                                                                    <div v-if="filteredStaffForIds(autoRules[i].assignee_ids, ruleSearchQueries[i]).length === 0" class="px-4 py-5 text-center text-xs text-gray-400 italic">
+                                                                    <div v-if="filteredStaffForIds(autoRules[i].assignee_ids, ruleSearchQueries[i]).length === 0" class="px-4 py-5 text-center text-xs text-gray-400 italic dark:text-gray-400">
                                                                         {{ ruleSearchQueries[i] ? `No agents match "${ruleSearchQueries[i]}"` : 'All assignable agents are already added.' }}
                                                                     </div>
                                                                 </div>
@@ -1383,20 +1383,20 @@ const syncEmails = () => {
                                                         </div>
 
                                                         <!-- Draggable rotation queue -->
-                                                        <div v-if="autoRules[i].assignee_ids.length > 0" class="mt-2 border border-gray-200 rounded-lg overflow-hidden max-w-lg">
-                                                            <div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                                                                <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Rotation Order</span>
-                                                                <span class="text-[9px] text-gray-400">{{ autoRules[i].assignee_ids.length }} agent{{ autoRules[i].assignee_ids.length !== 1 ? 's' : '' }}</span>
+                                                        <div v-if="autoRules[i].assignee_ids.length > 0" class="mt-2 border border-gray-200 rounded-lg overflow-hidden max-w-lg dark:border-gray-700">
+                                                            <div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between dark:bg-gray-800/80 dark:border-gray-700">
+                                                                <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider dark:text-gray-400">Rotation Order</span>
+                                                                <span class="text-[9px] text-gray-400 dark:text-gray-400">{{ autoRules[i].assignee_ids.length }} agent{{ autoRules[i].assignee_ids.length !== 1 ? 's' : '' }}</span>
                                                             </div>
                                                             <draggable
                                                                 :modelValue="getRuleAssigneeObjects(autoRules[i])"
                                                                 @update:modelValue="items => setRuleAssigneeObjects(autoRules[i], items)"
                                                                 item-key="id"
                                                                 handle=".rule-assignee-drag-handle"
-                                                                class="divide-y divide-gray-100"
+                                                                class="divide-y divide-gray-100 dark:divide-gray-700"
                                                             >
                                                                 <template #item="{ element, index: pos }">
-                                                                    <div class="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-gray-50 transition-colors">
+                                                                    <div class="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-gray-50 transition-colors dark:bg-gray-800 dark:hover:bg-gray-700">
                                                                         <span class="rule-assignee-drag-handle cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0" title="Drag to reorder">
                                                                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
                                                                         </span>
@@ -1405,8 +1405,8 @@ const syncEmails = () => {
                                                                             {{ getAgentInitials(element.id) }}
                                                                         </div>
                                                                         <div class="flex-1 min-w-0">
-                                                                            <p class="text-xs font-semibold text-gray-800 truncate">{{ getAgent(element.id)?.name ?? `User #${element.id}` }}</p>
-                                                                            <p class="text-[10px] text-gray-400 truncate">{{ getAgent(element.id)?.email }}</p>
+                                                                            <p class="text-xs font-semibold text-gray-800 truncate dark:text-gray-200">{{ getAgent(element.id)?.name ?? `User #${element.id}` }}</p>
+                                                                            <p class="text-[10px] text-gray-400 truncate dark:text-gray-400">{{ getAgent(element.id)?.email }}</p>
                                                                         </div>
                                                                         <button type="button" @click="removeRuleAssignee(autoRules[i], element.id)" class="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0" title="Remove">
                                                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -1427,13 +1427,13 @@ const syncEmails = () => {
                                     </div>
 
                                     <!-- Row count -->
-                                    <p v-if="autoRules.length > 0" class="mt-1.5 text-[10px] text-gray-400 text-right tabular-nums">
+                                    <p v-if="autoRules.length > 0" class="mt-1.5 text-[10px] text-gray-400 text-right tabular-nums dark:text-gray-400">
                                         {{ filteredRuleIndexes.length }} of {{ autoRules.length }} {{ autoRules.length === 1 ? 'rule' : 'rules' }}
                                         <span v-if="rulesListSearch"> matching "{{ rulesListSearch }}"</span>
                                     </p>
                                 </section>
 
-                                <div class="border-t border-gray-100"></div>
+                                <div class="border-t border-gray-100 dark:border-gray-700"></div>
 
                                 <!-- Global Default Assignees Section -->
                                 <section>
@@ -1441,43 +1441,43 @@ const syncEmails = () => {
                                         <UserGroupIcon class="w-4 h-4 mr-1.5" />
                                         Global Default Assignees
                                     </h3>
-                                    <p class="text-xs text-gray-500 mb-3 leading-relaxed">
+                                    <p class="text-xs text-gray-500 mb-3 leading-relaxed dark:text-gray-300">
                                         Tickets with no matching rule are round-robin distributed among these agents. Leave empty to keep unmatched tickets unassigned.
                                     </p>
 
                                     <!-- Search to add default agents -->
                                     <div class="relative max-w-lg">
-                                        <div class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500 transition-all">
-                                            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                                        <div class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white focus-within:ring-2 focus-within:ring-purple-500 focus-within:border-purple-500 transition-all dark:bg-gray-800 dark:border-gray-600">
+                                            <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
                                             <input
                                                 type="text"
                                                 v-model="defaultSearchQuery"
                                                 @focus="openDropdown('default')"
                                                 @blur="closeDropdown"
                                                 placeholder="Search and add agents by name or email…"
-                                                class="flex-1 border-0 outline-none text-xs text-gray-700 bg-transparent placeholder-gray-400"
+                                                class="flex-1 border-0 outline-none text-xs text-gray-700 bg-transparent placeholder-gray-400 dark:text-gray-300"
                                             />
                                         </div>
                                         <!-- Dropdown -->
-                                        <div v-if="activeDropdown === 'default'" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                                        <div v-if="activeDropdown === 'default'" class="absolute z-30 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                                             <div class="max-h-52 overflow-y-auto">
                                                 <button
                                                     v-for="agent in filteredDefaultStaff"
                                                     :key="agent.id"
                                                     type="button"
                                                     @mousedown.prevent="selectDefaultAssignee(agent.id)"
-                                                    class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors border-b border-gray-50 last:border-0"
+                                                    class="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors border-b border-gray-50 last:border-0 dark:hover:bg-purple-900/20 dark:border-gray-700"
                                                 >
                                                     <div class="w-7 h-7 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
                                                         {{ agent.name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().slice(0, 2) }}
                                                     </div>
                                                     <div class="flex-1 min-w-0">
-                                                        <p class="text-xs font-semibold text-gray-900 truncate">{{ agent.name }}</p>
-                                                        <p class="text-[10px] text-gray-400 truncate">{{ agent.email }}</p>
+                                                        <p class="text-xs font-semibold text-gray-900 truncate dark:text-gray-100">{{ agent.name }}</p>
+                                                        <p class="text-[10px] text-gray-400 truncate dark:text-gray-400">{{ agent.email }}</p>
                                                     </div>
                                                     <svg class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                                                 </button>
-                                                <div v-if="filteredDefaultStaff.length === 0" class="px-4 py-5 text-center text-xs text-gray-400 italic">
+                                                <div v-if="filteredDefaultStaff.length === 0" class="px-4 py-5 text-center text-xs text-gray-400 italic dark:text-gray-400">
                                                     {{ defaultSearchQuery ? `No agents match "${defaultSearchQuery}"` : 'All assignable agents are already added.' }}
                                                 </div>
                                             </div>
@@ -1485,20 +1485,20 @@ const syncEmails = () => {
                                     </div>
 
                                     <!-- Draggable default rotation queue -->
-                                    <div v-if="autoDefaults.length > 0" class="mt-2 border border-gray-200 rounded-lg overflow-hidden max-w-lg">
-                                        <div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Rotation Order</span>
-                                            <span class="text-[9px] text-gray-400">{{ autoDefaults.length }} agent{{ autoDefaults.length !== 1 ? 's' : '' }}</span>
+                                    <div v-if="autoDefaults.length > 0" class="mt-2 border border-gray-200 rounded-lg overflow-hidden max-w-lg dark:border-gray-700">
+                                        <div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between dark:bg-gray-800/80 dark:border-gray-700">
+                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider dark:text-gray-400">Rotation Order</span>
+                                            <span class="text-[9px] text-gray-400 dark:text-gray-400">{{ autoDefaults.length }} agent{{ autoDefaults.length !== 1 ? 's' : '' }}</span>
                                         </div>
                                         <draggable
                                             :modelValue="getDefaultAssigneeObjects"
                                             @update:modelValue="setDefaultAssigneeObjects"
                                             item-key="id"
                                             handle=".default-assignee-drag-handle"
-                                            class="divide-y divide-gray-100"
+                                            class="divide-y divide-gray-100 dark:divide-gray-700"
                                         >
                                             <template #item="{ element, index: pos }">
-                                                <div class="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-gray-50 transition-colors">
+                                                <div class="flex items-center gap-3 px-3 py-2.5 bg-white hover:bg-gray-50 transition-colors dark:bg-gray-800 dark:hover:bg-gray-700">
                                                     <span class="default-assignee-drag-handle cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0" title="Drag to reorder">
                                                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg>
                                                     </span>
@@ -1507,8 +1507,8 @@ const syncEmails = () => {
                                                         {{ getAgentInitials(element.id) }}
                                                     </div>
                                                     <div class="flex-1 min-w-0">
-                                                        <p class="text-xs font-semibold text-gray-800 truncate">{{ getAgent(element.id)?.name ?? `User #${element.id}` }}</p>
-                                                        <p class="text-[10px] text-gray-400 truncate">{{ getAgent(element.id)?.email }}</p>
+                                                        <p class="text-xs font-semibold text-gray-800 truncate dark:text-gray-200">{{ getAgent(element.id)?.name ?? `User #${element.id}` }}</p>
+                                                        <p class="text-[10px] text-gray-400 truncate dark:text-gray-400">{{ getAgent(element.id)?.email }}</p>
                                                     </div>
                                                     <button type="button" @click="removeDefaultAssignee(element.id)" class="p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0" title="Remove">
                                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -1518,10 +1518,10 @@ const syncEmails = () => {
                                         </draggable>
                                     </div>
 
-                                    <p v-if="!assignableStaff || assignableStaff.length === 0" class="mt-2 text-[10px] text-gray-400 italic">
+                                    <p v-if="!assignableStaff || assignableStaff.length === 0" class="mt-2 text-[10px] text-gray-400 italic dark:text-gray-400">
                                         No assignable staff found. Enable "Is Assignable" on a role first.
                                     </p>
-                                    <p v-else-if="autoDefaults.length === 0" class="mt-2 text-[10px] text-gray-400 italic">
+                                    <p v-else-if="autoDefaults.length === 0" class="mt-2 text-[10px] text-gray-400 italic dark:text-gray-400">
                                         No default agents added — unmatched tickets will remain unassigned.
                                     </p>
                                 </section>
@@ -1548,7 +1548,7 @@ const syncEmails = () => {
                         </div>
 
                         <!-- Sticky Footer -->
-                        <div v-if="activeTab !== 'sidebar_layout' && activeTab !== 'auto_assignee'" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <div v-if="activeTab !== 'sidebar_layout' && activeTab !== 'auto_assignee'" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between dark:bg-gray-800/80 dark:border-gray-700">
                             <div>
                                 <Transition enter-active-class="transition ease-in-out duration-300" enter-from-class="opacity-0" leave-active-class="transition ease-in-out duration-300" leave-to-class="opacity-0">
                                     <div v-if="form.recentlySuccessful" class="text-sm font-bold text-green-600 flex items-center">
@@ -1556,7 +1556,7 @@ const syncEmails = () => {
                                         Changes saved!
                                     </div>
                                 </Transition>
-                                <div v-if="!form.recentlySuccessful" class="text-[10px] text-gray-400 italic">
+                                <div v-if="!form.recentlySuccessful" class="text-[10px] text-gray-400 italic dark:text-gray-400">
                                     * All changes are applied instantly after saving.
                                 </div>
                             </div>

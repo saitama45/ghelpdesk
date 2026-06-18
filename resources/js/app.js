@@ -7,6 +7,7 @@ import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import ClickAway from './Directives/ClickAway.js';
 import ToastPlugin from './Plugins/toast.js';
+import { useTheme } from './Composables/useTheme.js';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -18,6 +19,8 @@ createInertiaApp({
             import.meta.glob('./Pages/**/*.vue'),
         ),
     setup({ el, App, props, plugin }) {
+        useTheme().init();
+
         return createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)

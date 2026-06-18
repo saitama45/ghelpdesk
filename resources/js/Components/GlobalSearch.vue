@@ -2,13 +2,13 @@
     <div class="relative max-w-lg w-full" v-click-away="closeSearch">
         <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MagnifyingGlassIcon class="h-5 w-5 text-gray-400" aria-hidden="true" />
+                <MagnifyingGlassIcon class="h-5 w-5 text-gray-400 dark:text-gray-400" aria-hidden="true" />
             </div>
             <input
                 ref="searchInput"
                 v-model="query"
                 type="text"
-                class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-200"
+                class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all duration-200 dark:bg-gray-800 dark:border-gray-600 dark:placeholder-gray-400"
                 placeholder="Search tickets, users, menus... (Ctrl+/)"
                 @input="handleInput"
                 @focus="isFocused = true"
@@ -25,10 +25,10 @@
         <!-- Search Results Dropdown -->
         <div
             v-if="showResults"
-            class="absolute mt-1 w-full bg-white shadow-2xl rounded-md border border-gray-200 z-50 overflow-hidden max-h-[85vh] flex flex-col"
+            class="absolute mt-1 w-full bg-white shadow-2xl rounded-md border border-gray-200 z-50 overflow-hidden max-h-[85vh] flex flex-col dark:bg-gray-800 dark:border-gray-700"
         >
             <!-- Tab Bar + Sort Control -->
-            <div class="border-b border-gray-100 bg-white">
+            <div class="border-b border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700">
                 <!-- Tabs -->
                 <div class="flex overflow-x-auto scrollbar-none">
                     <button
@@ -51,7 +51,7 @@
 
                 <!-- Sort Control (hidden for Navigation tab) -->
                 <div v-if="activeTab !== 'navigation'" class="flex items-center justify-end px-3 py-1.5 border-t border-gray-50">
-                    <span class="text-[10px] text-gray-400 mr-2 font-medium">Sort:</span>
+                    <span class="text-[10px] text-gray-400 mr-2 font-medium dark:text-gray-400">Sort:</span>
                     <div class="flex gap-1">
                         <button
                             v-for="s in sortOptions"
@@ -71,10 +71,10 @@
 
                 <!-- Navigation -->
                 <div v-if="showSection('navigation') && results.menus.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 dark:bg-gray-900/50 dark:text-gray-300">
                         Navigation
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(menu, index) in results.menus" :key="'menu-' + index">
                             <Link
                                 :href="menu.url"
@@ -86,8 +86,8 @@
                                     <LinkIcon class="w-4 h-4" />
                                 </div>
                                 <div class="ml-3">
-                                    <p class="text-sm font-medium text-gray-900 group-hover:text-blue-600">{{ menu.name }}</p>
-                                    <p class="text-xs text-gray-500">{{ menu.path }}</p>
+                                    <p class="text-sm font-medium text-gray-900 group-hover:text-blue-600 dark:text-gray-100">{{ menu.name }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-300">{{ menu.path }}</p>
                                 </div>
                             </Link>
                         </li>
@@ -96,10 +96,10 @@
 
                 <!-- Tickets -->
                 <div v-if="showSection('tickets') && results.tickets.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Tickets
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(ticket, index) in results.tickets" :key="'ticket-' + index">
                             <Link
                                 :href="route('tickets.show', ticket.id)"
@@ -112,14 +112,14 @@
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
                                     <div class="flex items-center justify-between">
-                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 dark:text-gray-100">
                                             <span class="text-blue-600 font-bold">[{{ ticket.ticket_key }}]</span> {{ ticket.title }}
                                         </p>
                                         <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :class="getStatusClass(ticket.status)">
                                             {{ ticket.status }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-gray-500 truncate">
+                                    <p class="text-xs text-gray-500 truncate dark:text-gray-300">
                                         {{ ticket.company_name }} • Assigned to: {{ ticket.assignee_name }}
                                     </p>
                                 </div>
@@ -130,10 +130,10 @@
 
                 <!-- Requests (POS + SAP merged) -->
                 <div v-if="showSection('requests') && results.requests.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Requests
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(req, index) in results.requests" :key="'req-' + index">
                             <Link
                                 :href="route(req.source === 'pos' ? 'pos-requests.show' : 'sap-requests.show', req.id)"
@@ -149,7 +149,7 @@
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
                                     <div class="flex items-center justify-between">
-                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 dark:text-gray-100">
                                             <span class="font-bold" :class="req.source === 'pos' ? 'text-indigo-600' : 'text-teal-600'">
                                                 [{{ req.source === 'pos' ? 'POS' : 'SAP' }} #{{ req.id }}]
                                             </span> {{ req.request_type }}
@@ -158,7 +158,7 @@
                                             {{ req.status }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-gray-500 truncate">
+                                    <p class="text-xs text-gray-500 truncate dark:text-gray-300">
                                         {{ req.company }} • {{ req.requester }}
                                         <span v-if="req.ticket_key" class="ml-1 font-bold text-blue-600">• {{ req.ticket_key }}</span>
                                     </p>
@@ -170,10 +170,10 @@
 
                 <!-- Forms (Request Types) -->
                 <div v-if="showSection('forms') && results.forms.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Forms
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(form, index) in results.forms" :key="'form-' + index">
                             <Link
                                 :href="getFormLink(form)"
@@ -187,9 +187,9 @@
                                     </svg>
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
-                                    <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">{{ form.name }}</p>
-                                    <p class="text-xs text-gray-500 flex items-center gap-1">
-                                        <span class="font-mono text-gray-400">{{ form.code }}</span>
+                                    <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 dark:text-gray-100">{{ form.name }}</p>
+                                    <p class="text-xs text-gray-500 flex items-center gap-1 dark:text-gray-300">
+                                        <span class="font-mono text-gray-400 dark:text-gray-400">{{ form.code }}</span>
                                         <span v-for="rf in form.request_for" :key="rf"
                                             class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
                                             :class="rf === 'POS' ? 'bg-indigo-100 text-indigo-700' : rf === 'SAP' ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600'">
@@ -204,10 +204,10 @@
 
                 <!-- Projects -->
                 <div v-if="showSection('projects') && results.projects.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Projects
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(project, index) in results.projects" :key="'project-' + index">
                             <Link
                                 :href="route('projects.show', project.id)"
@@ -222,12 +222,12 @@
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
                                     <div class="flex items-center justify-between">
-                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-green-600">{{ project.name }}</p>
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-green-600 dark:text-gray-100">{{ project.name }}</p>
                                         <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :class="getProjectStatusClass(project.status)">
                                             {{ project.status }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-gray-500 truncate">{{ project.store_name }}</p>
+                                    <p class="text-xs text-gray-500 truncate dark:text-gray-300">{{ project.store_name }}</p>
                                 </div>
                             </Link>
                         </li>
@@ -236,10 +236,10 @@
 
                 <!-- Inventory (Assets + Stock Ins) -->
                 <div v-if="showSection('inventory') && results.inventory.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Inventory
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(item, index) in results.inventory" :key="'inv-' + index">
                             <Link
                                 :href="getInventoryLink(item)"
@@ -254,7 +254,7 @@
                                     </svg>
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
-                                    <p class="text-sm font-medium text-gray-900 truncate group-hover:text-orange-600">
+                                    <p class="text-sm font-medium text-gray-900 truncate group-hover:text-orange-600 dark:text-gray-100">
                                         <span class="font-bold text-[10px] mr-1 px-1 py-0.5 rounded"
                                             :class="item.type === 'asset' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'">
                                             {{ item.type === 'asset' ? 'ASSET' : 'STOCK' }}
@@ -262,7 +262,7 @@
                                         <span v-if="item.type === 'asset'">{{ item.item_code }} — {{ item.label }}</span>
                                         <span v-else>{{ item.dr_no }} — {{ item.vendor }}</span>
                                     </p>
-                                    <p class="text-xs text-gray-500 truncate">
+                                    <p class="text-xs text-gray-500 truncate dark:text-gray-300">
                                         <span v-if="item.type === 'asset'">{{ item.description }}</span>
                                         <span v-else>S/N: {{ item.serial_no || 'N/A' }} • {{ item.status }}</span>
                                     </p>
@@ -274,30 +274,30 @@
 
                 <!-- Schedules -->
                 <div v-if="showSection('schedules') && results.schedules.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Schedules
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(sched, index) in results.schedules" :key="'sched-' + index">
                             <Link
                                 :href="route('schedules.index')"
-                                class="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors group"
+                                class="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors group dark:hover:bg-gray-700"
                                 :class="{ 'bg-gray-50': isSelected('schedule', index) }"
                                 @click="closeSearch"
                             >
-                                <div class="flex-shrink-0 w-8 h-8 bg-gray-100 text-gray-600 rounded-md flex items-center justify-center">
+                                <div class="flex-shrink-0 w-8 h-8 bg-gray-100 text-gray-600 rounded-md flex items-center justify-center dark:bg-gray-800 dark:text-gray-300">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                     </svg>
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
                                     <div class="flex items-center justify-between">
-                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-gray-600">{{ sched.user_name }}</p>
-                                        <span v-if="sched.status" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-gray-600 dark:text-gray-100">{{ sched.user_name }}</p>
+                                        <span v-if="sched.status" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
                                             {{ sched.status }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-gray-500">
+                                    <p class="text-xs text-gray-500 dark:text-gray-300">
                                         {{ formatDateRange(sched.start_time, sched.end_time) }}
                                     </p>
                                 </div>
@@ -308,10 +308,10 @@
 
                 <!-- Attendance -->
                 <div v-if="showSection('attendance') && results.attendance.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Attendance
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(log, index) in results.attendance" :key="'att-' + index">
                             <Link
                                 :href="route('attendance.index')"
@@ -326,12 +326,12 @@
                                 </div>
                                 <div class="ml-3 flex-1 min-w-0">
                                     <div class="flex items-center justify-between">
-                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600">{{ log.user_name }}</p>
+                                        <p class="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 dark:text-gray-100">{{ log.user_name }}</p>
                                         <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
                                             {{ formatAttendanceType(log.type) }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-gray-500">
+                                    <p class="text-xs text-gray-500 dark:text-gray-300">
                                         {{ log.log_time ? new Date(log.log_time).toLocaleString() : '' }}
                                         <span v-if="log.location_client" class="ml-1">• {{ log.location_client }}</span>
                                     </p>
@@ -343,10 +343,10 @@
 
                 <!-- Users -->
                 <div v-if="showSection('users') && results.users.length > 0">
-                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                    <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 border-t border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                         Users
                     </div>
-                    <ul class="divide-y divide-gray-100">
+                    <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(user, index) in results.users" :key="'user-' + index">
                             <Link
                                 :href="route('users.index', { search: user.email })"
@@ -357,12 +357,12 @@
                                 <div v-if="user.profile_photo" class="flex-shrink-0 w-8 h-8 rounded-full overflow-hidden">
                                     <img :src="'/serve-storage/' + user.profile_photo" class="w-full h-full object-cover">
                                 </div>
-                                <div v-else class="flex-shrink-0 w-8 h-8 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center">
+                                <div v-else class="flex-shrink-0 w-8 h-8 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center dark:bg-gray-800 dark:text-gray-300">
                                     <UserIcon class="w-4 h-4" />
                                 </div>
                                 <div class="ml-3">
-                                    <p class="text-sm font-medium text-gray-900 group-hover:text-blue-600">{{ user.name }}</p>
-                                    <p class="text-xs text-gray-500">{{ user.email }}</p>
+                                    <p class="text-sm font-medium text-gray-900 group-hover:text-blue-600 dark:text-gray-100">{{ user.name }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-300">{{ user.email }}</p>
                                 </div>
                             </Link>
                         </li>
@@ -371,22 +371,22 @@
 
                 <!-- No Results -->
                 <div v-if="!loading && query.length >= 2 && totalResults === 0" class="px-4 py-8 text-center" role="status">
-                    <MagnifyingGlassIcon class="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 class="mt-2 text-sm font-medium text-gray-900">No results found</h3>
-                    <p class="mt-1 text-sm text-gray-500">No matches found for "{{ query }}"</p>
+                    <MagnifyingGlassIcon class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-400" />
+                    <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No results found</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">No matches found for "{{ query }}"</p>
                 </div>
 
-                <div v-if="query.length < 2 && query.length > 0" class="px-4 py-4 text-center text-sm text-gray-500">
+                <div v-if="query.length < 2 && query.length > 0" class="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-300">
                     Type at least 2 characters to search...
                 </div>
             </div>
 
             <!-- Footer -->
-            <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400">
+            <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                 <div class="flex items-center space-x-3">
-                    <span><kbd class="px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-600 font-sans">ESC</kbd> to close</span>
-                    <span><kbd class="px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-600 font-sans">↑↓</kbd> to navigate</span>
-                    <span><kbd class="px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-600 font-sans">ENTER</kbd> to select</span>
+                    <span><kbd class="px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-600 font-sans dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600">ESC</kbd> to close</span>
+                    <span><kbd class="px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-600 font-sans dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600">↑↓</kbd> to navigate</span>
+                    <span><kbd class="px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-600 font-sans dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600">ENTER</kbd> to select</span>
                 </div>
             </div>
         </div>

@@ -100,13 +100,13 @@ const updatePassword = () => {
 
         <div class="max-w-4xl mx-auto space-y-6">
             <!-- Profile Header -->
-            <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="bg-white rounded-lg shadow-sm p-6 dark:bg-gray-800">
                 <div class="flex items-center space-x-4">
                     <div class="relative group cursor-pointer" @click="selectNewPhoto">
-                        <div v-if="photoPreview" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200">
+                        <div v-if="photoPreview" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-700">
                             <img :src="photoPreview" class="h-full w-full object-cover">
                         </div>
-                        <div v-else-if="user.profile_photo" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200">
+                        <div v-else-if="user.profile_photo" class="h-20 w-20 rounded-full overflow-hidden border-2 border-gray-200 dark:border-gray-700">
                             <img :src="'/serve-storage/' + user.profile_photo" class="h-full w-full object-cover">
                         </div>
                         <div v-else class="h-20 w-20 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
@@ -120,8 +120,8 @@ const updatePassword = () => {
                         <input ref="photoInput" type="file" class="hidden" @change="updatePhotoPreview" accept="image/*">
                     </div>
                     <div>
-                        <h2 class="text-2xl font-bold text-gray-900">{{ user.name }}</h2>
-                        <p class="text-gray-600">{{ user.email }}</p>
+                        <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ user.name }}</h2>
+                        <p class="text-gray-600 dark:text-gray-300">{{ user.email }}</p>
                         <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 mt-1">
                             {{ user.roles[0]?.name || 'User' }}
                         </span>
@@ -130,8 +130,8 @@ const updatePassword = () => {
             </div>
 
             <!-- Tabs -->
-            <div class="bg-white rounded-lg shadow-sm">
-                <div class="border-b border-gray-200">
+            <div class="bg-white rounded-lg shadow-sm dark:bg-gray-800">
+                <div class="border-b border-gray-200 dark:border-gray-700">
                     <nav class="flex space-x-8 px-6">
                         <button
                             @click="activeTab = 'profile'"
@@ -163,43 +163,43 @@ const updatePassword = () => {
                     <form @submit.prevent="updateProfile" class="space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Full Name</label>
                                 <input 
                                     v-model="profileForm.name" 
                                     type="text" 
                                     required 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                 >
                                 <div v-if="profileForm.errors.name" class="text-red-600 text-sm mt-1">{{ profileForm.errors.name }}</div>
                             </div>
 
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Email Address</label>
                                 <input 
                                     v-model="profileForm.email" 
                                     type="email" 
                                     required 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                 >
                                 <div v-if="profileForm.errors.email" class="text-red-600 text-sm mt-1">{{ profileForm.errors.email }}</div>
                             </div>
 
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Department</label>
                                 <input 
                                     v-model="profileForm.department" 
                                     type="text" 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                 >
                                 <div v-if="profileForm.errors.department" class="text-red-600 text-sm mt-1">{{ profileForm.errors.department }}</div>
                             </div>
 
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Position</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Position</label>
                                 <input 
                                     v-model="profileForm.position" 
                                     type="text" 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                 >
                                 <div v-if="profileForm.errors.position" class="text-red-600 text-sm mt-1">{{ profileForm.errors.position }}</div>
                             </div>
@@ -225,34 +225,34 @@ const updatePassword = () => {
                 <div v-show="activeTab === 'password'" class="p-6">
                     <form @submit.prevent="updatePassword" class="space-y-6 max-w-md">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Current Password</label>
                             <input 
                                 v-model="passwordForm.current_password" 
                                 type="password" 
                                 required 
-                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                             >
                             <div v-if="passwordForm.errors.current_password" class="text-red-600 text-sm mt-1">{{ passwordForm.errors.current_password }}</div>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">New Password</label>
                             <input 
                                 v-model="passwordForm.password" 
                                 type="password" 
                                 required 
-                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                             >
                             <div v-if="passwordForm.errors.password" class="text-red-600 text-sm mt-1">{{ passwordForm.errors.password }}</div>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Confirm New Password</label>
                             <input 
                                 v-model="passwordForm.password_confirmation" 
                                 type="password" 
                                 required 
-                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                             >
                         </div>
 

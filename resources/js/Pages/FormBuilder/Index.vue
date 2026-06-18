@@ -231,18 +231,18 @@ const openFieldBuilder = (formData) => {
                     </template>
 
                     <template #header>
-                        <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Name</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Slug</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Description</th>
-                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest">Status</th>
-                            <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest">Actions</th>
+                        <tr class="bg-gray-50/80 backdrop-blur-sm dark:bg-gray-800/80">
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Name</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Slug</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Description</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Status</th>
+                            <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
                         <tr v-for="(formData, index) in data" :key="formData.id" 
-                            class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0"
+                            class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/50 transition-all duration-300 border-b border-gray-100 last:border-0 dark:border-gray-700 dark:hover:bg-gray-700"
                         >
                             <td class="px-6 py-5 whitespace-nowrap text-left">
                                 <div class="flex items-center justify-start">
@@ -252,7 +252,7 @@ const openFieldBuilder = (formData) => {
                                         </svg>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors duration-300">{{ formData.name }}</div>
+                                        <div class="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors duration-300 dark:text-gray-100">{{ formData.name }}</div>
                                         <div v-if="formData.request_types?.length" class="mt-1 flex flex-wrap gap-1">
                                             <span class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-tighter">
                                                 {{ formData.request_types.length }} Request Types
@@ -262,15 +262,15 @@ const openFieldBuilder = (formData) => {
                                 </div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-left">
-                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-gray-100 text-gray-700 border border-gray-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-100 transition-colors duration-300">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-gray-100 text-gray-700 border border-gray-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-100 transition-colors duration-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                     {{ formData.slug }}
                                 </span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-left">
-                                <div class="text-sm text-gray-500 truncate max-w-xs">{{ formData.description || 'No description' }}</div>
+                                <div class="text-sm text-gray-500 truncate max-w-xs dark:text-gray-300">{{ formData.description || 'No description' }}</div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-left">
-                                <span :class="formData.is_active ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'" 
+                                <span :class="formData.is_active ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800' : 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800'" 
                                       class="inline-flex items-center px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full shadow-sm">
                                     <span class="w-1 h-1 rounded-full mr-1.5" :class="formData.is_active ? 'bg-emerald-500' : 'bg-rose-500'"></span>
                                     {{ formData.is_active ? 'Active' : 'Inactive' }}
@@ -279,16 +279,16 @@ const openFieldBuilder = (formData) => {
                             <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end items-center space-x-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
                                     <div class="flex flex-col items-end space-y-1">
-                                        <span v-if="formData.form_schema?.fields?.length" class="text-[9px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                        <span v-if="formData.form_schema?.fields?.length" class="text-[9px] font-black text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 whitespace-nowrap dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800">
                                             {{ formData.form_schema.fields.length }} fields
                                         </span>
-                                        <span v-if="formData.form_schema?.approver_fields?.length" class="text-[9px] font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                        <span v-if="formData.form_schema?.approver_fields?.length" class="text-[9px] font-black text-orange-700 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 whitespace-nowrap dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800">
                                             {{ formData.form_schema.approver_fields.length }} approver fields
                                         </span>
-                                        <span v-if="formData.form_schema?.has_items && formData.form_schema?.items_template_source && Object.keys(formData.form_schema?.items_templates || {}).length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                        <span v-if="formData.form_schema?.has_items && formData.form_schema?.items_template_source && Object.keys(formData.form_schema?.items_templates || {}).length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800">
                                             {{ Object.keys(formData.form_schema.items_templates || {}).length }} item templates
                                         </span>
-                                        <span v-else-if="formData.form_schema?.has_items && formData.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                        <span v-else-if="formData.form_schema?.has_items && formData.form_schema?.items_columns?.length" class="text-[9px] font-black text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 whitespace-nowrap dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800">
                                             {{ formData.form_schema.items_columns.length }} line item cols
                                         </span>
                                     </div>
@@ -351,15 +351,15 @@ const openFieldBuilder = (formData) => {
             <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-center justify-center p-4">
                 <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" @click="closeModal"></div>
                 
-                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-8">
                         <div>
-                            <h3 class="text-2xl font-black text-gray-900 tracking-tight">
+                            <h3 class="text-2xl font-black text-gray-900 tracking-tight dark:text-gray-100">
                                 {{ isEditing ? 'Update Form Definition' : 'New Form Definition' }}
                             </h3>
-                            <p class="text-sm text-gray-500 mt-1">Configure form name, description and status.</p>
+                            <p class="text-sm text-gray-500 mt-1 dark:text-gray-300">Configure form name, description and status.</p>
                         </div>
-                        <button @click="closeModal" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300">
+                        <button @click="closeModal" class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all duration-300 dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -367,8 +367,8 @@ const openFieldBuilder = (formData) => {
                     </div>
 
                     <form @submit.prevent="submitForm" class="space-y-6">
-                        <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
-                            <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3 ml-1">Connect Request Types (Optional)</label>
+                        <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800">
+                            <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3 ml-1 dark:text-indigo-300">Connect Request Types (Optional)</label>
                             <MultiAutocomplete
                                 v-model="form.request_type_ids"
                                 :options="requestTypeOptions"
@@ -377,27 +377,27 @@ const openFieldBuilder = (formData) => {
                                 placeholder="Search and select request types..."
                                 :limit="10"
                             />
-                            <p class="text-[10px] text-indigo-500 mt-2 ml-1 italic font-medium">When Request Types are connected, users will see tiles to choose from when starting a submission. The selected type's schema and approvals will be used.</p>
+                            <p class="text-[10px] text-indigo-500 mt-2 ml-1 italic font-medium dark:text-indigo-400">When Request Types are connected, users will see tiles to choose from when starting a submission. The selected type's schema and approvals will be used.</p>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Form Name</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1 dark:text-gray-400">Form Name</label>
                                 <input v-model="form.name" type="text" required placeholder="e.g. Assets, Employees, Equipment"
-                                       class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-bold transition-all duration-300">
+                                       class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-bold transition-all duration-300 dark:bg-gray-900/50 dark:text-white dark:focus:bg-gray-900">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Workflow Type</label>
-                                <div class="flex p-1 bg-gray-50 rounded-2xl border border-transparent focus-within:border-indigo-500 transition-all duration-300">
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1 dark:text-gray-400">Workflow Type</label>
+                                <div class="flex p-1 bg-gray-50 rounded-2xl border border-transparent focus-within:border-indigo-500 transition-all duration-300 dark:bg-gray-900/50">
                                     <button type="button" 
                                             @click="form.workflow_type = 'approval'"
-                                            :class="form.workflow_type === 'approval' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'"
+                                            :class="form.workflow_type === 'approval' ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-800 dark:text-indigo-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
                                             class="flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all">
                                         Approvals
                                     </button>
                                     <button type="button" 
                                             @click="form.workflow_type = 'checklist'"
-                                            :class="form.workflow_type === 'checklist' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'"
+                                            :class="form.workflow_type === 'checklist' ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-800 dark:text-indigo-400' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'"
                                             class="flex-1 py-2 text-xs font-black uppercase tracking-widest rounded-xl transition-all">
                                         Checklist
                                     </button>
@@ -407,17 +407,17 @@ const openFieldBuilder = (formData) => {
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="md:col-span-2">
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">Description</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1 dark:text-gray-400">Description</label>
                                 <textarea v-model="form.description" rows="2" placeholder="Describe the purpose of this form..."
-                                          class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300"></textarea>
+                                          class="block w-full px-4 py-3 bg-gray-50 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:border-transparent text-sm font-medium transition-all duration-300 dark:bg-gray-900/50 dark:text-white dark:focus:bg-gray-900"></textarea>
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1 dark:text-gray-400">
                                 {{ isChecklist ? 'Number of Tasks' : 'Default Approval Levels' }}
                             </label>
-                            <div class="flex items-center space-x-4 bg-gray-50 rounded-2xl p-1 border border-transparent focus-within:border-indigo-500 focus-within:bg-white transition-all duration-300">
+                            <div class="flex items-center space-x-4 bg-gray-50 rounded-2xl p-1 border border-transparent focus-within:border-indigo-500 focus-within:bg-white transition-all duration-300 dark:bg-gray-900/50 dark:focus-within:bg-gray-900">
                                 <button type="button" @click="form.approval_levels > 0 && form.approval_levels--" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
@@ -425,7 +425,7 @@ const openFieldBuilder = (formData) => {
                                 </button>
                                 <div class="flex-1 text-center">
                                     <input v-model.number="form.approval_levels" type="number" required min="0"
-                                           class="w-full text-center bg-transparent border-none focus:ring-0 text-sm font-black text-gray-900">
+                                           class="w-full text-center bg-transparent border-none focus:ring-0 text-sm font-black text-gray-900 dark:text-gray-100">
                                     <div class="text-[9px] font-black uppercase text-orange-500 mt-[-4px]" v-if="form.approval_levels === 0">No workflow</div>
                                 </div>
                                 <button type="button" @click="form.approval_levels++" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
@@ -455,14 +455,14 @@ const openFieldBuilder = (formData) => {
                             <template v-else>
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1">
+                                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1 ml-1 dark:text-gray-400">
                                             {{ isChecklist ? 'Task Assignments' : 'Default Approval Matrix' }}
                                         </label>
-                                        <p class="text-xs text-gray-500 ml-1">
+                                        <p class="text-xs text-gray-500 ml-1 dark:text-gray-300">
                                             {{ isChecklist ? 'Assign task owners for each step. Tasks can be completed in any order.' : 'Assign one or more approvers for each level. Steps are processed sequentially.' }}
                                         </p>
                                     </div>
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100">
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-100 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800">
                                         {{ form.approval_levels }} {{ isChecklist ? 'Task' : 'Level' }}{{ form.approval_levels > 1 ? 's' : '' }}
                                     </span>
                                 </div>
@@ -471,14 +471,14 @@ const openFieldBuilder = (formData) => {
                                     <div
                                         v-for="level in form.approver_matrix"
                                         :key="level.level"
-                                        class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4"
+                                        class="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:bg-gray-800/80 dark:border-gray-700"
                                     >
                                         <div class="flex items-center justify-between gap-3 mb-3">
                                             <div>
-                                                <p class="text-sm font-black text-gray-900">
+                                                <p class="text-sm font-black text-gray-900 dark:text-gray-100">
                                                     {{ isChecklist ? 'Task' : 'Level' }} {{ level.level }}
                                                 </p>
-                                                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black">
+                                                <p class="text-[10px] uppercase tracking-widest text-gray-400 font-black dark:text-gray-400">
                                                     {{ level.user_ids.length }} {{ isChecklist ? 'assignee' : 'approver' }}{{ level.user_ids.length !== 1 ? 's' : '' }}
                                                 </p>
                                             </div>
@@ -487,7 +487,7 @@ const openFieldBuilder = (formData) => {
                                         <div v-if="isChecklist" class="mb-4">
                                             <label class="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Task Name</label>
                                             <input v-model="level.name" type="text" placeholder="e.g. Document Verification, Physical Inspection..."
-                                                   class="block w-full px-3 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xs font-bold transition-all">
+                                                   class="block w-full px-3 py-2 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xs font-bold transition-all dark:bg-gray-800 dark:border-gray-700">
                                         </div>
 
                                         <MultiAutocomplete
@@ -503,17 +503,17 @@ const openFieldBuilder = (formData) => {
                             </template>
                         </div>
 
-                        <div class="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div class="flex items-center p-4 bg-gray-50 rounded-2xl border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input v-model="form.is_active" type="checkbox" class="sr-only peer">
-                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                                <span class="ml-3 text-sm font-bold text-gray-700">Active Status</span>
+                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 dark:bg-gray-700"></div>
+                                <span class="ml-3 text-sm font-bold text-gray-700 dark:text-gray-300">Active Status</span>
                             </label>
                         </div>
 
                         <div class="flex space-x-4 pt-6">
                             <button type="button" @click="closeModal" 
-                                    class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all duration-300">
+                                    class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all duration-300 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
                             <button type="submit" 

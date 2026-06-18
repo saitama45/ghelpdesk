@@ -174,7 +174,7 @@ onUnmounted(() => {
     <div ref="containerRef" class="relative">
         <div
             @click="openDropdown"
-            class="w-full bg-white border border-gray-300 rounded-lg shadow-sm p-1.5 text-left cursor-text focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all duration-200 min-h-[42px]"
+            class="w-full bg-white border border-gray-300 rounded-lg shadow-sm p-1.5 text-left cursor-text focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all duration-200 min-h-[42px] dark:bg-gray-800 dark:border-gray-600"
             :class="{ 'bg-gray-50 text-gray-400 cursor-not-allowed': disabled, 'hover:border-blue-400': !disabled }"
         >
             <div class="flex flex-wrap gap-1">
@@ -198,7 +198,7 @@ onUnmounted(() => {
                 <button
                     v-if="limit && !isExpanded && selectedOptions.length > limit"
                     @click.stop="isExpanded = true"
-                    class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200 hover:bg-gray-200 transition-colors uppercase tracking-tighter"
+                    class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200 hover:bg-gray-200 transition-colors uppercase tracking-tighter dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                 >
                     +{{ remainingCount }} more
                 </button>
@@ -207,7 +207,7 @@ onUnmounted(() => {
                 <button
                     v-if="limit && isExpanded"
                     @click.stop="isExpanded = false"
-                    class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200 hover:bg-gray-200 transition-colors uppercase tracking-tighter"
+                    class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-black border border-gray-200 hover:bg-gray-200 transition-colors uppercase tracking-tighter dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                 >
                     Show Less
                 </button>
@@ -224,7 +224,7 @@ onUnmounted(() => {
             </div>
 
             <span class="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="h-5 w-5 text-gray-400 dark:text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
                 </svg>
             </span>
@@ -239,7 +239,7 @@ onUnmounted(() => {
                 <div 
                     v-if="isOpen" 
                     :id="'multi-autocomplete-dropdown-' + uniqueId"
-                    class="fixed z-[10000] bg-white shadow-2xl border border-gray-200 rounded-lg overflow-hidden flex flex-col"
+                    class="fixed z-[10000] bg-white shadow-2xl border border-gray-200 rounded-lg overflow-hidden flex flex-col dark:bg-gray-800 dark:border-gray-700"
                     :style="dropdownStyle"
                 >
                     <div class="overflow-y-auto overscroll-contain flex-grow custom-scrollbar">
@@ -247,14 +247,14 @@ onUnmounted(() => {
                             <li
                                 v-for="(option, index) in filteredOptions"
                                 :key="index"
-                                class="text-gray-900 cursor-pointer select-none relative py-2.5 pl-3 pr-9 hover:bg-blue-50 transition-colors text-sm"
+                                class="text-gray-900 cursor-pointer select-none relative py-2.5 pl-3 pr-9 hover:bg-blue-50 transition-colors text-sm dark:text-slate-100 dark:hover:bg-blue-500/15"
                                 @click="toggleOption(option)"
                             >
                                 <span class="block truncate">
                                     {{ typeof option === 'object' ? option[labelKey] : option }}
                                 </span>
                             </li>
-                            <li v-if="filteredOptions.length === 0" class="px-3 py-4 text-sm text-gray-500 text-center italic">
+                            <li v-if="filteredOptions.length === 0" class="px-3 py-4 text-sm text-gray-500 text-center italic dark:text-gray-300">
                                 {{ searchQuery === '' ? 'All options selected' : 'No results found for "' + searchQuery + '"' }}
                             </li>
                         </ul>

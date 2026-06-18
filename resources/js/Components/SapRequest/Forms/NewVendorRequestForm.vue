@@ -48,12 +48,12 @@ function onFileChange(key, e, multiple = false) {
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Employee Name <span class="text-rose-500">*</span></label>
                     <input :value="form.employee_name" @input="update('employee_name', $event.target.value)" type="text"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                 </div>
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Employee ID (Attachment) <span class="text-rose-500">*</span></label>
                     <input type="file" @change="onFileChange('employee_id_file', $event)"
-                        class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 transition-all" />
+                        class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 transition-all dark:text-gray-300" />
                 </div>
             </div>
         </template>
@@ -66,42 +66,42 @@ function onFileChange(key, e, multiple = false) {
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Name <span class="text-rose-500">*</span></label>
                         <input :value="form.vendor_name" @input="update('vendor_name', $event.target.value)" type="text"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Contact Person <span class="text-rose-500">*</span></label>
                         <input :value="form.contact_person" @input="update('contact_person', $event.target.value)" type="text"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">TIN # <span class="text-rose-500">*</span></label>
                         <input :value="form.tin" @input="update('tin', $event.target.value)" type="text"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Telephone Number <span class="text-rose-500">*</span></label>
                         <input :value="form.telephone" @input="update('telephone', $event.target.value)" type="text"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Phone Number <span class="text-rose-500">*</span></label>
                         <input :value="form.phone" @input="update('phone', $event.target.value)" type="text"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Currency <span class="text-rose-500">*</span></label>
                         <input :value="form.currency" @input="update('currency', $event.target.value)" type="text"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800" />
                     </div>
                     <div class="md:col-span-2">
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Address <span class="text-rose-500">*</span></label>
                         <textarea :value="form.address" @input="update('address', $event.target.value)" rows="2"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all"></textarea>
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800"></textarea>
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Terms <span class="text-rose-500">*</span></label>
                         <select :value="form.payment_terms" @change="update('payment_terms', $event.target.value)"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
                             <option value="">Select terms...</option>
                             <option v-for="t in PAYMENT_TERMS" :key="t">{{ t }}</option>
                         </select>
@@ -120,7 +120,7 @@ function onFileChange(key, e, multiple = false) {
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tax Status <span class="text-rose-500">*</span></label>
                         <select :value="form.tax_status" @change="update('tax_status', $event.target.value)"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
                             <option value="">Select status...</option>
                             <option v-for="s in TAX_STATUSES" :key="s">{{ s }}</option>
                         </select>
@@ -128,7 +128,7 @@ function onFileChange(key, e, multiple = false) {
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tax Group <span class="text-rose-500">*</span></label>
                         <select :value="form.tax_group" @change="update('tax_group', $event.target.value)"
-                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                            class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
                             <option value="">Select group...</option>
                             <option v-for="g in TAX_GROUPS" :key="g">{{ g }}</option>
                         </select>
@@ -140,17 +140,17 @@ function onFileChange(key, e, multiple = false) {
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">COR / SEC (up to 10 files) <span class="text-rose-500">*</span></label>
                         <input type="file" multiple @change="onFileChange('cor_sec_files', $event, true)"
-                            class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                            class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 dark:text-gray-300" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Blank Invoice (up to 5 files) <span class="text-rose-500">*</span></label>
                         <input type="file" multiple @change="onFileChange('blank_invoice_files', $event, true)"
-                            class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                            class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 dark:text-gray-300" />
                     </div>
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Blank Receipt (1 file) <span class="text-rose-500">*</span></label>
                         <input type="file" @change="onFileChange('blank_receipt_file', $event)"
-                            class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                            class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 dark:text-gray-300" />
                     </div>
                 </div>
             </div>

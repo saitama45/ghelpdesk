@@ -20,7 +20,7 @@
                 >
                     <template #actions>
                         <div class="flex items-center space-x-4">
-                            <nav class="flex flex-wrap p-1 bg-gray-100 rounded-lg gap-0.5">
+                            <nav class="flex flex-wrap p-1 bg-gray-100 rounded-lg gap-0.5 dark:bg-gray-800">
                                 <button
                                     v-for="cls in localStoreClasses"
                                     :key="cls.value"
@@ -43,48 +43,48 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Project Type</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Template Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Project Type</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Class</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Activities</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="template in data" :key="template.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="template in data" :key="template.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-bold text-gray-900">{{ template.name }}</div>
+                                <div class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ template.name }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2.5 py-1 bg-purple-50 text-purple-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-purple-100">
+                                <span class="px-2.5 py-1 bg-purple-50 text-purple-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-purple-100 dark:bg-purple-900/10 dark:text-purple-400 dark:border-purple-900/30">
                                     {{ template.project_type }}
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span v-if="template.store_class === 'Kitchen'" class="px-2.5 py-1 bg-amber-50 text-amber-700 border-amber-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                <span v-if="template.store_class === 'Kitchen'" class="px-2.5 py-1 bg-amber-50 text-amber-700 border-amber-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit dark:bg-amber-900/10 dark:text-amber-400 dark:border-amber-900/30">
                                     <BeakerIcon class="w-3 h-3 mr-1" />
                                     Kitchen
                                 </span>
-                                <span v-else-if="template.store_class === 'Both'" class="px-2.5 py-1 bg-blue-50 text-blue-700 border-blue-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                <span v-else-if="template.store_class === 'Both'" class="px-2.5 py-1 bg-blue-50 text-blue-700 border-blue-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit dark:bg-blue-900/10 dark:text-blue-400 dark:border-blue-900/30">
                                     <ArrowsPointingOutIcon class="w-3 h-3 mr-1" />
                                     Both
                                 </span>
-                                <span v-else-if="template.store_class === 'Office'" class="px-2.5 py-1 bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                <span v-else-if="template.store_class === 'Office'" class="px-2.5 py-1 bg-indigo-50 text-indigo-700 border-indigo-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit dark:bg-indigo-900/10 dark:text-indigo-400 dark:border-indigo-900/30">
                                     <BuildingOfficeIcon class="w-3 h-3 mr-1" />
                                     Office
                                 </span>
-                                <span v-else-if="template.store_class === 'Department Store (DS)'" class="px-2.5 py-1 bg-rose-50 text-rose-700 border-rose-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                <span v-else-if="template.store_class === 'Department Store (DS)'" class="px-2.5 py-1 bg-rose-50 text-rose-700 border-rose-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit dark:bg-rose-900/10 dark:text-rose-400 dark:border-rose-900/30">
                                     <BuildingOfficeIcon class="w-3 h-3 mr-1" />
                                     DS
                                 </span>
-                                <span v-else class="px-2.5 py-1 bg-slate-50 text-slate-600 border-slate-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit">
+                                <span v-else class="px-2.5 py-1 bg-slate-50 text-slate-600 border-slate-100 text-[10px] font-black uppercase tracking-widest rounded-lg border flex items-center w-fit dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
                                     <DocumentTextIcon class="w-3 h-3 mr-1" />
                                     Regular
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-xs font-bold text-gray-500">{{ template.activities?.length || 0 }} rows</div>
+                                <div class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ template.activities?.length || 0 }} rows</div>
                                 <div v-if="templateSubTaskCount(template)" class="text-[10px] font-black uppercase tracking-wider text-blue-500">{{ templateSubTaskCount(template) }} sub-tasks</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -118,19 +118,19 @@
             <div class="p-6">
                 <div class="flex justify-between items-center mb-6 border-b pb-4">
                     <div>
-                        <h3 class="text-xl font-bold text-gray-900">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ isEditing ? 'Edit Project Template' : 'Create Project Template' }}
                         </h3>
-                        <p class="text-xs text-gray-500 mt-1 uppercase font-black tracking-widest">Template Blueprint</p>
+                        <p class="text-xs text-gray-500 mt-1 uppercase font-black tracking-widest dark:text-gray-300">Template Blueprint</p>
                     </div>
-                    <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
 
                 <form @submit.prevent="submitForm" class="space-y-8">
                     <!-- Header Info -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
                         <div>
                             <InputLabel for="name" value="Template Name" />
                             <TextInput 
@@ -182,11 +182,11 @@
                     <!-- Details Repeater -->
                     <div class="space-y-4">
                         <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest">Milestone Activities / Sub-tasks</h4>
+                            <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">Milestone Activities / Sub-tasks</h4>
                             <button 
                                 type="button" 
                                 @click="addMilestone"
-                                class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
+                                class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900/30 dark:hover:bg-blue-900/40"
                             >
                                 <PlusIcon class="w-3.5 h-3.5 mr-1.5" />
                                 Add Milestone
@@ -194,24 +194,24 @@
                         </div>
 
                         <div class="space-y-4">
-                            <div v-for="(activities, milestone, milestoneIndex) in milestoneGroups" :key="milestoneIndex" class="overflow-hidden border rounded-xl shadow-sm bg-white">
-                                <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-50 border-b px-4 py-3">
+                            <div v-for="(activities, milestone, milestoneIndex) in milestoneGroups" :key="milestoneIndex" class="overflow-hidden border rounded-xl shadow-sm bg-white dark:bg-gray-800">
+                                <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-50 border-b px-4 py-3 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="flex items-center gap-3 min-w-0 flex-1">
                                         <input
                                             :value="milestone"
                                             type="text"
                                             @input="renameMilestone(milestone, $event.target.value)"
-                                            class="w-full max-w-sm text-xs border-gray-200 rounded-lg p-1.5 font-black text-gray-700 uppercase tracking-widest focus:ring-blue-500 focus:border-blue-500"
+                                            class="w-full max-w-sm text-xs border-gray-200 rounded-lg p-1.5 font-black text-gray-700 uppercase tracking-widest focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900"
                                             placeholder="Milestone name"
                                         >
-                                        <span class="px-2 py-0.5 bg-gray-200 text-gray-500 rounded text-[9px] font-black uppercase whitespace-nowrap">
+                                        <span class="px-2 py-0.5 bg-gray-200 text-gray-500 rounded text-[9px] font-black uppercase whitespace-nowrap dark:bg-gray-700 dark:text-gray-300">
                                             {{ activities.reduce((count, activity) => count + 1 + subTasksFor(activity).length, 0) }} rows
                                         </span>
                                     </div>
                                     <button
                                         type="button"
                                         @click="addActivity(milestone)"
-                                        class="inline-flex items-center px-2.5 py-1 bg-white text-blue-700 text-[10px] font-black uppercase tracking-wider rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors"
+                                        class="inline-flex items-center px-2.5 py-1 bg-white text-blue-700 text-[10px] font-black uppercase tracking-wider rounded-lg border border-blue-100 hover:bg-blue-50 transition-colors dark:bg-gray-800 dark:text-blue-400 dark:border-gray-700 dark:hover:bg-gray-700"
                                     >
                                         <PlusIcon class="w-3.5 h-3.5 mr-1" />
                                         Add Activity
@@ -219,52 +219,52 @@
                                 </div>
 
                                 <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200">
-                                        <thead class="bg-white">
+                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead class="bg-white dark:bg-gray-800">
                                             <tr>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-16">Ord</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[220px]">Activity / Sub-task</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px]">Department</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px]">Sub-Unit</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20">Qty</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-28">Lead Time Days</th>
-                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-24"></th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-16 dark:text-slate-300">Ord</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[220px] dark:text-slate-300">Activity / Sub-task</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Department</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Sub-Unit</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300">Qty</th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-28 dark:text-slate-300">Lead Time Days</th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-24 dark:text-slate-300"></th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-gray-100">
+                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                             <template v-for="act in activities" :key="act.client_key">
-                                                <tr class="group hover:bg-slate-50 transition-colors">
+                                                <tr class="group hover:bg-slate-50 transition-colors dark:hover:bg-gray-700/50">
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500">
+                                                        <input v-model="act.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input 
                                                             ref="activityInputs"
                                                             v-model="act.activity" 
                                                             type="text" 
-                                                            class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-800 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" 
+                                                            class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-800 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-200 dark:border-gray-700 dark:bg-gray-900" 
                                                             placeholder="Activity name..." 
                                                             required
                                                             @input="syncSubTaskMilestone(act)"
                                                         >
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <select v-model="act.department" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500" @change="handleActivityDepartmentChange(act)">
+                                                        <select v-model="act.department" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900" @change="handleActivityDepartmentChange(act)">
                                                             <option value="">None</option>
                                                             <option v-for="department in departmentOptions" :key="department.name" :value="department.name">{{ department.name }}</option>
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <select v-model="act.sub_unit" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500" :disabled="!act.department" @change="syncSubTaskOrganization(act)">
+                                                        <select v-model="act.sub_unit" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900" :disabled="!act.department" @change="syncSubTaskOrganization(act)">
                                                             <option value="">None</option>
                                                             <option v-for="subUnit in subUnitsForDepartment(act.department)" :key="subUnit" :value="subUnit">{{ subUnit }}</option>
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                        <input v-model="act.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                        <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                         <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider">Σ {{ subTaskLeadTimeSum(act) }} days</span>
                                                     </td>
                                                     <td class="px-2 py-2">
@@ -290,18 +290,18 @@
                                                     </td>
                                                 </tr>
 
-                                                <tr v-for="subTask in subTasksFor(act)" :key="subTask.client_key" class="group bg-slate-50/70 hover:bg-slate-100 transition-colors">
+                                                <tr v-for="subTask in subTasksFor(act)" :key="subTask.client_key" class="group bg-slate-50/70 hover:bg-slate-100 transition-colors dark:bg-gray-800/70 dark:hover:bg-gray-700">
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500">
+                                                        <input v-model="subTask.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex items-center gap-2 pl-6">
-                                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Sub</span>
+                                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Sub</span>
                                                             <input 
                                                                 ref="activityInputs"
                                                                 v-model="subTask.activity" 
                                                                 type="text" 
-                                                                class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-700 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500" 
+                                                                class="w-full text-xs border-gray-200 rounded p-1 font-bold text-gray-700 placeholder-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900" 
                                                                 placeholder="Sub-task name..." 
                                                                 required
                                                             >
@@ -309,7 +309,7 @@
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <select v-model="subTask.department"
-                                                                class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500"
+                                                                class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900"
                                                                 @change="handleSubTaskDepartmentChange(subTask)">
                                                             <option value="">None</option>
                                                             <option v-for="department in departmentOptions" :key="department.name" :value="department.name">{{ department.name }}</option>
@@ -317,17 +317,17 @@
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <select v-model="subTask.sub_unit"
-                                                                class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500"
+                                                                class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900"
                                                                 :disabled="!subTask.department">
                                                             <option value="">None</option>
                                                             <option v-for="subUnit in subUnitsForDepartment(subTask.department)" :key="subUnit" :value="subUnit">{{ subUnit }}</option>
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                        <input v-model="subTask.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                                                        <input v-model="subTask.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex justify-center">

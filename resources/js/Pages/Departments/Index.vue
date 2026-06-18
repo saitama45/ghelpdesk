@@ -1196,8 +1196,8 @@ const downloadChart = async () => {
         <div class="px-4 sm:px-6 lg:px-8 space-y-6">
                 <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h2 class="text-2xl font-black text-gray-900">Department Organisation Chart</h2>
-                        <p class="mt-1 text-sm font-medium text-gray-500">Build Department, Section, Unit, and Sub-Unit references, then place existing users into the chart.</p>
+                        <h2 class="text-2xl font-black text-gray-900 dark:text-gray-100">Department Organisation Chart</h2>
+                        <p class="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">Build Department, Section, Unit, and Sub-Unit references, then place existing users into the chart.</p>
                     </div>
                     <button
                         v-if="hasPermission('departments.create')"
@@ -1212,8 +1212,8 @@ const downloadChart = async () => {
                     </button>
                 </div>
 
-                <div class="rounded-xl border border-gray-200 bg-white shadow-sm">
-                    <div class="flex flex-col gap-4 border-b border-gray-200 bg-gray-50 px-6 py-5">
+                <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex flex-col gap-4 border-b border-gray-200 bg-gray-50 px-6 py-5 dark:bg-gray-900/50 dark:border-gray-700">
                         <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                             <!-- Left: Department Selector & Status -->
                             <div class="flex flex-1 items-center gap-2">
@@ -1230,7 +1230,7 @@ const downloadChart = async () => {
                                     v-if="selectedDepartment && hasPermission('departments.edit')"
                                     type="button"
                                     @click="openEditNode('department', selectedDepartment)"
-                                    class="rounded-lg bg-white border border-gray-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-gray-600 transition-colors hover:bg-gray-100 shadow-sm whitespace-nowrap"
+                                    class="rounded-lg bg-white border border-gray-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-gray-600 transition-colors hover:bg-gray-100 shadow-sm whitespace-nowrap dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                                     title="Edit department name, code, etc."
                                 >
                                     Edit Dept
@@ -1258,7 +1258,7 @@ const downloadChart = async () => {
                                         v-if="hasPermission('departments.edit')"
                                         type="button"
                                         @click="openAssignUserModal"
-                                        class="rounded-lg bg-white border border-emerald-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-50 shadow-sm"
+                                        class="rounded-lg bg-white border border-emerald-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-50 shadow-sm dark:bg-gray-800"
                                     >
                                         + Assign User
                                     </button>
@@ -1266,7 +1266,7 @@ const downloadChart = async () => {
                                         v-if="hasPermission('departments.edit')"
                                         type="button"
                                         @click="openAddVacantModal"
-                                        class="rounded-lg bg-white border border-amber-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-50 shadow-sm"
+                                        class="rounded-lg bg-white border border-amber-200 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-50 shadow-sm dark:bg-gray-800"
                                     >
                                         + Vacant Position
                                     </button>
@@ -1285,13 +1285,13 @@ const downloadChart = async () => {
                         </div>
 
                         <!-- Org Chart View Filters -->
-                        <div v-if="selectedDepartment" class="pt-4 border-t border-gray-200 mt-2">
+                        <div v-if="selectedDepartment" class="pt-4 border-t border-gray-200 mt-2 dark:border-gray-700">
                             <div class="flex flex-col gap-2">
-                                <div class="flex items-center gap-2 text-gray-400">
+                                <div class="flex items-center gap-2 text-gray-400 dark:text-gray-400">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                     </svg>
-                                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500">View Filters</span>
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">View Filters</span>
                                 </div>
                                 <div class="w-full sm:w-80">
                                     <HierarchySelector
@@ -1310,18 +1310,18 @@ const downloadChart = async () => {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21h18M6 21V7l6-4 6 4v14M9 10h1m4 0h1M9 14h1m4 0h1" />
                             </svg>
                         </div>
-                        <p class="mt-4 text-sm font-bold text-gray-700">No departments configured.</p>
-                        <p class="mt-1 text-xs text-gray-500">Create a department to start building the organisation chart.</p>
+                        <p class="mt-4 text-sm font-bold text-gray-700 dark:text-gray-300">No departments configured.</p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-300">Create a department to start building the organisation chart.</p>
                     </div>
 
                     <div v-else-if="selectedDepartment" class="relative overflow-hidden rounded-b-xl bg-slate-50/50" style="height: 70vh; min-height: 600px;">
                         <!-- Zoom Controls -->
-                        <div class="absolute bottom-4 right-4 z-20 flex flex-col gap-2 rounded-lg bg-white p-2 shadow-md border border-gray-200">
-                            <button type="button" @click="zoomIn" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-xl font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900" title="Zoom In">+</button>
-                            <button type="button" @click="resetZoom" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-[10px] font-black text-gray-600 hover:bg-gray-100 hover:text-gray-900" title="Reset Zoom">100%</button>
-                            <button type="button" @click="zoomOut" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-xl font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900" title="Zoom Out">-</button>
-                            <div class="my-0.5 border-t border-gray-100"></div>
-                            <button type="button" @click="downloadChart" :disabled="isDownloading" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-40" title="Download as JPG">
+                        <div class="absolute bottom-4 right-4 z-20 flex flex-col gap-2 rounded-lg bg-white p-2 shadow-md border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+                            <button type="button" @click="zoomIn" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-xl font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:bg-gray-900/50 dark:text-gray-300 dark:hover:bg-gray-700" title="Zoom In">+</button>
+                            <button type="button" @click="resetZoom" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-[10px] font-black text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:bg-gray-900/50 dark:text-gray-300 dark:hover:bg-gray-700" title="Reset Zoom">100%</button>
+                            <button type="button" @click="zoomOut" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-xl font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:bg-gray-900/50 dark:text-gray-300 dark:hover:bg-gray-700" title="Zoom Out">-</button>
+                            <div class="my-0.5 border-t border-gray-100 dark:border-gray-700"></div>
+                            <button type="button" @click="downloadChart" :disabled="isDownloading" class="flex h-8 w-8 items-center justify-center rounded bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-40 dark:bg-gray-900/50 dark:text-gray-300" title="Download as JPG">
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
@@ -1334,7 +1334,7 @@ const downloadChart = async () => {
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                             </svg>
-                            <span class="text-xs font-bold text-gray-600">Generating image…</span>
+                            <span class="text-xs font-bold text-gray-600 dark:text-gray-300">Generating image…</span>
                         </div>
 
                         <!-- Canvas Wrapper -->
@@ -1396,9 +1396,9 @@ const downloadChart = async () => {
                                         />
                                     </div>
                                     
-                                    <div v-if="userHierarchy.length === 0" class="rounded-lg border border-dashed border-gray-300 bg-white px-12 py-16 text-center">
-                                        <p class="text-sm font-bold text-gray-600">No users assigned to this department hierarchy yet.</p>
-                                        <p class="mt-1 text-xs text-gray-500">Use "Unplaced Users" or "Manage Structure" to assign team members.</p>
+                                    <div v-if="userHierarchy.length === 0" class="rounded-lg border border-dashed border-gray-300 bg-white px-12 py-16 text-center dark:bg-gray-800 dark:border-gray-600">
+                                        <p class="text-sm font-bold text-gray-600 dark:text-gray-300">No users assigned to this department hierarchy yet.</p>
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-300">Use "Unplaced Users" or "Manage Structure" to assign team members.</p>
                                     </div>
                                 </div>
                             </div>
@@ -1412,10 +1412,10 @@ const downloadChart = async () => {
         <div v-if="showNodeModal" class="fixed inset-0 z-[70] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeNodeModal"></div>
-                <div class="relative w-full max-w-lg rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
+                <div class="relative w-full max-w-lg rounded-xl border border-gray-100 bg-white p-6 shadow-2xl dark:bg-gray-800 dark:border-gray-700">
                     <div class="mb-6 flex items-center justify-between">
-                        <h3 class="text-xl font-black text-gray-900">{{ nodeTitle }}</h3>
-                        <button type="button" @click="closeNodeModal" class="text-gray-400 transition-colors hover:text-gray-600">
+                        <h3 class="text-xl font-black text-gray-900 dark:text-gray-100">{{ nodeTitle }}</h3>
+                        <button type="button" @click="closeNodeModal" class="text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -1425,26 +1425,26 @@ const downloadChart = async () => {
                     <form class="space-y-4" @submit.prevent="submitNode">
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Name <span class="text-rose-500">*</span></label>
-                                <input v-model="nodeForm.name" type="text" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Name <span class="text-rose-500">*</span></label>
+                                <input v-model="nodeForm.name" type="text" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                 <p v-if="nodeForm.errors.name" class="mt-1 text-xs text-rose-600">{{ nodeForm.errors.name }}</p>
                             </div>
                             <div>
-                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Code</label>
-                                <input v-model="nodeForm.code" type="text" maxlength="50" placeholder="e.g. HR, IT-OPS" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Code</label>
+                                <input v-model="nodeForm.code" type="text" maxlength="50" placeholder="e.g. HR, IT-OPS" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                 <p v-if="nodeForm.errors.code" class="mt-1 text-xs text-rose-600">{{ nodeForm.errors.code }}</p>
                             </div>
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Description</label>
-                            <textarea v-model="nodeForm.description" rows="3" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Description</label>
+                            <textarea v-model="nodeForm.description" rows="3" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"></textarea>
                         </div>
-                        <label class="flex items-center gap-2 text-sm font-bold text-gray-700">
-                            <input v-model="nodeForm.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500">
+                        <label class="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-300">
+                            <input v-model="nodeForm.is_active" type="checkbox" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 dark:border-gray-600">
                             Active
                         </label>
                         <div class="flex justify-end gap-3 border-t pt-5">
-                            <button type="button" @click="closeNodeModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200">Cancel</button>
+                            <button type="button" @click="closeNodeModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="nodeForm.processing" class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">Save</button>
                         </div>
                     </form>
@@ -1455,12 +1455,12 @@ const downloadChart = async () => {
         <div v-if="showPlacementModal" class="fixed inset-0 z-[60] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closePlacementModal"></div>
-                <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
+                <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl dark:bg-gray-800 dark:border-gray-700">
                     <div class="mb-6 flex items-center justify-between">
-                        <h3 class="text-xl font-black text-gray-900">
+                        <h3 class="text-xl font-black text-gray-900 dark:text-gray-100">
                             {{ placementForm.replace_user_id ? 'Replace Inactive User Position' : (placementMode === 'assign' ? 'Assign User' : 'Edit Organisation Placement') }}
                         </h3>
-                        <button type="button" @click="closePlacementModal" class="text-gray-400 transition-colors hover:text-gray-600">
+                        <button type="button" @click="closePlacementModal" class="text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -1469,7 +1469,7 @@ const downloadChart = async () => {
 
                     <form class="space-y-4" @submit.prevent="submitPlacement">
                         <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">User</label>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">User</label>
                             <Autocomplete
                                 v-model="placementForm.user_id"
                                 :options="userSelectOptions"
@@ -1482,15 +1482,15 @@ const downloadChart = async () => {
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
-                                <select v-model="placementForm.department_id" @change="placementForm.department_node_id = ''" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Department</label>
+                                <select v-model="placementForm.department_id" @change="placementForm.department_node_id = ''" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                     <option value="">No Department</option>
                                     <option v-for="department in activeDepartmentOptions" :key="department.id" :value="department.id">{{ department.name }}</option>
                                 </select>
                             </div>
                             <div>
                                 <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
-                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Team / Placement</label>
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Team / Placement</label>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="hasPermission('departments.create') && placementForm.department_id"
@@ -1515,7 +1515,7 @@ const downloadChart = async () => {
                                                 v-if="hasPermission('departments.edit')"
                                                 type="button"
                                                 @click="openEditNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(placementForm.department_id))?.nodes, placementForm.department_node_id))"
-                                                class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                                class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:text-gray-300"
                                             >
                                                 Edit
                                             </button>
@@ -1542,8 +1542,8 @@ const downloadChart = async () => {
 
                         <div>
                             <div class="mb-1 flex items-center justify-between">
-                                <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Reports To</label>
-                                <button type="button" @click="clearPlacementOrg" class="text-xs font-bold text-gray-500 hover:text-gray-700">Clear Org Placement</button>
+                                <label class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Reports To</label>
+                                <button type="button" @click="clearPlacementOrg" class="text-xs font-bold text-gray-500 hover:text-gray-700 dark:text-gray-300">Clear Org Placement</button>
                             </div>
                             <MultiAutocomplete
                                 v-model="placementForm.manager_ids"
@@ -1557,26 +1557,26 @@ const downloadChart = async () => {
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Profile Photo</label>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Profile Photo</label>
                                 <div class="flex items-center gap-4">
-                                    <div v-if="photoPreview" class="h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-gray-100 shadow-sm">
+                                    <div v-if="photoPreview" class="h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-gray-100 shadow-sm dark:border-gray-700">
                                         <img :src="photoPreview" class="h-full w-full object-cover" />
                                     </div>
                                     <input
                                         type="file"
                                         @input="handlePhotoSelect"
                                         accept="image/*"
-                                        class="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-xs file:font-black file:text-blue-700 hover:file:bg-blue-100"
+                                        class="block w-full text-sm text-gray-500 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-xs file:font-black file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-300"
                                     />
                                 </div>
-                                <progress v-if="placementForm.progress" :value="placementForm.progress.percentage" max="100" class="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-100 [&::-webkit-progress-bar]:bg-gray-100 [&::-webkit-progress-value]:bg-blue-600">
+                                <progress v-if="placementForm.progress" :value="placementForm.progress.percentage" max="100" class="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-100 [&::-webkit-progress-bar]:bg-gray-100 [&::-webkit-progress-value]:bg-blue-600 dark:bg-gray-800">
                                     {{ placementForm.progress.percentage }}%
                                 </progress>
                             </div>
                         </div>
 
                         <div class="flex justify-end gap-3 border-t pt-5">
-                            <button type="button" @click="closePlacementModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200">Cancel</button>
+                            <button type="button" @click="closePlacementModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="placementForm.processing" class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">Save</button>
                         </div>
                     </form>
@@ -1587,13 +1587,13 @@ const downloadChart = async () => {
         <div v-if="showVacantModal" class="fixed inset-0 z-[60] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeVacantModal"></div>
-                <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl">
+                <div class="relative w-full max-w-2xl rounded-xl border border-gray-100 bg-white p-6 shadow-2xl dark:bg-gray-800 dark:border-gray-700">
                     <div class="mb-6 flex items-center justify-between">
                         <div>
-                            <h3 class="text-xl font-black text-gray-900">{{ vacantMode === 'create' ? 'Add Vacant Position' : 'Edit Vacant Position' }}</h3>
-                            <p class="mt-0.5 text-xs font-medium text-gray-500">Placeholder node for an unfilled role in the org chart.</p>
+                            <h3 class="text-xl font-black text-gray-900 dark:text-gray-100">{{ vacantMode === 'create' ? 'Add Vacant Position' : 'Edit Vacant Position' }}</h3>
+                            <p class="mt-0.5 text-xs font-medium text-gray-500 dark:text-gray-300">Placeholder node for an unfilled role in the org chart.</p>
                         </div>
-                        <button type="button" @click="closeVacantModal" class="text-gray-400 transition-colors hover:text-gray-600">
+                        <button type="button" @click="closeVacantModal" class="text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-400">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -1602,23 +1602,23 @@ const downloadChart = async () => {
 
                     <form class="space-y-4" @submit.prevent="submitVacant">
                         <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Position Title</label>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Position Title</label>
                             <input
                                 v-model="vacantForm.title"
                                 type="text"
                                 placeholder="e.g. Head of Marketing"
-                                class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                                class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600"
                             >
                             <p v-if="vacantForm.errors.title" class="mt-1 text-xs text-rose-600">{{ vacantForm.errors.title }}</p>
                         </div>
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Department</label>
                                 <select
                                     v-model="vacantForm.department_id"
                                     @change="vacantForm.department_node_id = ''"
-                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500"
+                                    class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-amber-500 focus:ring-amber-500 dark:border-gray-600"
                                 >
                                     <option value="">No Department</option>
                                     <option v-for="dept in activeDepartmentOptions" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
@@ -1626,7 +1626,7 @@ const downloadChart = async () => {
                             </div>
                             <div>
                                 <div class="mb-1 flex min-h-5 items-center justify-between gap-2">
-                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500">Team / Placement</label>
+                                    <label class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Team / Placement</label>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="hasPermission('departments.create') && vacantForm.department_id"
@@ -1651,7 +1651,7 @@ const downloadChart = async () => {
                                                 v-if="hasPermission('departments.edit')"
                                                 type="button"
                                                 @click="openEditNode('node', findNodeInTree(activeDepartmentOptions.find(d => Number(d.id) === Number(vacantForm.department_id))?.nodes, vacantForm.department_node_id))"
-                                                class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700"
+                                                class="text-[10px] font-black uppercase tracking-wider text-gray-500 hover:text-gray-700 dark:text-gray-300"
                                             >
                                                 Edit
                                             </button>
@@ -1677,7 +1677,7 @@ const downloadChart = async () => {
                         </div>
 
                         <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Reports To</label>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Reports To</label>
                             <MultiAutocomplete
                                 v-model="vacantForm.manager_ids"
                                 :options="managerOptions"
@@ -1689,7 +1689,7 @@ const downloadChart = async () => {
                         </div>
 
                         <div class="flex justify-end gap-3 border-t pt-5">
-                            <button type="button" @click="closeVacantModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200">Cancel</button>
+                            <button type="button" @click="closeVacantModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="vacantForm.processing" class="rounded-lg bg-amber-500 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:opacity-50">
                                 {{ vacantMode === 'create' ? 'Add to Chart' : 'Save Changes' }}
                             </button>
@@ -1704,7 +1704,7 @@ const downloadChart = async () => {
             <!-- User drag ghost -->
             <div
                 v-if="dragState.active && dragState.kind === 'user' && draggedUserData"
-                class="pointer-events-none fixed z-[9999] w-56 rounded-xl border border-blue-300 bg-white p-3 shadow-2xl"
+                class="pointer-events-none fixed z-[9999] w-56 rounded-xl border border-blue-300 bg-white p-3 shadow-2xl dark:bg-gray-800"
                 :style="{ left: dragState.x + 'px', top: dragState.y + 'px', transform: 'translate(-50%, -60%) rotate(2deg)', opacity: 0.92 }"
             >
                 <div class="flex items-center gap-2">
@@ -1713,8 +1713,8 @@ const downloadChart = async () => {
                         <span v-else>{{ draggedUserData.name.charAt(0).toUpperCase() }}</span>
                     </div>
                     <div class="min-w-0">
-                        <div class="truncate text-xs font-black text-gray-900">{{ draggedUserData.name }}</div>
-                        <div class="truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight">{{ draggedUserData.position || 'No position' }}</div>
+                        <div class="truncate text-xs font-black text-gray-900 dark:text-gray-100">{{ draggedUserData.name }}</div>
+                        <div class="truncate text-[10px] font-bold text-gray-400 uppercase tracking-tight dark:text-gray-400">{{ draggedUserData.position || 'No position' }}</div>
                     </div>
                 </div>
             </div>
@@ -1740,13 +1740,13 @@ const downloadChart = async () => {
         <div v-if="showStructureModal && selectedDepartment" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" @click="showStructureModal = false"></div>
-                <div class="relative w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl">
-                    <div class="mb-8 flex items-center justify-between border-b border-gray-100 pb-4">
+                <div class="relative w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl dark:bg-gray-800 dark:border-gray-700">
+                    <div class="mb-8 flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-700">
                         <div>
-                            <h3 class="text-2xl font-black text-gray-900">Manage Org Structure</h3>
-                            <p class="text-sm font-medium text-gray-500">{{ selectedDepartment.name }}</p>
+                            <h3 class="text-2xl font-black text-gray-900 dark:text-gray-100">Manage Org Structure</h3>
+                            <p class="text-sm font-medium text-gray-500 dark:text-gray-300">{{ selectedDepartment.name }}</p>
                         </div>
-                        <button type="button" @click="showStructureModal = false" class="rounded-full bg-gray-50 p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+                        <button type="button" @click="showStructureModal = false" class="rounded-full bg-gray-50 p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:bg-gray-900/50 dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -1767,9 +1767,9 @@ const downloadChart = async () => {
                                 </button>
                             </div>
 
-                            <div v-if="!selectedDepartment.nodes?.length" class="py-12 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                <p class="text-sm font-bold text-gray-500">No teams created yet.</p>
-                                <p class="text-xs text-gray-400 mt-1">Start by adding a team at the root level.</p>
+                            <div v-if="!selectedDepartment.nodes?.length" class="py-12 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                                <p class="text-sm font-bold text-gray-500 dark:text-gray-300">No teams created yet.</p>
+                                <p class="text-xs text-gray-400 mt-1 dark:text-gray-400">Start by adding a team at the root level.</p>
                             </div>
 
                             <template v-else>

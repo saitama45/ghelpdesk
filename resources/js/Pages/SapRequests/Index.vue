@@ -124,8 +124,8 @@ function getStageDisplay(request) {
                 <!-- Header -->
                 <div class="flex items-center justify-between mb-8">
                     <div>
-                        <h1 class="text-3xl font-black text-gray-900 tracking-tight">SAP Requests</h1>
-                        <p class="text-sm text-gray-500 font-medium mt-1">Manage and track all SAP data creation requests.</p>
+                        <h1 class="text-3xl font-black text-gray-900 tracking-tight dark:text-gray-100">SAP Requests</h1>
+                        <p class="text-sm text-gray-500 font-medium mt-1 dark:text-gray-300">Manage and track all SAP data creation requests.</p>
                     </div>
                     <button v-if="hasPermission('sap_requests.create')" @click="showCreateSection = !showCreateSection"
                         :class="showCreateSection ? 'bg-gray-200 text-gray-700' : 'bg-teal-600 text-white shadow-lg shadow-teal-100 hover:bg-teal-700'"
@@ -138,26 +138,26 @@ function getStageDisplay(request) {
                 <!-- Create Section (Selection) -->
                 <div v-if="showCreateSection" class="mb-10 animate-in fade-in slide-in-from-top-4 duration-300">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="h-px flex-1 bg-gray-200"></div>
-                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Select Request Type to Start</h2>
-                        <div class="h-px flex-1 bg-gray-200"></div>
+                        <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
+                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400">Select Request Type to Start</h2>
+                        <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
                     </div>
                     
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <Link v-for="rt in requestTypes" :key="rt.id" :href="route('sap-requests.create', { type_id: rt.id })"
-                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-teal-500 hover:shadow-teal-100/50 transition-all group">
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-teal-500 hover:shadow-teal-100/50 transition-all group dark:bg-gray-800 dark:border-gray-700">
                             <div class="w-12 h-12 bg-teal-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-teal-600 group-hover:text-white transition-all">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                             </div>
-                            <h4 class="text-sm font-black text-gray-900 mb-1">{{ rt.name }}</h4>
-                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                            <h4 class="text-sm font-black text-gray-900 mb-1 dark:text-gray-100">{{ rt.name }}</h4>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-wider dark:text-gray-400">
                                 {{ rt.approval_levels > 0 ? `${rt.approval_levels} Approval Steps` : 'No Approval Required' }}
                             </p>
                         </Link>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6 flex flex-wrap gap-4">
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6 flex flex-wrap gap-4 dark:bg-gray-800 dark:border-gray-700">
                     <input v-model="search" @keyup.enter="applyFilter" type="text" placeholder="Search by request type, company, or requester..."
                         class="flex-1 min-w-[220px] border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all" />
                     <select v-model="status" @change="applyFilter"
@@ -179,35 +179,35 @@ function getStageDisplay(request) {
                 </div>
 
                 <!-- Table -->
-                <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden">
+                <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                     <div class="overflow-x-auto">
                         <table class="w-full">
                             <thead>
-                                <tr class="border-b border-gray-100 bg-gray-50/50">
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">#</th>
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Request Type</th>
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Entity</th>
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Requester</th>
-                                    <th class="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Stage</th>
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Ticket</th>
-                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Submitted</th>
+                                <tr class="border-b border-gray-100 bg-gray-50/50 dark:border-gray-700">
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">#</th>
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Request Type</th>
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Entity</th>
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Requester</th>
+                                    <th class="px-6 py-4 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Stage</th>
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Status</th>
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Ticket</th>
+                                    <th class="px-6 py-4 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-slate-300">Submitted</th>
                                     <th class="px-6 py-4"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
                                 <tr v-if="!sapRequests.data.length">
-                                    <td colspan="8" class="px-6 py-16 text-center text-sm text-gray-400 font-medium">No SAP requests found.</td>
+                                    <td colspan="8" class="px-6 py-16 text-center text-sm text-gray-400 font-medium dark:text-gray-400">No SAP requests found.</td>
                                 </tr>
                                 <tr v-for="r in sapRequests.data" :key="r.id" class="hover:bg-gray-50/50 transition-colors group">
-                                    <td class="px-6 py-4 text-sm font-black text-gray-400">#{{ r.id }}</td>
+                                    <td class="px-6 py-4 text-sm font-black text-gray-400 dark:text-gray-400">#{{ r.id }}</td>
                                     <td class="px-6 py-4">
-                                        <span class="text-sm font-bold text-gray-900">{{ r.request_type?.name }}</span>
+                                        <span class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ r.request_type?.name }}</span>
                                     </td>
-                                    <td class="px-6 py-4 text-sm font-semibold text-gray-700">{{ r.company?.name }}</td>
+                                    <td class="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">{{ r.company?.name }}</td>
                                     <td class="px-6 py-4">
-                                        <div class="text-sm font-bold text-gray-800">{{ r.user?.name ?? r.requester_name }}</div>
-                                        <div class="text-xs text-gray-400 font-medium">{{ r.user?.email ?? r.requester_email }}</div>
+                                        <div class="text-sm font-bold text-gray-800 dark:text-gray-200">{{ r.user?.name ?? r.requester_name }}</div>
+                                        <div class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ r.user?.email ?? r.requester_email }}</div>
                                     </td>
                                     <td class="px-6 py-4 text-center whitespace-nowrap">
                                         <span v-if="!getStageDisplay(r).isBadge" :class="getStageDisplay(r).class">
@@ -231,7 +231,7 @@ function getStageDisplay(request) {
                                         </Link>
                                         <span v-else class="text-xs text-gray-300 font-bold">—</span>
                                     </td>
-                                    <td class="px-6 py-4 text-xs font-medium text-gray-400">{{ new Date(r.created_at).toLocaleDateString() }}</td>
+                                    <td class="px-6 py-4 text-xs font-medium text-gray-400 dark:text-gray-400">{{ new Date(r.created_at).toLocaleDateString() }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="flex justify-end space-x-2">
                                             <Link :href="route('sap-requests.show', r.id)"
@@ -273,8 +273,8 @@ function getStageDisplay(request) {
                     </div>
 
                     <!-- Pagination -->
-                    <div v-if="sapRequests.last_page > 1" class="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-                        <p class="text-xs text-gray-400 font-medium">
+                    <div v-if="sapRequests.last_page > 1" class="px-6 py-4 border-t border-gray-100 flex items-center justify-between dark:border-gray-700">
+                        <p class="text-xs text-gray-400 font-medium dark:text-gray-400">
                             Showing {{ sapRequests.from }}–{{ sapRequests.to }} of {{ sapRequests.total }} requests
                         </p>
                         <div class="flex gap-1">

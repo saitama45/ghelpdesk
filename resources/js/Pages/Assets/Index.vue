@@ -45,18 +45,18 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Code</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category / Sub</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset Info</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type / EOL</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Item Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Category / Sub</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Asset Info</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Cost</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Type / EOL</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="asset in data" :key="asset.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="asset in data" :key="asset.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="text-sm font-bold text-blue-600 font-mono tracking-tight">{{ asset.item_code }}</span>
                             </td>
@@ -72,12 +72,12 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex flex-col">
-                                    <div class="text-sm font-medium text-gray-900">{{ asset.brand }} {{ asset.model }}</div>
-                                    <div class="text-xs text-gray-500 max-w-xs truncate" :title="asset.description">{{ asset.description || 'No description' }}</div>
+                                    <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ asset.brand }} {{ asset.model }}</div>
+                                    <div class="text-xs text-gray-500 max-w-xs truncate dark:text-gray-300" :title="asset.description">{{ asset.description || 'No description' }}</div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="text-sm font-medium text-gray-900">
+                                <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
                                     {{ asset.cost ? Number(asset.cost).toLocaleString('en-US', { style: 'currency', currency: 'PHP' }) : '-' }}
                                 </span>
                             </td>
@@ -87,7 +87,7 @@
                                           :class="asset.type === 'Fixed' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-orange-100 text-orange-800 border border-orange-200'">
                                         {{ asset.type }}
                                     </span>
-                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest dark:text-gray-300">
                                         EOL: {{ asset.eol_years ? asset.eol_years + ' Years' : 'N/A' }}
                                     </span>
                                 </div>
@@ -132,10 +132,10 @@
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeImportModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">Import Assets</h3>
-                        <button @click="closeImportModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Assets</h3>
+                        <button @click="closeImportModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -181,7 +181,7 @@
 
                         <div class="space-y-3">
                             <label
-                                class="flex flex-col items-center justify-center w-full px-6 py-8 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-blue-300 transition-colors cursor-pointer"
+                                class="flex flex-col items-center justify-center w-full px-6 py-8 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 hover:border-blue-300 transition-colors cursor-pointer dark:bg-gray-900/50 dark:border-gray-600 dark:hover:bg-gray-700"
                             >
                                 <input
                                     ref="importFileInput"
@@ -190,17 +190,17 @@
                                     class="hidden"
                                     @change="handleImportFileChange"
                                 >
-                                <svg class="w-8 h-8 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-8 h-8 text-gray-400 mb-3 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                                 </svg>
-                                <span class="text-sm font-semibold text-gray-700">Choose asset import file</span>
-                                <span class="text-xs text-gray-500 mt-1">Accepted formats: `.xlsx` or `.csv`</span>
+                                <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Choose asset import file</span>
+                                <span class="text-xs text-gray-500 mt-1 dark:text-gray-300">Accepted formats: `.xlsx` or `.csv`</span>
                             </label>
 
-                            <div v-if="selectedImportFile" class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                            <div v-if="selectedImportFile" class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div>
-                                    <p class="text-sm font-medium text-gray-900">{{ selectedImportFile.name }}</p>
-                                    <p class="text-xs text-gray-500">{{ formatFileSize(selectedImportFile.size) }}</p>
+                                    <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ selectedImportFile.name }}</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-300">{{ formatFileSize(selectedImportFile.size) }}</p>
                                 </div>
                                 <button type="button" @click="removeImportFile" class="text-sm font-semibold text-red-600 hover:text-red-700">
                                     Remove
@@ -222,7 +222,7 @@
 
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="closeImportModal"
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Close
                             </button>
                             <button @click="submitImport" :disabled="!selectedImportFile || isImporting"
@@ -243,12 +243,12 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ isEditing ? 'Edit Asset' : 'Create Asset' }}
                         </h3>
-                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -258,13 +258,13 @@
                     <form @submit.prevent="submitForm" class="space-y-5">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Item Code</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item Code</label>
                                 <div class="relative">
                                     <input v-model="form.item_code" type="text" :required="isEditing"
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono bg-gray-50"
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono bg-gray-50 dark:bg-gray-900/50 dark:border-gray-600"
                                            :readonly="!isEditing">
                                     <div v-if="!isEditing" class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="h-4 w-4 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                         </svg>
                                     </div>
@@ -272,7 +272,7 @@
                                 <p v-if="!isEditing" class="mt-1 text-[10px] text-blue-600 font-medium">System generated code</p>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Type</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Type</label>
                                 <Autocomplete
                                     v-model="form.type"
                                     :options="['Fixed', 'Consumables']"
@@ -284,7 +284,7 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Category</label>
                                 <Autocomplete
                                     v-model="form.category_id"
                                     :options="categories"
@@ -295,7 +295,7 @@
                                 />
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Category</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Sub-Category</label>
                                 <Autocomplete
                                     v-model="form.sub_category_id"
                                     :options="filteredSubCategories"
@@ -308,7 +308,7 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Brand</label>
                                 <Autocomplete
                                     v-model="form.brand"
                                     :options="brandOptions"
@@ -317,7 +317,7 @@
                                 />
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Model</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Model</label>
                                 <Autocomplete
                                     v-model="form.model"
                                     :options="modelOptions"
@@ -329,34 +329,34 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cost (PHP)</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Cost (PHP)</label>
                                 <input v-model="form.cost" type="number" step="0.01" min="0"
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">EOL (Years)</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">EOL (Years)</label>
                                 <input v-model="form.eol_years" type="number" step="1" min="0"
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Description</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Description</label>
                             <textarea v-model="form.description" rows="3"
-                                      class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                      class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                                       placeholder="Provide a detailed description of the asset..."></textarea>
                         </div>
 
                         <div class="flex items-center space-x-6">
                             <label class="flex items-center group cursor-pointer">
-                                <input type="checkbox" v-model="form.is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-colors">
-                                <span class="ml-2 text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">Active Asset</span>
+                                <input type="checkbox" v-model="form.is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-colors dark:border-gray-600">
+                                <span class="ml-2 text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">Active Asset</span>
                             </label>
                         </div>
 
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="closeModal" 
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
                             <button type="submit" 

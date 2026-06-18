@@ -95,22 +95,22 @@ const submit = () => {
 <template>
     <Head title="Support Survey" />
 
-    <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <div class="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+    <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 dark:bg-gray-900/50">
+        <div class="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
             <!-- Header -->
             <div class="p-8 text-center border-b border-gray-50 bg-blue-50/30">
                 <img src="/images/company_logo.png" alt="Company Logo" class="h-16 mx-auto mb-6 object-contain">
-                <h1 class="text-xl font-bold text-gray-900 mb-2">Thank you for your time.</h1>
-                <p class="text-sm text-gray-500">This survey should take under a minute to complete.</p>
+                <h1 class="text-xl font-bold text-gray-900 mb-2 dark:text-gray-100">Thank you for your time.</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-300">This survey should take under a minute to complete.</p>
             </div>
 
             <!-- Form -->
             <form @submit.prevent="submit" class="p-6 sm:p-8 space-y-8">
                 <!-- Feedback Guide -->
                 <div class="space-y-3">
-                    <h2 class="text-lg font-bold text-gray-900">Feedback Guide</h2>
-                    <p class="text-xs text-gray-500">Use this guide to help you choose a rating.</p>
-                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Feedback Guide</h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-300">Use this guide to help you choose a rating.</p>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-blue-700 text-white text-xs uppercase tracking-wider">
@@ -123,12 +123,12 @@ const submit = () => {
                                 <tr
                                     v-for="r in ratings"
                                     :key="r.value"
-                                    class="border-t border-gray-200 align-top"
+                                    class="border-t border-gray-200 align-top dark:border-gray-700"
                                 >
                                     <td class="px-4 py-4 whitespace-nowrap">
                                         <div class="flex items-center gap-2">
                                             <span :class="['w-2.5 h-2.5 rounded-full', dotClass[r.color]]"></span>
-                                            <span class="font-bold text-gray-800 text-sm">
+                                            <span class="font-bold text-gray-800 text-sm dark:text-gray-200">
                                                 {{ r.label.toUpperCase() }} ({{ r.value }})
                                             </span>
                                         </div>
@@ -144,8 +144,8 @@ const submit = () => {
                                             </span>
                                         </div>
                                     </td>
-                                    <td class="px-4 py-4 text-sm text-gray-700">{{ r.question }}</td>
-                                    <td class="px-4 py-4 text-sm text-gray-700">
+                                    <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{{ r.question }}</td>
+                                    <td class="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
                                         <ul class="list-disc list-outside pl-5 space-y-1">
                                             <li v-for="(ind, idx) in r.indicators" :key="idx">{{ ind }}</li>
                                         </ul>
@@ -158,7 +158,7 @@ const submit = () => {
 
                 <!-- Question 1 -->
                 <div class="space-y-4">
-                    <label class="block text-base font-semibold text-gray-800 text-center">
+                    <label class="block text-base font-semibold text-gray-800 text-center dark:text-gray-200">
                         1. Please Rate the Quality of Support Experienced
                     </label>
                     <div class="flex justify-between items-center px-2 max-w-md mx-auto">
@@ -184,13 +184,13 @@ const submit = () => {
 
                 <!-- Question 2 -->
                 <div class="space-y-3">
-                    <label class="block text-base font-semibold text-gray-800">
+                    <label class="block text-base font-semibold text-gray-800 dark:text-gray-200">
                         2. Share your experience working with us
                     </label>
                     <textarea
                         v-model="form.feedback"
                         rows="4"
-                        class="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all resize-none text-gray-700 placeholder-gray-400"
+                        class="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all resize-none text-gray-700 placeholder-gray-400 dark:text-gray-300 dark:border-gray-700"
                         placeholder="Your feedback helps us improve..."
                     ></textarea>
                     <div v-if="form.errors.feedback" class="text-red-500 text-xs font-medium">{{ form.errors.feedback }}</div>
@@ -208,7 +208,7 @@ const submit = () => {
         </div>
 
         <div class="mt-8 text-center">
-            <p class="text-gray-400 text-xs">Reference Ticket: <span class="font-bold">{{ ticket_key }}</span></p>
+            <p class="text-gray-400 text-xs dark:text-gray-400">Reference Ticket: <span class="font-bold">{{ ticket_key }}</span></p>
         </div>
     </div>
 </template>

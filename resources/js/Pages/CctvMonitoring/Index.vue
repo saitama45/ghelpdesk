@@ -6,55 +6,55 @@
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <div v-for="(count, status) in summary.status_counts" :key="status"
-                         class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                         class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 dark:bg-gray-800 dark:border-gray-700">
                         <p class="text-[10px] font-black uppercase tracking-wider"
                            :class="statusColorClass(status, 'text')">{{ status }}</p>
                         <p class="text-2xl font-black mt-1"
                            :class="statusColorClass(status, 'text')">{{ count }}</p>
                     </div>
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400">Tracked Stores</p>
-                        <p class="text-2xl font-black mt-1 text-gray-700">{{ summary.total_stores }}</p>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-400">Tracked Stores</p>
+                        <p class="text-2xl font-black mt-1 text-gray-700 dark:text-gray-300">{{ summary.total_stores }}</p>
                     </div>
                 </div>
 
                 <!-- Filters -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 dark:bg-gray-800 dark:border-gray-700">
                     <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Year</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Year</label>
                             <input v-model.number="filters.year" type="number" min="2000" max="2100"
-                                   class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                   class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector</label>
-                            <select v-model="filters.sector" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Sector</label>
+                            <select v-model="filters.sector" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                 <option :value="null">All Sectors</option>
                                 <option v-for="s in sectors" :key="s" :value="s">Sector {{ s }}</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
-                            <select v-model="filters.brand" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Brand</label>
+                            <select v-model="filters.brand" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                 <option value="">All Brands</option>
                                 <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Status</label>
-                            <select v-model="filters.status" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Status</label>
+                            <select v-model="filters.status" class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                 <option value="">All Statuses</option>
                                 <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Search</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Search</label>
                             <input v-model="filters.search" type="text" placeholder="Code, name, brand..."
-                                   class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                   class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div class="flex items-end gap-2">
                             <button @click="applyFilters" class="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors">Apply</button>
-                            <button @click="resetFilters" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">Reset</button>
+                            <button @click="resetFilters" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Reset</button>
                         </div>
                     </div>
                 </div>
@@ -93,20 +93,20 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-3 py-3 text-left text-[11px] font-black uppercase tracking-wider text-slate-500 sticky left-0 bg-white z-10">Store</th>
-                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">Equip</th>
-                            <th v-for="m in 12" :key="m" class="px-2 py-3 text-center text-[10px] font-black uppercase tracking-wider text-slate-500">{{ monthShort(m) }}</th>
-                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-wider text-slate-400">Latest</th>
-                            <th class="px-3 py-3 text-right text-[11px] font-black uppercase tracking-wider text-slate-500">Actions</th>
+                            <th class="px-3 py-3 text-left text-[11px] font-black uppercase tracking-wider text-slate-500 sticky left-0 bg-white z-10 dark:bg-gray-800 dark:text-slate-300">Store</th>
+                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-300">Equip</th>
+                            <th v-for="m in 12" :key="m" class="px-2 py-3 text-center text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">{{ monthShort(m) }}</th>
+                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-300">Latest</th>
+                            <th class="px-3 py-3 text-right text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="row in data" :key="row.id" class="hover:bg-gray-50">
-                            <td class="px-3 py-2 sticky left-0 bg-white z-10 border-r border-gray-100">
-                                <div class="text-sm font-bold text-gray-900">{{ row.store?.code }}</div>
-                                <div class="text-[11px] text-gray-500 truncate max-w-[160px]">{{ row.store?.name }}</div>
-                                <div class="text-[10px] text-gray-400">{{ row.store?.brand }} · {{ row.store?.area }}</div>
+                        <tr v-for="row in data" :key="row.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-3 py-2 sticky left-0 bg-white z-10 border-r border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ row.store?.code }}</div>
+                                <div class="text-[11px] text-gray-500 truncate max-w-[160px] dark:text-gray-300">{{ row.store?.name }}</div>
+                                <div class="text-[10px] text-gray-400 dark:text-gray-400">{{ row.store?.brand }} · {{ row.store?.area }}</div>
                             </td>
                             <td class="px-3 py-2">
                                 <div class="flex flex-col gap-0.5 text-[10px]">
@@ -137,7 +137,7 @@
                             <td class="px-3 py-2">
                                 <span v-if="row.latest_status" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
                                       :class="statusColorClass(row.latest_status, 'bg')">{{ row.latest_status }}</span>
-                                <span v-else class="text-[11px] text-gray-400 italic">No record</span>
+                                <span v-else class="text-[11px] text-gray-400 italic dark:text-gray-400">No record</span>
                             </td>
                             <td class="px-3 py-2 text-right">
                                 <div class="flex justify-end space-x-1">
@@ -157,36 +157,36 @@
         <div v-if="showInspectionModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/30 backdrop-blur-md" @click="closeInspectionModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 max-h-[92vh] overflow-y-auto">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 max-h-[92vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-900">
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                                 {{ editingInspection ? 'Edit' : 'Log' }} CCTV Inspection
                             </h3>
-                            <p class="text-xs text-gray-500 mt-0.5">
+                            <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">
                                 {{ activeRow?.store?.code }} · {{ activeRow?.store?.name }} · {{ activeMonthLabel }}
                             </p>
                         </div>
-                        <button @click="closeInspectionModal" class="text-gray-400 hover:text-gray-600">
+                        <button @click="closeInspectionModal" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
 
                     <form @submit.prevent="submitInspection" class="space-y-5">
                         <!-- Deployed Equipment (read-only) -->
-                        <div class="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                        <div class="p-4 bg-slate-50 rounded-lg border border-slate-100 dark:bg-slate-800/50 dark:border-slate-700">
                             <div class="flex items-center justify-between mb-2">
                                 <h4 class="text-xs font-black text-slate-500 uppercase tracking-widest">Deployed CCTV Equipment</h4>
                                 <span class="text-[11px] text-slate-400">{{ activeRow?.inventory_context.units.length || 0 }} units found at store</span>
                             </div>
                             <div v-if="activeRow?.inventory_context.units.length" class="grid grid-cols-2 md:grid-cols-3 gap-2">
                                 <div v-for="u in activeRow.inventory_context.units" :key="u.stock_in_id"
-                                     class="bg-white rounded-md border border-slate-200 px-2 py-1.5">
-                                    <div class="text-[11px] font-bold text-gray-800 truncate">{{ u.item_code }} {{ u.brand }} {{ u.model }}</div>
+                                     class="bg-white rounded-md border border-slate-200 px-2 py-1.5 dark:bg-gray-800">
+                                    <div class="text-[11px] font-bold text-gray-800 truncate dark:text-gray-200">{{ u.item_code }} {{ u.brand }} {{ u.model }}</div>
                                     <div class="flex items-center justify-between mt-0.5">
                                         <span class="text-[9px] uppercase font-black px-1.5 py-0.5 rounded"
-                                              :class="u.role === 'camera' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'">{{ u.role }}</span>
-                                        <span class="text-[10px] font-mono text-gray-500 truncate">{{ u.serial_no || u.barcode || '—' }}</span>
+                                              :class="u.role === 'camera' ? 'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400' : 'bg-purple-50 text-purple-600 dark:bg-purple-500/15 dark:text-purple-400'">{{ u.role }}</span>
+                                        <span class="text-[10px] font-mono text-gray-500 truncate dark:text-gray-300">{{ u.serial_no || u.barcode || '—' }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -195,17 +195,17 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Inspection Date <span class="text-red-500">*</span></label>
-                                <input v-model="inspectionForm.inspection_date" type="date" required class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Inspection Date <span class="text-red-500">*</span></label>
+                                <input v-model="inspectionForm.inspection_date" type="date" required class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Overall Status <span class="text-red-500">*</span></label>
-                                <select v-model="inspectionForm.overall_status" required class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Overall Status <span class="text-red-500">*</span></label>
+                                <select v-model="inspectionForm.overall_status" required class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                                     <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Tech</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Tech</label>
                                 <Autocomplete
                                     v-model="inspectionForm.technician"
                                     :options="assignableStaff"
@@ -216,74 +216,74 @@
 
                         <div class="grid grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Working Cameras</label>
-                                <input v-model.number="inspectionForm.working_cameras" type="number" min="0" @input="autoTotal" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Working Cameras</label>
+                                <input v-model.number="inspectionForm.working_cameras" type="number" min="0" @input="autoTotal" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Not Working</label>
-                                <input v-model.number="inspectionForm.not_working_cameras" type="number" min="0" @input="autoTotal" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Not Working</label>
+                                <input v-model.number="inspectionForm.not_working_cameras" type="number" min="0" @input="autoTotal" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Cameras</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Total Cameras</label>
                                 <input v-model.number="inspectionForm.total_cameras" type="number" min="0"
-                                       :placeholder="`inv: ${activeRow?.inventory_context.camera_count}`" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                       :placeholder="`inv: ${activeRow?.inventory_context.camera_count}`" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Data Retention</label>
-                                <input v-model="inspectionForm.data_retention" type="text" placeholder="e.g. 40 days" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Data Retention</label>
+                                <input v-model="inspectionForm.data_retention" type="text" placeholder="e.g. 40 days" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Storage</label>
-                                <input v-model="inspectionForm.storage" type="text" placeholder="e.g. 5TB" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Storage</label>
+                                <input v-model="inspectionForm.storage" type="text" placeholder="e.g. 5TB" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">UPS Status</label>
-                                <input v-model="inspectionForm.ups_status" type="text" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">UPS Status</label>
+                                <input v-model="inspectionForm.ups_status" type="text" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">LGU Status</label>
-                                <select v-model="inspectionForm.lgu_status" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">LGU Status</label>
+                                <select v-model="inspectionForm.lgu_status" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                                     <option v-for="s in lguStatuses" :key="s" :value="s">{{ s }}</option>
                                 </select>
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">LGU Memo</label>
-                            <input v-model="inspectionForm.lgu_memo" type="text" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">LGU Memo</label>
+                            <input v-model="inspectionForm.lgu_memo" type="text" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Next Step</label>
-                                <textarea v-model="inspectionForm.next_step" rows="2" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Next Step</label>
+                                <textarea v-model="inspectionForm.next_step" rows="2" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"></textarea>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Remarks</label>
-                                <textarea v-model="inspectionForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Remarks</label>
+                                <textarea v-model="inspectionForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"></textarea>
                             </div>
                         </div>
 
                         <!-- Units Inspected / Defective -->
-                        <div class="p-4 bg-red-50/40 rounded-lg border border-red-100">
+                        <div class="p-4 bg-red-50/40 rounded-lg border border-red-100 dark:bg-red-900/10 dark:border-red-900/30">
                             <div class="flex items-center justify-between mb-2">
                                 <div>
                                     <h4 class="text-xs font-black text-red-500 uppercase tracking-widest">Units Inspected / Defective</h4>
-                                    <p class="text-[10px] text-gray-400">Auto-loaded from deployed inventory — mark any defective ones.</p>
+                                    <p class="text-[10px] text-gray-400 dark:text-gray-400">Auto-loaded from deployed inventory — mark any defective ones.</p>
                                 </div>
                                 <button type="button" @click="openUnitPicker" class="text-[11px] font-bold text-blue-600 hover:text-blue-700">+ Add unit</button>
                             </div>
                             <div v-if="inspectionForm.linked_units.length" class="space-y-1.5">
                                 <div v-for="(lu, idx) in inspectionForm.linked_units" :key="lu.stock_in_id"
-                                     class="flex items-center gap-2 bg-white rounded-md border border-gray-200 px-3 py-2">
+                                     class="flex items-center gap-2 bg-white rounded-md border border-gray-200 px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
                                     <div class="flex-1 min-w-0">
-                                        <div class="text-xs font-bold text-gray-800 truncate">{{ lu.item_code }} {{ lu.brand }} {{ lu.model }}</div>
-                                        <div class="text-[10px] font-mono text-gray-400">{{ lu.serial_no || lu.barcode || '—' }}</div>
+                                        <div class="text-xs font-bold text-gray-800 truncate dark:text-gray-200">{{ lu.item_code }} {{ lu.brand }} {{ lu.model }}</div>
+                                        <div class="text-[10px] font-mono text-gray-400 dark:text-gray-400">{{ lu.serial_no || lu.barcode || '—' }}</div>
                                     </div>
-                                    <select v-model="lu.condition" class="border-gray-300 rounded-md text-[11px] font-bold">
+                                    <select v-model="lu.condition" class="border-gray-300 rounded-md text-[11px] font-bold dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                                         <option value="Working">Working</option>
                                         <option value="Defective">Defective</option>
                                         <option value="N/A">N/A</option>
@@ -293,34 +293,34 @@
                                     </button>
                                 </div>
                             </div>
-                            <p v-else class="text-[11px] text-gray-400 italic">No CCTV units found in this store's deployed inventory.</p>
+                            <p v-else class="text-[11px] text-gray-400 italic dark:text-gray-400">No CCTV units found in this store's deployed inventory.</p>
                         </div>
 
                         <!-- Mandatory Ticket -->
-                        <div class="p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+                        <div class="p-4 bg-blue-50/50 rounded-lg border border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/30">
                             <div class="flex items-center justify-between mb-2">
                                 <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest">Linked Ticket <span class="text-red-500">(required)</span></h4>
                                 <a v-if="existingTicket" :href="route('tickets.edit', existingTicket.id)" target="_blank"
                                    class="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline">🎫 {{ existingTicket.ticket_key }} ↗</a>
                             </div>
-                            <div v-if="existingTicket" class="text-xs text-gray-600">
+                            <div v-if="existingTicket" class="text-xs text-gray-600 dark:text-gray-300">
                                 Ticket already created: <span class="font-bold">{{ existingTicket.title }}</span> ({{ existingTicket.status }})
                             </div>
                             <div v-else class="grid grid-cols-1 gap-2">
                                 <input v-model="inspectionForm.ticket_title" type="text" placeholder="Ticket title (auto-generated if blank)"
-                                       class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                       class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                                 <textarea v-model="inspectionForm.ticket_description" rows="2" placeholder="Ticket description (optional)"
-                                          class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
+                                          class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"></textarea>
                                 <p class="text-[10px] text-blue-500">A ticket is auto-created with this store + CCTV category on save.</p>
                             </div>
                         </div>
 
                         <div class="flex justify-between items-center pt-4 border-t">
                             <button v-if="editingInspection && hasPermission('cctv_monitoring.delete')" type="button" @click="deleteInspection"
-                                    class="px-4 py-2 text-sm font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">Delete Inspection</button>
+                                    class="px-4 py-2 text-sm font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50">Delete Inspection</button>
                             <span v-else></span>
                             <div class="flex space-x-3">
-                                <button type="button" @click="closeInspectionModal" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                                <button type="button" @click="closeInspectionModal" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                                 <button type="submit" :disabled="saving"
                                         class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all disabled:opacity-50">
                                     {{ saving ? 'Saving...' : (editingInspection ? 'Update Inspection' : 'Save Inspection') }}
@@ -336,25 +336,25 @@
         <div v-if="showUnitPicker" class="fixed inset-0 z-[60] overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/40" @click="showUnitPicker = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 max-h-[80vh] overflow-y-auto">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 border border-gray-100 max-h-[80vh] overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold text-gray-900">Link CCTV Unit</h3>
-                        <button @click="showUnitPicker = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Link CCTV Unit</h3>
+                        <button @click="showUnitPicker = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
                     <div v-if="unitOptions.length" class="space-y-2">
                         <div v-for="u in availableUnits" :key="u.stock_in_id"
-                             class="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:bg-blue-50">
+                             class="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2 hover:bg-blue-50 dark:border-gray-700">
                             <div class="flex-1">
-                                <div class="text-sm font-bold text-gray-800">{{ u.item_code }} {{ u.brand }} {{ u.model }}</div>
-                                <div class="text-[11px] text-gray-400 font-mono">{{ u.serial_no || u.barcode || '—' }} · {{ u.role }}</div>
+                                <div class="text-sm font-bold text-gray-800 dark:text-gray-200">{{ u.item_code }} {{ u.brand }} {{ u.model }}</div>
+                                <div class="text-[11px] text-gray-400 font-mono dark:text-gray-400">{{ u.serial_no || u.barcode || '—' }} · {{ u.role }}</div>
                             </div>
                             <button type="button" @click="linkUnit(u)" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-md hover:bg-blue-700">Add</button>
                         </div>
-                        <p v-if="!availableUnits.length" class="text-[11px] text-gray-400 italic text-center py-3">All available units are already linked.</p>
+                        <p v-if="!availableUnits.length" class="text-[11px] text-gray-400 italic text-center py-3 dark:text-gray-400">All available units are already linked.</p>
                     </div>
-                    <div v-else class="text-center py-8 text-sm text-gray-400">
+                    <div v-else class="text-center py-8 text-sm text-gray-400 dark:text-gray-400">
                         No CCTV units found in inventory at this store.
                     </div>
                 </div>
@@ -365,17 +365,17 @@
         <div v-if="showSystemModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/30 backdrop-blur-md" @click="showSystemModal = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold text-gray-900">CCTV System — {{ activeRow?.store?.code }}</h3>
-                        <button @click="showSystemModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">CCTV System — {{ activeRow?.store?.code }}</h3>
+                        <button @click="showSystemModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
                     <form @submit.prevent="submitSystem" class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">CCTV Type</label>
-                            <select v-model="systemForm.cctv_type" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">CCTV Type</label>
+                            <select v-model="systemForm.cctv_type" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                 <option value="">—</option>
                                 <option value="DVR">DVR</option>
                                 <option value="NVR">NVR</option>
@@ -383,27 +383,27 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total DVR/NVR No.</label>
-                            <input v-model.number="systemForm.dvr_nvr_count" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Total DVR/NVR No.</label>
+                            <input v-model.number="systemForm.dvr_nvr_count" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Expected Cameras</label>
-                            <input v-model.number="systemForm.expected_cameras" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Expected Cameras</label>
+                            <input v-model.number="systemForm.expected_cameras" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">DPO Seal Checking</label>
-                            <select v-model="systemForm.dpo_seal_checking" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">DPO Seal Checking</label>
+                            <select v-model="systemForm.dpo_seal_checking" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                 <option value="Pending">Pending</option>
                                 <option value="Done">Done</option>
                                 <option value="N/A">N/A</option>
                             </select>
                         </div>
                         <div class="col-span-2 flex items-center gap-6">
-                            <label class="flex items-center gap-2 text-sm"><input v-model="systemForm.has_qr_code" type="checkbox" class="rounded border-gray-300 text-blue-600"> Has QR Code</label>
-                            <label class="flex items-center gap-2 text-sm"><input v-model="systemForm.setup_completed" type="checkbox" class="rounded border-gray-300 text-blue-600"> Setup Completed</label>
+                            <label class="flex items-center gap-2 text-sm"><input v-model="systemForm.has_qr_code" type="checkbox" class="rounded border-gray-300 text-blue-600 dark:border-gray-600"> Has QR Code</label>
+                            <label class="flex items-center gap-2 text-sm"><input v-model="systemForm.setup_completed" type="checkbox" class="rounded border-gray-300 text-blue-600 dark:border-gray-600"> Setup Completed</label>
                         </div>
                         <div class="col-span-2 flex justify-end space-x-3 pt-4 border-t">
-                            <button type="button" @click="showSystemModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="button" @click="showSystemModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="saving" class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50">Save</button>
                         </div>
                     </form>
@@ -415,27 +415,27 @@
         <div v-if="showCreateModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/30 backdrop-blur-md" @click="showCreateModal = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold text-gray-900">Add CCTV System</h3>
-                        <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Add CCTV System</h3>
+                        <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
                     <form @submit.prevent="submitCreate" class="space-y-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store <span class="text-red-500">*</span></label>
                             <Autocomplete
                                 v-model="createForm.store_id"
                                 :options="availableStores"
                                 placeholder="Search store by code or name..."
                             />
-                            <p v-if="!availableStores.length" class="text-[11px] text-gray-400 italic mt-1">All stores already have a CCTV system configured.</p>
+                            <p v-if="!availableStores.length" class="text-[11px] text-gray-400 italic mt-1 dark:text-gray-400">All stores already have a CCTV system configured.</p>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">CCTV Type</label>
-                                <select v-model="createForm.cctv_type" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">CCTV Type</label>
+                                <select v-model="createForm.cctv_type" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                     <option value="">—</option>
                                     <option value="DVR">DVR</option>
                                     <option value="NVR">NVR</option>
@@ -443,16 +443,16 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total DVR/NVR No.</label>
-                                <input v-model.number="createForm.dvr_nvr_count" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Total DVR/NVR No.</label>
+                                <input v-model.number="createForm.dvr_nvr_count" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Expected Cameras</label>
-                                <input v-model.number="createForm.expected_cameras" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Expected Cameras</label>
+                                <input v-model.number="createForm.expected_cameras" type="number" min="0" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">DPO Seal Checking</label>
-                                <select v-model="createForm.dpo_seal_checking" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">DPO Seal Checking</label>
+                                <select v-model="createForm.dpo_seal_checking" class="block w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600">
                                     <option value="Pending">Pending</option>
                                     <option value="Done">Done</option>
                                     <option value="N/A">N/A</option>
@@ -460,11 +460,11 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-6">
-                            <label class="flex items-center gap-2 text-sm"><input v-model="createForm.has_qr_code" type="checkbox" class="rounded border-gray-300 text-blue-600"> Has QR Code</label>
-                            <label class="flex items-center gap-2 text-sm"><input v-model="createForm.setup_completed" type="checkbox" class="rounded border-gray-300 text-blue-600"> Setup Completed</label>
+                            <label class="flex items-center gap-2 text-sm"><input v-model="createForm.has_qr_code" type="checkbox" class="rounded border-gray-300 text-blue-600 dark:border-gray-600"> Has QR Code</label>
+                            <label class="flex items-center gap-2 text-sm"><input v-model="createForm.setup_completed" type="checkbox" class="rounded border-gray-300 text-blue-600 dark:border-gray-600"> Setup Completed</label>
                         </div>
                         <div class="flex justify-end space-x-3 pt-4 border-t">
-                            <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
+                            <button type="button" @click="showCreateModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                             <button type="submit" :disabled="saving || !createForm.store_id"
                                     class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all disabled:opacity-50">{{ saving ? 'Saving...' : 'Create System' }}</button>
                         </div>
@@ -477,10 +477,10 @@
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/30 backdrop-blur-md" @click="showImportModal = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-bold text-gray-900">Import CCTV Inspections</h3>
-                        <button @click="showImportModal = false" class="text-gray-400 hover:text-gray-600">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Import CCTV Inspections</h3>
+                        <button @click="showImportModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -489,7 +489,7 @@
                             <p class="text-xs text-blue-700">Each row = one store-month inspection. Match by <b>Store Code</b>. A ticket is auto-created per row.</p>
                             <a :href="route('cctv-monitoring.import-template')" class="text-xs font-black text-blue-700 underline mt-2 inline-block">Download CSV Template</a>
                         </div>
-                        <input type="file" ref="importFileInput" accept=".csv" @change="handleImportFile" class="block w-full text-sm text-gray-500">
+                        <input type="file" ref="importFileInput" accept=".csv" @change="handleImportFile" class="block w-full text-sm text-gray-500 dark:text-gray-300">
                         <div v-if="importErrors.length" class="p-3 bg-amber-50 rounded-lg border border-amber-100 max-h-40 overflow-y-auto">
                             <p class="text-xs font-bold text-amber-800 mb-1">Issues:</p>
                             <ul class="text-[11px] text-amber-700 list-disc pl-4">
@@ -497,7 +497,7 @@
                             </ul>
                         </div>
                         <div class="flex justify-end space-x-3 pt-4 border-t">
-                            <button type="button" @click="showImportModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Close</button>
+                            <button type="button" @click="showImportModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Close</button>
                             <button @click="submitImport" :disabled="!importFile || importing"
                                     class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50">{{ importing ? 'Importing...' : 'Start Import' }}</button>
                         </div>

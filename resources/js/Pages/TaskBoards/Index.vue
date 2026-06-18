@@ -561,16 +561,16 @@ const boardPeriodLabel = (board) => {
         <template #header>Task Board</template>
 
         <div class="space-y-6">
-            <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+            <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between dark:bg-gray-800 dark:border-gray-700">
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Task Board</h1>
-                    <p class="mt-1 text-sm text-gray-500">Kanban boards for service work, follow-ups, and team tasks.</p>
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Task Board</h1>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">Kanban boards for service work, follow-ups, and team tasks.</p>
                 </div>
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <button
                         type="button"
                         @click="toggleClosed"
-                        class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                        class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     >
                         <ArchiveBoxIcon class="h-4 w-4" />
                         {{ showClosed ? 'Open boards' : 'Closed boards' }}
@@ -596,19 +596,19 @@ const boardPeriodLabel = (board) => {
                 </div>
             </div>
 
-            <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                 <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] xl:items-end">
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Search</label>
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Search</label>
                         <input
                             v-model="search"
                             type="search"
-                            class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                             placeholder="Search boards..."
                         >
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Department</label>
                         <HierarchySelector
                             v-model="filterNodeId"
                             :nodes="hierarchicalOptions"
@@ -616,8 +616,8 @@ const boardPeriodLabel = (board) => {
                         />
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Month</label>
-                        <select v-model="boardFilters.month" class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Month</label>
+                        <select v-model="boardFilters.month" class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                             <option value="">All months</option>
                             <option v-for="month in monthOptions" :key="month.value" :value="month.value">
                                 {{ month.label }}
@@ -625,8 +625,8 @@ const boardPeriodLabel = (board) => {
                         </select>
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Year</label>
-                        <select v-model="boardFilters.year" class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Year</label>
+                        <select v-model="boardFilters.year" class="h-10 w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                             <option value="">All years</option>
                             <option v-for="year in yearFilterOptions" :key="year" :value="year">
                                 {{ year }}
@@ -636,25 +636,25 @@ const boardPeriodLabel = (board) => {
                     <button
                         type="button"
                         :disabled="!hasBoardFilters"
-                        class="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        class="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                         @click="clearBoardFilters"
                     >
                         Clear
                     </button>
                 </div>
-                <p class="mt-3 text-xs font-semibold text-gray-500">
+                <p class="mt-3 text-xs font-semibold text-gray-500 dark:text-gray-300">
                     Showing {{ sortedBoards.length }} of {{ totalBoardCount }} board{{ totalBoardCount === 1 ? '' : 's' }}
                 </p>
             </div>
 
             <div v-if="sortedBoards.length" class="space-y-4">
-                <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-                    <div class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex flex-col gap-2 border-b border-gray-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
                         <div>
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">Year</p>
-                            <h2 class="text-2xl font-black text-gray-900">{{ selectedMatrixYear }}</h2>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Year</p>
+                            <h2 class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ selectedMatrixYear }}</h2>
                         </div>
-                        <div class="text-xs font-semibold text-gray-500">
+                        <div class="text-xs font-semibold text-gray-500 dark:text-gray-300">
                             {{ matrixColumns.length }} team{{ matrixColumns.length === 1 ? '' : 's' }}
                         </div>
                     </div>
@@ -662,17 +662,17 @@ const boardPeriodLabel = (board) => {
                     <div v-if="matrixColumns.length" class="overflow-x-auto">
                         <table class="min-w-full border-collapse text-left">
                             <thead>
-                                <tr class="border-b border-gray-200 bg-gray-50">
-                                    <th class="sticky left-0 z-10 w-28 bg-gray-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500">Month</th>
-                                    <th class="min-w-96 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500">Team</th>
+                                <tr class="border-b border-gray-200 bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <th class="sticky left-0 z-10 w-28 bg-gray-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900/50 dark:text-slate-300">Month</th>
+                                    <th class="min-w-96 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-slate-300">Team</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="row in matrixRows" :key="row.value" class="border-b border-gray-100 last:border-b-0">
-                                    <th class="sticky left-0 z-10 bg-white px-4 py-4 text-sm font-black text-gray-800">
+                                <tr v-for="row in matrixRows" :key="row.value" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700">
+                                    <th class="sticky left-0 z-10 bg-white px-4 py-4 text-sm font-black text-gray-800 dark:bg-gray-800 dark:text-gray-200">
                                         {{ row.label }}
                                     </th>
-                                    <td class="h-16 min-w-96 border-l border-gray-100 px-3 py-3 align-top">
+                                    <td class="h-16 min-w-96 border-l border-gray-100 px-3 py-3 align-top dark:border-gray-700">
                                         <div v-if="row.boardItems.length" class="flex flex-wrap gap-2">
                                             <Link
                                                 v-for="item in row.boardItems"
@@ -691,22 +691,22 @@ const boardPeriodLabel = (board) => {
                         </table>
                     </div>
 
-                    <div v-else class="p-10 text-center text-sm font-semibold text-gray-500">
+                    <div v-else class="p-10 text-center text-sm font-semibold text-gray-500 dark:text-gray-300">
                         Select a department with configured teams to show the matrix.
                     </div>
                 </div>
             </div>
 
-            <div v-else class="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center">
-                <p class="text-sm font-semibold text-gray-600">No boards found.</p>
+            <div v-else class="rounded-lg border border-dashed border-gray-300 bg-white p-12 text-center dark:bg-gray-800 dark:border-gray-600">
+                <p class="text-sm font-semibold text-gray-600 dark:text-gray-300">No boards found.</p>
             </div>
         </div>
 
         <Modal :show="showGenerateMonthlyModal" @close="showGenerateMonthlyModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="mb-6 flex items-center justify-between">
-                    <h2 class="text-xl font-bold text-gray-900">Generate Monthly Boards</h2>
-                    <button type="button" @click="showGenerateMonthlyModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Generate Monthly Boards</h2>
+                    <button type="button" @click="showGenerateMonthlyModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
@@ -714,7 +714,7 @@ const boardPeriodLabel = (board) => {
                 <form class="space-y-5" @submit.prevent="submitMonthlyBoards">
                     <div class="grid gap-4 md:grid-cols-3">
                         <div class="md:col-span-1">
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Department</label>
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Department</label>
                             <HierarchySelector
                                 v-model="monthlyNodeId"
                                 :nodes="hierarchicalOptions"
@@ -722,16 +722,16 @@ const boardPeriodLabel = (board) => {
                             />
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Month</label>
-                            <select v-model.number="monthlyForm.month" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Month</label>
+                            <select v-model.number="monthlyForm.month" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                 <option v-for="month in monthOptions" :key="month.value" :value="month.value">
                                     {{ month.label }}
                                 </option>
                             </select>
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Year</label>
-                            <select v-model.number="monthlyForm.year" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Year</label>
+                            <select v-model.number="monthlyForm.year" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                 <option v-for="year in yearOptions" :key="year" :value="year">
                                     {{ year }}
                                 </option>
@@ -739,10 +739,10 @@ const boardPeriodLabel = (board) => {
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-700">
                         <div class="mb-3 flex items-center justify-between gap-3">
-                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500">Boards to Create</p>
-                            <span class="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-gray-600 ring-1 ring-gray-200">
+                            <p class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Boards to Create</p>
+                            <span class="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-gray-600 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300">
                                 {{ monthlyBoardPreview.length }} board{{ monthlyBoardPreview.length === 1 ? '' : 's' }}
                             </span>
                         </div>
@@ -751,12 +751,12 @@ const boardPeriodLabel = (board) => {
                             <div
                                 v-for="board in monthlyBoardPreview"
                                 :key="board.id"
-                                class="rounded-lg border border-gray-200 bg-white px-3 py-2"
+                                class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700"
                             >
                                 <div class="flex items-center justify-between gap-3">
                                     <div class="min-w-0">
-                                        <p class="truncate text-sm font-bold text-gray-900">{{ board.title }}</p>
-                                        <p class="text-xs font-medium text-gray-500">{{ board.path }}</p>
+                                        <p class="truncate text-sm font-bold text-gray-900 dark:text-gray-100">{{ board.title }}</p>
+                                        <p class="text-xs font-medium text-gray-500 dark:text-gray-300">{{ board.path }}</p>
                                     </div>
                                     <button
                                         type="button"
@@ -771,19 +771,19 @@ const boardPeriodLabel = (board) => {
                                         <div
                                             v-for="user in board.users"
                                             :key="user.id"
-                                            class="rounded-md bg-white px-2 py-1.5 text-xs"
+                                            class="rounded-md bg-white px-2 py-1.5 text-xs dark:bg-gray-800"
                                         >
-                                            <p class="truncate font-bold text-gray-800">{{ user.name }}</p>
+                                            <p class="truncate font-bold text-gray-800 dark:text-gray-200">{{ user.name }}</p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <p v-else class="py-8 text-center text-sm font-semibold text-gray-500">No active sub-units found.</p>
+                        <p v-else class="py-8 text-center text-sm font-semibold text-gray-500 dark:text-gray-300">No active sub-units found.</p>
                     </div>
 
-                    <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
-                        <button type="button" @click="showGenerateMonthlyModal = false" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200">Cancel</button>
+                    <div class="flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-700">
+                        <button type="button" @click="showGenerateMonthlyModal = false" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                         <button
                             type="submit"
                             :disabled="isGeneratingMonthly || monthlyBoardPreview.length === 0"
@@ -799,23 +799,23 @@ const boardPeriodLabel = (board) => {
         <Modal :show="showCreateModal" @close="showCreateModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="mb-6 flex items-center justify-between">
-                    <h2 class="text-xl font-bold text-gray-900">Create Board</h2>
-                    <button type="button" @click="showCreateModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Create Board</h2>
+                    <button type="button" @click="showCreateModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
 
                 <form class="space-y-5" @submit.prevent="submitBoard">
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Board title</label>
-                        <input v-model="form.title" type="text" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Board title</label>
+                        <input v-model="form.title" type="text" required class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Description</label>
-                        <textarea v-model="form.description" rows="3" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Description</label>
+                        <textarea v-model="form.description" rows="3" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"></textarea>
                     </div>
                     <div>
-                        <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Background</label>
+                        <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Background</label>
                         <div class="flex flex-wrap gap-2">
                             <button
                                 v-for="color in backgroundOptions"
@@ -829,7 +829,7 @@ const boardPeriodLabel = (board) => {
                         </div>
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Members</label>
+                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Members</label>
                         <MultiAutocomplete
                             v-model="form.member_ids"
                             :options="userOptions"
@@ -838,8 +838,8 @@ const boardPeriodLabel = (board) => {
                             placeholder="Select one or more members..."
                         />
                     </div>
-                    <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
-                        <button type="button" @click="showCreateModal = false" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200">Cancel</button>
+                    <div class="flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-700">
+                        <button type="button" @click="showCreateModal = false" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                         <button type="submit" :disabled="isSubmitting" class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
                             {{ isSubmitting ? 'Creating...' : 'Create Board' }}
                         </button>

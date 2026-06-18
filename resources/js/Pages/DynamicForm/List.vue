@@ -79,17 +79,17 @@ const deleteRecord = async (record) => {
 }
 
 const STATUS_COLORS = {
-    'Open': 'bg-blue-100 text-blue-700 border-blue-200',
-    'Approved': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    'Cancelled': 'bg-rose-100 text-rose-800 border-rose-200',
-    'Rejected': 'bg-red-100 text-red-800 border-red-200',
-    'In Progress': 'bg-amber-100 text-amber-800 border-amber-200',
+    'Open': 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:border-blue-400/30',
+    'Approved': 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-400/30',
+    'Cancelled': 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:border-rose-400/30',
+    'Rejected': 'bg-red-100 text-red-800 border-red-200 dark:bg-red-500/15 dark:text-red-200 dark:border-red-400/30',
+    'In Progress': 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-400/30',
 }
 
 function statusClass(s) {
-    if (!s) return 'bg-gray-100 text-gray-500 border-gray-200'
-    if (s.startsWith('Approved Level')) return 'bg-indigo-100 text-indigo-700 border-indigo-200'
-    return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500 border-gray-200'
+    if (!s) return 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+    if (s.startsWith('Approved Level')) return 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-500/15 dark:text-indigo-200 dark:border-indigo-400/30'
+    return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
 }
 
 const ticketPlaceholder = (record) => {
@@ -148,8 +148,8 @@ const toggleAllColumns = () => {
                 <!-- Header with Toggle Button -->
                 <div class="flex items-center justify-between mb-8">
                     <div>
-                        <h1 class="text-3xl font-black text-gray-900 tracking-tight">Dynamic Forms</h1>
-                        <p class="text-sm text-gray-500 font-medium mt-1">Submit and track custom form requests.</p>
+                        <h1 class="text-3xl font-black text-gray-900 tracking-tight dark:text-gray-100">Dynamic Forms</h1>
+                        <p class="text-sm text-gray-500 font-medium mt-1 dark:text-gray-300">Submit and track custom form requests.</p>
                     </div>
                     <button @click="showCreateSection = !showCreateSection"
                         :class="showCreateSection ? 'bg-gray-200 text-gray-700' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700'"
@@ -164,27 +164,27 @@ const toggleAllColumns = () => {
                 <!-- Create Section (Selection Tiles) -->
                 <div v-if="showCreateSection" class="mb-10 animate-in fade-in slide-in-from-top-4 duration-300">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="h-px flex-1 bg-gray-200"></div>
-                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Select a form to start</h2>
-                        <div class="h-px flex-1 bg-gray-200"></div>
+                        <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
+                        <h2 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] dark:text-gray-400">Select a form to start</h2>
+                        <div class="h-px flex-1 bg-gray-200 dark:bg-gray-700"></div>
                     </div>
                     
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <Link v-for="form in forms" :key="form.id" :href="route('dynamic-form.index', { slug: form.slug, create: 1 })"
-                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group">
+                            class="bg-white p-6 rounded-[2rem] shadow-xl shadow-gray-100/50 border border-gray-100 text-left hover:border-indigo-500 hover:shadow-indigo-100/50 transition-all group dark:bg-gray-800 dark:border-gray-700">
                             <div class="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-all">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </div>
-                            <h4 class="text-sm font-black text-gray-900 mb-1">{{ form.name }}</h4>
-                            <p class="text-xs text-gray-400 font-medium mb-3 line-clamp-2 min-h-[2.5rem]">{{ form.description || 'No description available.' }}</p>
+                            <h4 class="text-sm font-black text-gray-900 mb-1 dark:text-gray-100">{{ form.name }}</h4>
+                            <p class="text-xs text-gray-400 font-medium mb-3 line-clamp-2 min-h-[2.5rem] dark:text-gray-400">{{ form.description || 'No description available.' }}</p>
                             <div class="flex items-center justify-between mt-auto pt-2 border-t border-gray-50">
-                                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider dark:text-gray-400">
                                     {{ form.approval_levels > 0 ? `${form.approval_levels} Steps` : 'No Approval' }}
                                 </span>
-                                <div class="p-1.5 bg-gray-50 rounded-lg group-hover:bg-indigo-50 transition-colors">
-                                    <svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-indigo-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="p-1.5 bg-gray-50 rounded-lg group-hover:bg-indigo-50 transition-colors dark:bg-gray-900/50">
+                                    <svg class="w-3.5 h-3.5 text-gray-400 group-hover:text-indigo-600 transition-colors dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
                                     </svg>
                                 </div>
@@ -209,7 +209,7 @@ const toggleAllColumns = () => {
                     @change-per-page="pagination.changePerPage"
                 >
                     <template #actions>
-                        <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm">
+                        <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600">
                             <option value="">All Statuses</option>
                             <option value="Open">Open</option>
                             <option value="Approved">Approved</option>
@@ -218,7 +218,7 @@ const toggleAllColumns = () => {
                         </select>
                         <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
                             <template #trigger>
-                                <button class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap">
+                                <button class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
                                     </svg>
@@ -226,26 +226,26 @@ const toggleAllColumns = () => {
                                 </button>
                             </template>
                             <template #content>
-                                <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100">Visible Columns</div>
-                                <div class="p-2 border-b border-gray-100">
-                                    <label class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer" @click.stop>
+                                <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 dark:text-gray-400 dark:border-gray-700">Visible Columns</div>
+                                <div class="p-2 border-b border-gray-100 dark:border-gray-700">
+                                    <label class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer dark:hover:bg-gray-700" @click.stop>
                                         <input type="checkbox"
                                             :checked="allToggleableVisible"
                                             :indeterminate="!allToggleableVisible && someToggleableVisible"
                                             @change="toggleAllColumns"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
-                                        <span class="text-sm font-bold text-gray-600">Select All</span>
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2 dark:border-gray-600">
+                                        <span class="text-sm font-bold text-gray-600 dark:text-gray-300">Select All</span>
                                     </label>
                                 </div>
                                 <div class="p-2 space-y-1">
                                     <label v-for="col in columnConfig" :key="col.key"
-                                        class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                                        class="flex items-center px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer dark:hover:bg-gray-700"
                                         :class="col.locked ? 'opacity-50 cursor-not-allowed' : ''"
                                         @click.stop>
                                         <input type="checkbox" :checked="col.visible" :disabled="col.locked"
                                             @change="toggleColumn(col)"
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2">
-                                        <span class="text-sm font-semibold text-gray-700">{{ col.label }}</span>
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2 dark:border-gray-600">
+                                        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{{ col.label }}</span>
                                     </label>
                                 </div>
                             </template>
@@ -253,29 +253,29 @@ const toggleAllColumns = () => {
                     </template>
 
                     <template #header>
-                        <tr class="bg-gray-50/80 backdrop-blur-sm">
-                            <th v-if="isColumnVisible('form_type')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Form Type</th>
-                            <th v-if="isColumnVisible('ticket')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Ticket#</th>
-                            <th v-if="isColumnVisible('summary')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Summary</th>
-                            <th v-if="isColumnVisible('submitted_by')" class="px-6 py-4 text-left text-xs font-black text-gray-400 uppercase tracking-widest">Submitted By</th>
-                            <th v-if="isColumnVisible('date')" class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Date</th>
-                            <th v-if="isColumnVisible('status')" class="px-6 py-4 text-center text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
-                            <th v-if="isColumnVisible('actions')" class="px-6 py-4 text-right text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                        <tr class="bg-gray-50/80 backdrop-blur-sm dark:bg-slate-800/80">
+                            <th v-if="isColumnVisible('form_type')" class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Form Type</th>
+                            <th v-if="isColumnVisible('ticket')" class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Ticket#</th>
+                            <th v-if="isColumnVisible('summary')" class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Summary</th>
+                            <th v-if="isColumnVisible('submitted_by')" class="px-6 py-4 text-left text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Submitted By</th>
+                            <th v-if="isColumnVisible('date')" class="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Date</th>
+                            <th v-if="isColumnVisible('status')" class="px-6 py-4 text-center text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Status</th>
+                            <th v-if="isColumnVisible('actions')" class="px-6 py-4 text-right text-xs font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="record in data" :key="record.id" class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/30 transition-all duration-300 border-b border-gray-100 last:border-0">
+                        <tr v-for="record in data" :key="record.id" class="group hover:bg-white hover:shadow-xl hover:shadow-gray-200/30 transition-all duration-300 border-b border-gray-100 last:border-0 dark:border-slate-700 dark:hover:bg-slate-800/70 dark:hover:shadow-black/20">
                             <td v-if="isColumnVisible('form_type')" class="px-6 py-5 whitespace-nowrap">
                                 <div class="flex items-center">
-                                    <div class="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500">
+                                    <div class="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 dark:bg-indigo-500/15 dark:text-indigo-200">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                         </svg>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-black text-gray-900 group-hover:text-indigo-600 transition-colors">{{ record.definition.name }}</div>
-                                        <div class="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ID: #{{ record.id }}</div>
+                                        <div class="text-sm font-black text-gray-900 group-hover:text-indigo-600 transition-colors dark:text-slate-100 dark:group-hover:text-indigo-200">{{ record.definition.name }}</div>
+                                        <div class="text-[10px] text-gray-500 font-bold uppercase tracking-tighter dark:text-slate-300">ID: #{{ record.id }}</div>
                                     </div>
                                 </div>
                             </td>
@@ -283,26 +283,26 @@ const toggleAllColumns = () => {
                                 <Link
                                     v-if="record.ticket"
                                     :href="route('tickets.edit', record.ticket.id)"
-                                    class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                    class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white"
                                 >
                                     {{ record.ticket.ticket_key }}
                                 </Link>
                                 <span
                                     v-else
                                     class="text-[10px] font-black uppercase italic"
-                                    :class="record.status === 'Approved' ? 'text-rose-400' : 'text-gray-300'"
+                                    :class="record.status === 'Approved' ? 'text-rose-400 dark:text-rose-300' : 'text-gray-300 dark:text-slate-400'"
                                 >
                                     {{ ticketPlaceholder(record) }}
                                 </span>
                             </td>
                             <td v-if="isColumnVisible('summary')" class="px-6 py-5 whitespace-nowrap">
-                                <div class="text-sm font-bold text-gray-600 truncate max-w-xs">{{ getDisplayValue(record) }}</div>
+                                <div class="text-sm font-bold text-gray-600 truncate max-w-xs dark:text-slate-200">{{ getDisplayValue(record) }}</div>
                             </td>
                             <td v-if="isColumnVisible('submitted_by')" class="px-6 py-5 whitespace-nowrap">
-                                <div class="text-sm font-bold text-gray-900">{{ record.creator?.name || 'System' }}</div>
+                                <div class="text-sm font-bold text-gray-900 dark:text-slate-100">{{ record.creator?.name || 'System' }}</div>
                             </td>
                             <td v-if="isColumnVisible('date')" class="px-6 py-5 whitespace-nowrap text-center">
-                                <span class="text-xs font-bold text-gray-500">{{ new Date(record.created_at).toLocaleDateString() }}</span>
+                                <span class="text-xs font-bold text-gray-500 dark:text-slate-300">{{ new Date(record.created_at).toLocaleDateString() }}</span>
                             </td>
                             <td v-if="isColumnVisible('status')" class="px-6 py-5 whitespace-nowrap text-center">
                                 <span :class="statusClass(record.status)" class="inline-flex items-center px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full border shadow-sm">

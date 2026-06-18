@@ -37,7 +37,7 @@ const WHSE_LOCATIONS = ['01', '02', '03', 'Big Whse', 'Small Whse', 'Chiller', '
         <div>
             <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Warehouse Location <span class="text-rose-500">*</span></label>
             <select :value="modelValue.warehouse_location" @change="update('warehouse_location', $event.target.value)"
-                class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
                 <option value="">Select location...</option>
                 <option v-for="l in WHSE_LOCATIONS" :key="l">{{ l }}</option>
             </select>
@@ -46,7 +46,7 @@ const WHSE_LOCATIONS = ['01', '02', '03', 'Big Whse', 'Small Whse', 'Chiller', '
         <!-- BOM Table -->
         <div>
             <div class="flex items-center justify-between mb-3">
-                <h4 class="text-sm font-black text-gray-800">BOM Line Items</h4>
+                <h4 class="text-sm font-black text-gray-800 dark:text-gray-200">BOM Line Items</h4>
                 <button type="button" @click="addRow"
                     class="flex items-center gap-1 px-4 py-2 bg-teal-50 text-teal-600 rounded-xl font-bold text-xs hover:bg-teal-100 transition-all">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/></svg>
@@ -69,7 +69,7 @@ const WHSE_LOCATIONS = ['01', '02', '03', 'Big Whse', 'Small Whse', 'Chiller', '
                     </thead>
                     <tbody>
                         <tr v-for="(row, i) in bomRows" :key="i" class="border-t border-slate-100 hover:bg-slate-50 transition-colors">
-                            <td class="px-3 py-2 text-gray-400 font-bold">{{ i + 1 }}</td>
+                            <td class="px-3 py-2 text-gray-400 font-bold dark:text-gray-400">{{ i + 1 }}</td>
                             <td class="px-2 py-2"><input :value="row.fin_prod_name" @input="updateRow(i, 'fin_prod_name', $event.target.value)" type="text" class="w-full min-w-[130px] border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:border-teal-400 focus:ring-0" /></td>
                             <td class="px-2 py-2"><input :value="row.fin_prod_uom" @input="updateRow(i, 'fin_prod_uom', $event.target.value)" type="text" placeholder="WHOLE" class="w-full min-w-[80px] border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:border-teal-400 focus:ring-0" /></td>
                             <td class="px-2 py-2"><input :value="row.sap_raw_mats_sku" @input="updateRow(i, 'sap_raw_mats_sku', $event.target.value)" type="text" placeholder="e.g. 260A2A" class="w-full min-w-[100px] border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono focus:border-teal-400 focus:ring-0" /></td>

@@ -4,13 +4,13 @@
             <!-- Header -->
             <div class="flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Payments & Monitoring</h1>
-                    <p class="text-sm text-gray-500">Telco / connectivity monitoring by office & store, with cash schedule and approval workflow</p>
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Payments & Monitoring</h1>
+                    <p class="text-sm text-gray-500 dark:text-gray-300">Telco / connectivity monitoring by office & store, with cash schedule and approval workflow</p>
                 </div>
             </div>
 
             <!-- Tabs -->
-            <div class="border-b border-gray-200">
+            <div class="border-b border-gray-200 dark:border-gray-700">
                 <nav class="-mb-px flex space-x-6 overflow-x-auto">
                     <button
                         v-for="t in tabList"
@@ -32,56 +32,56 @@
             <div v-if="currentTab === 'monitoring'" class="space-y-5">
                 <!-- KPI strip -->
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Monthly MRC</p>
-                        <p class="text-xl font-bold text-gray-900 mt-1">₱{{ formatAmount(summary.monthly_mrc) }}</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Monthly MRC</p>
+                        <p class="text-xl font-bold text-gray-900 mt-1 dark:text-gray-100">₱{{ formatAmount(summary.monthly_mrc) }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Annual MRC</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Annual MRC</p>
                         <p class="text-xl font-bold text-purple-600 mt-1">₱{{ formatAmount(summary.annual_mrc) }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Active Services</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Active Services</p>
                         <p class="text-xl font-bold text-emerald-600 mt-1">{{ summary.active_services || 0 }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Pending Installs</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Pending Installs</p>
                         <p class="text-xl font-bold text-orange-600 mt-1">{{ summary.pending_installs || 0 }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Monitored Sites</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Monitored Sites</p>
                         <p class="text-xl font-bold text-blue-600 mt-1">{{ summary.monitored_locations || 0 }}</p>
                     </div>
-                    <button @click="switchTab('approvals')" class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:border-yellow-200 hover:bg-yellow-50 transition-colors group">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-yellow-600">Pending Approvals</p>
+                    <button @click="switchTab('approvals')" class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:border-yellow-200 hover:bg-yellow-50 transition-colors group dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-yellow-600 dark:text-gray-300">Pending Approvals</p>
                         <p class="text-xl font-bold text-yellow-600 mt-1">{{ summary.pending_approvals || 0 }}</p>
                     </button>
                 </div>
 
                 <!-- Controls -->
-                <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
                         <div class="flex flex-wrap items-center gap-3">
-                            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit dark:bg-gray-900/50 dark:border-gray-700">
                                 <button v-for="seg in locationTypes" :key="seg.id" @click="monitoringType = seg.id"
                                         :class="[
                                             'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
                                             monitoringType === seg.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                                         ]">
                                     {{ seg.label }}
-                                    <span class="ml-1 text-xs text-gray-400">{{ seg.id === 'office' ? officeCount : storeCount }}</span>
+                                    <span class="ml-1 text-xs text-gray-400 dark:text-gray-400">{{ seg.id === 'office' ? officeCount : storeCount }}</span>
                                 </button>
                             </div>
-                            <select v-model="monitoringBrand" class="border-gray-300 rounded-lg text-sm pl-2 pr-7">
+                            <select v-model="monitoringBrand" class="border-gray-300 rounded-lg text-sm pl-2 pr-7 dark:border-gray-600">
                                 <option value="">All Brands</option>
                                 <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
                             </select>
                             <input v-model="monitoringSearch" type="text" placeholder="Search code, name, address..."
-                                   class="border-gray-300 rounded-lg text-sm w-56" />
+                                   class="border-gray-300 rounded-lg text-sm w-56 dark:border-gray-600" />
                         </div>
                         <div class="flex items-center gap-2 flex-nowrap">
                             <a v-if="hasPermission('payments.view')" href="/payments/services/import-template"
-                               class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                               class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                 Download Template
                             </a>
                             <button v-if="hasPermission('payments.create')" @click="openConnectivityImportModal()"
@@ -98,36 +98,36 @@
 
                 <!-- Brand groups -->
                 <div v-if="groupedByBrand.length" class="space-y-4">
-                    <div v-for="group in groupedByBrand" :key="group.brand" class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div v-for="group in groupedByBrand" :key="group.brand" class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                         <button @click="toggleBrand(group.brand)"
-                                class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
+                                class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left dark:bg-gray-900/50 dark:hover:bg-gray-700">
                             <div class="flex items-center gap-3">
-                                <svg class="w-4 h-4 text-gray-400 transition-transform" :class="collapsedBrands[group.brand] ? '-rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-                                <span class="font-bold text-gray-900">{{ group.brand }}</span>
-                                <span class="text-xs text-gray-500">{{ group.locations.length }} {{ monitoringType === 'office' ? 'office(s)' : 'store(s)' }} · {{ group.serviceCount }} service(s)</span>
+                                <svg class="w-4 h-4 text-gray-400 transition-transform dark:text-gray-400" :class="collapsedBrands[group.brand] ? '-rotate-90' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                                <span class="font-bold text-gray-900 dark:text-gray-100">{{ group.brand }}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-300">{{ group.locations.length }} {{ monitoringType === 'office' ? 'office(s)' : 'store(s)' }} · {{ group.serviceCount }} service(s)</span>
                             </div>
-                            <span class="text-sm font-mono font-semibold text-gray-700">₱{{ formatAmount(group.mrc) }}/mo</span>
+                            <span class="text-sm font-mono font-semibold text-gray-700 dark:text-gray-300">₱{{ formatAmount(group.mrc) }}/mo</span>
                         </button>
 
-                        <div v-show="!collapsedBrands[group.brand]" class="divide-y divide-gray-100">
+                        <div v-show="!collapsedBrands[group.brand]" class="divide-y divide-gray-100 dark:divide-gray-700">
                             <div v-for="loc in group.locations" :key="loc.id" class="p-4">
                                 <!-- Location header -->
                                 <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                                     <div class="min-w-0">
                                         <div class="flex items-center gap-2 flex-wrap">
-                                            <span class="text-sm font-bold text-gray-900">{{ loc.code }}</span>
-                                            <span class="text-sm text-gray-700">{{ loc.name }}</span>
+                                            <span class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ loc.code }}</span>
+                                            <span class="text-sm text-gray-700 dark:text-gray-300">{{ loc.name }}</span>
                                             <span :class="loc.type === 'office' ? 'bg-indigo-100 text-indigo-800' : 'bg-sky-100 text-sky-800'" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ loc.type }}</span>
                                             <span v-if="loc.monitoring_status" :class="monitoringStatusPill(loc.monitoring_status)" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ loc.monitoring_status }}</span>
                                         </div>
-                                        <div v-if="loc.address" class="text-xs text-gray-500 mt-0.5">{{ loc.address }}</div>
-                                        <div v-if="loc.legal_company || loc.company_applied_with" class="text-xs text-gray-400">
+                                        <div v-if="loc.address" class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">{{ loc.address }}</div>
+                                        <div v-if="loc.legal_company || loc.company_applied_with" class="text-xs text-gray-400 dark:text-gray-400">
                                             <span v-if="loc.legal_company">{{ loc.legal_company }}</span>
                                             <span v-if="loc.company_applied_with"> · applied with {{ loc.company_applied_with }}</span>
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-1 shrink-0">
-                                        <span class="text-xs font-mono text-gray-500 mr-1">₱{{ formatAmount(locationMrc(loc)) }}/mo</span>
+                                        <span class="text-xs font-mono text-gray-500 mr-1 dark:text-gray-300">₱{{ formatAmount(locationMrc(loc)) }}/mo</span>
                                         <IconBtn v-if="hasPermission('payments.edit')" kind="edit" title="Edit location details" @click="openLocationModal(loc)" />
                                         <button v-if="hasPermission('payments.create')" @click="openServiceModal(loc)" title="Add connectivity service"
                                                 class="p-2 rounded-full text-blue-600 hover:text-blue-900 hover:bg-blue-50 transition-colors">
@@ -137,9 +137,9 @@
                                 </div>
 
                                 <!-- Services table -->
-                                <div v-if="loc.services.length" class="mt-3 overflow-x-auto border border-gray-100 rounded-lg">
+                                <div v-if="loc.services.length" class="mt-3 overflow-x-auto border border-gray-100 rounded-lg dark:border-gray-700">
                                     <table class="min-w-full text-sm">
-                                        <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+                                        <thead class="bg-gray-50 text-[11px] uppercase text-gray-500 dark:bg-gray-900/50 dark:text-slate-300">
                                             <tr>
                                                 <th class="px-3 py-2 text-left">Role</th>
                                                 <th class="px-3 py-2 text-left">Telco / Vendor</th>
@@ -151,22 +151,22 @@
                                                 <th class="px-3 py-2 text-right">Actions</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-gray-100">
-                                            <tr v-for="sv in loc.services" :key="sv.id" class="hover:bg-gray-50">
+                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                            <tr v-for="sv in loc.services" :key="sv.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                                 <td class="px-3 py-2">
                                                     <span :class="sv.role === 'primary' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ sv.role }}</span>
                                                 </td>
                                                 <td class="px-3 py-2">
-                                                    <div class="font-medium text-gray-900">{{ sv.telco || '—' }}</div>
-                                                    <div class="text-xs text-gray-500">{{ sv.vendor?.name || 'No vendor' }}</div>
+                                                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ sv.telco || '—' }}</div>
+                                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ sv.vendor?.name || 'No vendor' }}</div>
                                                 </td>
                                                 <td class="px-3 py-2">
                                                     <div>{{ sv.account_no || '—' }}</div>
-                                                    <div v-if="sv.service_id" class="text-xs text-gray-500">SID {{ sv.service_id }}</div>
+                                                    <div v-if="sv.service_id" class="text-xs text-gray-500 dark:text-gray-300">SID {{ sv.service_id }}</div>
                                                 </td>
                                                 <td class="px-3 py-2">
                                                     <div>{{ sv.bandwidth || '—' }}</div>
-                                                    <div v-if="sv.install_type" class="text-xs text-gray-500 capitalize">{{ sv.install_type }}</div>
+                                                    <div v-if="sv.install_type" class="text-xs text-gray-500 capitalize dark:text-gray-300">{{ sv.install_type }}</div>
                                                 </td>
                                                 <td class="px-3 py-2 text-right font-mono">{{ formatAmount(sv.mrc) }}</td>
                                                 <td class="px-3 py-2 text-xs">{{ sv.installation_date || '—' }}</td>
@@ -177,7 +177,7 @@
                                                             {{ approvalLabel(sv.latest_record_status) }}
                                                         </span>
                                                     </div>
-                                                    <div v-if="sv.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400" :title="'Last reminder sent on ' + sv.last_reminder_sent_at">
+                                                    <div v-if="sv.last_reminder_sent_at" class="mt-1 flex items-center text-[10px] text-gray-400 dark:text-gray-400" :title="'Last reminder sent on ' + sv.last_reminder_sent_at">
                                                         <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                                                         {{ formatDateShort(sv.last_reminder_sent_at) }}
                                                     </div>
@@ -195,7 +195,7 @@
                                         </tbody>
                                     </table>
                                 </div>
-                                <div v-else class="mt-3 text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg py-3 text-center">
+                                <div v-else class="mt-3 text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg py-3 text-center dark:text-gray-400 dark:border-gray-700">
                                     No connectivity service yet.
                                     <button v-if="hasPermission('payments.create')" @click="openServiceModal(loc)" class="text-blue-600 hover:text-blue-800 font-medium not-italic">Add one</button>
                                 </div>
@@ -203,39 +203,39 @@
                         </div>
                     </div>
                 </div>
-                <div v-else class="bg-white rounded-xl border border-dashed border-gray-300 py-12 text-center text-gray-400">
+                <div v-else class="bg-white rounded-xl border border-dashed border-gray-300 py-12 text-center text-gray-400 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600">
                     No {{ monitoringType === 'office' ? 'offices' : 'stores' }} match the current filters.
                 </div>
             </div>
 
             <!-- ============ SCHEDULE TAB ============ -->
             <div v-if="currentTab === 'schedule'" class="space-y-4">
-                <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-                    <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div class="bg-white rounded-lg border border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
                         <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
                             <div>
-                                <h3 class="text-lg font-semibold text-gray-900">Cash Schedule</h3>
-                                <p class="text-sm text-gray-600">Monthly, weekly, and calendar view of payable due dates</p>
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Cash Schedule</h3>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Monthly, weekly, and calendar view of payable due dates</p>
                             </div>
                             <div class="flex flex-col sm:flex-row gap-2">
                                 <input v-model="cashFilters.month" @change="refreshCashSchedule" type="month"
-                                       class="border-gray-300 rounded-lg text-sm">
+                                       class="border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 <select v-model="cashFilters.vendor_id" @change="refreshCashSchedule"
-                                        class="border-gray-300 rounded-lg text-sm pl-2 pr-7">
+                                        class="border-gray-300 rounded-lg text-sm pl-2 pr-7 dark:border-gray-600">
                                     <option value="">All vendors</option>
                                     <option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.name }}</option>
                                 </select>
                                 <select v-model="cashFilters.source" @change="refreshCashSchedule"
-                                        class="border-gray-300 rounded-lg text-sm pl-2 pr-7">
+                                        class="border-gray-300 rounded-lg text-sm pl-2 pr-7 dark:border-gray-600">
                                     <option value="all">All sources</option>
                                     <option value="service">Connectivity (Telco)</option>
                                     <option value="invoice">SOA Invoices</option>
                                     <option value="renewal">Renewals</option>
                                     <option value="weekly">Weekly Plans</option>
                                 </select>
-                                <label class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                                <label class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white dark:bg-gray-800 dark:border-gray-600">
                                     <input v-model="cashFilters.include_paid" @change="refreshCashSchedule" type="checkbox"
-                                           class="rounded border-gray-300 text-blue-600">
+                                           class="rounded border-gray-300 text-blue-600 dark:border-gray-600">
                                     Include Paid
                                 </label>
                             </div>
@@ -244,7 +244,7 @@
 
                     <div class="px-4 sm:px-6 py-4 space-y-4">
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit dark:bg-gray-900/50 dark:border-gray-700">
                                 <button v-for="view in cashViews" :key="view.id" @click="cashView = view.id"
                                         :class="[
                                             'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
@@ -254,24 +254,24 @@
                                 </button>
                             </div>
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                                <div class="rounded-lg border border-gray-200 px-4 py-3">
-                                    <div class="text-xs uppercase text-gray-500 font-semibold">Items</div>
-                                    <div class="text-xl font-bold text-gray-900">{{ cashSchedule.items?.length || 0 }}</div>
+                                <div class="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
+                                    <div class="text-xs uppercase text-gray-500 font-semibold dark:text-gray-300">Items</div>
+                                    <div class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ cashSchedule.items?.length || 0 }}</div>
                                 </div>
-                                <div class="rounded-lg border border-gray-200 px-4 py-3">
-                                    <div class="text-xs uppercase text-gray-500 font-semibold">Year Total</div>
-                                    <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(cashSchedule.total) }}</div>
+                                <div class="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700">
+                                    <div class="text-xs uppercase text-gray-500 font-semibold dark:text-gray-300">Year Total</div>
+                                    <div class="text-xl font-bold text-gray-900 dark:text-gray-100">₱{{ formatAmount(cashSchedule.total) }}</div>
                                 </div>
-                                <div class="rounded-lg border border-gray-200 px-4 py-3 col-span-2 sm:col-span-1">
-                                    <div class="text-xs uppercase text-gray-500 font-semibold">Selected Month</div>
-                                    <div class="text-xl font-bold text-gray-900">₱{{ formatAmount(selectedMonthTotal) }}</div>
+                                <div class="rounded-lg border border-gray-200 px-4 py-3 col-span-2 sm:col-span-1 dark:border-gray-700">
+                                    <div class="text-xs uppercase text-gray-500 font-semibold dark:text-gray-300">Selected Month</div>
+                                    <div class="text-xl font-bold text-gray-900 dark:text-gray-100">₱{{ formatAmount(selectedMonthTotal) }}</div>
                                 </div>
                             </div>
                         </div>
 
-                        <div v-if="cashView === 'monthly'" class="overflow-x-auto border border-gray-200 rounded-lg">
-                            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                        <div v-if="cashView === 'monthly'" class="overflow-x-auto border border-gray-200 rounded-lg dark:border-gray-700">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                                <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-900/50 dark:text-slate-300">
                                     <tr>
                                         <th class="px-4 py-3 text-left">Month</th>
                                         <th class="px-4 py-3 text-right">Connectivity</th>
@@ -282,9 +282,9 @@
                                         <th class="px-4 py-3 text-right">Items</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-gray-200">
-                                    <tr v-for="row in cashSchedule.monthly || []" :key="row.month" class="hover:bg-gray-50">
-                                        <td class="px-4 py-3 font-medium text-gray-900">{{ formatMonthLabel(row.month) }}</td>
+                                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                    <tr v-for="row in cashSchedule.monthly || []" :key="row.month" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{{ formatMonthLabel(row.month) }}</td>
                                         <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.service_total) }}</td>
                                         <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.invoice_total) }}</td>
                                         <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.renewal_total) }}</td>
@@ -293,29 +293,29 @@
                                         <td class="px-4 py-3 text-right">{{ row.count }}</td>
                                     </tr>
                                     <tr v-if="!(cashSchedule.monthly || []).length">
-                                        <td colspan="7" class="px-4 py-8 text-center text-gray-400">No scheduled payable dates found.</td>
+                                        <td colspan="7" class="px-4 py-8 text-center text-gray-400 dark:text-gray-400">No scheduled payable dates found.</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
 
                         <div v-if="cashView === 'weekly'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div v-for="week in cashSchedule.weekly || []" :key="week.week" class="border border-gray-200 rounded-lg p-4">
-                                <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
+                            <div v-for="week in cashSchedule.weekly || []" :key="week.week" class="border border-gray-200 rounded-lg p-4 dark:border-gray-700">
+                                <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-3 dark:border-gray-700">
                                     <div>
-                                        <div class="font-semibold text-gray-900">{{ week.week }}</div>
-                                        <div class="text-xs text-gray-500">{{ week.range }}</div>
+                                        <div class="font-semibold text-gray-900 dark:text-gray-100">{{ week.week }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-300">{{ week.range }}</div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="font-mono font-bold text-gray-900">₱{{ formatAmount(week.total) }}</div>
-                                        <div class="text-xs text-gray-500">{{ week.count }} items</div>
+                                        <div class="font-mono font-bold text-gray-900 dark:text-gray-100">₱{{ formatAmount(week.total) }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-300">{{ week.count }} items</div>
                                     </div>
                                 </div>
                                 <div class="space-y-2">
                                     <div v-for="item in week.items" :key="`${item.source_type}-${item.source_id}-${item.due_date}`" class="flex items-start justify-between gap-3 text-sm">
                                         <div>
-                                            <div class="font-medium text-gray-800">{{ item.vendor_name || '—' }}</div>
-                                            <div class="text-xs text-gray-500">{{ sourceLabel(item.source_type) }} · {{ item.label }}</div>
+                                            <div class="font-medium text-gray-800 dark:text-gray-200">{{ item.vendor_name || '—' }}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-300">{{ sourceLabel(item.source_type) }} · {{ item.label }}</div>
                                         </div>
                                         <div class="text-right shrink-0">
                                             <div class="font-mono">{{ formatAmount(item.amount) }}</div>
@@ -324,25 +324,25 @@
                                     </div>
                                 </div>
                             </div>
-                            <div v-if="!(cashSchedule.weekly || []).length" class="lg:col-span-2 border border-dashed border-gray-300 rounded-lg py-10 text-center text-gray-400">
+                            <div v-if="!(cashSchedule.weekly || []).length" class="lg:col-span-2 border border-dashed border-gray-300 rounded-lg py-10 text-center text-gray-400 dark:text-gray-400 dark:border-gray-600">
                                 No weekly schedule for the selected month.
                             </div>
                         </div>
 
-                        <div v-if="cashView === 'calendar'" class="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
-                            <div v-for="day in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="day" class="bg-gray-50 px-2 py-2 text-xs font-semibold text-gray-500 text-center">
+                        <div v-if="cashView === 'calendar'" class="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden dark:bg-gray-700 dark:border-gray-700">
+                            <div v-for="day in ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']" :key="day" class="bg-gray-50 px-2 py-2 text-xs font-semibold text-gray-500 text-center dark:bg-gray-900/50 dark:text-gray-300">
                                 {{ day }}
                             </div>
                             <div v-for="day in calendarDays" :key="day.key"
                                  :class="['min-h-28 bg-white p-2 text-xs', !day.inMonth ? 'bg-gray-50 text-gray-400' : '']">
-                                <div class="font-semibold text-gray-700 mb-1">{{ day.day }}</div>
+                                <div class="font-semibold text-gray-700 mb-1 dark:text-gray-300">{{ day.day }}</div>
                                 <div v-if="day.total > 0" class="font-mono font-bold text-blue-700 mb-1">₱{{ formatCompactAmount(day.total) }}</div>
                                 <div class="space-y-1">
                                     <div v-for="item in day.items.slice(0, 3)" :key="`${day.key}-${item.source_type}-${item.source_id}`"
-                                         class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate" :title="`${item.vendor_name} - ${item.label}`">
+                                         class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate dark:bg-gray-900/50 dark:border-gray-700" :title="`${item.vendor_name} - ${item.label}`">
                                         {{ sourceLabel(item.source_type) }} · {{ item.vendor_name || '—' }}
                                     </div>
-                                    <div v-if="day.items.length > 3" class="text-gray-500">+{{ day.items.length - 3 }} more</div>
+                                    <div v-if="day.items.length > 3" class="text-gray-500 dark:text-gray-300">+{{ day.items.length - 3 }} more</div>
                                 </div>
                             </div>
                         </div>
@@ -369,26 +369,26 @@
                 >
                     <template #header>
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payable</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status / Level</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid On / Ref</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">#</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Payable</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Vendor</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Amount</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status / Level</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Paid On / Ref</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="rec in data" :key="rec.id" class="hover:bg-gray-50">
+                        <tr v-for="rec in data" :key="rec.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td class="px-4 py-3 text-sm">{{ rec.id }}</td>
                             <td class="px-4 py-3 text-sm capitalize">{{ rec.payable_type }} #{{ rec.payable_id }}</td>
                             <td class="px-4 py-3 text-sm">{{ rec.vendor?.name || '—' }}</td>
                             <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(rec.amount) }}</td>
                             <td class="px-4 py-3 text-sm">
                                 <span :class="statusPill(rec.status)" class="px-2 py-0.5 text-xs rounded-full font-semibold">{{ rec.status }}</span>
-                                <div class="text-xs text-gray-500 mt-0.5">Lvl {{ rec.current_approval_level }} / {{ rec.approver_data?.levels || '?' }}</div>
+                                <div class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Lvl {{ rec.current_approval_level }} / {{ rec.approver_data?.levels || '?' }}</div>
                             </td>
-                            <td class="px-4 py-3 text-xs">{{ rec.paid_on || '—' }}<div v-if="rec.reference_no" class="text-gray-500">{{ rec.reference_no }}</div></td>
+                            <td class="px-4 py-3 text-xs">{{ rec.paid_on || '—' }}<div v-if="rec.reference_no" class="text-gray-500 dark:text-gray-300">{{ rec.reference_no }}</div></td>
                             <td class="px-4 py-3 text-right">
                                 <div class="flex justify-end space-x-1">
                                     <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="approve" title="Approve" @click="openApproveModal(rec)" />
@@ -403,7 +403,7 @@
 
             <!-- ============ OTHER PAYABLES TAB ============ -->
             <div v-if="currentTab === 'payables'" class="space-y-4">
-                <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
+                <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit dark:bg-gray-900/50 dark:border-gray-700">
                     <button v-for="seg in payablesTabs" :key="seg.id" @click="payablesTab = seg.id"
                             :class="[
                                 'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
@@ -425,7 +425,7 @@
                             {{ s.charAt(0).toUpperCase() + s.slice(1) }}
                         </button>
                         <button @click="renewalsPagination.updateSearchParam('status', null)"
-                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50">
+                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700">
                             Clear
                         </button>
                     </div>
@@ -448,7 +448,7 @@
                         <template #actions>
                             <div class="flex items-center gap-2 flex-nowrap">
                                 <a v-if="hasPermission('payments.view')" href="/payments/renewals/import-template"
-                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                     Download Template
                                 </a>
                                 <button v-if="hasPermission('payments.create')" @click="openRenewalImportModal()"
@@ -463,21 +463,21 @@
                         </template>
                         <template #header>
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor / Service</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cycle</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next Due</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assignee</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Vendor / Service</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Cycle</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Amount</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Next Due</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Assignee</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                             </tr>
                         </template>
                         <template #body="{ data }">
-                            <tr v-for="r in data" :key="r.id" class="hover:bg-gray-50">
+                            <tr v-for="r in data" :key="r.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <td class="px-4 py-3">
-                                    <div class="text-sm font-medium text-gray-900">{{ r.vendor?.name || '—' }}</div>
-                                    <div class="text-xs text-gray-500">{{ r.service_type }}<span v-if="r.sub_type"> · {{ r.sub_type }}</span></div>
-                                    <div v-if="r.purpose" class="text-xs text-gray-400">{{ r.purpose }}</div>
+                                    <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ r.vendor?.name || '—' }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ r.service_type }}<span v-if="r.sub_type"> · {{ r.sub_type }}</span></div>
+                                    <div v-if="r.purpose" class="text-xs text-gray-400 dark:text-gray-400">{{ r.purpose }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-sm capitalize">{{ r.cycle?.replace('_', ' ') }}</td>
                                 <td class="px-4 py-3 text-right text-sm font-mono">{{ r.currency || 'PHP' }} {{ formatAmount(r.total_amount) }}</td>
@@ -506,7 +506,7 @@
                                         <IconBtn v-if="hasPermission('payments.edit') && r.latest_record_status !== 'approved'" kind="edit" title="Edit Renewal" @click="openRenewalModal(r)" />
                                         <IconBtn v-if="hasPermission('payments.delete') && !r.latest_record_status" kind="delete" title="Delete Renewal" @click="confirmDelete('renewals', r, 'renewal')" />
                                     </div>
-                                    <span v-else class="text-xs text-gray-400 italic">—</span>
+                                    <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">—</span>
                                 </td>
                             </tr>
                         </template>
@@ -525,7 +525,7 @@
                             {{ s }}
                         </button>
                         <button @click="invoicesPagination.updateSearchParam('inv_status', null)"
-                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50">
+                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700">
                             Clear
                         </button>
                     </div>
@@ -548,7 +548,7 @@
                         <template #actions>
                             <div class="flex items-center gap-2 flex-nowrap">
                                 <a v-if="hasPermission('payments.view')" href="/payments/invoices/import-template"
-                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                     Download Template
                                 </a>
                                 <button v-if="hasPermission('payments.create')" @click="openImportModal()"
@@ -567,24 +567,24 @@
                         </template>
                         <template #header>
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">APV / SI</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor / Store</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Invoice</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Outstanding</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due / Aging</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">APV / SI</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Vendor / Store</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Invoice</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Outstanding</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Due / Aging</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                             </tr>
                         </template>
                         <template #body="{ data }">
-                            <tr v-for="i in data" :key="i.id" class="hover:bg-gray-50">
+                            <tr v-for="i in data" :key="i.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <td class="px-4 py-3 text-sm">
-                                    <div class="font-medium text-gray-900">{{ i.apv_no || '—' }}</div>
-                                    <div class="text-xs text-gray-500">SI {{ i.si_number || '—' }}</div>
+                                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ i.apv_no || '—' }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">SI {{ i.si_number || '—' }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-sm">
                                     <div>{{ i.vendor?.name || '—' }}</div>
-                                    <div class="text-xs text-gray-500">{{ i.store_code || '' }} {{ i.po_number ? '· PO ' + i.po_number : '' }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ i.store_code || '' }} {{ i.po_number ? '· PO ' + i.po_number : '' }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(i.invoice_amount) }}</td>
                                 <td class="px-4 py-3 text-right text-sm font-mono font-semibold" :class="i.outstanding_amount > 0 ? 'text-red-700' : 'text-green-700'">
@@ -610,20 +610,20 @@
                                         <IconBtn v-if="hasPermission('payments.edit') && i.latest_record_status !== 'approved'" kind="edit" title="Edit Invoice" @click="openInvoiceModal(i)" />
                                         <IconBtn v-if="hasPermission('payments.delete') && !i.latest_record_status" kind="delete" title="Delete Invoice" @click="confirmDelete('invoices', i, 'invoice')" />
                                     </div>
-                                    <span v-else class="text-xs text-gray-400 italic">—</span>
+                                    <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">—</span>
                                 </td>
                             </tr>
                         </template>
                     </DataTable>
 
                     <!-- Overpayments mini-table -->
-                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                    <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex justify-between items-center mb-3">
-                            <h3 class="font-semibold text-gray-900">Recent Overpayments</h3>
+                            <h3 class="font-semibold text-gray-900 dark:text-gray-100">Recent Overpayments</h3>
                         </div>
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="text-left text-xs text-gray-500 uppercase border-b">
+                                <tr class="text-left text-xs text-gray-500 uppercase border-b dark:text-gray-300">
                                     <th class="py-2">Date</th>
                                     <th class="py-2">Vendor</th>
                                     <th class="py-2">Check Details</th>
@@ -636,14 +636,14 @@
                                 <tr v-for="op in (overpayments?.data || [])" :key="op.id" class="border-b last:border-0">
                                     <td class="py-2">{{ op.collection_date || '—' }}</td>
                                     <td class="py-2">{{ op.vendor?.name || '—' }}</td>
-                                    <td class="py-2 text-gray-600">{{ op.check_details || '—' }}</td>
+                                    <td class="py-2 text-gray-600 dark:text-gray-300">{{ op.check_details || '—' }}</td>
                                     <td class="py-2 text-right font-mono">{{ formatAmount(op.amount) }}</td>
                                     <td class="py-2 text-xs">{{ op.invoice ? ('APV ' + (op.invoice.apv_no || op.invoice.si_number || op.invoice.id)) : '— unapplied' }}</td>
                                     <td class="py-2 text-right">
                                         <IconBtn v-if="hasPermission('payments.delete')" kind="delete" title="Delete Overpayment" @click="confirmDelete('overpayments', op, 'overpayment')" />
                                     </td>
                                 </tr>
-                                <tr v-if="!(overpayments?.data?.length)"><td colspan="6" class="py-4 text-center text-gray-400 text-xs">No overpayments yet</td></tr>
+                                <tr v-if="!(overpayments?.data?.length)"><td colspan="6" class="py-4 text-center text-gray-400 text-xs dark:text-gray-400">No overpayments yet</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -669,7 +669,7 @@
                         <template #actions>
                             <div class="flex items-center gap-2 flex-nowrap">
                                 <a v-if="hasPermission('payments.view')" href="/payments/weekly-plans/import-template"
-                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center">
+                                   class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm whitespace-nowrap inline-flex items-center dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
                                     Download Template
                                 </a>
                                 <button v-if="hasPermission('payments.create')" @click="openWeeklyImportModal()"
@@ -684,23 +684,23 @@
                         </template>
                         <template #header>
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Week</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor / Project</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Week</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Vendor / Project</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Category</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Amount</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                             </tr>
                         </template>
                         <template #body="{ data }">
-                            <tr v-for="w in data" :key="w.id" class="hover:bg-gray-50">
+                            <tr v-for="w in data" :key="w.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <td class="px-4 py-3 text-sm">
-                                    <div>{{ w.month || '—' }} <span v-if="w.week_no" class="text-xs text-gray-500">/ Wk {{ w.week_no }}</span></div>
-                                    <div class="text-xs text-gray-500">{{ w.week_date || '' }}</div>
+                                    <div>{{ w.month || '—' }} <span v-if="w.week_no" class="text-xs text-gray-500 dark:text-gray-300">/ Wk {{ w.week_no }}</span></div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ w.week_date || '' }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-sm">
                                     <div>{{ w.vendor?.name || '—' }}</div>
-                                    <div class="text-xs text-gray-500">{{ w.project_label || '' }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">{{ w.project_label || '' }}</div>
                                 </td>
                                 <td class="px-4 py-3 text-sm">{{ w.category || '—' }}</td>
                                 <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(w.amount) }}</td>
@@ -719,7 +719,7 @@
                                         <IconBtn v-if="hasPermission('payments.edit') && w.latest_record_status !== 'approved'" kind="edit" title="Edit Plan Row" @click="openWeeklyModal(w)" />
                                         <IconBtn v-if="hasPermission('payments.delete') && !w.latest_record_status" kind="delete" title="Delete Plan Row" @click="confirmDelete('weekly-plans', w, 'weekly plan row')" />
                                     </div>
-                                    <span v-else class="text-xs text-gray-400 italic">—</span>
+                                    <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">—</span>
                                 </td>
                             </tr>
                         </template>
@@ -728,28 +728,28 @@
             </div>
 
             <!-- ============ SETTINGS TAB ============ -->
-            <div v-if="currentTab === 'settings'" class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 max-w-2xl">
-                <h3 class="font-semibold text-gray-900">Reminder & Approval Settings</h3>
+            <div v-if="currentTab === 'settings'" class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 max-w-2xl dark:bg-gray-800 dark:border-gray-700">
+                <h3 class="font-semibold text-gray-900 dark:text-gray-100">Reminder & Approval Settings</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Approval Levels</label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 dark:text-gray-300">Approval Levels</label>
                         <input v-model.number="settingsForm.approval_levels" type="number" min="1" max="5"
-                               class="block w-full border-gray-300 rounded-lg text-sm">
+                               class="block w-full border-gray-300 rounded-lg text-sm dark:border-gray-600">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Default Currency</label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1 dark:text-gray-300">Default Currency</label>
                         <input v-model="settingsForm.default_currency" type="text" maxlength="8"
-                               class="block w-full border-gray-300 rounded-lg text-sm">
+                               class="block w-full border-gray-300 rounded-lg text-sm dark:border-gray-600">
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Global BCC (email)</label>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1 dark:text-gray-300">Global BCC (email)</label>
                     <input v-model="settingsForm.global_bcc" type="text"
-                           class="block w-full border-gray-300 rounded-lg text-sm" placeholder="finance-bcc@company.com">
+                           class="block w-full border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="finance-bcc@company.com">
                 </div>
                 <div class="flex items-center">
                     <input v-model="settingsForm.reminders_enabled" type="checkbox" id="rem_enabled"
-                           class="rounded border-gray-300 text-blue-600">
+                           class="rounded border-gray-300 text-blue-600 dark:border-gray-600">
                     <label for="rem_enabled" class="ml-2 text-sm">Enable automated due-date reminders</label>
                 </div>
                 <div class="pt-3 border-t flex justify-end">
@@ -769,10 +769,10 @@
                 </FormField>
 
                 <div class="max-h-[56vh] overflow-y-auto pr-1 space-y-3 custom-scrollbar">
-                    <div v-for="(provider, idx) in serviceProviders" :key="idx" class="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                    <div v-for="(provider, idx) in serviceProviders" :key="idx" class="rounded-xl border border-gray-200 bg-gray-50/60 p-3 dark:border-gray-700">
                         <div class="flex items-center justify-between mb-2">
                             <div class="flex items-center gap-2">
-                                <span class="text-[11px] font-black uppercase tracking-widest text-gray-500">Provider {{ idx + 1 }}</span>
+                                <span class="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Provider {{ idx + 1 }}</span>
                                 <span :class="provider.role === 'primary' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'" class="px-2 py-0.5 text-[10px] rounded-full font-semibold uppercase">{{ provider.role }}</span>
                             </div>
                             <button type="button" @click="removeProvider(idx)" class="p-1 text-red-500 hover:bg-red-50 rounded-lg" title="Remove provider">
@@ -799,28 +799,28 @@
                                 <Autocomplete v-model="provider.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                             </FormField>
                             <FormField label="Account No.">
-                                <input v-model="provider.account_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model="provider.account_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                             <FormField label="Service ID">
-                                <input v-model="provider.service_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model="provider.service_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                             <FormField label="Bandwidth">
-                                <input v-model="provider.bandwidth" placeholder="50 Mbps" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model="provider.bandwidth" placeholder="50 Mbps" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                             <FormField label="Install Type">
                                 <Autocomplete v-model="provider.install_type" :options="installTypeOptions" placeholder="Select type..." />
                             </FormField>
                             <FormField label="MRC (VAT inc)" required>
-                                <input v-model.number="provider.mrc" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model.number="provider.mrc" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                             <FormField label="Currency">
                                 <Autocomplete v-model="provider.currency" :options="currencyOptions" placeholder="Select currency..." />
                             </FormField>
                             <FormField label="Installation Date">
-                                <input v-model="provider.installation_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model="provider.installation_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                             <FormField label="Billing Day (1-31)">
-                                <input v-model.number="provider.billing_day" type="number" min="1" max="31" placeholder="Defaults to install day" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model.number="provider.billing_day" type="number" min="1" max="31" placeholder="Defaults to install day" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                             <FormField label="Status">
                                 <Autocomplete v-model="provider.status" :options="serviceStatusOptions" placeholder="Select status..." />
@@ -829,17 +829,17 @@
                                 <Autocomplete v-model="provider.assignee_id" :options="userOptions" placeholder="Search user..." />
                             </FormField>
                             <FormField label="CC Emails (comma-separated)">
-                                <input v-model="provider.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                                <input v-model="provider.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                             </FormField>
                         </div>
                         <div class="mt-3">
                             <FormField label="Notes">
-                                <textarea v-model="provider.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                                <textarea v-model="provider.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                             </FormField>
                         </div>
                     </div>
 
-                    <div v-if="!serviceProviders.length" class="text-center text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg py-6">
+                    <div v-if="!serviceProviders.length" class="text-center text-xs text-gray-400 italic border border-dashed border-gray-200 rounded-lg py-6 dark:text-gray-400 dark:border-gray-700">
                         No providers. Add one below.
                     </div>
                 </div>
@@ -857,18 +857,18 @@
         <Modal v-if="locationModal.open" @close="locationModal.open = false" :title="'Edit Location — ' + (locationModal.current?.code || '')">
             <form @submit.prevent="submitLocation" class="space-y-3">
                 <FormField label="Address">
-                    <textarea v-model="locationForm.address" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                    <textarea v-model="locationForm.address" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <div class="grid grid-cols-2 gap-3">
                     <FormField label="Company (operating entity)">
                         <Autocomplete v-model="locationForm.legal_company" :options="companyOptions" allow-custom placeholder="Select or type company..." />
                     </FormField>
                     <FormField label="Company Applied With">
-                        <input v-model="locationForm.company_applied_with" placeholder="Telco account holder" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="locationForm.company_applied_with" placeholder="Telco account holder" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Monitoring Status">
                         <Autocomplete v-model="locationForm.monitoring_status" :options="monitoringStatusOptions" allow-custom placeholder="Select status..." />
-                        <p class="mt-1 text-[11px] text-gray-400">Site lifecycle: OPEN once live, PENDING/FOR APPLICATION while connectivity is being set up, FOR TERMINATION when winding down.</p>
+                        <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-400">Site lifecycle: OPEN once live, PENDING/FOR APPLICATION while connectivity is being set up, FOR TERMINATION when winding down.</p>
                     </FormField>
                 </div>
                 <ModalFooter @cancel="locationModal.open = false" submit-label="Save" />
@@ -884,13 +884,13 @@
                 </div>
                 <FormField label="Excel File" required>
                     <input type="file" accept=".xlsx" required @change="onConnectivityImportFileChange"
-                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-300">
                 </FormField>
-                <div v-if="connectivityImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                <div v-if="connectivityImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2 dark:border-gray-700">
                     <div class="grid grid-cols-3 gap-2">
-                        <div><span class="text-gray-500">Created:</span> <strong>{{ connectivityImportResult.created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Updated:</span> <strong>{{ connectivityImportResult.updated || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ connectivityImportResult.skipped || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Created:</span> <strong>{{ connectivityImportResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Updated:</span> <strong>{{ connectivityImportResult.updated || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Skipped:</span> <strong>{{ connectivityImportResult.skipped || 0 }}</strong></div>
                     </div>
                     <div v-if="connectivityImportResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
                         <div v-for="error in connectivityImportResult.errors" :key="error">{{ error }}</div>
@@ -902,7 +902,7 @@
                     </a>
                     <div class="flex gap-3">
                         <button type="button" @click="connectivityImportModal.open = false"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
                         <button type="submit" :disabled="connectivityImportModal.loading"
@@ -923,14 +923,14 @@
                 </div>
                 <FormField label="Excel File" required>
                     <input type="file" accept=".xlsx" required @change="onImportFileChange"
-                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-300">
                 </FormField>
-                <div v-if="importResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                <div v-if="importResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2 dark:border-gray-700">
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <div><span class="text-gray-500">Created:</span> <strong>{{ importResult.created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Updated:</span> <strong>{{ importResult.updated || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Payments:</span> <strong>{{ importResult.payments_created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ importResult.skipped || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Created:</span> <strong>{{ importResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Updated:</span> <strong>{{ importResult.updated || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Payments:</span> <strong>{{ importResult.payments_created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Skipped:</span> <strong>{{ importResult.skipped || 0 }}</strong></div>
                     </div>
                     <div v-if="importResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
                         <div v-for="error in importResult.errors" :key="error">{{ error }}</div>
@@ -942,7 +942,7 @@
                     </a>
                     <div class="flex gap-3">
                         <button type="button" @click="importModal.open = false"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
                         <button type="submit" :disabled="importModal.loading"
@@ -963,14 +963,14 @@
                 </div>
                 <FormField label="Excel File" required>
                     <input type="file" accept=".xlsx" required @change="onRenewalImportFileChange"
-                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-300">
                 </FormField>
-                <div v-if="renewalImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                <div v-if="renewalImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2 dark:border-gray-700">
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <div><span class="text-gray-500">Created:</span> <strong>{{ renewalImportResult.created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Duplicates:</span> <strong>{{ renewalImportResult.duplicates || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Payments:</span> <strong>{{ renewalImportResult.payments_created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ renewalImportResult.skipped || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Created:</span> <strong>{{ renewalImportResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Duplicates:</span> <strong>{{ renewalImportResult.duplicates || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Payments:</span> <strong>{{ renewalImportResult.payments_created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Skipped:</span> <strong>{{ renewalImportResult.skipped || 0 }}</strong></div>
                     </div>
                     <div v-if="renewalImportResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
                         <div v-for="error in renewalImportResult.errors" :key="error">{{ error }}</div>
@@ -982,7 +982,7 @@
                     </a>
                     <div class="flex gap-3">
                         <button type="button" @click="renewalImportModal.open = false"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
                         <button type="submit" :disabled="renewalImportModal.loading"
@@ -1003,14 +1003,14 @@
                 </div>
                 <FormField label="Excel File" required>
                     <input type="file" accept=".xlsx" required @change="onWeeklyImportFileChange"
-                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100">
+                           class="block w-full text-sm text-gray-700 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-300">
                 </FormField>
-                <div v-if="weeklyImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2">
+                <div v-if="weeklyImportResult" class="rounded-lg border border-gray-200 p-4 text-sm space-y-2 dark:border-gray-700">
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <div><span class="text-gray-500">Created:</span> <strong>{{ weeklyImportResult.created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Duplicates:</span> <strong>{{ weeklyImportResult.duplicates || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Payments:</span> <strong>{{ weeklyImportResult.payments_created || 0 }}</strong></div>
-                        <div><span class="text-gray-500">Skipped:</span> <strong>{{ weeklyImportResult.skipped || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Created:</span> <strong>{{ weeklyImportResult.created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Duplicates:</span> <strong>{{ weeklyImportResult.duplicates || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Payments:</span> <strong>{{ weeklyImportResult.payments_created || 0 }}</strong></div>
+                        <div><span class="text-gray-500 dark:text-gray-300">Skipped:</span> <strong>{{ weeklyImportResult.skipped || 0 }}</strong></div>
                     </div>
                     <div v-if="weeklyImportResult.errors?.length" class="max-h-36 overflow-y-auto rounded bg-red-50 border border-red-100 p-2 text-red-700">
                         <div v-for="error in weeklyImportResult.errors" :key="error">{{ error }}</div>
@@ -1022,7 +1022,7 @@
                     </a>
                     <div class="flex gap-3">
                         <button type="button" @click="weeklyImportModal.open = false"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
                         <button type="submit" :disabled="weeklyImportModal.loading"
@@ -1042,24 +1042,24 @@
                         <Autocomplete v-model="renewalForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                     </FormField>
                     <FormField label="Service Type" required>
-                        <input v-model="renewalForm.service_type" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.service_type" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Sub-Type">
-                        <input v-model="renewalForm.sub_type" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.sub_type" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Purpose">
-                        <input v-model="renewalForm.purpose" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.purpose" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Unit Cost" required>
-                        <input v-model.number="renewalForm.unit_cost" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="renewalForm.unit_cost" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Qty" required>
-                        <input v-model.number="renewalForm.qty" type="number" min="1" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="renewalForm.qty" type="number" min="1" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Total Amount (auto-calc)">
                         <input :value="(Number(renewalForm.unit_cost || 0) * Number(renewalForm.qty || 0)).toFixed(2)"
                                type="text" readonly
-                               class="block w-full border-gray-300 bg-gray-50 rounded-lg shadow-sm text-sm font-mono text-gray-700 cursor-not-allowed" />
+                               class="block w-full border-gray-300 bg-gray-50 rounded-lg shadow-sm text-sm font-mono text-gray-700 cursor-not-allowed dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-600" />
                     </FormField>
                     <FormField label="Currency">
                         <Autocomplete v-model="renewalForm.currency" :options="currencyOptions" placeholder="Select currency..." />
@@ -1068,29 +1068,29 @@
                         <Autocomplete v-model="renewalForm.cycle" :options="cycleOptions" placeholder="Select cycle..." />
                     </FormField>
                     <FormField label="Cycle Anchor Date">
-                        <input v-model="renewalForm.cycle_anchor_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.cycle_anchor_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Next Due Date">
-                        <input v-model="renewalForm.next_due_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.next_due_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Expiration Date">
-                        <input v-model="renewalForm.expiration_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.expiration_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Payment Terms">
-                        <input v-model="renewalForm.payment_terms" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.payment_terms" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Assignee">
                         <Autocomplete v-model="renewalForm.assignee_user_id" :options="userOptions" placeholder="Search user..." />
                     </FormField>
                     <FormField label="CC Emails (comma-separated)">
-                        <input v-model="renewalForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="renewalForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Status">
                         <Autocomplete v-model="renewalForm.status" :options="renewalStatusOptions" placeholder="Select status..." />
                     </FormField>
                 </div>
                 <FormField label="Notes">
-                    <textarea v-model="renewalForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                    <textarea v-model="renewalForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <ModalFooter @cancel="renewalModal.open = false" :submit-label="renewalModal.editing ? 'Update' : 'Create'" />
             </form>
@@ -1104,28 +1104,28 @@
                         <Autocomplete v-model="invoiceForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                     </FormField>
                     <FormField label="APV No.">
-                        <input v-model="invoiceForm.apv_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="invoiceForm.apv_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Store Code">
                         <Autocomplete v-model="invoiceForm.store_code" :options="storeOptions" placeholder="Search store code..." />
                     </FormField>
                     <FormField label="PO Number">
-                        <input v-model="invoiceForm.po_number" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="invoiceForm.po_number" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="SI Number">
-                        <input v-model="invoiceForm.si_number" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="invoiceForm.si_number" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="SI Date">
-                        <input v-model="invoiceForm.si_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="invoiceForm.si_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Due Date">
-                        <input v-model="invoiceForm.due_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="invoiceForm.due_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Invoice Amount" required>
-                        <input v-model.number="invoiceForm.invoice_amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="invoiceForm.invoice_amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Outstanding Amount">
-                        <input v-model.number="invoiceForm.outstanding_amount" type="number" step="0.01" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="invoiceForm.outstanding_amount" type="number" step="0.01" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Status">
                         <Autocomplete v-model="invoiceForm.status" :options="invoiceStatusOptions" placeholder="Select status..." />
@@ -1134,11 +1134,11 @@
                         <Autocomplete v-model="invoiceForm.assignee_user_id" :options="userOptions" placeholder="Search user..." />
                     </FormField>
                     <FormField label="CC Emails (comma-separated)">
-                        <input v-model="invoiceForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="invoiceForm.cc_emails" placeholder="email1@example.com, email2@example.com" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                 </div>
                 <FormField label="Remarks">
-                    <textarea v-model="invoiceForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                    <textarea v-model="invoiceForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <ModalFooter @cancel="invoiceModal.open = false" :submit-label="invoiceModal.editing ? 'Update' : 'Create'" />
             </form>
@@ -1152,20 +1152,20 @@
                 </FormField>
                 <div class="grid grid-cols-2 gap-3">
                     <FormField label="Collection Date">
-                        <input v-model="overpaymentForm.collection_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="overpaymentForm.collection_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Check Details">
-                        <input v-model="overpaymentForm.check_details" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="overpaymentForm.check_details" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Amount" required>
-                        <input v-model.number="overpaymentForm.amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="overpaymentForm.amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Apply to Invoice (optional)">
                         <Autocomplete v-model="overpaymentForm.applied_to_invoice_id" :options="invoiceForOverpaymentOptions" placeholder="Search invoice..." />
                     </FormField>
                 </div>
                 <FormField label="Remarks">
-                    <textarea v-model="overpaymentForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                    <textarea v-model="overpaymentForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <ModalFooter @cancel="overpaymentModal.open = false" submit-label="Record" />
             </form>
@@ -1179,19 +1179,19 @@
                         <Autocomplete v-model="weeklyForm.vendor_id" :options="userVendorOptions" placeholder="Search vendor..." />
                     </FormField>
                     <FormField label="Project Label">
-                        <input v-model="weeklyForm.project_label" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="weeklyForm.project_label" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Month">
-                        <input v-model="weeklyForm.month" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" placeholder="Jan" />
+                        <input v-model="weeklyForm.month" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" placeholder="Jan" />
                     </FormField>
                     <FormField label="Week #">
-                        <input v-model.number="weeklyForm.week_no" type="number" min="1" max="53" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="weeklyForm.week_no" type="number" min="1" max="53" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Week Date">
-                        <input v-model="weeklyForm.week_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model="weeklyForm.week_date" type="date" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Amount" required>
-                        <input v-model.number="weeklyForm.amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                        <input v-model.number="weeklyForm.amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                     </FormField>
                     <FormField label="Category">
                         <Autocomplete v-model="weeklyForm.category" :options="weeklyCategoryOptions" placeholder="Select category..." />
@@ -1201,7 +1201,7 @@
                     </FormField>
                 </div>
                 <FormField label="Notes">
-                    <textarea v-model="weeklyForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                    <textarea v-model="weeklyForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <ModalFooter @cancel="weeklyModal.open = false" :submit-label="weeklyModal.editing ? 'Update' : 'Create'" />
             </form>
@@ -1210,12 +1210,12 @@
         <!-- SUBMIT FOR APPROVAL MODAL -->
         <Modal v-if="submitModal.open" @close="submitModal.open = false" title="Submit for Approval">
             <form @submit.prevent="confirmSubmit" class="space-y-3">
-                <p class="text-sm text-gray-600">Submitting <strong>{{ submitModal.payableType }}</strong> for vendor approval chain.</p>
+                <p class="text-sm text-gray-600 dark:text-gray-300">Submitting <strong>{{ submitModal.payableType }}</strong> for vendor approval chain.</p>
                 <FormField label="Amount" required>
-                    <input v-model.number="submitForm.amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    <input v-model.number="submitForm.amount" type="number" step="0.01" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                 </FormField>
                 <FormField label="Remarks">
-                    <textarea v-model="submitForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                    <textarea v-model="submitForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <ModalFooter @cancel="submitModal.open = false" submit-label="Submit" />
             </form>
@@ -1225,10 +1225,10 @@
         <Modal v-if="markPaidModal.open" @close="markPaidModal.open = false" title="Mark as Paid">
             <form @submit.prevent="confirmMarkPaid" class="space-y-3">
                 <FormField label="Paid On" required>
-                    <input v-model="markPaidForm.paid_on" type="date" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    <input v-model="markPaidForm.paid_on" type="date" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                 </FormField>
                 <FormField label="Reference No.">
-                    <input v-model="markPaidForm.reference_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm" />
+                    <input v-model="markPaidForm.reference_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
                 </FormField>
                 <ModalFooter @cancel="markPaidModal.open = false" submit-label="Post Payment" />
             </form>
@@ -1237,13 +1237,13 @@
         <!-- DELETE CONFIRM MODAL -->
         <Modal v-if="deleteModal.open" @close="deleteModal.open = false" title="Confirm Delete">
             <div class="space-y-4">
-                <p class="text-sm text-gray-700">
+                <p class="text-sm text-gray-700 dark:text-gray-300">
                     Are you sure you want to delete this <strong>{{ deleteModal.label }}</strong>?
                     This action cannot be undone.
                 </p>
                 <div class="flex justify-end space-x-3 pt-4 border-t">
                     <button type="button" @click="deleteModal.open = false"
-                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Cancel
                     </button>
                     <button type="button" @click="performDelete"
@@ -1257,18 +1257,18 @@
         <!-- APPROVE CONFIRM MODAL -->
         <Modal v-if="approveModal.open" @close="approveModal.open = false" title="Approve Payment">
             <form @submit.prevent="confirmApprove" class="space-y-3">
-                <p class="text-sm text-gray-700">
+                <p class="text-sm text-gray-700 dark:text-gray-300">
                     Approve payment record <strong>#{{ approveModal.record?.id }}</strong>
                     for vendor <strong>{{ approveModal.record?.vendor?.name || '—' }}</strong>
                     (₱{{ formatAmount(approveModal.record?.amount) }})?
                 </p>
                 <FormField label="Remarks (optional)">
                     <textarea v-model="approveForm.remarks" rows="2"
-                              class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"></textarea>
+                              class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
                 <div class="flex justify-end space-x-3 pt-4 border-t">
                     <button type="button" @click="approveModal.open = false"
-                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Cancel
                     </button>
                     <button type="submit"
@@ -1282,18 +1282,18 @@
         <!-- REJECT MODAL -->
         <Modal v-if="rejectModal.open" @close="rejectModal.open = false" title="Reject Payment">
             <form @submit.prevent="confirmReject" class="space-y-3">
-                <p class="text-sm text-gray-700">
+                <p class="text-sm text-gray-700 dark:text-gray-300">
                     Reject payment record <strong>#{{ rejectModal.record?.id }}</strong>?
                     Please provide a reason — this will be sent to the requester.
                 </p>
                 <FormField label="Reason" required>
                     <textarea v-model="rejectForm.remarks" rows="3" required
-                              class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
                               placeholder="Explain why this payment is being rejected..."></textarea>
                 </FormField>
                 <div class="flex justify-end space-x-3 pt-4 border-t">
                     <button type="button" @click="rejectModal.open = false"
-                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
+                            class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Cancel
                     </button>
                     <button type="submit"

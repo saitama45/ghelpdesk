@@ -219,7 +219,7 @@ const scrollToSection = (sectionId) => {
                     </button>
                     <button
                         @click="toggleVideoExpanded"
-                        class="border-2 border-white text-white hover:bg-white hover:text-slate-900 font-bold py-4 px-8 rounded-lg transition-all duration-300"
+                        class="border-2 border-white text-white hover:bg-white hover:text-slate-900 font-bold py-4 px-8 rounded-lg transition-all duration-300 dark:hover:bg-gray-700"
                     >
                         <span class="flex items-center">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -318,7 +318,7 @@ const scrollToSection = (sectionId) => {
                 <!-- Two Column Content -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     <!-- Left Column - Advantages of Pre-Planning -->
-                    <div class="bg-white rounded-2xl shadow-xl p-8 h-full">
+                    <div class="bg-white rounded-2xl shadow-xl p-8 h-full dark:bg-gray-800">
                         <div class="flex items-center mb-8">
                             <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
                                 <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -481,7 +481,7 @@ const scrollToSection = (sectionId) => {
         </section>
 
         <!-- Services Section -->
-        <section id="services" class="py-20 bg-white">
+        <section id="services" class="py-20 bg-white dark:bg-gray-800">
             <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center mb-16">
                     <h2 class="text-4xl font-serif text-slate-800 mb-4">Our Products and Services</h2>
@@ -586,7 +586,7 @@ const scrollToSection = (sectionId) => {
                 </div>
 
                 <!-- Contact Form Card -->
-                <div class="bg-white rounded-3xl shadow-2xl overflow-hidden border border-blue-100">
+                <div class="bg-white rounded-3xl shadow-2xl overflow-hidden border border-blue-100 dark:bg-gray-800">
                     <!-- Form Header -->
                     <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 text-center">
                         <div class="inline-flex items-center mb-2">

@@ -111,9 +111,9 @@ const groupedAssets = computed(() => {
 </script>
 
 <template>
-    <div class="bg-white shadow rounded-lg border border-gray-200 overflow-hidden">
-        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-            <h3 class="text-lg font-bold text-gray-900">IT Items Status</h3>
+    <div class="bg-white shadow rounded-lg border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">IT Items Status</h3>
             <button 
                 @click="isAddingAsset = !isAddingAsset"
                 class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
@@ -171,7 +171,7 @@ const groupedAssets = computed(() => {
                         <button @click="saveAsset" :disabled="form.processing" class="flex-1 bg-indigo-600 text-white font-bold py-2 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm">
                             {{ isEditing ? 'Update' : 'Save' }}
                         </button>
-                        <button @click="isAddingAsset = false" class="px-3 bg-white text-slate-600 font-bold py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+                        <button @click="isAddingAsset = false" class="px-3 bg-white text-slate-600 font-bold py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all dark:bg-gray-800">
                             <TrashIcon class="w-4 h-4" />
                         </button>
                     </div>
@@ -184,34 +184,34 @@ const groupedAssets = computed(() => {
         </transition>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900/50">
                     <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category / Item</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Specs</th>
-                        <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsible</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dates</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Category / Item</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Specs</th>
+                        <th scope="col" class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Qty</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Status</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Responsible</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Dates</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Remarks</th>
                         <th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                     <template v-for="(assets, category) in groupedAssets" :key="category">
                         <tr class="bg-gray-100/50">
-                            <td colspan="8" class="px-6 py-2 text-sm font-bold text-gray-900 border-t border-gray-200">
+                            <td colspan="8" class="px-6 py-2 text-sm font-bold text-gray-900 border-t border-gray-200 dark:text-gray-100 dark:border-gray-700">
                                 {{ category }}
                             </td>
                         </tr>
-                        <tr v-for="asset in assets" :key="asset.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900 pl-8">
+                        <tr v-for="asset in assets" :key="asset.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900 pl-8 dark:text-gray-100">
                                 {{ asset.item_name }}
                             </td>
-                            <td class="px-6 py-3 text-sm text-gray-500 max-w-[200px] truncate" :title="asset.model_specs">
+                            <td class="px-6 py-3 text-sm text-gray-500 max-w-[200px] truncate dark:text-gray-300" :title="asset.model_specs">
                                 {{ asset.model_specs || '-' }}
                             </td>
-                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500 text-center">
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500 text-center dark:text-gray-300">
                                 {{ asset.quantity }}
                             </td>
                             <td class="px-6 py-3 whitespace-nowrap">
@@ -219,21 +219,21 @@ const groupedAssets = computed(() => {
                                     {{ asset.delivery_status || 'Pending' }}
                                 </span>
                             </td>
-                            <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">
+                            <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                                 {{ asset.responsible || '-' }}
                             </td>
-                            <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">
+                            <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                                 <div class="flex flex-col gap-1">
                                     <span class="text-xs" v-if="asset.store_delivery_date">
-                                        <span class="text-gray-400 font-medium">Del:</span> {{ formatDate(asset.store_delivery_date) }}
+                                        <span class="text-gray-400 font-medium dark:text-gray-400">Del:</span> {{ formatDate(asset.store_delivery_date) }}
                                     </span>
                                     <span class="text-xs" v-if="asset.store_setup_date">
-                                        <span class="text-gray-400 font-medium">Set:</span> {{ formatDate(asset.store_setup_date) }}
+                                        <span class="text-gray-400 font-medium dark:text-gray-400">Set:</span> {{ formatDate(asset.store_setup_date) }}
                                     </span>
                                     <span class="text-xs text-gray-300" v-if="!asset.store_delivery_date && !asset.store_setup_date">-</span>
                                 </div>
                             </td>
-                            <td class="px-6 py-3 text-sm text-gray-500 max-w-[200px] truncate" :title="asset.remarks">
+                            <td class="px-6 py-3 text-sm text-gray-500 max-w-[200px] truncate dark:text-gray-300" :title="asset.remarks">
                                 {{ asset.remarks || '-' }}
                             </td>
                             <td class="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
@@ -249,7 +249,7 @@ const groupedAssets = computed(() => {
                         </tr>
                     </template>
                     <tr v-if="Object.keys(groupedAssets).length === 0">
-                        <td colspan="8" class="px-6 py-12 text-center text-sm text-gray-500">
+                        <td colspan="8" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-300">
                             No IT assets or items tracked yet. Click "Add Item" to begin tracking the Bill of Materials.
                         </td>
                     </tr>

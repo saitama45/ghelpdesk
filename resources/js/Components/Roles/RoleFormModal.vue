@@ -2,10 +2,10 @@
     <div v-if="show" class="fixed inset-0 z-50 overflow-y-auto">
         <div class="flex items-center justify-center min-h-screen px-4 py-6">
             <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="$emit('close')"></div>
-            <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all">
+            <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex justify-between items-center mb-6">
-                    <h3 class="text-xl font-bold text-gray-900">{{ title }}</h3>
-                    <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h3>
+                    <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -15,15 +15,15 @@
                 <form @submit.prevent="$emit('submit')" class="space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Role Name</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Role Name</label>
                             <input v-model="form.name" type="text" required
-                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Default Landing Page</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Default Landing Page</label>
                             <select v-model="form.landing_page"
-                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 <optgroup v-for="group in landingPageOptions" :key="group.group" :label="group.group">
                                     <option v-for="opt in group.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                                 </optgroup>
@@ -36,48 +36,48 @@
                             <label class="flex items-center space-x-3 cursor-pointer">
                                 <div class="relative">
                                     <input type="checkbox" v-model="form.is_assignable" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
                                 </div>
                                 <span class="text-sm font-bold text-blue-900">Assignable to Tickets</span>
                             </label>
                             <p class="text-[10px] text-blue-600 mt-1 uppercase font-bold italic">Users with this role appear in "Assignee" list.</p>
                         </div>
 
-                        <div class="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Email Notifications</h4>
+                        <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 dark:text-gray-400">Email Notifications</h4>
                             <div class="space-y-3">
                                 <label class="flex items-center justify-between cursor-pointer group">
-                                    <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">On Ticket Creation</span>
+                                    <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">On Ticket Creation</span>
                                     <div class="relative">
                                         <input type="checkbox" v-model="form.notify_on_ticket_create" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
                                     </div>
                                 </label>
 
                                 <label class="flex items-center justify-between cursor-pointer group">
-                                    <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">When Assigned</span>
+                                    <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">When Assigned</span>
                                     <div class="relative">
                                         <input type="checkbox" v-model="form.notify_on_ticket_assign" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
                                     </div>
                                 </label>
 
                                 <label class="flex items-center justify-between cursor-pointer group">
-                                    <span class="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors flex items-center gap-1.5">
+                                    <span class="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors flex items-center gap-1.5 dark:text-gray-300">
                                         On Urgent Ticket
                                         <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">P1</span>
                                     </span>
                                     <div class="relative">
                                         <input type="checkbox" v-model="form.notify_on_urgent_ticket" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500"></div>
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500 dark:bg-gray-700"></div>
                                     </div>
                                 </label>
 
                                 <label class="flex items-center justify-between cursor-pointer group">
-                                    <span class="text-sm font-medium text-gray-700 group-hover:text-emerald-600 transition-colors">On User Registration</span>
+                                    <span class="text-sm font-medium text-gray-700 group-hover:text-emerald-600 transition-colors dark:text-gray-300">On User Registration</span>
                                     <div class="relative">
                                         <input type="checkbox" v-model="form.notify_on_user_registration" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 dark:bg-gray-700"></div>
                                     </div>
                                 </label>
                             </div>
@@ -87,32 +87,32 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="md:col-span-1">
                             <div class="flex items-center justify-between mb-2">
-                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Companies</label>
+                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Companies</label>
                                 <button type="button" @click="toggleAllCompanies" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800">
                                     {{ form.companies.length === companies.length ? 'Unselect All' : 'Select All' }}
                                 </button>
                             </div>
-                            <div class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white shadow-inner custom-scrollbar">
+                            <div class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white shadow-inner custom-scrollbar dark:bg-gray-800 dark:border-gray-700">
                                 <label v-for="company in companies" :key="company.id" class="flex items-center group cursor-pointer">
                                     <input type="checkbox" :value="company.id" v-model="form.companies"
-                                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors">
-                                    <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors">{{ company.name }}</span>
+                                           class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors dark:border-gray-600">
+                                    <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">{{ company.name }}</span>
                                 </label>
                             </div>
                         </div>
 
                         <div class="md:col-span-2">
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
-                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Permissions</label>
+                                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Permissions</label>
                                 <div class="flex items-center space-x-3">
                                     <div class="relative flex-1 sm:flex-none">
                                         <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                            <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="h-3.5 w-3.5 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                             </svg>
                                         </div>
                                         <input v-model="permissionSearch" type="text" placeholder="Search permissions..."
-                                               class="pl-8 pr-3 py-1.5 text-xs border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 w-full sm:w-64 shadow-sm">
+                                               class="pl-8 pr-3 py-1.5 text-xs border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 w-full sm:w-64 shadow-sm dark:border-gray-600">
                                     </div>
                                     <button type="button" @click="toggleAllPermissions" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800 whitespace-nowrap px-2 py-1 bg-blue-50 rounded-md transition-colors">
                                         {{ areAllPermissionsSelected ? 'Unselect All' : 'Select All' }}
@@ -120,7 +120,7 @@
                                 </div>
                             </div>
 
-                            <div class="flex overflow-x-auto custom-scrollbar border-b border-gray-200 mb-4 pb-1">
+                            <div class="flex overflow-x-auto custom-scrollbar border-b border-gray-200 mb-4 pb-1 dark:border-gray-700">
                                 <button
                                     v-for="group in groupedPermissions"
                                     :key="group.name"
@@ -144,25 +144,25 @@
                                 <div v-for="group in groupedPermissions" :key="group.name">
                                     <div v-if="activeTab === group.name" class="space-y-4">
                                         <div class="flex items-center justify-between">
-                                            <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest">{{ group.name }} Overview</h3>
+                                            <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">{{ group.name }} Overview</h3>
                                             <button type="button" @click="toggleGroup(group)" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors">
                                                 {{ isGroupSelected(group) ? 'Clear All in Group' : 'Select All in Group' }}
                                             </button>
                                         </div>
 
                                         <div class="grid grid-cols-1 gap-4">
-                                            <div v-for="categoryData in group.categories" :key="categoryData.name" class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                                <div class="flex items-center justify-between mb-3 border-b border-gray-200 pb-2">
-                                                    <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest">{{ categoryData.name.replace(/_/g, ' ') }}</h4>
+                                            <div v-for="categoryData in group.categories" :key="categoryData.name" class="bg-gray-50 rounded-xl p-4 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                                                <div class="flex items-center justify-between mb-3 border-b border-gray-200 pb-2 dark:border-gray-700">
+                                                    <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">{{ categoryData.name.replace(/_/g, ' ') }}</h4>
                                                     <button type="button" @click="toggleCategory(categoryData.permissions)" class="text-[10px] font-bold text-blue-600 uppercase hover:text-blue-800">
                                                         {{ isCategorySelected(categoryData.permissions) ? 'Clear' : 'All' }}
                                                     </button>
                                                 </div>
                                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    <label v-for="permission in sortPermissions(categoryData.permissions)" :key="permission.id" class="flex items-center group cursor-pointer p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200 shadow-sm sm:shadow-none">
+                                                    <label v-for="permission in sortPermissions(categoryData.permissions)" :key="permission.id" class="flex items-center group cursor-pointer p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200 shadow-sm sm:shadow-none dark:hover:bg-gray-700">
                                                         <input type="checkbox" :value="permission.name" v-model="form.permissions"
-                                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors">
-                                                        <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors truncate" :title="permission.name">{{ permission.name.split('.')[1] }}</span>
+                                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors dark:border-gray-600">
+                                                        <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors truncate dark:text-gray-300" :title="permission.name">{{ permission.name.split('.')[1] }}</span>
                                                     </label>
                                                 </div>
                                             </div>
@@ -171,12 +171,12 @@
                                 </div>
 
                                 <div v-if="groupedPermissions.length === 0" class="text-center py-12">
-                                    <div class="bg-gray-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                                    <div class="bg-gray-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 dark:bg-gray-900/50">
                                         <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                         </svg>
                                     </div>
-                                    <p class="text-sm text-gray-500 font-medium">No permissions found matching "{{ permissionSearch }}"</p>
+                                    <p class="text-sm text-gray-500 font-medium dark:text-gray-300">No permissions found matching "{{ permissionSearch }}"</p>
                                     <button type="button" @click="permissionSearch = ''" class="mt-2 text-xs font-bold text-blue-600 uppercase hover:text-blue-800">
                                         Clear search
                                     </button>
@@ -187,7 +187,7 @@
 
                     <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                         <button type="button" @click="$emit('close')"
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button type="submit"

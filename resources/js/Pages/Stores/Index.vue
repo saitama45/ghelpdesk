@@ -22,7 +22,7 @@
                         <div class="flex items-center space-x-2">
                             <select
                                 v-model="filterSector"
-                                class="border-gray-300 rounded-lg shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500 h-[38px] pl-3 pr-8"
+                                class="border-gray-300 rounded-lg shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500 h-[38px] pl-3 pr-8 dark:border-gray-600"
                             >
                                 <option value="">All Sectors</option>
                                 <option v-for="n in 9" :key="n" :value="n - 1">Sector {{ n - 1 }}</option>
@@ -51,17 +51,17 @@
 
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Classification</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sector</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Team</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geofencing</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Store</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Classification</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Sector</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Assigned Team</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Geofencing</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="store in data" :key="store.id" class="hover:bg-gray-50 transition-colors">
+                        <tr v-for="store in data" :key="store.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
@@ -70,8 +70,8 @@
                                         </svg>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-medium text-gray-900">{{ store.name }}</div>
-                                        <div class="text-xs text-gray-500 font-mono tracking-tighter">{{ store.code }}</div>
+                                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ store.name }}</div>
+                                        <div class="text-xs text-gray-500 font-mono tracking-tighter dark:text-gray-300">{{ store.code }}</div>
                                     </div>
                                 </div>
                             </td>
@@ -93,7 +93,7 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-gray-50 text-gray-700 border border-gray-200">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-gray-50 text-gray-700 border border-gray-200 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                     Sector {{ store.sector }}
                                 </span>
                             </td>
@@ -108,23 +108,23 @@
                                         {{ user.name.charAt(0) }}
                                     </div>
                                     <div v-if="store.users.length > 3"
-                                         class="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">
+                                         class="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                         +{{ store.users.length - 3 }}
                                     </div>
                                 </button>
-                                <div v-else class="text-xs text-gray-400 italic">Unassigned</div>
+                                <div v-else class="text-xs text-gray-400 italic dark:text-gray-400">Unassigned</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div v-if="store.latitude && store.longitude" class="flex flex-col">
-                                    <span class="text-xs font-medium text-gray-900 flex items-center">
+                                    <span class="text-xs font-medium text-gray-900 flex items-center dark:text-gray-100">
                                         <svg class="w-3 h-3 mr-1 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
                                         </svg>
                                         Active
                                     </span>
-                                    <span class="text-[10px] text-gray-500">Radius: {{ store.radius_meters }}m</span>
+                                    <span class="text-[10px] text-gray-500 dark:text-gray-300">Radius: {{ store.radius_meters }}m</span>
                                 </div>
-                                <span v-else class="text-xs text-gray-400">Not set</span>
+                                <span v-else class="text-xs text-gray-400 dark:text-gray-400">Not set</span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
@@ -160,12 +160,12 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-xl font-bold text-gray-900">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
                             {{ isEditing ? 'Edit Store' : 'Create Store' }}
                         </h3>
-                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="closeModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -173,7 +173,7 @@
                     </div>
 
                     <!-- Tabs -->
-                    <div class="flex flex-wrap gap-1 border-b border-gray-200 mb-5">
+                    <div class="flex flex-wrap gap-1 border-b border-gray-200 mb-5 dark:border-gray-700">
                         <button
                             v-for="tab in storeTabs"
                             :key="tab.key"
@@ -190,32 +190,32 @@
                             <!-- ── General ── -->
                             <div v-show="activeTab === 'general'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Code</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store Code</label>
                                     <input v-model="form.code" type="text" required
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Store Name</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store Name</label>
                                     <input v-model="form.name" type="text" required
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Brand</label>
                                     <input v-model="form.brand" type="text" required
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Area</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Area</label>
                                     <input v-model="form.area" type="text" required
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sector</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Sector</label>
                                     <input v-model="form.sector" type="number" required min="0"
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Class</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Class</label>
                                     <ManageableAutocomplete
                                         v-model="form.class"
                                         :options="classOptionsLocal"
@@ -228,7 +228,7 @@
                                     />
                                 </div>
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Clusters</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Clusters</label>
                                     <MultiAutocomplete
                                         v-model="form.cluster_ids"
                                         :options="clusters"
@@ -239,7 +239,7 @@
                                 </div>
                                 <div class="md:col-span-2">
                                     <div class="flex items-center justify-between mb-1">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Assigned Team members</label>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Assigned Team members</label>
                                         <button type="button" @click="toggleAllTeamMembers"
                                             class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
                                             {{ form.user_ids.length === props.users.length ? 'Deselect All' : 'Select All' }}
@@ -254,34 +254,34 @@
                                     />
                                 </div>
                                 <div class="md:col-span-2 flex items-center space-x-2">
-                                    <input v-model="form.is_active" type="checkbox" id="is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                    <label for="is_active" class="text-sm text-gray-700 font-medium">Active Store</label>
+                                    <input v-model="form.is_active" type="checkbox" id="is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
+                                    <label for="is_active" class="text-sm text-gray-700 font-medium dark:text-gray-300">Active Store</label>
                                 </div>
                             </div>
 
                             <!-- ── Contact ── -->
                             <div v-show="activeTab === 'contact'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Contact Person (AOM)</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Contact Person (AOM)</label>
                                     <input v-model="form.contact_person" type="text" placeholder="Area Operations Manager name"
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Contact Details</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Contact Details</label>
                                     <input v-model="form.contact_details" type="text" placeholder="Mobile / phone number"
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Email Address</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email Address</label>
                                     <input v-model="form.email" type="email"
-                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                           class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
                             </div>
 
                             <!-- ── Connectivity & Systems ── -->
                             <div v-show="activeTab === 'connectivity'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Hookup</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Hookup</label>
                                     <ManageableAutocomplete
                                         v-model="form.hookup"
                                         :options="hookupOptionsLocal"
@@ -294,7 +294,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Telco</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Telco</label>
                                     <ManageableMultiAutocomplete
                                         v-model="form.telcos"
                                         :options="telcoOptionsLocal"
@@ -307,7 +307,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Connectivity Type</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Connectivity Type</label>
                                     <ManageableMultiAutocomplete
                                         v-model="form.connectivity_types"
                                         :options="connectivityOptionsLocal"
@@ -320,7 +320,7 @@
                                     />
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Systems Deployed</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Systems Deployed</label>
                                     <ManageableMultiAutocomplete
                                         v-model="form.systems"
                                         :options="systemOptionsLocal"
@@ -334,13 +334,13 @@
                                 </div>
                                 <div class="md:col-span-2">
                                     <div class="flex items-center justify-between mb-1">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Remote Apps</label>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Remote Apps</label>
                                         <button type="button" @click="addRemoteApp"
                                             class="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
                                             + Add Remote App
                                         </button>
                                     </div>
-                                    <div v-if="form.remote_apps.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200">
+                                    <div v-if="form.remote_apps.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                                         No remote apps. Add Teamviewer/Anydesk/etc. with their ID.
                                     </div>
                                     <div v-else class="space-y-2">
@@ -358,7 +358,7 @@
                                                 />
                                             </div>
                                             <input v-model="remote.id" type="text" placeholder="ID value"
-                                                   class="flex-1 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                                   class="flex-1 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                             <button type="button" @click="removeRemoteApp(idx)"
                                                 class="p-2 text-red-500 hover:bg-red-50 rounded-lg shrink-0" title="Remove">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -372,16 +372,16 @@
                             <div v-show="activeTab === 'files'" class="space-y-5">
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div>
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Opening Date</label>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Opening Date</label>
                                         <input v-model="form.opening_date" type="date"
-                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                     </div>
                                 </div>
 
                                 <!-- Blueprint -->
-                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="flex items-center justify-between">
-                                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Blueprints (PDF / Image)</h4>
+                                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Blueprints (PDF / Image)</h4>
                                         <label class="inline-flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 cursor-pointer">
                                             <input ref="blueprintInput" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" class="hidden" @change="handleBlueprintSelect">
                                             <span>+ Add Files</span>
@@ -390,12 +390,12 @@
 
                                     <!-- Existing (uploaded) -->
                                     <div v-if="existingBlueprints.length" class="space-y-1.5">
-                                        <div v-for="bp in existingBlueprints" :key="bp.id" class="flex items-center justify-between gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2">
+                                        <div v-for="bp in existingBlueprints" :key="bp.id" class="flex items-center justify-between gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
                                             <a :href="blueprintDownloadUrl(bp)" target="_blank" rel="noopener noreferrer" class="text-xs font-bold text-blue-600 hover:underline truncate">
                                                 {{ bp.file_name }}
                                             </a>
                                             <div class="flex items-center gap-2 shrink-0">
-                                                <span class="text-[10px] text-gray-400">{{ formatBytes(bp.file_size_bytes) }}</span>
+                                                <span class="text-[10px] text-gray-400 dark:text-gray-400">{{ formatBytes(bp.file_size_bytes) }}</span>
                                                 <button type="button" @click="deleteExistingBlueprint(bp)" class="p-1 text-red-500 hover:bg-red-50 rounded" title="Delete">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                                                 </button>
@@ -406,9 +406,9 @@
                                     <!-- Staged (pending upload) -->
                                     <div v-if="stagedBlueprints.length" class="space-y-1.5">
                                         <div v-for="(file, idx) in stagedBlueprints" :key="idx" class="flex items-center justify-between gap-2 bg-blue-50/50 rounded-lg border border-blue-100 px-3 py-2">
-                                            <span class="text-xs font-semibold text-gray-700 truncate">{{ file.name }}</span>
+                                            <span class="text-xs font-semibold text-gray-700 truncate dark:text-gray-300">{{ file.name }}</span>
                                             <div class="flex items-center gap-2 shrink-0">
-                                                <span class="text-[10px] text-gray-400">{{ formatBytes(file.size) }} · pending</span>
+                                                <span class="text-[10px] text-gray-400 dark:text-gray-400">{{ formatBytes(file.size) }} · pending</span>
                                                 <button type="button" @click="removeStagedBlueprint(idx)" class="p-1 text-red-500 hover:bg-red-50 rounded" title="Remove">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                                 </button>
@@ -416,15 +416,15 @@
                                         </div>
                                     </div>
 
-                                    <p v-if="!existingBlueprints.length && !stagedBlueprints.length" class="text-[11px] text-gray-400 italic">
+                                    <p v-if="!existingBlueprints.length && !stagedBlueprints.length" class="text-[11px] text-gray-400 italic dark:text-gray-400">
                                         No blueprint files yet. Max 25MB per file.
                                     </p>
                                 </div>
 
                                 <!-- Geofencing -->
-                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-4">
+                                <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-4 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="flex items-center justify-between">
-                                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest">Geofencing (Optional)</h4>
+                                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Geofencing (Optional)</h4>
                                         <button type="button" @click="getCurrentLocation"
                                             class="inline-flex items-center space-x-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-700 transition-colors">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -436,20 +436,20 @@
                                     </div>
                                     <div class="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Latitude</label>
+                                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1 dark:text-gray-300">Latitude</label>
                                             <input v-model="form.latitude" type="number" step="any"
-                                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600">
                                         </div>
                                         <div>
-                                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Longitude</label>
+                                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1 dark:text-gray-300">Longitude</label>
                                             <input v-model="form.longitude" type="number" step="any"
-                                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                                   class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600">
                                         </div>
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Radius (Meters)</label>
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1 dark:text-gray-300">Radius (Meters)</label>
                                         <input v-model="form.radius_meters" type="number"
-                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs"
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600"
                                                placeholder="Default: 150">
                                     </div>
                                 </div>
@@ -458,7 +458,7 @@
 
                         <div class="flex justify-end space-x-3 pt-4 border-t">
                             <button type="button" @click="closeModal"
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
                             <button type="submit" :disabled="blueprintUploading"
@@ -475,13 +475,13 @@
         <div v-if="showTeamModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showTeamModal = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-4">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-900">Assigned Team</h3>
-                            <p class="text-xs text-gray-500 font-medium mt-1">{{ selectedTeamStore?.name }}</p>
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Assigned Team</h3>
+                            <p class="text-xs text-gray-500 font-medium mt-1 dark:text-gray-300">{{ selectedTeamStore?.name }}</p>
                         </div>
-                        <button @click="showTeamModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showTeamModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -489,20 +489,20 @@
                     </div>
 
                     <div class="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2 space-y-3">
-                        <div v-for="user in selectedTeamStore?.users" :key="user.id" class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <div v-for="user in selectedTeamStore?.users" :key="user.id" class="flex items-center p-3 bg-gray-50 rounded-lg border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
                             <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700 shrink-0">
                                 {{ user.name.charAt(0) }}
                             </div>
                             <div class="ml-3 overflow-hidden">
-                                <div class="text-sm font-bold text-gray-900 truncate">{{ user.name }}</div>
-                                <div class="text-xs text-gray-500 truncate">{{ user.email }}</div>
+                                <div class="text-sm font-bold text-gray-900 truncate dark:text-gray-100">{{ user.name }}</div>
+                                <div class="text-xs text-gray-500 truncate dark:text-gray-300">{{ user.email }}</div>
                             </div>
                         </div>
                     </div>
 
                     <div class="mt-6 flex justify-end">
                         <button type="button" @click="showTeamModal = false" 
-                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
                     </div>
@@ -514,10 +514,10 @@
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showImportModal = false"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900">Import Stores</h3>
-                        <button @click="showImportModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Stores</h3>
+                        <button @click="showImportModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -545,7 +545,7 @@
                             <label class="block">
                                 <span class="sr-only">Choose file</span>
                                 <input type="file" @change="handleFileChange" accept=".xlsx,.csv"
-                                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer">
+                                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer dark:text-gray-300">
                             </label>
 
                             <div v-if="importResults" class="p-4 rounded-lg" :class="importResults.errors.length > 0 ? 'bg-amber-50' : 'bg-green-50'">
@@ -563,7 +563,7 @@
 
                         <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
                             <button type="button" @click="showImportModal = false" 
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Close
                             </button>
                             <button @click="submitImport" :disabled="!selectedFile || importing"

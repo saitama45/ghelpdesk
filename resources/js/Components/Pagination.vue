@@ -1,7 +1,7 @@
 <template>
     <div class="flex items-center justify-between">
         <!-- Records info -->
-        <div class="text-sm text-gray-700">
+        <div class="text-sm text-gray-700 dark:text-gray-300">
             {{ showingText }}
         </div>
 
@@ -9,18 +9,18 @@
         <div class="flex items-center space-x-2">
             <!-- Per page selector -->
             <div class="flex items-center space-x-2">
-                <span class="text-sm text-gray-700">Show</span>
+                <span class="text-sm text-gray-700 dark:text-gray-300">Show</span>
                 <select
                     :value="perPage"
                     @change="$emit('changePerPage', parseInt($event.target.value))"
-                    class="border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    class="border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 dark:border-gray-600"
                 >
                     <option value="10">10</option>
                     <option value="25">25</option>
                     <option value="50">50</option>
                     <option value="100">100</option>
                 </select>
-                <span class="text-sm text-gray-700">per page</span>
+                <span class="text-sm text-gray-700 dark:text-gray-300">per page</span>
             </div>
 
             <!-- Page navigation -->
@@ -29,7 +29,7 @@
                 <button
                     @click="$emit('goToPage', currentPage - 1)"
                     :disabled="currentPage <= 1"
-                    class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:hover:bg-gray-700"
                 >
                     Previous
                 </button>
@@ -48,14 +48,14 @@
                     >
                         {{ page }}
                     </button>
-                    <span v-else class="px-2 py-1 text-sm text-gray-500">...</span>
+                    <span v-else class="px-2 py-1 text-sm text-gray-500 dark:text-gray-300">...</span>
                 </template>
 
                 <!-- Next button -->
                 <button
                     @click="$emit('goToPage', currentPage + 1)"
                     :disabled="currentPage >= lastPage"
-                    class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:hover:bg-gray-700"
                 >
                     Next
                 </button>

@@ -84,17 +84,17 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div class="lg:col-span-2">
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Item Name <span class="text-rose-500">*</span></label>
                     <input :value="item.item_name" @input="updateItem(i, 'item_name', $event.target.value)" type="text"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none" />
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800" />
                 </div>
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Item Code <span class="text-rose-500">*</span></label>
                     <input :value="item.item_code" @input="updateItem(i, 'item_code', $event.target.value)" type="text" placeholder="SKU/SAP Code"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none" />
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800" />
                 </div>
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Item Type <span class="text-rose-500">*</span></label>
                     <select :value="item.item_type" @change="updateItem(i, 'item_type', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select type...</option>
                         <option v-for="t in ITEM_TYPES" :key="t">{{ t }}</option>
                     </select>
@@ -102,7 +102,7 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Manage Type <span class="text-rose-500">*</span></label>
                     <select :value="item.manage_type" @change="updateItem(i, 'manage_type', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select type...</option>
                         <option v-for="m in MANAGE_TYPES" :key="m">{{ m }}</option>
                     </select>
@@ -110,7 +110,7 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div v-if="isGsi">
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Default Whse <span class="text-rose-500">*</span></label>
                     <select :value="item.sap_default_whse_location" @change="updateItem(i, 'sap_default_whse_location', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select location...</option>
                         <option v-for="l in WHSE_LOCATIONS" :key="l">{{ l }}</option>
                     </select>
@@ -118,7 +118,7 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div v-if="isGsi">
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Picking Cat <span class="text-rose-500">*</span></label>
                     <select :value="item.gsi_picking_category" @change="updateItem(i, 'gsi_picking_category', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select category...</option>
                         <option v-for="c in PICKING_CATEGORIES" :key="c">{{ c }}</option>
                     </select>
@@ -126,7 +126,7 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Storage Loc <span class="text-rose-500">*</span></label>
                     <select :value="item.storage_location" @change="updateItem(i, 'storage_location', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select location...</option>
                         <option v-for="s in STORAGE_LOCATIONS" :key="s">{{ s }}</option>
                     </select>
@@ -135,12 +135,12 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">UOM Config <span class="text-rose-500">*</span></label>
                     <input :value="item.uom_config" @input="updateItem(i, 'uom_config', $event.target.value)" type="text"
                         placeholder="e.g. 1 Case x 24 Bot"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none" />
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800" />
                 </div>
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Currency <span class="text-rose-500">*</span></label>
                     <select :value="item.currency" @change="updateItem(i, 'currency', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select currency...</option>
                         <option v-for="c in CURRENCIES" :key="c">{{ c }}</option>
                     </select>
@@ -148,12 +148,12 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Purch Cost <span class="text-rose-500">*</span></label>
                     <input :value="item.purchase_cost" @input="updateItem(i, 'purchase_cost', $event.target.value)" type="number" step="0.01"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none" />
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800" />
                 </div>
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tax Group <span class="text-rose-500">*</span></label>
                     <select :value="item.sales_tax_group" @change="updateItem(i, 'sales_tax_group', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select tax group...</option>
                         <option v-for="t in TAX_GROUPS" :key="t">{{ t }}</option>
                     </select>
@@ -161,7 +161,7 @@ const MANAGE_TYPES = ['None', 'Serial', 'Batch/Expiry']
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">G/L Account <span class="text-rose-500">*</span></label>
                     <select :value="item.gl_account" @change="updateItem(i, 'gl_account', $event.target.value)"
-                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none">
+                        class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:border-teal-500 focus:ring-0 transition-all outline-none dark:bg-gray-800">
                         <option value="">Select account...</option>
                         <option v-for="g in GL_ACCOUNTS" :key="g">{{ g }}</option>
                     </select>

@@ -357,15 +357,15 @@ const lineItems = computed(() => props.record.data?.items ?? [])
     <Head :title="`${form.name} #${record.id}`" />
 
     <AppLayout :title="`${form.name} #${record.id}`">
-        <div class="py-12 bg-gray-50 min-h-screen">
+        <div class="py-12 bg-gray-50 min-h-screen dark:bg-gray-900/50">
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
 
                 <!-- Back -->
                 <div class="flex items-center gap-3 mb-6">
-                    <Link :href="route('dynamic-form.index', form.slug)" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all">
+                    <Link :href="route('dynamic-form.index', form.slug)" class="p-2 rounded-xl text-gray-400 hover:bg-white hover:text-gray-600 hover:shadow-md transition-all dark:text-gray-400 dark:hover:bg-gray-700">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/></svg>
                     </Link>
-                    <span class="text-sm font-bold text-gray-400">Back to {{ form.name }}</span>
+                    <span class="text-sm font-bold text-gray-400 dark:text-gray-400">Back to {{ form.name }}</span>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -374,13 +374,13 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                     <div class="lg:col-span-2 space-y-8">
 
                         <!-- Header Card -->
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden">
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                             <div class="absolute top-0 right-0 p-8">
                                 <span :class="statusClass(record.status)" class="px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
                                     {{ record.status }}
                                 </span>
                             </div>
-                            <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-4 flex items-center gap-3">
+                            <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-4 flex items-center gap-3 dark:text-gray-100">
                                 <span class="text-indigo-600">#{{ record.id }}</span>
                                 {{ form.name }}
                             </h1>
@@ -392,31 +392,31 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                             </div>
                             <div class="grid grid-cols-2 md:grid-cols-3 gap-8">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Created By</label>
-                                    <p class="text-base font-bold text-gray-900">{{ record.creator?.name ?? 'System' }}</p>
-                                    <p class="text-xs text-gray-400 font-medium">{{ record.creator?.email }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Created By</label>
+                                    <p class="text-base font-bold text-gray-900 dark:text-gray-100">{{ record.creator?.name ?? 'System' }}</p>
+                                    <p class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ record.creator?.email }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Created At</label>
-                                    <p class="text-sm font-mono font-black text-gray-600">{{ fmt(record.created_at) }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Created At</label>
+                                    <p class="text-sm font-mono font-black text-gray-600 dark:text-gray-300">{{ fmt(record.created_at) }}</p>
                                 </div>
                                 <div v-if="record.updated_by">
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Last Updated By</label>
-                                    <p class="text-base font-bold text-gray-900">{{ record.updator?.name }}</p>
-                                    <p class="text-xs text-gray-400 font-medium">{{ fmt(record.updated_at) }}</p>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Last Updated By</label>
+                                    <p class="text-base font-bold text-gray-900 dark:text-gray-100">{{ record.updator?.name }}</p>
+                                    <p class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ fmt(record.updated_at) }}</p>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Form Data Card -->
-                        <div v-if="Object.keys(formData).length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-xl font-black text-gray-900 mb-6">Details</h3>
+                        <div v-if="Object.keys(formData).length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-xl font-black text-gray-900 mb-6 dark:text-gray-100">Details</h3>
                             <dl class="divide-y divide-gray-50">
                                 <div v-for="field in schemaFields" :key="field.key" class="flex items-start justify-between py-4">
-                                    <dt class="text-xs font-black text-gray-400 uppercase tracking-widest w-1/3">
+                                    <dt class="text-xs font-black text-gray-400 uppercase tracking-widest w-1/3 dark:text-gray-400">
                                         {{ field.label }}
                                     </dt>
-                                    <dd class="text-sm font-semibold text-gray-900 text-right w-2/3">
+                                    <dd class="text-sm font-semibold text-gray-900 text-right w-2/3 dark:text-gray-100">
                                         <template v-if="field.type === 'file'">
                                             <div v-if="Array.isArray(formData[field.key])" class="flex flex-col items-end gap-1">
                                                 <a v-for="(file, fi) in formData[field.key]" :key="fi" :href="getFileUrl(file)" target="_blank" rel="noopener noreferrer" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
@@ -439,12 +439,12 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                         </div>
 
                         <!-- Items Card -->
-                        <div v-if="hasSchemaItems && lineItems.length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100">
-                            <h3 class="text-xl font-black text-gray-900 mb-6">{{ activeItemLabel }} ({{ lineItems.length }})</h3>
+                        <div v-if="hasSchemaItems && lineItems.length" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+                            <h3 class="text-xl font-black text-gray-900 mb-6 dark:text-gray-100">{{ activeItemLabel }} ({{ lineItems.length }})</h3>
                             <div class="overflow-x-auto">
                                 <table class="w-full border-separate border-spacing-y-3">
                                     <thead>
-                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left">
+                                        <tr class="text-[10px] font-black text-gray-500 uppercase tracking-widest text-left dark:text-slate-300">
                                             <th class="px-4 pb-4">#</th>
                                             <th v-for="col in activeSchemaItemsColumns" :key="col.key" class="px-4 pb-4">
                                                 {{ col.label }}
@@ -452,9 +452,9 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="(item, i) in lineItems" :key="i" class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group">
-                                            <td class="px-4 py-5 rounded-l-2xl text-[10px] font-black text-gray-400">{{ i + 1 }}</td>
-                                            <td v-for="col in activeSchemaItemsColumns" :key="col.key" class="px-4 py-5 text-sm font-semibold text-gray-700">
+                                        <tr v-for="(item, i) in lineItems" :key="i" class="bg-gray-50/50 hover:bg-white hover:shadow-xl transition-all duration-300 rounded-2xl group dark:bg-slate-900/70 dark:hover:bg-slate-800 dark:hover:shadow-black/20">
+                                            <td class="px-4 py-5 rounded-l-2xl text-[10px] font-black text-gray-400 dark:text-slate-400">{{ i + 1 }}</td>
+                                            <td v-for="col in activeSchemaItemsColumns" :key="col.key" class="px-4 py-5 text-sm font-semibold text-gray-700 dark:text-slate-100">
                                                 <template v-if="col.type === 'file'">
                                                     <div v-if="Array.isArray(item[col.key])" class="flex flex-col gap-1">
                                                         <a v-for="(file, fi) in item[col.key]" :key="fi" :href="getFileUrl(file)" target="_blank" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 hover:underline">
@@ -482,9 +482,9 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                     <!-- Right: Workflow Sidebar -->
                     <div v-if="totalLevels > 0 || record.ticket" class="space-y-8">
                         <!-- Linked Ticket & SLA Display -->
-                        <div v-if="record.ticket" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
+                        <div v-if="record.ticket" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <h3 class="text-lg font-black text-gray-900 flex items-center gap-2 dark:text-gray-100">
                                     <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/></svg>
                                     Linked Ticket
                                 </h3>
@@ -498,26 +498,26 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                 </Link>
 
                                 <div v-if="ticketSlaMetric" class="space-y-3">
-                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4">Ticket SLA</h4>
+                                    <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4 dark:text-gray-400">Ticket SLA</h4>
                                     <div class="p-3 rounded-xl border" :class="slaTargetClass('response')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response Target</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Response Target</span>
                                             <span class="text-[9px] font-black uppercase" :class="slaStatus('response').class">
                                                 {{ slaStatus('response').label }}
                                             </span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ slaTargetDate('response') }}
                                         </div>
                                     </div>
                                     <div class="p-3 rounded-xl border" :class="slaTargetClass('resolution')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution Target</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Resolution Target</span>
                                             <span class="text-[9px] font-black uppercase" :class="slaStatus('resolution').class">
                                                 {{ slaStatus('resolution').label }}
                                             </span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ slaTargetDate('resolution') }}
                                         </div>
                                     </div>
@@ -525,13 +525,13 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                             </div>
                         </div>
 
-                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100">
+                        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                             
                             <!-- Header -->
                             <div class="flex items-center justify-between mb-8">
-                                <h3 class="text-lg font-black text-gray-900">{{ isChecklistWorkflow ? 'Task Checklist' : 'Approval Pulse' }}</h3>
+                                <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">{{ isChecklistWorkflow ? 'Task Checklist' : 'Approval Pulse' }}</h3>
                                 <span v-if="record.status === 'Approved'" class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[9px] font-black uppercase tracking-widest">Finalized</span>
-                                <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest">No workflow</span>
+                                <span v-if="totalLevels === 0" class="px-3 py-1 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300">No workflow</span>
                             </div>
 
                             <!-- Checklist Workflow UI -->
@@ -560,20 +560,20 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                     <p v-if="getApprovalForLevel(lvl).remarks" class="text-[10px] text-emerald-700 italic bg-white/50 rounded-lg p-2 mt-2 border border-emerald-100/50">"{{ getApprovalForLevel(lvl).remarks }}"</p>
                                                 </div>
                                                 <div v-else class="mt-1">
-                                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-indigo-400">Assigned To</p>
+                                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-indigo-400 dark:text-gray-400">Assigned To</p>
                                                     <div class="flex flex-wrap gap-1.5 mt-2">
                                                         <template v-if="(assignedApproversByLevel[lvl] ?? []).length > 0">
-                                                            <span v-for="user in assignedApproversByLevel[lvl]" :key="user.id" class="px-2 py-0.5 rounded-md bg-white border border-gray-100 text-[9px] font-black text-gray-600 shadow-sm">
+                                                            <span v-for="user in assignedApproversByLevel[lvl]" :key="user.id" class="px-2 py-0.5 rounded-md bg-white border border-gray-100 text-[9px] font-black text-gray-600 shadow-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                                                 {{ user.name }}
                                                             </span>
                                                         </template>
-                                                        <span v-else class="text-[10px] text-gray-400 italic">Anyone can complete</span>
+                                                        <span v-else class="text-[10px] text-gray-400 italic dark:text-gray-400">Anyone can complete</span>
                                                     </div>
                                                     <div v-if="hasPermission('form_builder.edit') && record.status !== 'Rejected' && record.status !== 'Cancelled'" class="mt-3">
                                                         <button 
                                                             @click.stop="sendReminder(lvl)"
                                                             :disabled="reminderLoading"
-                                                            class="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-1.5">
+                                                            class="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-1.5 dark:bg-gray-800">
                                                             <svg v-if="reminderLoading" class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                                             <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                                                             {{ reminderLoading ? 'Sending...' : 'Remind' }}
@@ -586,7 +586,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
 
                                     <!-- Selected Task Action Area -->
                                     <div v-if="selectedChecklistLevel === lvl" class="mt-6 pt-6 border-t border-indigo-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div v-if="approverFields.length > 0" class="bg-white border border-indigo-50 rounded-2xl p-4 shadow-sm">
+                                        <div v-if="approverFields.length > 0" class="bg-white border border-indigo-50 rounded-2xl p-4 shadow-sm dark:bg-gray-800">
                                             <h4 class="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-3">Task Details</h4>
                                             <DynamicFormRenderer
                                                 :fields="approverFields"
@@ -599,10 +599,10 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                         </div>
 
                                         <textarea v-model="approvalForm.remarks" rows="2" placeholder="Task remarks (optional)..."
-                                            class="w-full bg-white border-2 border-indigo-50 rounded-2xl p-3 text-xs font-medium focus:border-indigo-500 focus:ring-0 transition-all"></textarea>
+                                            class="w-full bg-white border-2 border-indigo-50 rounded-2xl p-3 text-xs font-medium focus:border-indigo-500 focus:ring-0 transition-all dark:bg-gray-800"></textarea>
                                         
                                         <div class="flex gap-2">
-                                            <button @click="selectedChecklistLevel = null" class="flex-1 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 transition-all">Cancel</button>
+                                            <button @click="selectedChecklistLevel = null" class="flex-1 py-2 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 transition-all dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                                             <button @click="submitChecklistApproval(lvl)" :disabled="approvalForm.processing"
                                                 class="flex-[2] py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
                                                 <span>Mark as Done</span>
@@ -635,15 +635,15 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                     {{ fmt(getApprovalForLevel(lvl).created_at) }}
                                                 </span>
                                             </div>
-                                            <div v-if="getApprovalForLevel(lvl)" class="mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 relative overflow-hidden">
+                                            <div v-if="getApprovalForLevel(lvl)" class="mt-3 p-4 bg-gray-50 rounded-2xl border border-gray-100 relative overflow-hidden dark:bg-gray-900/50 dark:border-gray-700">
                                                 <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
                                                 <div class="flex items-center mb-1">
                                                     <div class="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-[9px] font-black text-indigo-600 mr-2 capitalize">
                                                         {{ getApprovalForLevel(lvl).user?.name?.charAt(0) ?? '?' }}
                                                     </div>
-                                                    <span class="text-xs font-black text-gray-900">{{ getApprovalForLevel(lvl).user?.name ?? 'Unknown' }}</span>
+                                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ getApprovalForLevel(lvl).user?.name ?? 'Unknown' }}</span>
                                                 </div>
-                                                <p v-if="getApprovalForLevel(lvl).remarks" class="text-[11px] text-gray-600 italic">"{{ getApprovalForLevel(lvl).remarks }}"</p>
+                                                <p v-if="getApprovalForLevel(lvl).remarks" class="text-[11px] text-gray-600 italic dark:text-gray-300">"{{ getApprovalForLevel(lvl).remarks }}"</p>
                                             </div>
                                             <div v-else-if="Number(lvl) === Number(record.current_approval_level)" class="mt-3 p-4 bg-indigo-50/50 rounded-2xl border-2 border-dashed border-indigo-200">
                                                 <div class="flex items-center text-indigo-600">
@@ -653,7 +653,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                 <div v-if="(assignedApproversByLevel[Number(lvl)] ?? []).length > 0" class="mt-3 pt-3 border-t border-indigo-100">
                                                     <p class="text-[9px] font-black uppercase tracking-widest text-indigo-500 mb-2">Assigned Approvers</p>
                                                     <div class="flex flex-wrap gap-2">
-                                                        <span v-for="approver in assignedApproversByLevel[Number(lvl)]" :key="approver.id" class="px-2.5 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold">
+                                                        <span v-for="approver in assignedApproversByLevel[Number(lvl)]" :key="approver.id" class="px-2.5 py-1 rounded-full bg-white text-indigo-700 border border-indigo-200 text-[10px] font-bold dark:bg-gray-800">
                                                             {{ approver.name }}
                                                         </span>
                                                     </div>
@@ -662,24 +662,24 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                                     <button 
                                                         @click="sendReminder(lvl)"
                                                         :disabled="reminderLoading"
-                                                        class="px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-2">
+                                                        class="px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm border border-indigo-100 transition-all flex items-center gap-2 dark:bg-gray-800">
                                                         <svg v-if="reminderLoading" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                                         <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                                                         {{ reminderLoading ? 'Sending...' : 'Remind' }}
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic">Locked</div>
+                                            <div v-else class="mt-3 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase italic dark:text-gray-400">Locked</div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- Action Box (Approval Workflow Only) -->
-                            <div v-if="canApprove && !isChecklistWorkflow" class="mt-10 pt-8 border-t border-gray-100 relative">
-                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em]">Your Decision</div>
+                            <div v-if="canApprove && !isChecklistWorkflow" class="mt-10 pt-8 border-t border-gray-100 relative dark:border-gray-700">
+                                <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 bg-white text-[9px] font-black text-indigo-500 uppercase tracking-[0.3em] dark:bg-gray-800">Your Decision</div>
                                 
-                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm">
+                                <div v-if="approverFields.length > 0" class="mb-6 bg-white border-2 border-indigo-100 rounded-[2rem] p-6 shadow-sm dark:bg-gray-800">
                                     <h4 class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Required Approver Details</h4>
                                     <DynamicFormRenderer
                                         :fields="approverFields"
@@ -692,7 +692,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                 </div>
 
                                 <textarea v-model="approvalForm.remarks" rows="3" placeholder="Add approval remarks (optional)..."
-                                    class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-4 text-sm font-medium focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all mb-4"></textarea>
+                                    class="w-full bg-gray-50 border-2 border-gray-100 rounded-3xl p-4 text-sm font-medium focus:bg-white focus:border-indigo-500 focus:ring-0 transition-all mb-4 dark:bg-gray-900/50 dark:border-gray-700"></textarea>
                                 <button @click="submitApproval" :disabled="approvalForm.processing"
                                     class="w-full py-4 bg-indigo-600 text-white rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-indigo-200 hover:bg-indigo-700 transform hover:-translate-y-1 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                                     <span>Release Stage {{ record.current_approval_level }}</span>

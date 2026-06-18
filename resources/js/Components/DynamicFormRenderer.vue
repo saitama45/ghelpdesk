@@ -392,7 +392,7 @@ const getSelectedFileNames = (value) => {
         <div class="grid" :class="[gridClass, gapClass]">
             <template v-for="field in visibleFields" :key="field.key">
                 <div :class="colSpanClass(field)">
-                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">
                         {{ field.label }}
                         <span v-if="field.required" class="text-red-500 ml-0.5">*</span>
                     </label>
@@ -461,7 +461,7 @@ const getSelectedFileNames = (value) => {
                     </div>
 
                     <!-- toggle -->
-                    <div v-else-if="field.type === 'toggle'" class="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                    <div v-else-if="field.type === 'toggle'" class="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl border border-transparent hover:border-indigo-100 transition-all dark:bg-gray-900/50">
                         <button
                             type="button"
                             @click="setValue(field.key, !getValue(field.key))"
@@ -469,17 +469,17 @@ const getSelectedFileNames = (value) => {
                         >
                             <span :class="['inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform', getValue(field.key) ? 'translate-x-6' : 'translate-x-1']" />
                         </button>
-                        <span class="text-xs text-gray-700 font-black uppercase">{{ getValue(field.key) ? 'Yes' : 'No' }}</span>
+                        <span class="text-xs text-gray-700 font-black uppercase dark:text-gray-300">{{ getValue(field.key) ? 'Yes' : 'No' }}</span>
                     </div>
 
                     <!-- file -->
                     <template v-else-if="field.type === 'file'">
                         <!-- Existing/New upload preview -->
-                        <div v-if="isStoredFile(getValue(field.key)) || filePreviews[field.key]" class="mb-2 flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                        <div v-if="isStoredFile(getValue(field.key)) || filePreviews[field.key]" class="mb-2 flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
                             <div class="flex items-center gap-2 min-w-0 flex-1">
                                 <img v-if="isImagePath(getValue(field.key)) || filePreviews[field.key]"
                                      :src="filePreviews[field.key] || storageUrl(getValue(field.key))"
-                                     class="h-12 w-12 object-cover rounded-lg border border-gray-200 flex-shrink-0"
+                                     class="h-12 w-12 object-cover rounded-lg border border-gray-200 flex-shrink-0 dark:border-gray-700"
                                      alt="attachment preview" />
                                 <span v-else class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-indigo-50 rounded-lg border border-indigo-100">
                                     <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -490,7 +490,7 @@ const getSelectedFileNames = (value) => {
                                     <span class="block text-xs font-bold text-indigo-600 truncate">
                                         {{ filePreviews[field.key] ? 'New image selected' : getSelectedFileNames(getValue(field.key)) }}
                                     </span>
-                                    <span class="text-[10px] text-gray-400 font-bold uppercase">
+                                    <span class="text-[10px] text-gray-400 font-bold uppercase dark:text-gray-400">
                                         {{ filePreviews[field.key] ? 'New' : 'Current' }}
                                     </span>
                                 </div>
@@ -504,17 +504,17 @@ const getSelectedFileNames = (value) => {
                             :multiple="field.multiple"
                             @change="handleFileChange(field, $event)"
                             :required="field.required && !isStoredFile(getValue(field.key))"
-                            class="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
+                            class="block w-full text-xs text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all dark:text-gray-300"
                         />
                         <p v-if="!isStoredFile(getValue(field.key)) && !filePreviews[field.key] && getValue(field.key)" class="mt-1 text-xs font-bold text-indigo-600">
                             Selected: {{ getSelectedFileNames(getValue(field.key)) }}
                         </p>
-                        <p v-if="field.max_file_size" class="mt-1 text-[10px] text-gray-400 italic">Max size: {{ field.max_file_size }}MB</p>
-                        <p v-if="isStoredFile(getValue(field.key))" class="mt-1 text-[10px] text-gray-400 italic">Choose a new file to replace the current attachment.</p>
+                        <p v-if="field.max_file_size" class="mt-1 text-[10px] text-gray-400 italic dark:text-gray-400">Max size: {{ field.max_file_size }}MB</p>
+                        <p v-if="isStoredFile(getValue(field.key))" class="mt-1 text-[10px] text-gray-400 italic dark:text-gray-400">Choose a new file to replace the current attachment.</p>
                     </template>
 
                     <!-- help text -->
-                    <p v-if="field.help_text" class="mt-1.5 text-[10px] text-gray-400 font-medium italic ml-1">{{ field.help_text }}</p>
+                    <p v-if="field.help_text" class="mt-1.5 text-[10px] text-gray-400 font-medium italic ml-1 dark:text-gray-400">{{ field.help_text }}</p>
 
                     <!-- error -->
                     <p v-if="getFieldError(field.key)" class="mt-1.5 text-[10px] text-red-600 font-bold ml-1 uppercase">{{ getFieldError(field.key) }}</p>
@@ -524,10 +524,10 @@ const getSelectedFileNames = (value) => {
 
         <!-- ── Line Items Section (Card-based Grid) ── -->
         <div v-if="hasResolvedItems" class="space-y-6 pt-4">
-            <div class="flex items-center justify-between border-b border-gray-100 pb-4">
+            <div class="flex items-center justify-between border-b border-gray-100 pb-4 dark:border-gray-700">
                 <div>
-                    <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest">{{ resolvedItemsTitle }}</h4>
-                    <p class="text-[10px] text-gray-400 font-bold uppercase mt-1 italic">Add multiple records below</p>
+                    <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">{{ resolvedItemsTitle }}</h4>
+                    <p class="text-[10px] text-gray-400 font-bold uppercase mt-1 italic dark:text-gray-400">Add multiple records below</p>
                 </div>
                 <button type="button" @click="addItemRow"
                     class="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-100">
@@ -538,7 +538,7 @@ const getSelectedFileNames = (value) => {
 
             <div class="space-y-4">
                 <div v-for="(row, rowIdx) in items" :key="rowIdx" 
-                    class="relative bg-gray-50/50 rounded-3xl p-8 border-2 border-gray-100 hover:border-indigo-100 hover:bg-white transition-all group">
+                    class="relative bg-gray-50/50 rounded-3xl p-8 border-2 border-gray-100 hover:border-indigo-100 hover:bg-white transition-all group dark:border-gray-700 dark:hover:bg-gray-700">
                     
                     <!-- Item Header/Remove -->
                     <div class="flex items-center justify-between mb-6">
@@ -555,7 +555,7 @@ const getSelectedFileNames = (value) => {
                     <div class="grid gap-6" :class="gridClass">
                         <div v-for="col in resolvedItemsColumns" :key="col.key"
                             :class="colSpanClass(col)">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">
                                 {{ col.label }}
                                 <span v-if="col.required" class="text-red-500 ml-0.5">*</span>
                             </label>
@@ -606,23 +606,23 @@ const getSelectedFileNames = (value) => {
                             </div>
 
                             <!-- toggle -->
-                            <div v-else-if="col.type === 'toggle'" class="flex items-center gap-3 p-3 bg-white border-2 border-gray-100 rounded-2xl">
+                            <div v-else-if="col.type === 'toggle'" class="flex items-center gap-3 p-3 bg-white border-2 border-gray-100 rounded-2xl dark:bg-gray-800 dark:border-gray-700">
                                 <button type="button"
                                     @click="setItemCell(rowIdx, col.key, !row[col.key])"
                                     :class="['relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none', row[col.key] ? 'bg-indigo-600' : 'bg-gray-200']">
                                     <span :class="['inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform', row[col.key] ? 'translate-x-4' : 'translate-x-0.5']" />
                                 </button>
-                                <span class="text-[10px] text-gray-700 font-black uppercase">{{ row[col.key] ? 'Yes' : 'No' }}</span>
+                                <span class="text-[10px] text-gray-700 font-black uppercase dark:text-gray-300">{{ row[col.key] ? 'Yes' : 'No' }}</span>
                             </div>
 
                             <!-- file -->
                             <template v-else-if="col.type === 'file'">
                                 <!-- Existing/New upload preview -->
-                                <div v-if="isStoredFile(row[col.key]) || itemFilePreviews[`${rowIdx}_${col.key}`]" class="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-xl border border-gray-200">
+                                <div v-if="isStoredFile(row[col.key]) || itemFilePreviews[`${rowIdx}_${col.key}`]" class="mb-2 flex items-center gap-2 p-2 bg-gray-50 rounded-xl border border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="flex items-center gap-2 min-w-0 flex-1">
                                         <img v-if="isImagePath(row[col.key]) || itemFilePreviews[`${rowIdx}_${col.key}`]"
                                              :src="itemFilePreviews[`${rowIdx}_${col.key}`] || storageUrl(row[col.key])"
-                                             class="h-10 w-10 object-cover rounded-lg border border-gray-200 flex-shrink-0"
+                                             class="h-10 w-10 object-cover rounded-lg border border-gray-200 flex-shrink-0 dark:border-gray-700"
                                              alt="attachment preview" />
                                         <span v-else class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-indigo-50 rounded-lg border border-indigo-100">
                                             <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -633,7 +633,7 @@ const getSelectedFileNames = (value) => {
                                             <span class="block text-[10px] font-bold text-indigo-600 truncate">
                                                 {{ itemFilePreviews[`${rowIdx}_${col.key}`] ? 'New image selected' : getSelectedFileNames(row[col.key]) }}
                                             </span>
-                                            <span class="text-[9px] text-gray-400 font-bold uppercase">
+                                            <span class="text-[9px] text-gray-400 font-bold uppercase dark:text-gray-400">
                                                 {{ itemFilePreviews[`${rowIdx}_${col.key}`] ? 'New' : 'Current' }}
                                             </span>
                                         </div>
@@ -646,7 +646,7 @@ const getSelectedFileNames = (value) => {
                                     type="file"
                                     :multiple="col.multiple"
                                     @change="handleItemFileChange(rowIdx, col, $event)"
-                                    class="block w-full text-[10px] text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all"
+                                    class="block w-full text-[10px] text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 transition-all dark:text-gray-300"
                                 />
                                 <p v-if="getItemError(rowIdx, col.key)" class="mt-1 text-[10px] text-red-600 font-bold uppercase">{{ getItemError(rowIdx, col.key) }}</p>
                             </template>

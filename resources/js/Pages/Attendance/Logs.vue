@@ -224,7 +224,7 @@ const stopDrag = () => {
         <div class="space-y-6">
             <!-- Filter Bar (Prominent) -->
             <div class="bg-blue-600 rounded-xl shadow-lg p-1">
-                <div class="bg-white rounded-lg p-4">
+                <div class="bg-white rounded-lg p-4 dark:bg-gray-800">
                     <div class="flex flex-col lg:flex-row lg:items-center gap-6">
                         <div class="flex items-center gap-2 text-blue-600 font-bold shrink-0">
                             <FunnelIcon class="w-5 h-5" />
@@ -234,7 +234,7 @@ const stopDrag = () => {
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
                             <!-- Sub-Unit -->
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Sub-Unit</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Sub-Unit</label>
                                 <Autocomplete
                                     v-model="filterSubUnit"
                                     :options="subUnitOptions"
@@ -246,7 +246,7 @@ const stopDrag = () => {
 
                             <!-- Store -->
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Store</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Store</label>
                                 <Autocomplete
                                     v-model="filterStore"
                                     :options="storeOptions"
@@ -258,21 +258,21 @@ const stopDrag = () => {
 
                             <!-- Date From -->
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Date From</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Date From</label>
                                 <input 
                                     v-model="filterDateFrom" 
                                     type="date" 
-                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px]"
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px] dark:border-gray-600"
                                 >
                             </div>
 
                             <!-- Date To -->
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Date To</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Date To</label>
                                 <input 
                                     v-model="filterDateTo" 
                                     type="date" 
-                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px]"
+                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px] dark:border-gray-600"
                                 >
                             </div>
                         </div>
@@ -288,14 +288,14 @@ const stopDrag = () => {
             </div>
 
             <!-- Tab Bar (Ultra-Emphasis Segmented Control) -->
-            <div class="inline-flex p-2 bg-slate-100 rounded-[2rem] shadow-inner mb-4">
+            <div class="inline-flex p-2 bg-slate-100 rounded-[2rem] shadow-inner mb-4 dark:bg-slate-800">
                 <button
                     @click="activeTab = 'logs'"
                     :class="[
                         'inline-flex items-center gap-3 px-12 py-4 text-sm font-black transition-all duration-300 rounded-[1.75rem]',
                         activeTab === 'logs' 
-                            ? 'bg-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05]' 
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-white'
+                            ? 'bg-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05] dark:shadow-blue-900/50' 
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-white dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700'
                     ]"
                 >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -308,8 +308,8 @@ const stopDrag = () => {
                     :class="[
                         'inline-flex items-center gap-3 px-12 py-4 text-sm font-black transition-all duration-300 rounded-[1.75rem]',
                         activeTab === 'work_hours' 
-                            ? 'bg-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05]' 
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-white'
+                            ? 'bg-blue-600 text-white shadow-2xl shadow-blue-200 scale-[1.05] dark:shadow-blue-900/50' 
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-white dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700'
                     ]"
                 >
                     <ClockIcon class="w-5 h-5" />
@@ -317,11 +317,11 @@ const stopDrag = () => {
                 </button>
             </div>
 
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
-                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Search Name</label>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 dark:bg-gray-800 dark:border-gray-700">
+                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Search Name</label>
                 <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="h-4 w-4 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
@@ -329,7 +329,7 @@ const stopDrag = () => {
                         v-model="search"
                         type="search"
                         placeholder="Search employee name in Logs and Work Hours"
-                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px] pl-10 pr-4"
+                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-[42px] pl-10 pr-4 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                     >
                 </div>
             </div>
@@ -359,24 +359,24 @@ const stopDrag = () => {
                 </template>
 
                 <template #header>
-                    <tr class="bg-gray-50">
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selfie</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Store</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Log Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
+                    <tr class="bg-gray-50 dark:bg-gray-900/50">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Selfie</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Store</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Log Time</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Location</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Device</th>
                     </tr>
                 </template>
 
                 <template #body="{ data }">
-                    <tr v-for="log in data" :key="log.id" class="hover:bg-gray-50 transition-colors">
+                    <tr v-for="log in data" :key="log.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex-shrink-0 h-12 w-12 cursor-pointer group relative" @click="openPreview(log.photo_path)">
                                 <img 
                                     :src="'/serve-storage/' + log.photo_path" 
-                                    class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105"
+                                    class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
                                     alt="Selfie"
                                 />
                                 <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
@@ -385,19 +385,19 @@ const stopDrag = () => {
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-semibold text-gray-900">{{ log.user?.name }}</div>
-                            <div class="text-xs text-gray-500">{{ log.user?.email }}</div>
+                            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ log.user?.name }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-300">{{ log.user?.email }}</div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-semibold text-gray-900">{{ log.schedule_store?.store?.name || log.schedule?.store?.name || '-' }}</div>
+                            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ log.schedule_store?.store?.name || log.schedule?.store?.name || '-' }}</div>
                             <div v-if="log.schedule_store?.store?.code || log.schedule?.store?.code" class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
                                 CODE: {{ log.schedule_store?.store?.code || log.schedule?.store?.code }}
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex flex-col">
-                                <span class="text-sm font-bold text-gray-900">{{ formatDate(log.log_time, { year: undefined, month: undefined, day: undefined }) }}</span>
-                                <span class="text-xs text-gray-500">{{ formatDate(log.log_time, { hour: undefined, minute: undefined, second: undefined }) }}</span>
+                                <span class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatDate(log.log_time, { year: undefined, month: undefined, day: undefined }) }}</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-300">{{ formatDate(log.log_time, { hour: undefined, minute: undefined, second: undefined }) }}</span>
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
@@ -410,7 +410,7 @@ const stopDrag = () => {
                                 {{ log.type === 'time_in' ? 'In' : 'Out' }}
                             </span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                             <a 
                                 :href="getGoogleMapsUrl(log.latitude, log.longitude)" 
                                 target="_blank"
@@ -421,7 +421,7 @@ const stopDrag = () => {
                                 <ArrowTopRightOnSquareIcon class="w-3 h-3" />
                             </a>
                         </td>
-                        <td class="px-6 py-4 text-xs text-gray-400 min-w-[220px]">
+                        <td class="px-6 py-4 text-xs text-gray-400 min-w-[220px] dark:text-gray-400">
                             {{ log.device_info || 'Unknown Device' }}
                         </td>
                     </tr>
@@ -429,32 +429,32 @@ const stopDrag = () => {
             </DataTable>
 
             <!-- Work Hours Tab -->
-            <div v-if="activeTab === 'work_hours'" class="bg-white rounded-b-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-100">
-                    <h2 class="text-base font-black text-gray-900">Work Hours Summary</h2>
-                    <p class="text-xs text-gray-500 mt-0.5">Based on scheduled shifts and actual time-in / time-out logs for the selected date range.</p>
+            <div v-if="activeTab === 'work_hours'" class="bg-white rounded-b-xl shadow-sm border border-gray-100 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                    <h2 class="text-base font-black text-gray-900 dark:text-gray-100">Work Hours Summary</h2>
+                    <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Based on scheduled shifts and actual time-in / time-out logs for the selected date range.</p>
                 </div>
 
-                <div v-if="!workHoursSummary || workHoursSummary.length === 0" class="px-6 py-12 text-center text-sm text-gray-400">
+                <div v-if="!workHoursSummary || workHoursSummary.length === 0" class="px-6 py-12 text-center text-sm text-gray-400 dark:text-gray-400">
                     No scheduled or logged data found for the selected date range.
                 </div>
 
                 <div v-else class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-100">
-                        <thead class="bg-gray-50">
+                    <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">User</th>
-                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. Days</th>
-                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Present</th>
-                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Absent</th>
-                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Scheduled Hrs</th>
-                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Hrs</th>
-                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Variance</th>
+                                <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">User</th>
+                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Sched. Days</th>
+                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Present</th>
+                                <th class="px-6 py-3 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Absent</th>
+                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Scheduled Hrs</th>
+                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Actual Hrs</th>
+                                <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Variance</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-50">
-                            <tr v-for="row in workHoursSummary" :key="row.user_id" class="hover:bg-gray-50 transition-colors">
-                                <td class="px-6 py-3 text-sm font-bold text-gray-900">{{ row.name }}</td>
+                        <tbody class="bg-white divide-y divide-gray-50 dark:bg-gray-800">
+                            <tr v-for="row in workHoursSummary" :key="row.user_id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
+                                <td class="px-6 py-3 text-sm font-bold text-gray-900 dark:text-gray-100">{{ row.name }}</td>
                                 <td class="px-6 py-3 text-center">
                                     <button @click="openDetail(row, 'all')" class="text-sm font-bold text-blue-600 hover:underline cursor-pointer">
                                         {{ row.scheduled_days }}
@@ -474,10 +474,10 @@ const stopDrag = () => {
                                         {{ row.scheduled_days - row.days_present }}
                                     </button>
                                 </td>
-                                <td class="px-6 py-3 text-right text-sm font-bold text-gray-700">
+                                <td class="px-6 py-3 text-right text-sm font-bold text-gray-700 dark:text-gray-300">
                                     {{ formatMinutes(row.scheduled_minutes) }}
                                 </td>
-                                <td class="px-6 py-3 text-right text-sm font-bold text-gray-900">
+                                <td class="px-6 py-3 text-right text-sm font-bold text-gray-900 dark:text-gray-100">
                                     {{ formatMinutes(row.actual_minutes) }}
                                 </td>
                                 <td class="px-6 py-3 text-right">
@@ -500,49 +500,49 @@ const stopDrag = () => {
             <div class="p-6">
                 <div class="flex items-center justify-between mb-4">
                     <div>
-                        <h3 class="text-base font-black text-gray-900">{{ detailUser }}</h3>
-                        <p class="text-xs text-gray-500 mt-0.5">
+                        <h3 class="text-base font-black text-gray-900 dark:text-gray-100">{{ detailUser }}</h3>
+                        <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">
                             <span v-if="detailMode === 'all'">All scheduled dates</span>
                             <span v-else-if="detailMode === 'present'">Days present</span>
                             <span v-else>Days absent</span>
                         </p>
                     </div>
                     <!-- Mode toggle -->
-                    <div class="flex gap-1 rounded-lg border border-gray-200 p-1 text-xs font-bold">
+                    <div class="flex gap-1 rounded-lg border border-gray-200 p-1 text-xs font-bold dark:border-gray-700">
                         <button @click="detailMode = 'all'"     :class="detailMode === 'all'     ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1 rounded-md transition-colors">All</button>
                         <button @click="detailMode = 'present'" :class="detailMode === 'present' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1 rounded-md transition-colors">Present</button>
                         <button @click="detailMode = 'absent'"  :class="detailMode === 'absent'  ? 'bg-red-600 text-white' : 'text-gray-500 hover:bg-gray-100'" class="px-3 py-1 rounded-md transition-colors">Absent</button>
                     </div>
                 </div>
 
-                <div class="overflow-hidden rounded-xl border border-gray-200">
-                    <table class="min-w-full divide-y divide-gray-100 text-sm">
-                        <thead class="bg-gray-50">
+                <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                    <table class="min-w-full divide-y divide-gray-100 text-sm dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-4 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider">Date</th>
-                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. Start</th>
-                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Sched. End</th>
-                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Time In</th>
-                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Actual Time Out</th>
-                                <th class="px-4 py-2 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider">Work Hours</th>
-                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-4 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Date</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Sched. Start</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Sched. End</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Actual Time In</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Actual Time Out</th>
+                                <th class="px-4 py-2 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Work Hours</th>
+                                <th class="px-4 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-50 bg-white">
+                        <tbody class="divide-y divide-gray-50 bg-white dark:bg-gray-800">
                             <tr v-if="filteredDetailRows.length === 0">
-                                <td colspan="7" class="px-4 py-8 text-center text-gray-400 text-xs">No records.</td>
+                                <td colspan="7" class="px-4 py-8 text-center text-gray-400 text-xs dark:text-gray-400">No records.</td>
                             </tr>
-                            <tr v-for="d in filteredDetailRows" :key="d.date" class="hover:bg-gray-50">
-                                <td class="px-4 py-2 font-bold text-gray-900">{{ d.date }}</td>
-                                <td class="px-4 py-2 text-center text-gray-600">{{ formatTime(d.scheduled_start) }}</td>
-                                <td class="px-4 py-2 text-center text-gray-600">{{ formatTime(d.scheduled_end) }}</td>
-                                <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_in ? 'text-emerald-700' : 'text-gray-300'">
+                            <tr v-for="d in filteredDetailRows" :key="d.date" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <td class="px-4 py-2 font-bold text-gray-900 dark:text-gray-100">{{ d.date }}</td>
+                                <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-300">{{ formatTime(d.scheduled_start) }}</td>
+                                <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-300">{{ formatTime(d.scheduled_end) }}</td>
+                                <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_in ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-300 dark:text-slate-400'">
                                     {{ formatTime(d.actual_time_in) }}
                                 </td>
-                                <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_out ? 'text-blue-700' : 'text-gray-300'">
+                                <td class="px-4 py-2 text-center font-bold" :class="d.actual_time_out ? 'text-blue-700 dark:text-blue-300' : 'text-gray-300 dark:text-slate-400'">
                                     {{ formatTime(d.actual_time_out) }}
                                 </td>
-                                <td class="px-4 py-2 text-right font-bold" :class="d.actual_minutes !== null && d.actual_minutes !== undefined ? 'text-gray-900' : 'text-gray-300'">
+                                <td class="px-4 py-2 text-right font-bold" :class="d.actual_minutes !== null && d.actual_minutes !== undefined ? 'text-gray-900 dark:text-slate-100' : 'text-gray-300 dark:text-slate-400'">
                                     {{ formatDetailWorkHours(d.actual_minutes) }}
                                 </td>
                                 <td class="px-4 py-2 text-center">
@@ -564,8 +564,8 @@ const stopDrag = () => {
         <Modal :show="isPreviewOpen" @close="closePreview" maxWidth="2xl">
             <div class="p-4 sm:p-6">
                 <div class="flex items-center justify-between mb-4 border-b pb-3">
-                    <h3 class="text-lg font-bold text-gray-900">Selfie Preview</h3>
-                    <button @click="closePreview" class="text-gray-400 hover:text-gray-600">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Selfie Preview</h3>
+                    <button @click="closePreview" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>

@@ -215,27 +215,27 @@ const priorityLabel = (priority) => {
     <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <template #header>
             <div class="flex items-center gap-2">
-                <ArchiveBoxIcon class="h-5 w-5 text-gray-500" />
+                <ArchiveBoxIcon class="h-5 w-5 text-gray-500 dark:text-gray-300" />
                 <span>Ticket Archive</span>
             </div>
         </template>
 
         <div class="space-y-6">
-            <section class="rounded-xl border border-red-100 bg-white p-5 shadow-sm">
+            <section class="rounded-xl border border-red-100 bg-white p-5 shadow-sm dark:bg-gray-800">
                 <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <div class="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-red-600">
                             <ExclamationTriangleIcon class="h-4 w-4" />
                             Manual Purge Retention
                         </div>
-                        <h2 class="mt-2 text-xl font-black text-gray-900">Archived tickets become purge-eligible after {{ retention.label }}.</h2>
-                        <p class="mt-1 text-sm text-gray-600">
+                        <h2 class="mt-2 text-xl font-black text-gray-900 dark:text-gray-100">Archived tickets become purge-eligible after {{ retention.label }}.</h2>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
                             Current cutoff: archived on or before {{ retention.cutoff }}.
                         </p>
                     </div>
                     <Link
                         :href="route('settings.index', { tab: 'ticket_retention' })"
-                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50"
+                        class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                     >
                         Retention Settings
                     </Link>
@@ -265,7 +265,7 @@ const priorityLabel = (priority) => {
                                 v-if="canRestore"
                                 type="button"
                                 @click="restoreSelected"
-                                class="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
+                                class="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:bg-gray-800"
                             >
                                 <ArrowPathIcon class="h-4 w-4" />
                                 Restore Selected
@@ -276,7 +276,7 @@ const priorityLabel = (priority) => {
                                 @click="purgeSelected"
                                 :title="selectedPurgeBlockedReasons[0] || 'Purge selected tickets permanently'"
                                 :aria-disabled="selectedPurgeBlockedReasons.length > 0"
-                                class="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-50"
+                                class="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-50 dark:bg-gray-800"
                                 :class="selectedPurgeBlockedReasons.length ? 'cursor-help opacity-60' : ''"
                             >
                                 <TrashIcon class="h-4 w-4" />
@@ -285,7 +285,7 @@ const priorityLabel = (priority) => {
                             <button
                                 type="button"
                                 @click="clearSelection"
-                                class="inline-flex min-h-[40px] items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                                class="inline-flex min-h-[40px] items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 dark:bg-gray-800"
                             >
                                 Clear
                             </button>
@@ -317,14 +317,14 @@ const priorityLabel = (priority) => {
                                 type="checkbox"
                                 :checked="allSelected"
                                 @change="toggleAll"
-                                class="cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                class="cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
                             >
                         </th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Ticket</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">People</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Archived</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Purge Status</th>
-                        <th class="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">Actions</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Ticket</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">People</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Archived</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Purge Status</th>
+                        <th class="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Actions</th>
                     </tr>
                 </template>
 
@@ -332,7 +332,7 @@ const priorityLabel = (priority) => {
                     <tr
                         v-for="ticket in data"
                         :key="ticket.id"
-                        class="align-top hover:bg-gray-50"
+                        class="align-top hover:bg-gray-50 dark:hover:bg-gray-700"
                         :class="selectedIds.includes(ticket.id) ? 'ring-1 ring-inset ring-blue-300' : ''"
                     >
                         <td class="px-4 py-4 w-10 align-top">
@@ -340,24 +340,24 @@ const priorityLabel = (priority) => {
                                 type="checkbox"
                                 :value="ticket.id"
                                 v-model="selectedIds"
-                                class="mt-1 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                class="mt-1 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
                             >
                         </td>
                         <td class="px-4 py-4">
                             <div class="min-w-[260px] max-w-[420px] space-y-2">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <span class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-black">
+                                    <span class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-black dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                                         {{ ticket.ticket_key }}
                                     </span>
-                                    <span class="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold capitalize text-black">
+                                    <span class="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold capitalize text-black dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                                         {{ priorityLabel(ticket.priority) }}
                                     </span>
                                     <span class="rounded-full border border-blue-300 bg-blue-50 px-2.5 py-1 text-[11px] font-bold capitalize text-blue-700">
                                         {{ statusLabel(ticket.status) }}
                                     </span>
                                 </div>
-                                <div class="break-words text-sm font-bold text-gray-900">{{ ticket.title }}</div>
-                                <div v-if="ticket.parent" class="text-xs text-gray-500">
+                                <div class="break-words text-sm font-bold text-gray-900 dark:text-gray-100">{{ ticket.title }}</div>
+                                <div v-if="ticket.parent" class="text-xs text-gray-500 dark:text-gray-300">
                                     Child of {{ ticket.parent.ticket_key }}
                                 </div>
                                 <div v-if="ticket.archived_children_count > 0" class="text-xs font-semibold text-blue-700">
@@ -368,19 +368,19 @@ const priorityLabel = (priority) => {
                         <td class="px-4 py-4">
                             <div class="min-w-[180px] space-y-2 text-sm">
                                 <div>
-                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Requester</div>
-                                    <div class="font-semibold text-gray-900">{{ ticket.reporter?.name || 'External requester' }}</div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-300">Requester</div>
+                                    <div class="font-semibold text-gray-900 dark:text-gray-100">{{ ticket.reporter?.name || 'External requester' }}</div>
                                 </div>
                                 <div>
-                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Assignee</div>
-                                    <div class="font-semibold text-gray-900">{{ ticket.assignee?.name || 'Unassigned' }}</div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-300">Assignee</div>
+                                    <div class="font-semibold text-gray-900 dark:text-gray-100">{{ ticket.assignee?.name || 'Unassigned' }}</div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-4 text-sm text-gray-900">
+                        <td class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
                             <div class="min-w-[150px]">
                                 <div class="font-semibold">{{ ticket.deleted_at }}</div>
-                                <div class="mt-1 text-xs text-gray-500">Created {{ ticket.created_at }}</div>
+                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">Created {{ ticket.created_at }}</div>
                             </div>
                         </td>
                         <td class="px-4 py-4">
@@ -393,7 +393,7 @@ const priorityLabel = (priority) => {
                                 >
                                     {{ ticket.purge_eligible && ticket.active_children_count === 0 ? 'Eligible' : 'Retained' }}
                                 </span>
-                                <div class="mt-2 text-xs text-gray-500">
+                                <div class="mt-2 text-xs text-gray-500 dark:text-gray-300">
                                     <span v-if="ticket.active_children_count > 0">Archive child tickets before purge.</span>
                                     <span v-else-if="!ticket.purge_eligible">Available {{ ticket.purge_available_at }}</span>
                                     <span v-else>Permanent purge is available.</span>
@@ -406,7 +406,7 @@ const priorityLabel = (priority) => {
                                     v-if="canRestore"
                                     type="button"
                                     @click="restoreTicket(ticket)"
-                                    class="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-50"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:bg-gray-800"
                                 >
                                     <ArrowPathIcon class="h-4 w-4" />
                                     Restore
@@ -417,7 +417,7 @@ const priorityLabel = (priority) => {
                                     @click="purgeTicket(ticket)"
                                     :title="purgeBlockedReason(ticket) || 'Purge this ticket permanently'"
                                     :aria-disabled="Boolean(purgeBlockedReason(ticket))"
-                                    class="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-50"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:bg-gray-800"
                                     :class="purgeBlockedReason(ticket) ? 'cursor-help opacity-60' : ''"
                                 >
                                     <TrashIcon class="h-4 w-4" />

@@ -315,36 +315,36 @@ const submitRedeem = () => {
             <div class="space-y-6 min-w-fit">
                 <!-- Header -->
                 <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Loyalty Stamps</h1>
-                    <p class="text-sm text-gray-500">Manage customer stamp cards, programs, and reward redemptions.</p>
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Loyalty Stamps</h1>
+                    <p class="text-sm text-gray-500 dark:text-gray-300">Manage customer stamp cards, programs, and reward redemptions.</p>
                 </div>
 
                 <!-- Summary stat cards (always visible) -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Customers</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-2">{{ summary.customers ?? 0 }}</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Customers</p>
+                        <p class="text-2xl font-bold text-gray-900 mt-2 dark:text-gray-100">{{ summary.customers ?? 0 }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Active Cards</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Active Cards</p>
                         <p class="text-2xl font-bold text-blue-600 mt-2">{{ summary.active_cards ?? 0 }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Completed (to redeem)</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Completed (to redeem)</p>
                         <p class="text-2xl font-bold text-amber-600 mt-2">{{ summary.completed_cards ?? 0 }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Redeemed</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Redeemed</p>
                         <p class="text-2xl font-bold text-green-600 mt-2">{{ summary.redeemed_cards ?? 0 }}</p>
                     </div>
-                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
-                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Amount</p>
+                    <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Total Amount</p>
                         <p class="text-2xl font-bold text-indigo-600 mt-2">₱{{ formatAmount(summary.total_amount) }}</p>
                     </div>
                 </div>
 
                 <!-- Tabs -->
-                <div class="border-b border-gray-200">
+                <div class="border-b border-gray-200 dark:border-gray-700">
                     <nav class="-mb-px flex space-x-6 overflow-x-auto">
                         <button
                             v-for="t in tabList"
@@ -382,18 +382,18 @@ const submitRedeem = () => {
                     </template>
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Phone</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Email</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Phone</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="c in data" :key="c.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ c.name }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ c.email || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ c.phone || '—' }}</td>
+                        <tr v-for="c in data" :key="c.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ c.name }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ c.email || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ c.phone || '—' }}</td>
                             <td class="px-6 py-3 text-sm">
                                 <span :class="['px-2 py-0.5 rounded-full text-xs font-medium', c.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">{{ c.is_active ? 'Active' : 'Inactive' }}</span>
                             </td>
@@ -431,25 +431,25 @@ const submitRedeem = () => {
                     </template>
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Year</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Stamps Required</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Auto Rule</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Year</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Stamps Required</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Auto Rule</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="p in data" :key="p.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-3 text-sm font-medium text-gray-900">
+                        <tr v-for="p in data" :key="p.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                                 {{ p.name }}
-                                <p v-if="p.description" class="text-xs text-gray-500 font-normal">{{ p.description }}</p>
+                                <p v-if="p.description" class="text-xs text-gray-500 font-normal dark:text-gray-300">{{ p.description }}</p>
                             </td>
-                            <td class="px-6 py-3 text-sm text-gray-700">{{ p.year }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700">{{ p.stamps_required }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600">
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ p.year }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ p.stamps_required }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">
                                 <span v-if="p.auto_stamp_amount">1 stamp / ₱{{ formatAmount(p.auto_stamp_amount) }}</span>
-                                <span v-else class="text-gray-400">Manual only</span>
+                                <span v-else class="text-gray-400 dark:text-gray-400">Manual only</span>
                             </td>
                             <td class="px-6 py-3 text-sm">
                                 <span :class="['px-2 py-0.5 rounded-full text-xs font-medium', p.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600']">{{ p.is_active ? 'Active' : 'Inactive' }}</span>
@@ -488,27 +488,27 @@ const submitRedeem = () => {
                     </template>
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Program</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Store</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Issued</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Progress</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Program</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Store</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Issued</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Progress</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Status</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="card in data" :key="card.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ card.customer?.name || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700">{{ card.program?.name || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ card.store ? `${card.store.code}${card.store.name ? ' — ' + card.store.name : ''}` : '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600 whitespace-nowrap">{{ formatDateTime(card.created_at) }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700">
+                        <tr v-for="card in data" :key="card.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ card.customer?.name || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ card.program?.name || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ card.store ? `${card.store.code}${card.store.name ? ' — ' + card.store.name : ''}` : '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 whitespace-nowrap dark:text-gray-300">{{ formatDateTime(card.created_at) }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
                                 <button @click="openEntriesModal(card)" class="flex items-center gap-2 group" title="View stamp history">
-                                    <div class="w-28 bg-gray-100 rounded-full h-2 overflow-hidden">
+                                    <div class="w-28 bg-gray-100 rounded-full h-2 overflow-hidden dark:bg-gray-800">
                                         <div class="bg-blue-500 h-2 group-hover:bg-blue-600 transition-colors" :style="{ width: ((card.stamps_count / (card.program?.stamps_required || 1)) * 100) + '%' }"></div>
                                     </div>
-                                    <span class="text-xs text-gray-600 whitespace-nowrap group-hover:text-blue-600 transition-colors">{{ card.stamps_count }} / {{ card.program?.stamps_required }}</span>
+                                    <span class="text-xs text-gray-600 whitespace-nowrap group-hover:text-blue-600 transition-colors dark:text-gray-300">{{ card.stamps_count }} / {{ card.program?.stamps_required }}</span>
                                 </button>
                             </td>
                             <td class="px-6 py-3 text-sm">
@@ -551,26 +551,26 @@ const submitRedeem = () => {
                 >
                     <template #header>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Customer</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Program</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Reward Item</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Location</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Qty</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total Purchase</th>
-                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">By</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Program</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Reward Item</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Location</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Qty</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Total Purchase</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">By</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="r in data" :key="r.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ formatDateTime(r.created_at) }}</td>
-                            <td class="px-6 py-3 text-sm font-medium text-gray-900">{{ r.customer?.name || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700">{{ r.program?.name || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700">{{ assetLabel(r.asset) }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ r.location }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700">{{ r.quantity }}</td>
-                            <td class="px-6 py-3 text-sm font-medium text-gray-700 whitespace-nowrap">₱{{ formatAmount(r.total_purchase_amount) }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600">{{ r.creator?.name || '—' }}</td>
+                        <tr v-for="r in data" :key="r.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ formatDateTime(r.created_at) }}</td>
+                            <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ r.customer?.name || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ r.program?.name || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ assetLabel(r.asset) }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ r.location }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ r.quantity }}</td>
+                            <td class="px-6 py-3 text-sm font-medium text-gray-700 whitespace-nowrap dark:text-gray-300">₱{{ formatAmount(r.total_purchase_amount) }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ r.creator?.name || '—' }}</td>
                         </tr>
                     </template>
                 </DataTable>
@@ -580,26 +580,26 @@ const submitRedeem = () => {
         <!-- Customer Modal -->
         <Modal :show="customerModal" @close="customerModal = false" max-width="lg">
             <div class="p-6 space-y-4">
-                <h3 class="text-lg font-bold text-gray-900">{{ customerForm.id ? 'Edit Customer' : 'New Customer' }}</h3>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ customerForm.id ? 'Edit Customer' : 'New Customer' }}</h3>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
-                    <input v-model="customerForm.name" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Name <span class="text-red-500">*</span></label>
+                    <input v-model="customerForm.name" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                     <p v-if="customerForm.errors.name" class="text-xs text-red-600 mt-1">{{ customerForm.errors.name }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input v-model="customerForm.email" type="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Email</label>
+                    <input v-model="customerForm.email" type="email" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                     <p v-if="customerForm.errors.email" class="text-xs text-red-600 mt-1">{{ customerForm.errors.email }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input v-model="customerForm.phone" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Phone</label>
+                    <input v-model="customerForm.phone" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                 </div>
-                <label class="flex items-center gap-2 text-sm text-gray-700">
-                    <input v-model="customerForm.is_active" type="checkbox" class="rounded border-gray-300" /> Active
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input v-model="customerForm.is_active" type="checkbox" class="rounded border-gray-300 dark:border-gray-600" /> Active
                 </label>
                 <div class="flex justify-end gap-2 pt-2">
-                    <button @click="customerModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Cancel</button>
+                    <button @click="customerModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitCustomer" :disabled="customerForm.processing" class="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Save</button>
                 </div>
             </div>
@@ -608,40 +608,40 @@ const submitRedeem = () => {
         <!-- Program Modal -->
         <Modal :show="programModal" @close="programModal = false" max-width="lg">
             <div class="p-6 space-y-4">
-                <h3 class="text-lg font-bold text-gray-900">{{ programForm.id ? 'Edit Program' : 'New Program' }}</h3>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ programForm.id ? 'Edit Program' : 'New Program' }}</h3>
                 <div class="grid grid-cols-3 gap-3">
                     <div class="col-span-2">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
-                        <input v-model="programForm.name" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Name <span class="text-red-500">*</span></label>
+                        <input v-model="programForm.name" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                         <p v-if="programForm.errors.name" class="text-xs text-red-600 mt-1">{{ programForm.errors.name }}</p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Year <span class="text-red-500">*</span></label>
-                        <input v-model.number="programForm.year" type="number" min="2000" max="2100" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Year <span class="text-red-500">*</span></label>
+                        <input v-model.number="programForm.year" type="number" min="2000" max="2100" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                         <p v-if="programForm.errors.year" class="text-xs text-red-600 mt-1">{{ programForm.errors.year }}</p>
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea v-model="programForm.description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"></textarea>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Description</label>
+                    <textarea v-model="programForm.description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600"></textarea>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Stamps Required <span class="text-red-500">*</span></label>
-                        <input v-model.number="programForm.stamps_required" type="number" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Stamps Required <span class="text-red-500">*</span></label>
+                        <input v-model.number="programForm.stamps_required" type="number" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                         <p v-if="programForm.errors.stamps_required" class="text-xs text-red-600 mt-1">{{ programForm.errors.stamps_required }}</p>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">₱ per stamp (auto)</label>
-                        <input v-model.number="programForm.auto_stamp_amount" type="number" min="0" step="0.01" placeholder="Leave blank = manual only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">₱ per stamp (auto)</label>
+                        <input v-model.number="programForm.auto_stamp_amount" type="number" min="0" step="0.01" placeholder="Leave blank = manual only" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                         <p v-if="programForm.errors.auto_stamp_amount" class="text-xs text-red-600 mt-1">{{ programForm.errors.auto_stamp_amount }}</p>
                     </div>
                 </div>
-                <label class="flex items-center gap-2 text-sm text-gray-700">
-                    <input v-model="programForm.is_active" type="checkbox" class="rounded border-gray-300" /> Active
+                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input v-model="programForm.is_active" type="checkbox" class="rounded border-gray-300 dark:border-gray-600" /> Active
                 </label>
                 <div class="flex justify-end gap-2 pt-2">
-                    <button @click="programModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Cancel</button>
+                    <button @click="programModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitProgram" :disabled="programForm.processing" class="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Save</button>
                 </div>
             </div>
@@ -650,11 +650,11 @@ const submitRedeem = () => {
         <!-- Card Modal -->
         <Modal :show="cardModal" @close="cardModal = false" max-width="lg">
             <div class="p-6 space-y-4">
-                <h3 class="text-lg font-bold text-gray-900">New Stamp Card</h3>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">New Stamp Card</h3>
 
                 <!-- Customer field with inline management -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Customer <span class="text-red-500">*</span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Customer <span class="text-red-500">*</span></label>
                     <div class="flex items-center gap-2">
                         <div class="flex-1 min-w-0">
                             <Autocomplete v-model="cardForm.customer_id" :options="customerOptions" placeholder="Search customer..." />
@@ -685,7 +685,7 @@ const submitRedeem = () => {
 
                 <!-- Program field with inline management -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Program <span class="text-red-500">*</span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Program <span class="text-red-500">*</span></label>
                     <div class="flex items-center gap-2">
                         <div class="flex-1 min-w-0">
                             <Autocomplete v-model="cardForm.stamp_program_id" :options="programOptions" placeholder="Search program..." />
@@ -716,13 +716,13 @@ const submitRedeem = () => {
 
                 <!-- Store field -->
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Store</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Store</label>
                     <Autocomplete v-model="cardForm.store_id" :options="storeOptions" placeholder="Select store..." />
                     <p v-if="cardForm.errors.store_id" class="text-xs text-red-600 mt-1">{{ cardForm.errors.store_id }}</p>
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
-                    <button @click="cardModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Cancel</button>
+                    <button @click="cardModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitCard" :disabled="cardForm.processing" class="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Create</button>
                 </div>
             </div>
@@ -731,34 +731,34 @@ const submitRedeem = () => {
         <!-- Add Stamps Modal -->
         <Modal :show="stampModal.open" @close="stampModal.open = false" max-width="md">
             <div class="p-6 space-y-4">
-                <h3 class="text-lg font-bold text-gray-900">Add Stamps</h3>
-                <p class="text-sm text-gray-500">{{ stampModal.card?.customer?.name }} — {{ stampModal.card?.program?.name }}</p>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Add Stamps</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-300">{{ stampModal.card?.customer?.name }} — {{ stampModal.card?.program?.name }}</p>
                 <div>
                     <div class="flex items-baseline justify-between mb-1">
-                        <label class="block text-sm font-medium text-gray-700">Number of stamps <span class="text-red-500">*</span></label>
-                        <span class="text-xs text-gray-500">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of stamps <span class="text-red-500">*</span></label>
+                        <span class="text-xs text-gray-500 dark:text-gray-300">
                             {{ stampModal.card?.stamps_count ?? 0 }} / {{ stampModal.card?.program?.stamps_required ?? '?' }} &mdash; <span class="font-medium text-blue-600">{{ stampRemaining }} remaining</span>
                         </span>
                     </div>
-                    <input v-model.number="stampForm.quantity" type="number" :min="1" :max="stampRemaining" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <input v-model.number="stampForm.quantity" type="number" :min="1" :max="stampRemaining" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                     <p v-if="stampForm.errors.quantity" class="text-xs text-red-600 mt-1">{{ stampForm.errors.quantity }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Purchase amount (₱) <span class="text-red-500">*</span></label>
-                    <input v-model.number="stampForm.purchase_amount" type="number" min="0.01" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Purchase amount (₱) <span class="text-red-500">*</span></label>
+                    <input v-model.number="stampForm.purchase_amount" type="number" min="0.01" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                     <p v-if="stampForm.errors.purchase_amount" class="text-xs text-red-600 mt-1">{{ stampForm.errors.purchase_amount }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Store</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Store</label>
                     <Autocomplete v-model="stampForm.store_id" :options="storeOptions" placeholder="Select store..." />
                     <p v-if="stampForm.errors.store_id" class="text-xs text-red-600 mt-1">{{ stampForm.errors.store_id }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Note</label>
-                    <input v-model="stampForm.note" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Note</label>
+                    <input v-model="stampForm.note" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
-                    <button @click="stampModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Cancel</button>
+                    <button @click="stampModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitStamp" :disabled="stampForm.processing" class="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Add</button>
                 </div>
             </div>
@@ -767,22 +767,22 @@ const submitRedeem = () => {
         <!-- Record Purchase Modal -->
         <Modal :show="purchaseModal.open" @close="purchaseModal.open = false" max-width="md">
             <div class="p-6 space-y-4">
-                <h3 class="text-lg font-bold text-gray-900">Record Purchase</h3>
-                <p class="text-sm text-gray-500">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Record Purchase</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-300">
                     {{ purchaseModal.card?.customer?.name }} — {{ purchaseModal.card?.program?.name }}
                     <span v-if="purchaseProgram?.auto_stamp_amount" class="block text-xs">Earns 1 stamp per ₱{{ formatAmount(purchaseProgram.auto_stamp_amount) }}</span>
                 </p>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Purchase amount (₱) <span class="text-red-500">*</span></label>
-                    <input v-model.number="purchaseForm.purchase_amount" type="number" min="0" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Purchase amount (₱) <span class="text-red-500">*</span></label>
+                    <input v-model.number="purchaseForm.purchase_amount" type="number" min="0" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                     <p v-if="purchaseForm.errors.purchase_amount" class="text-xs text-red-600 mt-1">{{ purchaseForm.errors.purchase_amount }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Note</label>
-                    <input v-model="purchaseForm.note" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Note</label>
+                    <input v-model="purchaseForm.note" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
-                    <button @click="purchaseModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Cancel</button>
+                    <button @click="purchaseModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitPurchase" :disabled="purchaseForm.processing" class="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">Record</button>
                 </div>
             </div>
@@ -791,29 +791,29 @@ const submitRedeem = () => {
         <!-- Redeem Modal -->
         <Modal :show="redeemModal.open" @close="redeemModal.open = false" max-width="lg">
             <div class="p-6 space-y-4">
-                <h3 class="text-lg font-bold text-gray-900">Redeem Reward</h3>
-                <p class="text-sm text-gray-500">{{ redeemModal.card?.customer?.name }} — {{ redeemModal.card?.program?.name }}</p>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Redeem Reward</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-300">{{ redeemModal.card?.customer?.name }} — {{ redeemModal.card?.program?.name }}</p>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Location / Store <span class="text-red-500">*</span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Location / Store <span class="text-red-500">*</span></label>
                     <Autocomplete v-model="redeemForm.location" :options="storeLocationOptions" placeholder="Search store..." />
                     <p v-if="redeemForm.errors.location" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.location }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Reward item (consumable) <span class="text-red-500">*</span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Reward item (consumable) <span class="text-red-500">*</span></label>
                     <Autocomplete v-model="redeemForm.asset_id" :options="assetOptions" :placeholder="loadingAssets ? 'Loading…' : (redeemForm.location ? 'Select item…' : 'Pick a location first')" :disabled="!redeemForm.location || loadingAssets" />
                     <p v-if="redeemForm.errors.asset_id" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.asset_id }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Quantity <span class="text-red-500">*</span></label>
-                    <input v-model.number="redeemForm.quantity" type="number" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Quantity <span class="text-red-500">*</span></label>
+                    <input v-model.number="redeemForm.quantity" type="number" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                     <p v-if="redeemForm.errors.quantity" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.quantity }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-                    <input v-model="redeemForm.remarks" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Remarks</label>
+                    <input v-model="redeemForm.remarks" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
-                    <button @click="redeemModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Cancel</button>
+                    <button @click="redeemModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitRedeem" :disabled="redeemForm.processing || !redeemForm.asset_id" class="px-4 py-2 text-sm rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50">Redeem</button>
                 </div>
             </div>
@@ -823,8 +823,8 @@ const submitRedeem = () => {
         <Modal :show="entriesModal.open" @close="entriesModal.open = false" max-width="2xl">
             <div class="p-6 space-y-4">
                 <div>
-                    <h3 class="text-lg font-bold text-gray-900">Stamp History</h3>
-                    <p class="text-sm text-gray-500 mt-0.5">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Stamp History</h3>
+                    <p class="text-sm text-gray-500 mt-0.5 dark:text-gray-300">
                         {{ entriesModal.card?.customer?.name }} — {{ entriesModal.card?.program?.name }}
                         <span class="ml-2 text-blue-600 font-medium">{{ entriesModal.card?.stamps_count }} / {{ entriesModal.card?.program?.stamps_required }} stamps</span>
                     </p>
@@ -839,44 +839,44 @@ const submitRedeem = () => {
                 </div>
 
                 <!-- Empty -->
-                <div v-else-if="!entriesModal.entries.length" class="py-10 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-xl">
-                    <p class="text-sm font-bold text-gray-400 uppercase tracking-widest">No stamp entries yet</p>
+                <div v-else-if="!entriesModal.entries.length" class="py-10 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-xl dark:border-gray-700">
+                    <p class="text-sm font-bold text-gray-400 uppercase tracking-widest dark:text-gray-400">No stamp entries yet</p>
                 </div>
 
                 <!-- History table -->
-                <div v-else class="overflow-x-auto rounded-xl border border-gray-100">
-                    <table class="min-w-full divide-y divide-gray-100">
-                        <thead class="bg-gray-50">
+                <div v-else class="overflow-x-auto rounded-xl border border-gray-100 dark:border-gray-700">
+                    <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-900/50">
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date & Time</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Stamps</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Source</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Store</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Purchase Amt</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Note</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">By</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Date & Time</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Stamps</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Source</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Store</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Purchase Amt</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Note</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">By</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-50 bg-white">
-                            <tr v-for="e in entriesModal.entries" :key="e.id" class="hover:bg-gray-50">
-                                <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{ formatDateTime(e.created_at) }}</td>
+                        <tbody class="divide-y divide-gray-50 bg-white dark:bg-gray-800">
+                            <tr v-for="e in entriesModal.entries" :key="e.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap dark:text-gray-300">{{ formatDateTime(e.created_at) }}</td>
                                 <td class="px-4 py-3 text-sm font-bold text-green-600">+{{ e.quantity }}</td>
                                 <td class="px-4 py-3 text-sm">
                                     <span :class="['px-2 py-0.5 rounded-full text-xs font-medium capitalize', e.source === 'purchase' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600']">
                                         {{ e.source }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3 text-sm text-gray-600">{{ e.store ? `${e.store.code}${e.store.name ? ' — ' + e.store.name : ''}` : '—' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600">{{ e.purchase_amount ? '₱' + formatAmount(e.purchase_amount) : '—' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600">{{ e.note || '—' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{{ e.creator?.name || '—' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ e.store ? `${e.store.code}${e.store.name ? ' — ' + e.store.name : ''}` : '—' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ e.purchase_amount ? '₱' + formatAmount(e.purchase_amount) : '—' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{{ e.note || '—' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap dark:text-gray-300">{{ e.creator?.name || '—' }}</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
                 <div class="flex justify-end pt-2">
-                    <button @click="entriesModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Close</button>
+                    <button @click="entriesModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Close</button>
                 </div>
             </div>
         </Modal>

@@ -7,17 +7,20 @@ import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { usePermission } from '@/Composables/usePermission.js';
+import ThemeToggle from '@/Components/ThemeToggle.vue';
 import Toast from '@/Components/Toast.vue';
 import { useToast } from '@/Composables/useToast.js';
 import { watch, onMounted, onUnmounted } from 'vue';
 import UserStatus from '@/Components/UserStatus.vue';
 import { usePresence } from '@/Composables/usePresence.js';
+import { useTheme } from '@/Composables/useTheme.js';
 
 const showingNavigationDropdown = ref(false);
 const { hasPermission } = usePermission();
 const { success, error, warning, info } = useToast();
 const page = usePage();
 const { init: initPresence, destroy: destroyPresence, currentStatus } = usePresence();
+const { init: initTheme } = useTheme();
 
 const checkFlashMessages = () => {
     const flash = page.props.flash || {};
@@ -30,6 +33,7 @@ const checkFlashMessages = () => {
 onMounted(() => {
     checkFlashMessages();
     initPresence();
+    initTheme();
 });
 
 onUnmounted(() => {
@@ -44,9 +48,9 @@ watch(() => page.props.flash, () => {
 <template>
     <div>
         <Toast />
-        <div class="min-h-screen bg-gray-100">
+        <div class="min-h-screen bg-gray-100 dark:bg-gray-950">
             <nav
-                class="border-b border-gray-100 bg-white"
+                class="border-b border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700"
             >
                 <!-- Primary Navigation Menu -->
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -56,7 +60,7 @@ watch(() => page.props.flash, () => {
                             <div class="flex shrink-0 items-center">
                                 <Link :href="route('dashboard')">
                                     <ApplicationLogo
-                                        class="block h-9 w-auto fill-current text-gray-800"
+                                        class="block h-9 w-auto fill-current text-gray-800 dark:text-gray-200"
                                     />
                                 </Link>
                             </div>
@@ -122,7 +126,9 @@ watch(() => page.props.flash, () => {
                             </div>
                         </div>
 
-                        <div class="hidden sm:ms-6 sm:flex sm:items-center">
+                        <div class="hidden sm:ms-6 sm:flex sm:items-center sm:gap-2">
+                            <ThemeToggle />
+
                             <!-- Settings Dropdown -->
                             <div class="relative ms-3">
                                 <Dropdown align="right" width="48">
@@ -130,7 +136,7 @@ watch(() => page.props.flash, () => {
                                         <span class="inline-flex rounded-md">
                                             <button
                                                 type="button"
-                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                                                class="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none dark:bg-gray-800 dark:text-gray-300"
                                             >
                                                 <UserStatus :status="currentStatus" size="lg" class="mr-2" />
                                                 {{ $page.props.auth.user.name }}
@@ -176,7 +182,7 @@ watch(() => page.props.flash, () => {
                                     showingNavigationDropdown =
                                         !showingNavigationDropdown
                                 "
-                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none"
+                                class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-100 hover:text-gray-500 focus:bg-gray-100 focus:text-gray-500 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-700 dark:focus:bg-gray-700"
                             >
                                 <svg
                                     class="h-6 w-6"
@@ -271,16 +277,16 @@ watch(() => page.props.flash, () => {
                     </div>
                     <!-- Responsive Settings Options -->
                     <div
-                        class="border-t border-gray-200 pb-1 pt-4"
+                        class="border-t border-gray-200 pb-1 pt-4 dark:border-gray-700"
                     >
                         <div class="px-4">
                             <div
-                                class="text-base font-medium text-gray-800 flex items-center"
+                                class="text-base font-medium text-gray-800 flex items-center dark:text-gray-200"
                             >
                                 <UserStatus :status="currentStatus" size="lg" class="mr-2" />
                                 {{ $page.props.auth.user.name }}
                             </div>
-                            <div class="text-sm font-medium text-gray-500">
+                            <div class="text-sm font-medium text-gray-500 dark:text-gray-300">
                                 {{ $page.props.auth.user.email }}
                             </div>
                         </div>
@@ -303,7 +309,7 @@ watch(() => page.props.flash, () => {
 
             <!-- Page Heading -->
             <header
-                class="bg-white shadow"
+                class="bg-white shadow dark:bg-gray-800"
                 v-if="$slots.header"
             >
                 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

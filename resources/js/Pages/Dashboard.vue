@@ -506,7 +506,7 @@ const exportToExcel = (type) => {
 
     <AppLayout content-class="w-full px-4 sm:px-6 lg:px-8">
         <template #header>
-            <h2 class="text-xl font-bold text-gray-900">Dashboard</h2>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h2>
         </template>
 
         <!-- Welcome Section -->
@@ -535,16 +535,16 @@ const exportToExcel = (type) => {
         </div>
 
         <!-- Management Filters -->
-        <div class="mb-6 bg-white rounded-xl shadow-sm border border-gray-200">
-            <div class="px-4 py-3 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div class="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+            <div class="px-4 py-3 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3 dark:border-gray-700">
                 <div>
-                    <h3 class="text-sm font-black text-gray-700 uppercase tracking-widest">Management Filters</h3>
-                    <p class="text-xs text-gray-500 mt-0.5">Controls the Kanban report and Live Store Health views.</p>
+                    <h3 class="text-sm font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Management Filters</h3>
+                    <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Controls the Kanban report and Live Store Health views.</p>
                 </div>
                 <button
                     v-if="hasActiveFilters"
                     @click="clearFilters"
-                    class="self-start lg:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-gray-600 bg-gray-100 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
+                    class="self-start lg:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-gray-600 bg-gray-100 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors dark:bg-gray-800 dark:text-gray-300"
                 >
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     Clear
@@ -552,7 +552,7 @@ const exportToExcel = (type) => {
             </div>
             <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Department</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Department</label>
                     <HierarchySelector
                         v-model="filterNodeId"
                         :nodes="hierarchicalOptions"
@@ -560,7 +560,7 @@ const exportToExcel = (type) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">User</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">User</label>
                     <Autocomplete
                         v-model="filterForm.user_id"
                         :options="usersWithLabel"
@@ -570,7 +570,7 @@ const exportToExcel = (type) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Store</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store</label>
                     <Autocomplete
                         v-model="filterForm.store_id"
                         :options="storesWithLabel"
@@ -580,7 +580,7 @@ const exportToExcel = (type) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Year</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Year</label>
                     <Autocomplete
                         v-model="filterForm.year"
                         :options="yearsWithLabel"
@@ -590,7 +590,7 @@ const exportToExcel = (type) => {
                     />
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Month</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Month</label>
                     <Autocomplete
                         v-model="filterForm.month"
                         :options="monthsWithLabel"
@@ -605,12 +605,12 @@ const exportToExcel = (type) => {
         <!-- Leadership Leaderboard -->
         <div v-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)" class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-8">
             <!-- Top 3 Agents -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 xl:col-span-2">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 xl:col-span-2 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                     <div class="flex items-center gap-2 [&>span.text-xl]:hidden">
                     <span class="text-xs font-black uppercase tracking-widest text-blue-600">Top</span>
                     <span class="text-xl">ðŸ…</span>
-                    <h3 class="text-xl font-black text-gray-900">Top 3 Techs <span class="text-blue-600">{{ leaderboardPeriodLabel }}</span></h3>
+                    <h3 class="text-xl font-black text-gray-900 dark:text-gray-100">Top 3 Techs <span class="text-blue-600">{{ leaderboardPeriodLabel }}</span></h3>
                     </div>
                     <button
                         v-if="leaderboardRankings.length"
@@ -665,23 +665,23 @@ const exportToExcel = (type) => {
                                     <img v-if="card.agent.total_points > 0 && card.agent.profile_photo" :src="'/serve-storage/' + card.agent.profile_photo" class="h-full w-full object-cover" :alt="card.agent.name">
                                     <span v-else>{{ card.agent.total_points === 0 ? '?' : (String(card.agent.name || '').charAt(0).toUpperCase() || '?') }}</span>
                                 </div>
-                                <div class="font-black text-gray-900 truncate"
+                                <div class="font-black text-gray-900 truncate dark:text-gray-100"
                                     :class="card.rank === 1 ? 'text-xl' : 'text-base'">
                                     {{ card.agent.total_points === 0 ? 'No points yet' : card.agent.name }}
                                 </div>
-                                <div class="mt-1 text-xs font-semibold text-gray-500">
+                                <div class="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-300">
                                     {{ card.agent.ticket_count }} ticket{{ card.agent.ticket_count !== 1 ? 's' : '' }}
                                     <span v-if="card.agent.avg_close_min !== null"> - avg {{ card.agent.avg_close_min }}m</span>
                                 </div>
                             </div>
                             <div class="rounded-lg bg-white/85 border border-white px-3 py-2 text-center shadow-sm">
                                 <div class="text-2xl font-black text-blue-700">{{ card.agent.total_points.toLocaleString() }}</div>
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">pts</div>
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">pts</div>
                             </div>
                         </template>
                         <template v-else>
-                            <div class="text-xs font-black uppercase tracking-widest text-gray-400">Top {{ card.rank }}</div>
-                            <div class="py-8 text-center text-sm font-semibold text-gray-400">No tech available</div>
+                            <div class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Top {{ card.rank }}</div>
+                            <div class="py-8 text-center text-sm font-semibold text-gray-400 dark:text-gray-400">No tech available</div>
                             <div class="rounded-lg bg-white/80 border border-white px-3 py-2 text-center">
                                 <div class="text-2xl font-black text-gray-300">0</div>
                                 <div class="text-[10px] font-black uppercase tracking-widest text-gray-300">pts</div>
@@ -691,44 +691,44 @@ const exportToExcel = (type) => {
                 </div>
                 <div v-if="false" class="space-y-3">
                     <div v-for="agent in leaderboard.top3" :key="agent.agent_id"
-                        class="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
+                        class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50">
                         <span class="text-sm font-black" :class="['text-yellow-500','text-gray-400','text-amber-600'][agent.rank-1]">#{{ agent.rank }}</span>
                         <span class="hidden text-lg font-black" :class="['text-yellow-500','text-gray-400','text-amber-600'][agent.rank-1]">
                             {{ ['ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰'][agent.rank-1] }}
                         </span>
                         <div class="flex-1 min-w-0">
-                            <div class="text-sm font-semibold text-gray-800 truncate">
+                            <div class="text-sm font-semibold text-gray-800 truncate dark:text-gray-200">
                                 {{ agent.total_points === 0 ? 'No points yet' : agent.name }}
                             </div>
-                            <div class="flex gap-3 text-xs text-gray-500 mt-0.5">
+                            <div class="flex gap-3 text-xs text-gray-500 mt-0.5 dark:text-gray-300">
                                 <span>{{ agent.ticket_count }} ticket{{ agent.ticket_count !== 1 ? 's' : '' }}</span>
                                 <span v-if="agent.avg_close_min !== null">avg {{ agent.avg_close_min }}m close</span>
                             </div>
                         </div>
                         <div class="text-right">
                             <div class="text-sm font-bold text-blue-600">{{ agent.total_points.toLocaleString() }}</div>
-                            <div class="text-xs text-gray-400">pts</div>
+                            <div class="text-xs text-gray-400 dark:text-gray-400">pts</div>
                         </div>
                     </div>
                 </div>
-                <div v-if="!leaderboard.top3?.length" class="text-sm text-gray-400 text-center py-4">No points awarded yet this month.</div>
+                <div v-if="!leaderboard.top3?.length" class="text-sm text-gray-400 text-center py-4 dark:text-gray-400">No points awarded yet this month.</div>
             </div>
 
             <!-- Monthly Trophies -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
                     <span class="text-xs font-black uppercase tracking-widest text-amber-600">Awards</span>
                     <span class="text-xl">ðŸ†</span>
-                    <h3 class="text-base font-bold text-gray-900">Monthly Trophies</h3>
+                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Monthly Trophies</h3>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div v-for="trophy in leaderboard.trophies" :key="trophy.label"
-                        class="p-3 rounded-lg bg-gray-50 flex items-start gap-2">
+                        class="p-3 rounded-lg bg-gray-50 flex items-start gap-2 dark:bg-gray-900/50">
                         <span class="text-xl leading-none mt-0.5">{{ trophy.icon }}</span>
                         <div class="min-w-0">
-                            <div class="text-xs font-semibold text-gray-700 leading-tight">{{ trophy.label }}</div>
-                            <div v-if="trophy.winner" class="text-xs text-gray-500 mt-1 truncate">{{ trophy.winner.name }}</div>
-                            <div v-else class="text-xs text-gray-400 mt-1 italic">No winner yet</div>
+                            <div class="text-xs font-semibold text-gray-700 leading-tight dark:text-gray-300">{{ trophy.label }}</div>
+                            <div v-if="trophy.winner" class="text-xs text-gray-500 mt-1 truncate dark:text-gray-300">{{ trophy.winner.name }}</div>
+                            <div v-else class="text-xs text-gray-400 mt-1 italic dark:text-gray-400">No winner yet</div>
                         </div>
                     </div>
                 </div>
@@ -737,12 +737,12 @@ const exportToExcel = (type) => {
 
         <Modal :show="showLeaderboardModal" @close="showLeaderboardModal = false" maxWidth="4xl">
             <div class="p-6">
-                <div class="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                <div class="flex items-center justify-between gap-4 border-b border-gray-100 pb-4 dark:border-gray-700">
                     <div>
-                        <h2 class="text-xl font-black text-gray-900">Tech Rankings</h2>
-                        <p class="mt-1 text-xs font-semibold text-gray-500">{{ leaderboardPeriodLabel }}</p>
+                        <h2 class="text-xl font-black text-gray-900 dark:text-gray-100">Tech Rankings</h2>
+                        <p class="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-300">{{ leaderboardPeriodLabel }}</p>
                     </div>
-                    <button @click="showLeaderboardModal = false" class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600">
+                    <button @click="showLeaderboardModal = false" class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -751,8 +751,8 @@ const exportToExcel = (type) => {
 
                 <div class="mt-5 max-h-[65vh] overflow-y-auto pr-1 custom-scrollbar">
                     <div v-if="leaderboardRankings.length" class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-100 text-left">
-                            <thead class="bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-500">
+                        <table class="min-w-full divide-y divide-gray-100 text-left dark:divide-gray-700">
+                            <thead class="bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900/50 dark:text-slate-300">
                                 <tr>
                                     <th class="px-3 py-3">Rank</th>
                                     <th class="px-3 py-3">Tech</th>
@@ -763,7 +763,7 @@ const exportToExcel = (type) => {
                                     <th class="px-3 py-3">Point Details</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-100">
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                 <tr v-for="agent in leaderboardRankings" :key="agent.agent_id" class="align-top">
                                     <td class="px-3 py-4">
                                         <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-xs font-black text-blue-700">
@@ -772,20 +772,20 @@ const exportToExcel = (type) => {
                                     </td>
                                     <td class="px-3 py-4">
                                         <div class="flex items-center gap-3">
-                                            <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-sm font-black text-gray-600">
+                                            <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-100 text-sm font-black text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                                 <img v-if="agent.profile_photo" :src="'/serve-storage/' + agent.profile_photo" class="h-full w-full object-cover" :alt="agent.name">
                                                 <span v-else>{{ String(agent.name || '').charAt(0).toUpperCase() || '?' }}</span>
                                             </div>
                                             <div class="min-w-0">
-                                                <div class="truncate text-sm font-black text-gray-900">{{ agent.name }}</div>
-                                                <div class="mt-0.5 text-xs font-semibold text-gray-400">Ranked by total points</div>
+                                                <div class="truncate text-sm font-black text-gray-900 dark:text-gray-100">{{ agent.name }}</div>
+                                                <div class="mt-0.5 text-xs font-semibold text-gray-400 dark:text-gray-400">Ranked by total points</div>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-3 py-4 text-right text-sm font-black text-blue-700">{{ agent.total_points.toLocaleString() }}</td>
-                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700">{{ agent.ticket_count }}</td>
-                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700">{{ formatMinutes(agent.avg_response_min) }}</td>
-                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700">{{ formatMinutes(agent.avg_resolution_min) }}</td>
+                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ agent.ticket_count }}</td>
+                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ formatMinutes(agent.avg_response_min) }}</td>
+                                    <td class="px-3 py-4 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ formatMinutes(agent.avg_resolution_min) }}</td>
                                     <td class="px-3 py-4">
                                         <div v-if="agent.point_breakdown?.length" class="flex max-w-md flex-wrap gap-1.5">
                                             <span
@@ -798,17 +798,17 @@ const exportToExcel = (type) => {
                                                 <span>{{ item.points > 0 ? '+' : '' }}{{ item.points }}</span>
                                             </span>
                                         </div>
-                                        <div v-else class="text-xs font-semibold italic text-gray-400">No breakdown available</div>
+                                        <div v-else class="text-xs font-semibold italic text-gray-400 dark:text-gray-400">No breakdown available</div>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <div v-else class="py-12 text-center text-sm italic text-gray-500">No ranked techs for the selected filters.</div>
+                    <div v-else class="py-12 text-center text-sm italic text-gray-500 dark:text-gray-300">No ranked techs for the selected filters.</div>
                 </div>
 
                 <div class="mt-6 flex justify-end">
-                    <button @click="showLeaderboardModal = false" class="rounded-lg bg-gray-100 px-6 py-2 text-sm font-black uppercase tracking-widest text-gray-700 transition-colors hover:bg-gray-200">Close</button>
+                    <button @click="showLeaderboardModal = false" class="rounded-lg bg-gray-100 px-6 py-2 text-sm font-black uppercase tracking-widest text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Close</button>
                 </div>
             </div>
         </Modal>
@@ -817,17 +817,17 @@ const exportToExcel = (type) => {
         <div class="mb-8">
             <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-4">
                 <div>
-                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center dark:text-gray-400">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 014-4h7M9 7h11M4 7h1m-1 5h1m-1 5h1" /></svg>
                         Ticket Flow Board
                     </h3>
-                    <p class="text-xs text-gray-500 mt-1">
+                    <p class="text-xs text-gray-500 mt-1 dark:text-gray-300">
                         <template v-if="kanbanView === 'project'">Projects grouped by status with task completion.</template>
                         <template v-else>Static workload view grouped by {{ kanbanView === 'sub_unit' ? kanbanDepartmentHeader.toLowerCase() : 'user' }}.</template>
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
                         <button
                             @click="kanbanView = 'sub_unit'"
                             :class="['px-3 py-1.5 text-xs font-black rounded-md transition-all', kanbanView === 'sub_unit' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700']"
@@ -847,25 +847,25 @@ const exportToExcel = (type) => {
                             Projects
                         </button>
                     </div>
-                    <span v-if="kanbanView !== 'project'" class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
+                    <span v-if="kanbanView !== 'project'" class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                         {{ activeKanbanTotals.all || 0 }} Tickets
                     </span>
-                    <span v-else class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm">
+                    <span v-else class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-black text-gray-600 shadow-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                         {{ projectTotals.all || 0 }} Projects
                     </span>
                 </div>
             </div>
 
             <!-- Ticket Board (Department / User views) -->
-            <div v-if="kanbanView !== 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
+            <div v-if="kanbanView !== 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar dark:bg-gray-800 dark:border-gray-700">
                 <div class="grid min-w-[1120px]" :style="{ gridTemplateColumns: `220px repeat(${kanbanColumns.length}, minmax(220px, 1fr))` }">
-                    <div class="sticky top-0 left-0 z-30 bg-gray-50 border-r border-b border-gray-200 px-4 py-3">
-                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">{{ kanbanView === 'sub_unit' ? kanbanDepartmentHeader : 'User' }}</p>
+                    <div class="sticky top-0 left-0 z-30 bg-gray-50 border-r border-b border-gray-200 px-4 py-3 dark:bg-gray-900/50 dark:border-gray-700">
+                        <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-gray-300">{{ kanbanView === 'sub_unit' ? kanbanDepartmentHeader : 'User' }}</p>
                     </div>
                     <div
                         v-for="column in kanbanColumns"
                         :key="column.key"
-                        class="sticky top-0 z-20 border-b border-r border-gray-200 px-3 py-3"
+                        class="sticky top-0 z-20 border-b border-r border-gray-200 px-3 py-3 dark:border-gray-700"
                         :class="getKanbanColumnTheme(column.key).header"
                     >
                         <div class="flex items-center justify-between gap-2">
@@ -880,10 +880,10 @@ const exportToExcel = (type) => {
                                 :key="`${column.key}-${priority.key}`"
                                 class="rounded-md border border-white/60 bg-white/70 px-1 py-1 text-center"
                             >
-                                <div class="text-[11px] font-black leading-none text-gray-900">
+                                <div class="text-[11px] font-black leading-none text-gray-900 dark:text-gray-100">
                                     {{ kanbanPrioritySummary[column.key]?.[priority.key] || 0 }}
                                 </div>
-                                <div class="mt-1 text-[9px] font-black uppercase tracking-wider text-gray-500">
+                                <div class="mt-1 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-300">
                                     {{ priority.label }}
                                 </div>
                             </div>
@@ -892,27 +892,27 @@ const exportToExcel = (type) => {
 
                     <template v-if="kanbanGroups.length > 0">
                         <template v-for="group in kanbanGroups" :key="group.key">
-                            <div class="sticky left-0 z-10 bg-white border-r border-b border-gray-200 px-4 py-4">
+                            <div class="sticky left-0 z-10 bg-white border-r border-b border-gray-200 px-4 py-4 dark:bg-gray-800 dark:border-gray-700">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="min-w-0">
-                                        <p class="text-sm font-black text-gray-900 truncate">{{ group.label }}</p>
-                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">{{ group.subtitle }}</p>
+                                        <p class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ group.label }}</p>
+                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5 dark:text-gray-400">{{ group.subtitle }}</p>
                                     </div>
-                                    <span class="shrink-0 px-2 py-1 rounded-lg bg-gray-100 text-[10px] font-black text-gray-700">{{ group.total }}</span>
+                                    <span class="shrink-0 px-2 py-1 rounded-lg bg-gray-100 text-[10px] font-black text-gray-700 dark:bg-gray-800 dark:text-gray-300">{{ group.total }}</span>
                                 </div>
                             </div>
 
                             <div
                                 v-for="column in kanbanColumns"
                                 :key="`${group.key}-${column.key}`"
-                                class="border-r border-b border-gray-200 bg-gray-50/40 p-2"
+                                class="border-r border-b border-gray-200 bg-gray-50/40 p-2 dark:border-gray-700"
                             >
                                 <div class="min-h-[92px] max-h-[360px] overflow-y-auto pr-1 custom-scrollbar space-y-2 border-l-2 pl-2" :class="getKanbanColumnTheme(column.key).rail">
                                     <Link
                                         v-for="ticket in getKanbanCell(group, column.key).tickets"
                                         :key="ticket.id"
                                         :href="route('tickets.edit', ticket.id)"
-                                        class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-200 hover:shadow-md transition-all"
+                                        class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-200 hover:shadow-md transition-all dark:bg-gray-800 dark:border-gray-700"
                                     >
                                         <div class="flex items-start justify-between gap-2">
                                             <span class="text-xs font-black text-blue-600">{{ ticket.key }}</span>
@@ -920,7 +920,7 @@ const exportToExcel = (type) => {
                                                 {{ ticket.priority || 'low' }} {{ getPriorityLevel(ticket.priority) }}
                                             </span>
                                         </div>
-                                        <p class="mt-1 text-xs font-bold text-gray-900 leading-4 line-clamp-2">{{ ticket.title }}</p>
+                                        <p class="mt-1 text-xs font-bold text-gray-900 leading-4 line-clamp-2 dark:text-gray-100">{{ ticket.title }}</p>
                                         <div class="mt-2 flex flex-wrap gap-1">
                                             <span :class="['px-1.5 py-0.5 text-[9px] font-black uppercase rounded border', getStatusColor(ticket.status)]">
                                                 {{ getStatusLabel(ticket.status) }}
@@ -929,16 +929,16 @@ const exportToExcel = (type) => {
                                                 {{ ticket.parent_key }}
                                             </span>
                                         </div>
-                                        <div class="mt-2 space-y-1 text-[10px] font-bold text-gray-500">
-                                            <p class="truncate">Assignee: <span class="text-gray-700">{{ ticket.assignee }}</span></p>
-                                            <p v-if="ticket.store" class="truncate">Store: <span class="text-gray-700">{{ ticket.store.label }}</span></p>
-                                            <p class="truncate">Company: <span class="text-gray-700">{{ ticket.company_name }}</span></p>
+                                        <div class="mt-2 space-y-1 text-[10px] font-bold text-gray-500 dark:text-gray-300">
+                                            <p class="truncate">Assignee: <span class="text-gray-700 dark:text-gray-300">{{ ticket.assignee }}</span></p>
+                                            <p v-if="ticket.store" class="truncate">Store: <span class="text-gray-700 dark:text-gray-300">{{ ticket.store.label }}</span></p>
+                                            <p class="truncate">Company: <span class="text-gray-700 dark:text-gray-300">{{ ticket.company_name }}</span></p>
                                         </div>
-                                        <div class="mt-2 flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-gray-400">
+                                        <div class="mt-2 flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-400">
                                             <span>Age {{ ticket.age || '-' }}</span>
                                             <span>{{ ticket.updated_at }}</span>
                                         </div>
-                                        <div v-if="ticket.status === 'closed' && ticket.survey" class="mt-2 border-t border-gray-100 pt-2">
+                                        <div v-if="ticket.status === 'closed' && ticket.survey" class="mt-2 border-t border-gray-100 pt-2 dark:border-gray-700">
                                             <button @click.prevent="openSurveyModal(ticket)" class="w-full py-1 px-2 flex items-center justify-center gap-1 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded-md text-[10px] font-bold transition-colors">
                                                 <span>⭐ {{ ticket.survey.rating }}/4 Rating</span>
                                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -946,7 +946,7 @@ const exportToExcel = (type) => {
                                         </div>
                                     </Link>
 
-                                    <div v-if="getKanbanCell(group, column.key).count === 0" class="h-20 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white/60">
+                                    <div v-if="getKanbanCell(group, column.key).count === 0" class="h-20 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white/60 dark:border-gray-700">
                                         <span class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No tickets</span>
                                     </div>
                                 </div>
@@ -955,22 +955,22 @@ const exportToExcel = (type) => {
                     </template>
 
                     <div v-else class="col-span-5 px-6 py-12 text-center">
-                        <p class="text-sm font-bold text-gray-500">No tickets match the selected management filters.</p>
+                        <p class="text-sm font-bold text-gray-500 dark:text-gray-300">No tickets match the selected management filters.</p>
                     </div>
                 </div>
             </div>
 
             <!-- Projects Board (Project View) -->
-            <div v-else-if="kanbanView === 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar">
+            <div v-else-if="kanbanView === 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar dark:bg-gray-800 dark:border-gray-700">
                 <div class="grid min-w-[900px]" :style="{ gridTemplateColumns: `repeat(${projectColumns.length}, minmax(220px, 1fr))` }">
                     <div
                         v-for="col in projectColumns"
                         :key="col.key"
-                        class="sticky top-0 z-20 border-b border-r border-gray-200 px-3 py-3"
+                        class="sticky top-0 z-20 border-b border-r border-gray-200 px-3 py-3 dark:border-gray-700"
                         :class="projectStatusTheme(col.key).header"
                     >
                         <div class="flex items-center justify-between gap-2">
-                            <span class="text-[11px] font-black uppercase tracking-widest text-gray-700">{{ col.label }}</span>
+                            <span class="text-[11px] font-black uppercase tracking-widest text-gray-700 dark:text-gray-300">{{ col.label }}</span>
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-black" :class="projectStatusTheme(col.key).badge">
                                 {{ projectTotals[col.key] || 0 }}
                             </span>
@@ -981,7 +981,7 @@ const exportToExcel = (type) => {
                         <div
                             v-for="col in projectColumns"
                             :key="`proj-col-${col.key}`"
-                            class="border-r border-b border-gray-200 bg-gray-50/40 p-2"
+                            class="border-r border-b border-gray-200 bg-gray-50/40 p-2 dark:border-gray-700"
                         >
                             <div class="min-h-[92px] max-h-[500px] overflow-y-auto pr-1 custom-scrollbar space-y-2 pl-2 border-l-2"
                                 :class="col.key === 'Completed' ? 'border-emerald-300' : col.key === 'In Progress' ? 'border-blue-300' : col.key === 'Delayed' ? 'border-red-300' : 'border-gray-200'">
@@ -989,35 +989,35 @@ const exportToExcel = (type) => {
                                     v-for="project in (projectGroups[col.key] || [])"
                                     :key="project.id"
                                     :href="route('projects.show', project.id)"
-                                    class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-indigo-200 hover:shadow-md transition-all"
+                                    class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-indigo-200 hover:shadow-md transition-all dark:bg-gray-800 dark:border-gray-700"
                                 >
                                     <p class="text-xs font-black text-indigo-700 truncate">{{ project.name }}</p>
-                                    <p v-if="project.store" class="text-[10px] text-gray-500 mt-0.5 truncate">🏪 {{ project.store }}</p>
+                                    <p v-if="project.store" class="text-[10px] text-gray-500 mt-0.5 truncate dark:text-gray-300">🏪 {{ project.store }}</p>
                                     <div class="mt-2">
                                         <div class="flex items-center justify-between mb-1">
-                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider">Completion</span>
-                                            <span class="text-[10px] font-black text-gray-700">{{ project.completion_pct }}%</span>
+                                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-wider dark:text-gray-400">Completion</span>
+                                            <span class="text-[10px] font-black text-gray-700 dark:text-gray-300">{{ project.completion_pct }}%</span>
                                         </div>
-                                        <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                        <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden dark:bg-gray-800">
                                             <div class="h-full rounded-full transition-all duration-500"
                                                 :class="projectStatusTheme(col.key).bar"
                                                 :style="{ width: project.completion_pct + '%' }"></div>
                                         </div>
                                     </div>
-                                    <div class="mt-2 space-y-0.5 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                                        <p v-if="project.target_go_live">🎯 Go-Live: <span class="text-gray-600 normal-case font-semibold">{{ project.target_go_live }}</span></p>
-                                        <p v-if="project.turn_over_date">📦 Turn-over: <span class="text-gray-600 normal-case font-semibold">{{ project.turn_over_date }}</span></p>
-                                        <p>Tasks: <span class="text-gray-600">{{ project.total_tasks }}</span></p>
+                                    <div class="mt-2 space-y-0.5 text-[9px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-400">
+                                        <p v-if="project.target_go_live">🎯 Go-Live: <span class="text-gray-600 normal-case font-semibold dark:text-gray-300">{{ project.target_go_live }}</span></p>
+                                        <p v-if="project.turn_over_date">📦 Turn-over: <span class="text-gray-600 normal-case font-semibold dark:text-gray-300">{{ project.turn_over_date }}</span></p>
+                                        <p>Tasks: <span class="text-gray-600 dark:text-gray-300">{{ project.total_tasks }}</span></p>
                                     </div>
                                 </Link>
-                                <div v-if="(projectGroups[col.key] || []).length === 0" class="h-20 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white/60">
+                                <div v-if="(projectGroups[col.key] || []).length === 0" class="h-20 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white/60 dark:border-gray-700">
                                     <span class="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No projects</span>
                                 </div>
                             </div>
                         </div>
                     </template>
                     <div v-else class="col-span-4 px-6 py-12 text-center">
-                        <p class="text-sm font-bold text-gray-500">No projects found.</p>
+                        <p class="text-sm font-bold text-gray-500 dark:text-gray-300">No projects found.</p>
                     </div>
                 </div>
             </div>
@@ -1025,22 +1025,22 @@ const exportToExcel = (type) => {
 
         <!-- Ticket Charts -->
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex items-start justify-between gap-4 mb-6">
                     <div>
-                        <h3 class="text-base font-bold text-gray-900">Overall Open vs Closed</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1">Filtered by the current dashboard controls.</p>
+                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Overall Open vs Closed</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Filtered by the current dashboard controls.</p>
                     </div>
-                    <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600">
+                    <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         {{ totalChartCount(overallChartData) }}
                     </span>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
                     <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(overallChartData)">
-                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
-                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(overallChartData) }}</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner dark:bg-gray-800">
+                            <span class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ totalChartCount(overallChartData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Tickets</span>
                         </div>
                     </div>
                     <div class="space-y-3">
@@ -1067,20 +1067,20 @@ const exportToExcel = (type) => {
                     </div>
                 </div>
 
-                <div class="mt-8 border-t border-gray-100 pt-5">
+                <div class="mt-8 border-t border-gray-100 pt-5 dark:border-gray-700">
                     <div class="flex items-center justify-between mb-4">
-                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-widest">Concern Type Open vs Closed</h4>
-                        <span class="text-xs font-bold text-gray-400">
+                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Concern Type Open vs Closed</h4>
+                        <span class="text-xs font-bold text-gray-400 dark:text-gray-400">
                             {{ concernTypeBars.reduce((sum, row) => sum + row.total, 0) }} Tickets
                         </span>
                     </div>
                     <div class="space-y-5">
                         <div v-for="row in concernTypeBars" :key="row.key">
                             <div class="flex items-center justify-between mb-1.5">
-                                <span class="text-sm font-bold text-gray-700">{{ row.label }}</span>
-                                <span class="text-sm font-black text-gray-900">{{ row.total }}</span>
+                                <span class="text-sm font-bold text-gray-700 dark:text-gray-300">{{ row.label }}</span>
+                                <span class="text-sm font-black text-gray-900 dark:text-gray-100">{{ row.total }}</span>
                             </div>
-                            <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden">
+                            <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden dark:bg-gray-800">
                                 <div
                                     v-if="row.open > 0"
                                     class="h-full bg-blue-600 transition-all"
@@ -1113,15 +1113,15 @@ const exportToExcel = (type) => {
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
                     <div>
-                        <h3 class="text-base font-bold text-gray-900">Per Brand</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1">Open vs Closed by selected company.</p>
+                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed by selected company.</p>
                     </div>
                     <select
                         v-model="selectedBrandId"
-                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold"
+                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold dark:border-gray-600"
                         :disabled="brandChartRows.length === 0"
                     >
                         <option value="all">All</option>
@@ -1135,36 +1135,36 @@ const exportToExcel = (type) => {
                     <div
                         v-for="brand in brandChartRows"
                         :key="brand.id"
-                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4"
+                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4 dark:border-gray-700"
                     >
                         <div class="flex items-start justify-between gap-3 mb-4">
                             <div class="min-w-0">
-                                <p class="text-sm font-black text-gray-900 truncate">{{ brand.name }}</p>
-                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate">{{ brand.code }}</p>
+                                <p class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ brand.name }}</p>
+                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate dark:text-gray-400">{{ brand.code }}</p>
                             </div>
-                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100">
+                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                 {{ totalChartCount(brandPieData(brand)) }}
                             </span>
                         </div>
 
                         <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
                             <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(brand))">
-                                <div class="absolute inset-5 rounded-full bg-white shadow-inner"></div>
+                                <div class="absolute inset-5 rounded-full bg-white shadow-inner dark:bg-gray-800"></div>
                             </div>
                             <div class="space-y-2 min-w-0">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="flex items-center gap-1.5 min-w-0">
                                         <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
-                                        <span class="text-xs font-bold text-gray-600 truncate">Open</span>
+                                        <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Open</span>
                                     </div>
-                                    <span class="text-xs font-black text-gray-900">{{ brand.open }}</span>
+                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.open }}</span>
                                 </div>
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="flex items-center gap-1.5 min-w-0">
                                         <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
-                                        <span class="text-xs font-bold text-gray-600 truncate">Closed</span>
+                                        <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Closed</span>
                                     </div>
-                                    <span class="text-xs font-black text-gray-900">{{ brand.closed }}</span>
+                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.closed }}</span>
                                 </div>
                             </div>
                         </div>
@@ -1173,16 +1173,16 @@ const exportToExcel = (type) => {
 
                 <div v-else-if="selectedBrandChart" class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
                     <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(selectedBrandPieData)">
-                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
-                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(selectedBrandPieData) }}</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner dark:bg-gray-800">
+                            <span class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ totalChartCount(selectedBrandPieData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Tickets</span>
                         </div>
                     </div>
                     <div class="space-y-4">
                         <div>
-                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest">Brand</p>
-                            <p class="text-lg font-black text-gray-900 mt-0.5">{{ selectedBrandChart.name }}</p>
-                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500">{{ selectedBrandChart.code }}</p>
+                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Brand</p>
+                            <p class="text-lg font-black text-gray-900 mt-0.5 dark:text-gray-100">{{ selectedBrandChart.name }}</p>
+                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ selectedBrandChart.code }}</p>
                         </div>
                         <div class="space-y-3">
                             <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
@@ -1208,7 +1208,7 @@ const exportToExcel = (type) => {
                         </div>
                     </div>
                 </div>
-                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400">
+                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                     No brand data available.
                 </div>
             </div>
@@ -1217,7 +1217,7 @@ const exportToExcel = (type) => {
         <!-- Store Health Section -->
         <div v-if="hasPermission('reports.store_health')" class="mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+                <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center dark:text-gray-400">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                     Live Store Health
                 </h3>
@@ -1235,7 +1235,7 @@ const exportToExcel = (type) => {
 
         <!-- Filters Section -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center">
+            <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center dark:text-gray-400">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                 Overview Performance
             </h3>
@@ -1244,36 +1244,36 @@ const exportToExcel = (type) => {
         <!-- Stats Grid -->
         <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
             <div 
-                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-blue-500 flex flex-col justify-between cursor-pointer hover:bg-blue-50 transition-colors"
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-blue-500 flex flex-col justify-between cursor-pointer hover:bg-blue-50 transition-colors dark:bg-gray-800"
                 @click="showTotalModal = true"
             >
                 <div class="flex items-center justify-between">
-                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Total</p>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Total</p>
                     <div class="p-1.5 bg-blue-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></div>
                 </div>
-                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.total }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ stats.total }}</p>
             </div>
 
             <div 
-                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-purple-500 flex flex-col justify-between cursor-pointer hover:bg-purple-50 transition-colors"
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-purple-500 flex flex-col justify-between cursor-pointer hover:bg-purple-50 transition-colors dark:bg-gray-800"
                 @click="showNewModal = true"
             >
                 <div class="flex items-center justify-between">
-                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">New</p>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">New</p>
                     <div class="p-1.5 bg-purple-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
                 </div>
-                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.new }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ stats.new }}</p>
             </div>
 
             <div 
-                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-yellow-500 flex flex-col justify-between cursor-pointer hover:bg-yellow-50 transition-colors"
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-yellow-500 flex flex-col justify-between cursor-pointer hover:bg-yellow-50 transition-colors dark:bg-gray-800"
                 @click="showOpenModal = true"
             >
                 <div class="flex items-center justify-between">
-                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Open</p>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Open</p>
                     <div class="p-1.5 bg-yellow-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
                 </div>
-                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.open }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ stats.open }}</p>
             </div>
 
             <div 
@@ -1325,35 +1325,35 @@ const exportToExcel = (type) => {
             </div>
 
             <div 
-                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-green-500 flex flex-col justify-between col-span-2 lg:col-span-1 cursor-pointer hover:bg-green-50 transition-colors"
+                class="bg-white rounded-xl shadow-sm p-4 sm:p-5 border-b-4 border-green-500 flex flex-col justify-between col-span-2 lg:col-span-1 cursor-pointer hover:bg-green-50 transition-colors dark:bg-gray-800"
                 @click="showClosedModal = true"
             >
                 <div class="flex items-center justify-between">
-                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest">Closed</p>
+                    <p class="text-[10px] sm:text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Closed</p>
                     <div class="p-1.5 bg-green-50 rounded-lg hidden sm:block"><svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></div>
                 </div>
-                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1">{{ stats.closed }}</p>
+                <p class="text-2xl sm:text-3xl font-black text-gray-900 mt-1 dark:text-gray-100">{{ stats.closed }}</p>
             </div>
         </div>
 
         <!-- Ticket Charts -->
         <div v-if="false" class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex items-start justify-between gap-4 mb-6">
                     <div>
-                        <h3 class="text-base font-bold text-gray-900">Overall Open vs Closed</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1">Filtered by the current dashboard controls.</p>
+                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Overall Open vs Closed</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Filtered by the current dashboard controls.</p>
                     </div>
-                    <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600">
+                    <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         {{ totalChartCount(overallChartData) }}
                     </span>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
                     <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(overallChartData)">
-                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
-                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(overallChartData) }}</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner dark:bg-gray-800">
+                            <span class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ totalChartCount(overallChartData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Tickets</span>
                         </div>
                     </div>
                     <div class="space-y-3">
@@ -1380,20 +1380,20 @@ const exportToExcel = (type) => {
                     </div>
                 </div>
 
-                <div class="mt-8 border-t border-gray-100 pt-5">
+                <div class="mt-8 border-t border-gray-100 pt-5 dark:border-gray-700">
                     <div class="flex items-center justify-between mb-4">
-                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-widest">Concern Type Open vs Closed</h4>
-                        <span class="text-xs font-bold text-gray-400">
+                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Concern Type Open vs Closed</h4>
+                        <span class="text-xs font-bold text-gray-400 dark:text-gray-400">
                             {{ concernTypeBars.reduce((sum, row) => sum + row.total, 0) }} Tickets
                         </span>
                     </div>
                     <div class="space-y-5">
                         <div v-for="row in concernTypeBars" :key="row.key">
                             <div class="flex items-center justify-between mb-1.5">
-                                <span class="text-sm font-bold text-gray-700">{{ row.label }}</span>
-                                <span class="text-sm font-black text-gray-900">{{ row.total }}</span>
+                                <span class="text-sm font-bold text-gray-700 dark:text-gray-300">{{ row.label }}</span>
+                                <span class="text-sm font-black text-gray-900 dark:text-gray-100">{{ row.total }}</span>
                             </div>
-                            <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden">
+                            <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden dark:bg-gray-800">
                                 <div
                                     v-if="row.open > 0"
                                     class="h-full bg-blue-600 transition-all"
@@ -1426,15 +1426,15 @@ const exportToExcel = (type) => {
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
                     <div>
-                        <h3 class="text-base font-bold text-gray-900">Per Brand</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1">Open vs Closed by selected company.</p>
+                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed by selected company.</p>
                     </div>
                     <select
                         v-model="selectedBrandId"
-                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold"
+                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold dark:border-gray-600"
                         :disabled="brandChartRows.length === 0"
                     >
                         <option value="all">All</option>
@@ -1448,36 +1448,36 @@ const exportToExcel = (type) => {
                     <div
                         v-for="brand in brandChartRows"
                         :key="brand.id"
-                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4"
+                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4 dark:border-gray-700"
                     >
                         <div class="flex items-start justify-between gap-3 mb-4">
                             <div class="min-w-0">
-                                <p class="text-sm font-black text-gray-900 truncate">{{ brand.name }}</p>
-                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate">{{ brand.code }}</p>
+                                <p class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ brand.name }}</p>
+                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate dark:text-gray-400">{{ brand.code }}</p>
                             </div>
-                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100">
+                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                 {{ totalChartCount(brandPieData(brand)) }}
                             </span>
                         </div>
 
                         <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
                             <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(brand))">
-                                <div class="absolute inset-5 rounded-full bg-white shadow-inner"></div>
+                                <div class="absolute inset-5 rounded-full bg-white shadow-inner dark:bg-gray-800"></div>
                             </div>
                             <div class="space-y-2 min-w-0">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="flex items-center gap-1.5 min-w-0">
                                         <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
-                                        <span class="text-xs font-bold text-gray-600 truncate">Open</span>
+                                        <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Open</span>
                                     </div>
-                                    <span class="text-xs font-black text-gray-900">{{ brand.open }}</span>
+                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.open }}</span>
                                 </div>
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="flex items-center gap-1.5 min-w-0">
                                         <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
-                                        <span class="text-xs font-bold text-gray-600 truncate">Closed</span>
+                                        <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Closed</span>
                                     </div>
-                                    <span class="text-xs font-black text-gray-900">{{ brand.closed }}</span>
+                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.closed }}</span>
                                 </div>
                             </div>
                         </div>
@@ -1486,16 +1486,16 @@ const exportToExcel = (type) => {
 
                 <div v-else-if="selectedBrandChart" class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
                     <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(selectedBrandPieData)">
-                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner">
-                            <span class="text-2xl font-black text-gray-900">{{ totalChartCount(selectedBrandPieData) }}</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400">Tickets</span>
+                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner dark:bg-gray-800">
+                            <span class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ totalChartCount(selectedBrandPieData) }}</span>
+                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Tickets</span>
                         </div>
                     </div>
                     <div class="space-y-4">
                         <div>
-                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest">Brand</p>
-                            <p class="text-lg font-black text-gray-900 mt-0.5">{{ selectedBrandChart.name }}</p>
-                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500">{{ selectedBrandChart.code }}</p>
+                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Brand</p>
+                            <p class="text-lg font-black text-gray-900 mt-0.5 dark:text-gray-100">{{ selectedBrandChart.name }}</p>
+                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ selectedBrandChart.code }}</p>
                         </div>
                         <div class="space-y-3">
                             <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
@@ -1521,7 +1521,7 @@ const exportToExcel = (type) => {
                         </div>
                     </div>
                 </div>
-                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400">
+                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                     No brand data available.
                 </div>
             </div>
@@ -1530,25 +1530,25 @@ const exportToExcel = (type) => {
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-2 space-y-8">
                 <!-- My Assigned Tickets -->
-                <div v-if="myTickets && myTickets.length > 0" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                <div v-if="myTickets && myTickets.length > 0" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
                         <div class="flex items-center space-x-2">
                             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                            <h3 class="text-lg font-bold text-gray-900">Assigned to Me</h3>
+                            <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Assigned to Me</h3>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead class="bg-gray-50/50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Company</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Priority</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Updated</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Ticket</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Company</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Priority</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Updated</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-100">
+                            <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
                                 <tr v-for="ticket in myTickets" :key="ticket.id" class="hover:bg-blue-50/30 transition-colors cursor-pointer" @click="router.visit(route('tickets.edit', ticket.id))">
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col">
@@ -1556,10 +1556,10 @@ const exportToExcel = (type) => {
                                                 <span class="text-sm font-bold text-blue-600">{{ ticket.key }}</span>
                                                 <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                             </div>
-                                            <span class="text-sm text-gray-900 line-clamp-1">{{ ticket.title }}</span>
+                                            <span class="text-sm text-gray-900 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</span>
                                         </div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ ticket.company_name }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{{ ticket.company_name }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span :class="['px-2.5 py-0.5 inline-flex text-xs font-bold rounded-full border', getStatusColor(ticket.status)]">
                                             {{ getStatusLabel(ticket.status) }}
@@ -1570,7 +1570,7 @@ const exportToExcel = (type) => {
                                             {{ ticket.priority }}
                                         </span>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-400 font-medium">{{ ticket.updated_at }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-400 font-medium dark:text-gray-400">{{ ticket.updated_at }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1578,37 +1578,37 @@ const exportToExcel = (type) => {
                 </div>
 
                 <!-- Recent Tickets -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
                         <div class="flex items-center space-x-2">
-                            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                            <h3 class="text-lg font-bold text-gray-900">Recent Tickets</h3>
+                            <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                            <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Recent Tickets</h3>
                         </div>
                         <Link :href="route('tickets.index')" class="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors">View All &rarr;</Link>
                     </div>
                     <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead class="bg-gray-50/50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ticket</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Assignee</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Priority</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Ticket</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Assignee</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-slate-300">Priority</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-100">
+                            <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
                                 <tr v-for="ticket in recentTickets" :key="ticket.id" class="hover:bg-gray-50/50 transition-colors cursor-pointer" @click="router.visit(route('tickets.edit', ticket.id))">
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col">
                                             <div class="flex items-center space-x-2">
                                                 <span class="text-sm font-bold text-blue-600">{{ ticket.key }}</span>
                                                 <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
-                                                <span class="text-[10px] text-gray-400 font-bold uppercase">{{ ticket.company_name }}</span>
+                                                <span class="text-[10px] text-gray-400 font-bold uppercase dark:text-gray-400">{{ ticket.company_name }}</span>
                                             </div>
-                                            <span class="text-sm text-gray-900 font-medium line-clamp-1">{{ ticket.title }}</span>
+                                            <span class="text-sm text-gray-900 font-medium line-clamp-1 dark:text-gray-100">{{ ticket.title }}</span>
                                         </div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">{{ ticket.assignee }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium dark:text-gray-300">{{ ticket.assignee }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span :class="['px-2.5 py-0.5 inline-flex text-xs font-bold rounded-full border', getStatusColor(ticket.status)]">
                                             {{ getStatusLabel(ticket.status) }}
@@ -1621,7 +1621,7 @@ const exportToExcel = (type) => {
                                     </td>
                                 </tr>
                                 <tr v-if="!recentTickets || recentTickets.length === 0">
-                                    <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-400 italic">
+                                    <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-400 italic dark:text-gray-400">
                                         No tickets found in your current workspace.
                                     </td>
                                 </tr>
@@ -1632,19 +1632,19 @@ const exportToExcel = (type) => {
             </div>
 
             <!-- Recent Activity -->
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
-                <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                    <h3 class="text-lg font-bold text-gray-900">Activity Stream</h3>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col dark:bg-gray-800 dark:border-gray-700">
+                <div class="px-6 py-4 bg-gray-50 border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Activity Stream</h3>
                 </div>
                 <div class="p-6 flex-grow">
                     <div class="flow-root">
                         <ul class="-mb-8">
                             <li v-for="(activity, index) in recentActivity" :key="activity.type + '-' + activity.id">
                                 <div class="relative pb-8">
-                                    <span v-if="index !== recentActivity.length - 1" class="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-100" aria-hidden="true"></span>
+                                    <span v-if="index !== recentActivity.length - 1" class="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-100 dark:bg-gray-800" aria-hidden="true"></span>
                                     <div class="relative flex items-start space-x-3">
                                         <div class="relative">
-                                            <div v-if="activity.user_photo" class="h-10 w-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-gray-100">
+                                            <div v-if="activity.user_photo" class="h-10 w-10 rounded-full border-2 border-white shadow-sm overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                 <img :src="'/serve-storage/' + activity.user_photo" class="h-full w-full object-cover" :alt="activity.user">
                                             </div>
                                             <div v-else class="h-10 w-10 rounded-full bg-blue-100 border-2 border-white shadow-sm flex items-center justify-center text-blue-600 font-bold text-sm">
@@ -1658,14 +1658,14 @@ const exportToExcel = (type) => {
                                         </div>
                                         <div class="min-w-0 flex-1">
                                             <div class="text-sm">
-                                                <span class="font-bold text-gray-900">{{ activity.user }}</span>
-                                                <span class="text-gray-500 ml-1">{{ activity.action }}</span>
+                                                <span class="font-bold text-gray-900 dark:text-gray-100">{{ activity.user }}</span>
+                                                <span class="text-gray-500 ml-1 dark:text-gray-300">{{ activity.action }}</span>
                                                 <Link :href="route('tickets.edit', activity.ticket_id)" class="ml-1 font-bold text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
                                             </div>
-                                            <p v-if="activity.type === 'comment'" class="mt-1 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100 italic line-clamp-2">
+                                            <p v-if="activity.type === 'comment'" class="mt-1 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100 italic line-clamp-2 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                                 "{{ truncate(activity.comment_text, 80) }}"
                                             </p>
-                                            <div class="mt-1 flex items-center space-x-2 text-xs text-gray-400 font-medium">
+                                            <div class="mt-1 flex items-center space-x-2 text-xs text-gray-400 font-medium dark:text-gray-400">
                                                 <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                 <span>{{ activity.time }}</span>
                                             </div>
@@ -1674,10 +1674,10 @@ const exportToExcel = (type) => {
                                 </div>
                             </li>
                             <li v-if="!recentActivity || recentActivity.length === 0" class="text-center py-12">
-                                <div class="bg-gray-50 rounded-full h-12 w-12 flex items-center justify-center mx-auto mb-3">
+                                <div class="bg-gray-50 rounded-full h-12 w-12 flex items-center justify-center mx-auto mb-3 dark:bg-gray-900/50">
                                     <svg class="h-6 w-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 </div>
-                                <p class="text-sm text-gray-400 italic">No recent activity detected.</p>
+                                <p class="text-sm text-gray-400 italic dark:text-gray-400">No recent activity detected.</p>
                             </li>
                         </ul>
                     </div>
@@ -1689,7 +1689,7 @@ const exportToExcel = (type) => {
         <Modal :show="showWaitingAlarmModal" @close="showWaitingAlarmModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         <svg class="w-6 h-6 text-orange-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         Aged Waiting Tickets
                         <span class="ml-2 px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">
@@ -1701,7 +1701,7 @@ const exportToExcel = (type) => {
                             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Export
                         </button>
-                        <button @click="showWaitingAlarmModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showWaitingAlarmModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -1720,9 +1720,9 @@ const exportToExcel = (type) => {
                                             {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter dark:text-gray-300">{{ ticket.company_name }}</span>
                                         <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
                                         <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                     </div>
@@ -1740,13 +1740,13 @@ const exportToExcel = (type) => {
                             </div>
                         </div>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500 italic">
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">
                         No tickets have reached the aging threshold yet.
                     </div>
                 </div>
 
                 <div class="mt-6 flex justify-end">
-                    <button @click="showWaitingAlarmModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">
+                    <button @click="showWaitingAlarmModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Close
                     </button>
                 </div>
@@ -1757,7 +1757,7 @@ const exportToExcel = (type) => {
         <Modal :show="showUrgentModal" @close="showUrgentModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         <svg class="w-6 h-6 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         Urgent (P1) Tickets
                         <span class="ml-2 px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded-full">
@@ -1769,7 +1769,7 @@ const exportToExcel = (type) => {
                             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Export
                         </button>
-                        <button @click="showUrgentModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showUrgentModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -1788,9 +1788,9 @@ const exportToExcel = (type) => {
                                             {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter dark:text-gray-300">{{ ticket.company_name }}</span>
                                         <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
                                         <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                     </div>
@@ -1811,13 +1811,13 @@ const exportToExcel = (type) => {
                             </div>
                         </div>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500 italic">
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">
                         No urgent tickets found.
                     </div>
                 </div>
 
                 <div class="mt-6 flex justify-end">
-                    <button @click="showUrgentModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">
+                    <button @click="showUrgentModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Close
                     </button>
                 </div>
@@ -1828,7 +1828,7 @@ const exportToExcel = (type) => {
         <Modal :show="showTotalModal" @close="showTotalModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                         Total Tickets (Latest 100)
                         <span class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
@@ -1840,14 +1840,14 @@ const exportToExcel = (type) => {
                             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Export
                         </button>
-                        <button @click="showTotalModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showTotalModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
                 </div>
                 <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                     <div v-if="totalTicketsList?.length > 0" class="space-y-3">
-                        <div v-for="ticket in totalTicketsList" :key="ticket.id" class="p-4 bg-gray-50 border border-gray-100 rounded-xl hover:shadow-md transition-all group">
+                        <div v-for="ticket in totalTicketsList" :key="ticket.id" class="p-4 bg-gray-50 border border-gray-100 rounded-xl hover:shadow-md transition-all group dark:bg-gray-900/50 dark:border-gray-700">
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
@@ -1858,16 +1858,16 @@ const exportToExcel = (type) => {
                                             {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter dark:text-gray-300">{{ ticket.company_name }}</span>
                                         <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
                                         <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                     </div>
                                 </div>
                                 <div class="text-right">
-                                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Created</p>
-                                    <p class="text-xs font-bold text-gray-600">{{ ticket.created_at }}</p>
+                                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Created</p>
+                                    <p class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ ticket.created_at }}</p>
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
@@ -1877,10 +1877,10 @@ const exportToExcel = (type) => {
                             </div>
                         </div>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500 italic">No tickets found.</div>
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">No tickets found.</div>
                 </div>
                 <div class="mt-6 flex justify-end">
-                    <button @click="showTotalModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                    <button @click="showTotalModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Close</button>
                 </div>
             </div>
         </Modal>
@@ -1889,7 +1889,7 @@ const exportToExcel = (type) => {
         <Modal :show="showNewModal" @close="showNewModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         <svg class="w-6 h-6 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                         New Tickets (Uncategorized & Unassigned)
                         <span class="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
@@ -1901,7 +1901,7 @@ const exportToExcel = (type) => {
                             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Export
                         </button>
-                        <button @click="showNewModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showNewModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -1919,9 +1919,9 @@ const exportToExcel = (type) => {
                                             {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter dark:text-gray-300">{{ ticket.company_name }}</span>
                                         <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
                                         <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                     </div>
@@ -1938,10 +1938,10 @@ const exportToExcel = (type) => {
                             </div>
                         </div>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500 italic">No new tickets found.</div>
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">No new tickets found.</div>
                 </div>
                 <div class="mt-6 flex justify-end">
-                    <button @click="showNewModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                    <button @click="showNewModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Close</button>
                 </div>
             </div>
         </Modal>
@@ -1950,7 +1950,7 @@ const exportToExcel = (type) => {
         <Modal :show="showOpenModal" @close="showOpenModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         <svg class="w-6 h-6 text-yellow-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         Open Tickets (Latest 100)
                         <span class="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
@@ -1962,7 +1962,7 @@ const exportToExcel = (type) => {
                             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Export
                         </button>
-                        <button @click="showOpenModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showOpenModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -1980,9 +1980,9 @@ const exportToExcel = (type) => {
                                             {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter dark:text-gray-300">{{ ticket.company_name }}</span>
                                         <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
                                         <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                     </div>
@@ -1999,10 +1999,10 @@ const exportToExcel = (type) => {
                             </div>
                         </div>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500 italic">No open tickets found.</div>
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">No open tickets found.</div>
                 </div>
                 <div class="mt-6 flex justify-end">
-                    <button @click="showOpenModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                    <button @click="showOpenModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Close</button>
                 </div>
             </div>
         </Modal>
@@ -2011,7 +2011,7 @@ const exportToExcel = (type) => {
         <Modal :show="showClosedModal" @close="showClosedModal = false" maxWidth="2xl">
             <div class="p-6">
                 <div class="flex items-center justify-between mb-6 border-b pb-4">
-                    <h2 class="text-xl font-bold text-gray-900 flex items-center">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center dark:text-gray-100">
                         <svg class="w-6 h-6 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                         Closed Tickets (Latest 100)
                         <span class="ml-2 px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
@@ -2023,7 +2023,7 @@ const exportToExcel = (type) => {
                             <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                             Export
                         </button>
-                        <button @click="showClosedModal = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button @click="showClosedModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
@@ -2041,9 +2041,9 @@ const exportToExcel = (type) => {
                                             {{ getStatusLabel(ticket.status) }}
                                         </span>
                                     </div>
-                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1">{{ ticket.title }}</h3>
+                                    <h3 class="text-sm font-bold text-gray-900 mt-1 line-clamp-1 dark:text-gray-100">{{ ticket.title }}</h3>
                                     <div class="flex items-center space-x-2 mt-1">
-                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">{{ ticket.company_name }}</span>
+                                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter dark:text-gray-300">{{ ticket.company_name }}</span>
                                         <span class="text-[9px] font-bold text-blue-500 uppercase tracking-tighter">Assignee: {{ ticket.assignee }}</span>
                                         <span v-if="ticket.parent_key" class="text-[9px] font-bold text-purple-600 uppercase tracking-tighter bg-purple-50 px-1 rounded border border-purple-100">Parent: {{ ticket.parent_key }}</span>
                                     </div>
@@ -2060,10 +2060,10 @@ const exportToExcel = (type) => {
                             </div>
                         </div>
                     </div>
-                    <div v-else class="text-center py-12 text-gray-500 italic">No closed tickets found.</div>
+                    <div v-else class="text-center py-12 text-gray-500 italic dark:text-gray-300">No closed tickets found.</div>
                 </div>
                 <div class="mt-6 flex justify-end">
-                    <button @click="showClosedModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest">Close</button>
+                    <button @click="showClosedModal = false" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-black uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Close</button>
                 </div>
             </div>
         </Modal>
@@ -2072,24 +2072,24 @@ const exportToExcel = (type) => {
     <!-- Survey Modal -->
     <Modal :show="showSurveyModal" @close="closeSurveyModal">
         <div class="p-6">
-            <h3 class="text-lg font-bold text-gray-900 mb-4">Ticket Feedback</h3>
+            <h3 class="text-lg font-bold text-gray-900 mb-4 dark:text-gray-100">Ticket Feedback</h3>
             <div v-if="selectedSurveyTicket" class="space-y-4">
                 <div class="flex items-center gap-2">
-                    <span class="text-sm font-bold text-gray-700">Rating:</span>
+                    <span class="text-sm font-bold text-gray-700 dark:text-gray-300">Rating:</span>
                     <div class="flex gap-1">
                         <span v-for="i in 4" :key="i" class="text-xl" :class="i <= selectedSurveyTicket.survey.rating ? 'text-yellow-400' : 'text-gray-200'">⭐</span>
                     </div>
-                    <span class="text-xs font-black text-gray-500 ml-2">({{ selectedSurveyTicket.survey.rating }}/4)</span>
+                    <span class="text-xs font-black text-gray-500 ml-2 dark:text-gray-300">({{ selectedSurveyTicket.survey.rating }}/4)</span>
                 </div>
                 <div>
-                    <span class="text-sm font-bold text-gray-700 block mb-1">Feedback:</span>
-                    <div class="p-3 bg-gray-50 rounded-lg text-sm text-gray-600 italic whitespace-pre-wrap">
+                    <span class="text-sm font-bold text-gray-700 block mb-1 dark:text-gray-300">Feedback:</span>
+                    <div class="p-3 bg-gray-50 rounded-lg text-sm text-gray-600 italic whitespace-pre-wrap dark:bg-gray-900/50 dark:text-gray-300">
                         {{ selectedSurveyTicket.survey.feedback || 'No written feedback provided.' }}
                     </div>
                 </div>
             </div>
             <div class="mt-6 flex justify-end">
-                <button @click="closeSurveyModal" class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors">
+                <button @click="closeSurveyModal" class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-bold rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                     Close
                 </button>
             </div>

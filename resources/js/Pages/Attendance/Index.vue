@@ -1071,7 +1071,7 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
             Daily Time Record (DTR)
         </template>
 
-        <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
+        <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
             <div v-if="isMissingActiveGeofence" class="p-8 text-center bg-red-50">
                 <ExclamationCircleIcon class="w-12 h-12 text-red-500 mx-auto mb-4" />
                 <h3 class="text-lg font-bold text-red-900">Active Schedule Geofence Required</h3>
@@ -1122,7 +1122,7 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div class="space-y-4">
                         <div class="flex items-center justify-between">
-                            <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
                                 <CameraIcon class="w-5 h-5 text-blue-600" />
                                 1. Take a Selfie
                             </h3>
@@ -1156,7 +1156,7 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
 
                     <div class="space-y-4">
                         <div class="flex items-center justify-between gap-3">
-                            <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <h3 class="text-lg font-bold text-gray-900 flex items-center gap-2 dark:text-gray-100">
                                 <MapPinIcon class="w-5 h-5 text-red-600" />
                                 2. Confirm Location
                             </h3>
@@ -1173,13 +1173,13 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                             </div>
                         </div>
 
-                        <div class="relative aspect-video bg-gray-100 rounded-lg border-2 overflow-hidden" :class="isWithinStoreVicinity ? 'border-blue-500' : 'border-gray-200'">
+                        <div class="relative aspect-video bg-gray-100 rounded-lg border-2 overflow-hidden dark:bg-gray-800" :class="isWithinStoreVicinity ? 'border-blue-500' : 'border-gray-200'">
                             <div ref="mapElement" class="w-full h-full"></div>
 
                             <div v-if="!latitude || locationError" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/90 p-4 text-center">
                                 <template v-if="!latitude && !locationError">
-                                    <ArrowPathIcon class="w-8 h-8 animate-spin text-gray-400 mb-2" />
-                                    <p class="text-gray-500">Acquiring location...</p>
+                                    <ArrowPathIcon class="w-8 h-8 animate-spin text-gray-400 mb-2 dark:text-gray-400" />
+                                    <p class="text-gray-500 dark:text-gray-300">Acquiring location...</p>
                                 </template>
                                 <p v-else-if="locationError" class="text-red-500 text-sm font-medium">{{ locationError }}</p>
                             </div>
@@ -1187,8 +1187,8 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
 
                             <div class="flex items-center justify-between gap-3">
                                 <div>
-                                    <p class="text-xs text-gray-500 uppercase tracking-widest font-black">Provider</p>
-                                    <p class="text-sm font-bold text-gray-900">{{ form.location_provider }} · {{ getLocationPlatform() }}</p>
+                                    <p class="text-xs text-gray-500 uppercase tracking-widest font-black dark:text-gray-300">Provider</p>
+                                    <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ form.location_provider }} · {{ getLocationPlatform() }}</p>
                                 </div>
                                 <SecondaryButton @click="refreshGps" :disabled="form.processing || isRefreshingLocation" class="justify-center px-4 py-2">
                                     <ArrowPathIcon class="w-4 h-4 mr-1" :class="isRefreshingLocation ? 'animate-spin' : ''" />
@@ -1198,14 +1198,14 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
 
                     </div>
 
-                    <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100">
+                    <div class="md:col-span-2 mt-4 pt-6 border-t border-gray-100 dark:border-gray-700">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
 
                             <!-- Time In / Out box -->
-                            <div class="bg-gray-50 rounded-xl p-4 sm:p-6 flex flex-col items-center gap-3 border border-gray-100 shadow-inner">
+                            <div class="bg-gray-50 rounded-xl p-4 sm:p-6 flex flex-col items-center gap-3 border border-gray-100 shadow-inner dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="text-center">
-                                    <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black">Current Manila Time</p>
-                                    <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums">{{ currentTime }}</p>
+                                    <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black dark:text-gray-300">Current Manila Time</p>
+                                    <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums dark:text-gray-100">{{ currentTime }}</p>
                                     <div class="flex items-center gap-2 mt-1 justify-center">
                                         <div :class="['w-2 h-2 rounded-full animate-pulse', presenceState === 'in' ? 'bg-green-500' : presenceState === 'out' ? 'bg-red-500' : 'bg-gray-400']"></div>
                                         <p class="text-xs sm:text-sm font-bold" :class="presenceState === 'in' ? 'text-green-600' : presenceState === 'out' ? 'text-red-600' : 'text-gray-500'">
@@ -1255,35 +1255,35 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                             </div>
 
                             <!-- GPS Accuracy box -->
-                            <div class="space-y-3 rounded-xl border border-gray-200 p-4 bg-gray-50">
+                            <div class="space-y-3 rounded-xl border border-gray-200 p-4 bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex justify-between text-sm">
-                                    <span class="text-gray-600 font-medium">GPS Accuracy</span>
+                                    <span class="text-gray-600 font-medium dark:text-gray-300">GPS Accuracy</span>
                                     <span :class="locationReadinessTone">{{ locationReadinessLabel }}</span>
                                 </div>
-                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
                                     <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" :style="{ width: `${locationAttemptProgress}%` }"></div>
                                 </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2">
-                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Accuracy</p>
-                                        <p class="font-bold text-gray-900">
+                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black dark:text-gray-300">Accuracy</p>
+                                        <p class="font-bold text-gray-900 dark:text-gray-100">
                                             <span v-if="locationAccuracy !== null">±{{ locationAccuracy.toFixed(1) }}m</span>
                                             <span v-else>Waiting for fix</span>
                                         </p>
                                     </div>
-                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2">
-                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Distance To Store</p>
-                                        <p class="font-bold text-gray-900">{{ requiresGeofencing ? locationDistanceLabel : 'Not required for WFH' }}</p>
+                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black dark:text-gray-300">Distance To Store</p>
+                                        <p class="font-bold text-gray-900 dark:text-gray-100">{{ requiresGeofencing ? locationDistanceLabel : 'Not required for WFH' }}</p>
                                     </div>
-                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2 sm:col-span-2">
-                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black">Last Updated</p>
-                                        <p class="font-bold text-gray-900">{{ locationFreshnessLabel }}</p>
+                                    <div class="rounded-lg bg-white border border-gray-200 px-3 py-2 sm:col-span-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <p class="text-[10px] uppercase tracking-widest text-gray-500 font-black dark:text-gray-300">Last Updated</p>
+                                        <p class="font-bold text-gray-900 dark:text-gray-100">{{ locationFreshnessLabel }}</p>
                                     </div>
                                 </div>
                                 <p v-if="locationHint" class="text-[11px] text-amber-700 font-medium">
                                     {{ locationHint }}
                                 </p>
-                                <p v-if="latitude" class="text-[10px] text-gray-400 font-mono">
+                                <p v-if="latitude" class="text-[10px] text-gray-400 font-mono dark:text-gray-400">
                                     {{ latitude.toFixed(6) }}, {{ longitude.toFixed(6) }}
                                 </p>
                             </div>

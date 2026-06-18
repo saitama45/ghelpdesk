@@ -189,18 +189,19 @@ const canSeeSettings = computed(() => {
     >
         <!-- Sidebar Header -->
         <div class="relative flex items-center px-4 border-b border-gray-800 shrink-0 h-16">
-            <div v-if="!isCollapsed" class="w-9 h-9 bg-white rounded-lg p-1 flex items-center justify-center flex-shrink-0">
-                <img src="/images/company_logo.png" alt="Company Logo" class="w-full h-full object-contain">
+            <div v-if="!isCollapsed" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="h-10 px-3 bg-white rounded-lg flex items-center justify-center flex-shrink-0 pointer-events-auto shadow-sm" style="background-color: white !important;">
+                    <img src="/images/company_logo.png" alt="Company Logo" class="h-7 w-auto object-contain">
+                </div>
             </div>
-            <span v-if="!isCollapsed" class="absolute inset-0 flex items-center justify-center text-lg font-bold leading-none whitespace-nowrap text-white pointer-events-none">Link Hub</span>
 
             <button
                 @click="toggleSidebar"
-                class="ml-auto p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
+                class="relative z-10 ml-auto p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
                 :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
             >
-                <Bars3Icon v-if="isCollapsed" class="w-5 h-5 text-gray-400 group-hover:text-white" />
-                <XMarkIcon v-else class="w-5 h-5 text-gray-400" />
+                <Bars3Icon v-if="isCollapsed" class="w-5 h-5 text-gray-400 group-hover:text-white dark:text-gray-400" />
+                <XMarkIcon v-else class="w-5 h-5 text-gray-400 dark:text-gray-400" />
             </button>
         </div>
 
@@ -277,7 +278,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('services') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('services') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
@@ -344,7 +345,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('inventory') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('inventory') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('assets.view')" :style="co('inventory', 'assets')">
@@ -403,7 +404,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('monitoring') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('monitoring') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('npc_status.view')" :style="co('monitoring', 'npc-status')">
@@ -456,7 +457,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('adminTask') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('adminTask') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('attendance.view')" :style="co('adminTask', 'dtr')">
@@ -521,7 +522,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('references') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('references') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto custom-scrollbar">
                             <div v-if="hasPermission('companies.view')" :style="co('references', 'companies')">
@@ -616,7 +617,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('reports') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('reports') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('reports.store_health')" :style="co('reports', 'store-health')">
@@ -663,7 +664,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('userManagement') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('userManagement') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('users.view')" :style="co('userManagement', 'users')">
@@ -704,7 +705,7 @@ const canSeeSettings = computed(() => {
 
                     <div v-if="isCollapsed" class="collapsed-flyout">
                         <div class="px-3 py-2 border-b border-gray-700">
-                            <p class="text-xs font-black uppercase tracking-widest text-gray-400">{{ getSectionLabel('settings') }}</p>
+                            <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('settings') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('settings.view')" :style="co('settings', 'system-settings')">
@@ -762,7 +763,7 @@ const canSeeSettings = computed(() => {
                 </div>
                 <div v-if="!isCollapsed" class="ml-3 flex-1 min-w-0">
                     <p class="text-sm font-medium truncate">{{ user.name || 'User' }}</p>
-                    <p class="text-xs text-gray-400 truncate">{{ user.email || 'user@example.com' }}</p>
+                    <p class="text-xs text-gray-400 truncate dark:text-gray-400">{{ user.email || 'user@example.com' }}</p>
                 </div>
             </div>
         </div>

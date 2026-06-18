@@ -24,8 +24,8 @@ const props = defineProps({
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                     </div>
-                    <h1 class="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight">Submit POS Request</h1>
-                    <p class="text-gray-500 mt-4 text-lg font-medium">Please fill out the form below to submit your request to the IT team.</p>
+                    <h1 class="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight dark:text-gray-100">Submit POS Request</h1>
+                    <p class="text-gray-500 mt-4 text-lg font-medium dark:text-gray-300">Please fill out the form below to submit your request to the IT team.</p>
                     
                     <!-- SLA Notice Card -->
                     <div class="mt-10 max-w-3xl mx-auto bg-amber-50 border-2 border-amber-100 rounded-[2rem] p-8 text-left flex items-start shadow-sm">

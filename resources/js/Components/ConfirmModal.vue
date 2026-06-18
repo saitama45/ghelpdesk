@@ -10,7 +10,7 @@
                 
                 <!-- Modal -->
                 <div 
-                    class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all duration-300 z-10 scale-100 opacity-100"
+                    class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all duration-300 z-10 scale-100 opacity-100 dark:bg-gray-800"
                 >
                     <!-- Icon -->
                     <div :class="[
@@ -27,8 +27,8 @@
                     
                     <!-- Content -->
                     <div class="px-6 py-4 text-center">
-                        <h3 class="text-xl font-semibold text-gray-900 mb-2">{{ title }}</h3>
-                        <p class="text-gray-600 mb-6">{{ message }}</p>
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2 dark:text-gray-100">{{ title }}</h3>
+                        <p class="text-gray-600 mb-6 dark:text-gray-300">{{ message }}</p>
                         
                         <!-- Actions -->
                         <div class="flex space-x-3">

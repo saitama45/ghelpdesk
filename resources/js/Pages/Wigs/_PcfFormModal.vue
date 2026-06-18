@@ -1,17 +1,17 @@
 <template>
     <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto" @click.self="$emit('close')">
-        <div class="bg-white rounded-2xl shadow-xl w-full max-w-[100rem] my-6">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-[100rem] my-6 dark:bg-gray-800">
             <!-- Header -->
-            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
-                <h2 class="text-lg font-black text-gray-800">{{ isEdit ? 'Edit' : 'New' }} Performance Commitment Form</h2>
-                <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10 dark:bg-gray-800 dark:border-gray-700">
+                <h2 class="text-lg font-black text-gray-800 dark:text-gray-200">{{ isEdit ? 'Edit' : 'New' }} Performance Commitment Form</h2>
+                <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none dark:text-gray-400">&times;</button>
             </div>
 
             <div class="p-6 space-y-5">
                 <!-- Header fields -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Team Member</label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Team Member</label>
                         <Autocomplete
                             v-model="form.user_id"
                             :options="availableUsers"
@@ -23,23 +23,23 @@
                         </p>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Year</label>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Year</label>
                         <input v-model.number="form.year" type="number" min="2000" max="2100"
-                               class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500" />
+                               class="w-full border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600" />
                     </div>
                 </div>
 
                 <!-- WIG items -->
-                <div class="border border-gray-100 rounded-xl overflow-hidden">
-                    <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                        <h3 class="text-xs font-black uppercase tracking-wider text-gray-700">Wildly Important Goals</h3>
+                <div class="border border-gray-100 rounded-xl overflow-hidden dark:border-gray-700">
+                    <div class="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between dark:bg-gray-900/50 dark:border-gray-700">
+                        <h3 class="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Wildly Important Goals</h3>
                         <button @click="addItem" class="text-xs font-bold text-blue-600 hover:text-blue-800">+ Add WIG</button>
                     </div>
 
                     <div class="overflow-x-auto">
                         <table class="min-w-full text-xs">
                             <thead>
-                                <tr class="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
+                                <tr class="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 dark:bg-gray-900/50 dark:text-gray-300">
                                     <th class="px-2 py-2 text-left font-bold">KRA</th>
                                     <th class="px-2 py-2 text-left font-bold">WIG</th>
                                     <th class="px-2 py-2 text-left font-bold">Lead Measures</th>
@@ -55,40 +55,40 @@
                                     <th class="px-2 py-2"></th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-100">
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                 <tr v-for="(it, i) in form.items" :key="i" class="align-top">
-                                    <td class="px-1 py-1"><textarea v-model="it.kra" rows="3" class="w-28 text-xs border-gray-200 rounded"></textarea></td>
-                                    <td class="px-1 py-1"><textarea v-model="it.wig" rows="3" class="w-44 text-xs border-gray-200 rounded"></textarea></td>
-                                    <td class="px-1 py-1"><textarea v-model="it.lead_measures" rows="3" class="w-36 text-xs border-gray-200 rounded"></textarea></td>
+                                    <td class="px-1 py-1"><textarea v-model="it.kra" rows="3" class="w-28 text-xs border-gray-200 rounded dark:border-gray-700"></textarea></td>
+                                    <td class="px-1 py-1"><textarea v-model="it.wig" rows="3" class="w-44 text-xs border-gray-200 rounded dark:border-gray-700"></textarea></td>
+                                    <td class="px-1 py-1"><textarea v-model="it.lead_measures" rows="3" class="w-36 text-xs border-gray-200 rounded dark:border-gray-700"></textarea></td>
                                     <td class="px-1 py-1">
-                                        <select v-model="it.performance_standard" class="w-36 text-xs border-gray-200 rounded pl-2 pr-7">
+                                        <select v-model="it.performance_standard" class="w-36 text-xs border-gray-200 rounded pl-2 pr-7 dark:border-gray-700">
                                             <option value="">—</option>
                                             <option v-for="s in standardOptions" :key="s" :value="s">{{ s }}</option>
                                         </select>
                                     </td>
-                                    <td class="px-1 py-1"><textarea v-model="it.performance_metric" rows="3" class="w-48 text-xs border-gray-200 rounded"></textarea></td>
-                                    <td class="px-1 py-1"><textarea v-model="it.metric_benchmark" rows="3" class="w-48 text-xs border-gray-200 rounded"></textarea></td>
-                                    <td class="px-1 py-1"><input v-model.number="it.q1_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded" /></td>
-                                    <td class="px-1 py-1"><input v-model.number="it.q2_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded" /></td>
-                                    <td class="px-1 py-1"><input v-model.number="it.q3_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded" /></td>
-                                    <td class="px-1 py-1"><input v-model.number="it.q4_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded" /></td>
+                                    <td class="px-1 py-1"><textarea v-model="it.performance_metric" rows="3" class="w-48 text-xs border-gray-200 rounded dark:border-gray-700"></textarea></td>
+                                    <td class="px-1 py-1"><textarea v-model="it.metric_benchmark" rows="3" class="w-48 text-xs border-gray-200 rounded dark:border-gray-700"></textarea></td>
+                                    <td class="px-1 py-1"><input v-model.number="it.q1_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded dark:border-gray-700" /></td>
+                                    <td class="px-1 py-1"><input v-model.number="it.q2_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded dark:border-gray-700" /></td>
+                                    <td class="px-1 py-1"><input v-model.number="it.q3_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded dark:border-gray-700" /></td>
+                                    <td class="px-1 py-1"><input v-model.number="it.q4_weight" type="number" min="0" max="100" step="0.01" class="w-16 text-xs text-center border-gray-200 rounded dark:border-gray-700" /></td>
                                     <td class="px-1 py-1">
-                                        <select v-model="it.value_alignment" class="w-32 text-xs border-gray-200 rounded pl-2 pr-7">
+                                        <select v-model="it.value_alignment" class="w-32 text-xs border-gray-200 rounded pl-2 pr-7 dark:border-gray-700">
                                             <option value="">—</option>
                                             <option v-for="v in valueOptions" :key="v" :value="v">{{ v }}</option>
                                         </select>
                                     </td>
-                                    <td class="px-1 py-1"><textarea v-model="it.value_remarks" rows="3" class="w-44 text-xs border-gray-200 rounded"></textarea></td>
+                                    <td class="px-1 py-1"><textarea v-model="it.value_remarks" rows="3" class="w-44 text-xs border-gray-200 rounded dark:border-gray-700"></textarea></td>
                                     <td class="px-1 py-1 text-center">
                                         <button @click="form.items.splice(i, 1)" class="text-red-500 hover:text-red-700 font-bold">✕</button>
                                     </td>
                                 </tr>
                                 <tr v-if="form.items.length === 0">
-                                    <td colspan="13" class="px-4 py-6 text-center text-gray-400">No WIGs yet — add at least one.</td>
+                                    <td colspan="13" class="px-4 py-6 text-center text-gray-400 dark:text-gray-400">No WIGs yet — add at least one.</td>
                                 </tr>
                             </tbody>
                             <tfoot v-if="form.items.length">
-                                <tr class="bg-gray-50 font-black text-gray-700">
+                                <tr class="bg-gray-50 font-black text-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
                                     <td colspan="6" class="px-2 py-2 text-right uppercase tracking-wider text-[10px]">Total:</td>
                                     <td class="px-1 py-2 text-center" :class="totalClass(totals.q1)">{{ totals.q1.toFixed(0) }}%</td>
                                     <td class="px-1 py-2 text-center" :class="totalClass(totals.q2)">{{ totals.q2.toFixed(0) }}%</td>
@@ -100,12 +100,12 @@
                         </table>
                     </div>
                 </div>
-                <p class="text-[11px] text-gray-400">Each quarter's weights should total 100%. Totals shown in green when balanced.</p>
+                <p class="text-[11px] text-gray-400 dark:text-gray-400">Each quarter's weights should total 100%. Totals shown in green when balanced.</p>
             </div>
 
             <!-- Footer -->
-            <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white rounded-b-2xl">
-                <button @click="$emit('close')" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200">Cancel</button>
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white rounded-b-2xl dark:bg-gray-800 dark:border-gray-700">
+                <button @click="$emit('close')" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                 <button @click="submit" :disabled="saving" class="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50">
                     {{ saving ? 'Saving…' : (isEdit ? 'Update PCF' : 'Create PCF') }}
                 </button>

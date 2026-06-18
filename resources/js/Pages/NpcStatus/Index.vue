@@ -4,26 +4,26 @@
             <div class="mx-auto max-w-7xl space-y-5 px-4 sm:px-6 lg:px-8">
 
                 <!-- Page Header -->
-                <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <h1 class="text-xl font-bold text-gray-900">NPC Renewal Monitoring</h1>
-                            <p class="text-sm text-gray-500">Track validity, renewal workflow, DPO files, assigned stores, and CCTV Seal Notices.</p>
+                            <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">NPC Renewal Monitoring</h1>
+                            <p class="text-sm text-gray-500 dark:text-gray-300">Track validity, renewal workflow, DPO files, assigned stores, and CCTV Seal Notices.</p>
                         </div>
                         <div class="flex items-center gap-3">
-                            <label class="text-xs font-black uppercase tracking-widest text-gray-500">Year</label>
-                            <div class="flex items-center rounded-xl border border-gray-200 bg-white shadow-sm">
+                            <label class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Year</label>
+                            <div class="flex items-center rounded-xl border border-gray-200 bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700">
                                 <button
                                     type="button"
                                     @click="changeYear(selectedYear - 1)"
-                                    class="rounded-l-xl px-3 py-2 text-lg font-black leading-none text-gray-600 transition-colors hover:bg-gray-50"
+                                    class="rounded-l-xl px-3 py-2 text-lg font-black leading-none text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
                                 >‹</button>
-                                <span class="min-w-[70px] select-none px-4 py-2 text-center text-lg font-black text-gray-900">{{ selectedYear }}</span>
+                                <span class="min-w-[70px] select-none px-4 py-2 text-center text-lg font-black text-gray-900 dark:text-gray-100">{{ selectedYear }}</span>
                                 <button
                                     type="button"
                                     @click="changeYear(selectedYear + 1)"
                                     :disabled="selectedYear >= currentYear + 1"
-                                    class="rounded-r-xl px-3 py-2 text-lg font-black leading-none text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    class="rounded-r-xl px-3 py-2 text-lg font-black leading-none text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-700"
                                 >›</button>
                             </div>
                         </div>
@@ -31,7 +31,7 @@
                 </div>
 
                 <!-- Status Tabs -->
-                <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex gap-2 overflow-x-auto custom-scrollbar">
                         <button
                             v-for="tab in statusTabs"
@@ -74,26 +74,26 @@
                 >
                     <template #header>
                         <tr>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Entity</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Validity</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Renewal Status</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Workflow</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">DPO Files</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Stores / CCTV</th>
-                            <th class="px-5 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-500">Actions</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Entity</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Validity</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Renewal Status</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Workflow</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">DPO Files</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Stores / CCTV</th>
+                            <th class="px-5 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="company in data" :key="company.id" class="hover:bg-gray-50">
+                        <tr v-for="company in data" :key="company.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td class="px-5 py-4">
                                 <div class="flex items-center gap-3">
                                     <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-black text-white">
                                         {{ company.code?.slice(0, 2) || 'NP' }}
                                     </div>
                                     <div class="min-w-0">
-                                        <div class="truncate text-sm font-bold text-gray-900">{{ company.name }}</div>
-                                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                                        <div class="truncate text-sm font-bold text-gray-900 dark:text-gray-100">{{ company.name }}</div>
+                                        <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-300">
                                             <span class="font-mono">{{ company.code }}</span>
                                             <span :class="company.is_active ? 'text-green-600' : 'text-red-600'" class="font-bold">
                                                 {{ company.is_active ? 'Active' : 'Inactive' }}
@@ -105,10 +105,10 @@
 
                             <td class="whitespace-nowrap px-5 py-4">
                                 <div v-if="company.npc_status" class="text-sm">
-                                    <div class="font-bold text-gray-900">{{ formatDate(company.npc_status.validity_from) }}</div>
-                                    <div class="text-xs text-gray-500">to {{ formatDate(company.npc_status.validity_to) }}</div>
+                                    <div class="font-bold text-gray-900 dark:text-gray-100">{{ formatDate(company.npc_status.validity_from) }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-300">to {{ formatDate(company.npc_status.validity_to) }}</div>
                                 </div>
-                                <span v-else class="text-xs font-bold text-gray-400">No yearly record</span>
+                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No yearly record</span>
                             </td>
 
                             <td class="whitespace-nowrap px-5 py-4">
@@ -116,7 +116,7 @@
                                     <span :class="statusBadgeClass(company.npc_status?.renewal_status || 'No Record')" class="inline-flex rounded-full px-2.5 py-1 text-xs font-black">
                                         {{ company.npc_status?.renewal_status || 'No Record' }}
                                     </span>
-                                    <div v-if="company.npc_status" class="text-[11px] font-semibold text-gray-500">
+                                    <div v-if="company.npc_status" class="text-[11px] font-semibold text-gray-500 dark:text-gray-300">
                                         {{ renewalDaysLabel(company.npc_status.renewal_days) }}
                                     </div>
                                 </div>
@@ -125,30 +125,30 @@
                             <td class="px-5 py-4">
                                 <div v-if="company.npc_status" class="min-w-[170px] space-y-2">
                                     <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-black text-gray-700">{{ company.npc_status.workflow_stage }}</span>
-                                        <span class="text-xs font-bold text-gray-500">{{ company.npc_status.workflow_progress }}%</span>
+                                        <span class="text-xs font-black text-gray-700 dark:text-gray-300">{{ company.npc_status.workflow_stage }}</span>
+                                        <span class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ company.npc_status.workflow_progress }}%</span>
                                     </div>
-                                    <div class="h-2 overflow-hidden rounded-full bg-gray-100">
+                                    <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                                         <div class="h-full rounded-full bg-blue-600" :style="{ width: `${company.npc_status.workflow_progress}%` }"></div>
                                     </div>
                                 </div>
-                                <span v-else class="text-xs font-bold text-gray-400">No workflow</span>
+                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No workflow</span>
                             </td>
 
                             <td class="px-5 py-4">
                                 <div v-if="company.npc_status" class="space-y-1 text-xs">
-                                    <div class="font-bold text-gray-700">Seal: {{ attachmentCount(company, 'dpo_seal') }}</div>
-                                    <div class="font-bold text-gray-700">Reg: {{ attachmentCount(company, 'dpo_registration') }}</div>
+                                    <div class="font-bold text-gray-700 dark:text-gray-300">Seal: {{ attachmentCount(company, 'dpo_seal') }}</div>
+                                    <div class="font-bold text-gray-700 dark:text-gray-300">Reg: {{ attachmentCount(company, 'dpo_registration') }}</div>
                                 </div>
-                                <span v-else class="text-xs font-bold text-gray-400">No files</span>
+                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No files</span>
                             </td>
 
                             <td class="whitespace-nowrap px-5 py-4">
-                                <div class="text-sm font-black text-gray-800">{{ company.store_count }} Stores</div>
-                                <div v-if="company.npc_status" class="mt-0.5 text-[11px] font-semibold text-gray-500">
+                                <div class="text-sm font-black text-gray-800 dark:text-gray-200">{{ company.store_count }} Stores</div>
+                                <div v-if="company.npc_status" class="mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-300">
                                     CCTV {{ cctvSummary(company).complete }}/{{ cctvSummary(company).total }}
                                 </div>
-                                <span v-else class="text-xs text-gray-400">—</span>
+                                <span v-else class="text-xs text-gray-400 dark:text-gray-400">—</span>
                             </td>
 
                             <td class="px-5 py-4 text-right">
@@ -187,14 +187,14 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl border border-gray-100 bg-white shadow-2xl">
+                <div class="relative flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl border border-gray-100 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">
 
                     <!-- Modal Header -->
                     <div class="border-b p-5">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                                <h3 class="text-xl font-bold text-gray-900">{{ selectedCompany?.name }}</h3>
-                                <p class="mt-0.5 text-xs font-black uppercase tracking-widest text-gray-400">{{ selectedCompany?.code }} — NPC Renewal</p>
+                                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ selectedCompany?.name }}</h3>
+                                <p class="mt-0.5 text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ selectedCompany?.code }} — NPC Renewal</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <!-- Year pills -->
@@ -215,7 +215,7 @@
                                     {{ year }}<span v-if="hasYearRecord(year)" class="ml-1 opacity-60">✓</span>
                                 </button>
                                 <span v-if="isHistoricalYear" class="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700">Read-only</span>
-                                <button type="button" @click="closeModal" class="ml-1 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                                <button type="button" @click="closeModal" class="ml-1 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -225,10 +225,10 @@
                     </div>
 
                     <!-- Step Indicator -->
-                    <div class="border-b bg-gray-50 px-6 py-4">
+                    <div class="border-b bg-gray-50 px-6 py-4 dark:bg-gray-900/50">
                         <div class="flex items-center">
                             <template v-for="(stepDef, idx) in stepDefs" :key="stepDef.key">
-                                <div v-if="idx > 0" class="mx-2 h-0.5 flex-1" :class="stepDef.step <= activeStep ? 'bg-blue-400' : 'bg-gray-200'"></div>
+                                <div v-if="idx > 0" class="mx-2 h-0.5 flex-1" :class="stepDef.step <= activeStep ? 'bg-blue-400' : 'bg-gray-200 dark:bg-gray-700'"></div>
                                 <button
                                     type="button"
                                     @click="goToStep(stepDef.step)"
@@ -237,10 +237,10 @@
                                     <div :class="[
                                         'flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-colors',
                                         activeStep === stepDef.step
-                                            ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                                            ? 'bg-blue-600 text-white ring-4 ring-blue-100 dark:ring-blue-900/50'
                                             : stepDef.isComplete
                                                 ? 'bg-green-500 text-white'
-                                                : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                                                : 'bg-gray-200 text-gray-500 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
                                     ]">
                                         <svg v-if="stepDef.isComplete && activeStep !== stepDef.step" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
@@ -248,8 +248,8 @@
                                         <span v-else>{{ stepDef.step }}</span>
                                     </div>
                                     <div class="text-center">
-                                        <div class="whitespace-nowrap text-xs font-bold text-gray-700">{{ stepDef.label }}</div>
-                                        <div class="whitespace-nowrap text-[10px] font-semibold text-gray-400">{{ stepDef.meta }}</div>
+                                        <div class="whitespace-nowrap text-xs font-bold text-gray-700 dark:text-gray-300">{{ stepDef.label }}</div>
+                                        <div class="whitespace-nowrap text-[10px] font-semibold text-gray-400 dark:text-gray-400">{{ stepDef.meta }}</div>
                                     </div>
                                 </button>
                             </template>
@@ -264,21 +264,21 @@
                             <!-- Historical: read-only -->
                             <div v-if="isHistoricalYear" class="space-y-4">
                                 <div v-if="modalNpcStatus">
-                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-5">
-                                        <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">Validity Period — {{ effectiveModalYear }}</div>
+                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
+                                        <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Validity Period — {{ effectiveModalYear }}</div>
                                         <div class="grid grid-cols-2 gap-6">
                                             <div>
-                                                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">From</div>
-                                                <div class="mt-0.5 text-base font-bold text-gray-900">{{ formatDate(modalNpcStatus.validity_from) }}</div>
+                                                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-400">From</div>
+                                                <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_from) }}</div>
                                             </div>
                                             <div>
-                                                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">To</div>
-                                                <div class="mt-0.5 text-base font-bold text-gray-900">{{ formatDate(modalNpcStatus.validity_to) }}</div>
+                                                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-400">To</div>
+                                                <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_to) }}</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                                        <div class="text-xs font-black uppercase tracking-widest text-gray-500">Renewal Status ({{ effectiveModalYear }})</div>
+                                    <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-700">
+                                        <div class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Renewal Status ({{ effectiveModalYear }})</div>
                                         <div class="mt-2">
                                             <span :class="statusBadgeClass(modalNpcStatus.renewal_status || 'No Record')" class="inline-flex rounded-full px-2.5 py-1 text-xs font-black">
                                                 {{ modalNpcStatus.renewal_status || 'No Record' }}
@@ -286,8 +286,8 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
-                                    <p class="text-sm font-semibold text-gray-500">No NPC renewal record found for {{ effectiveModalYear }}.</p>
+                                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center dark:bg-gray-900/50 dark:border-gray-700">
+                                    <p class="text-sm font-semibold text-gray-500 dark:text-gray-300">No NPC renewal record found for {{ effectiveModalYear }}.</p>
                                 </div>
                             </div>
 
@@ -295,21 +295,21 @@
                             <div v-else class="space-y-5">
                                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                                     <div>
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Validity From</label>
-                                        <input v-model="statusForm.validity_from" type="date" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Validity From</label>
+                                        <input v-model="statusForm.validity_from" type="date" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                     </div>
                                     <div>
-                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500">Validity To</label>
-                                        <input v-model="statusForm.validity_to" type="date" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Validity To</label>
+                                        <input v-model="statusForm.validity_to" type="date" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                     </div>
                                 </div>
-                                <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                                    <div class="text-xs font-black uppercase tracking-widest text-gray-500">Automatic Renewal Status Preview</div>
+                                <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <div class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Automatic Renewal Status Preview</div>
                                     <div class="mt-2 flex items-center gap-3">
                                         <span :class="statusBadgeClass(previewRenewalStatus)" class="inline-flex rounded-full px-2.5 py-1 text-xs font-black">
                                             {{ previewRenewalStatus }}
                                         </span>
-                                        <span class="text-sm font-semibold text-gray-600">{{ previewRenewalDaysLabel }}</span>
+                                        <span class="text-sm font-semibold text-gray-600 dark:text-gray-300">{{ previewRenewalDaysLabel }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -319,9 +319,9 @@
                         <div v-if="activeStep === 2">
                             <!-- Historical: read-only -->
                             <div v-if="isHistoricalYear">
-                                <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">DPO Documents — {{ effectiveModalYear }}</div>
+                                <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">DPO Documents — {{ effectiveModalYear }}</div>
                                 <AttachmentHistory :groups="modalAttachmentGroups" :can-delete="false" @delete="() => {}" />
-                                <div v-if="!modalAttachmentGroups.length" class="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500">
+                                <div v-if="!modalAttachmentGroups.length" class="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                     No DPO files found for {{ effectiveModalYear }}.
                                 </div>
                             </div>
@@ -355,7 +355,7 @@
                                         </div>
                                         <div class="md:col-span-2">
                                             <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-blue-700">File</label>
-                                            <input :key="fileInputKey + '-dpo-upload'" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="block w-full text-sm text-gray-500 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700" @change="setAttachmentFile">
+                                            <input :key="fileInputKey + '-dpo-upload'" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="block w-full text-sm text-gray-500 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 dark:text-gray-300" @change="setAttachmentFile">
                                         </div>
                                         <button type="button" :disabled="isUploadingAttachment" @click="uploadAttachment" class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 md:w-auto">
                                             {{ isUploadingAttachment ? 'Uploading...' : 'Upload' }}
@@ -375,48 +375,48 @@
                         <div v-if="activeStep === 3">
                             <!-- Historical: read-only -->
                             <div v-if="isHistoricalYear">
-                                <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500">Application Workflow — {{ effectiveModalYear }}</div>
+                                <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Application Workflow — {{ effectiveModalYear }}</div>
                                 <div v-if="historicalWorkflowSteps.length" class="space-y-3">
-                                    <div v-for="step in historicalWorkflowSteps" :key="step.key" class="rounded-lg border border-gray-200 p-3">
+                                    <div v-for="step in historicalWorkflowSteps" :key="step.key" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                                         <div class="flex items-start gap-3">
-                                            <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
+                                            <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600 dark:bg-green-500/15 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'">
                                                 <svg v-if="step.is_done" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
                                                 </svg>
                                                 <span v-else class="h-1.5 w-1.5 rounded-full bg-gray-400"></span>
                                             </span>
                                             <div class="min-w-0 flex-1">
-                                                <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900' : 'text-gray-500'">{{ step.label }}</div>
-                                                <div v-if="step.completed_at" class="text-xs text-gray-500">Completed: {{ formatDate(step.completed_at) }}</div>
-                                                <div v-if="step.remarks" class="mt-1 text-xs italic text-gray-600">{{ step.remarks }}</div>
+                                                <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'">{{ step.label }}</div>
+                                                <div v-if="step.completed_at" class="text-xs text-gray-500 dark:text-gray-300">Completed: {{ formatDate(step.completed_at) }}</div>
+                                                <div v-if="step.remarks" class="mt-1 text-xs italic text-gray-600 dark:text-gray-300">{{ step.remarks }}</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
-                                    <p class="text-sm font-semibold text-gray-500">No workflow record for {{ effectiveModalYear }}.</p>
+                                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center dark:bg-gray-900/50 dark:border-gray-700">
+                                    <p class="text-sm font-semibold text-gray-500 dark:text-gray-300">No workflow record for {{ effectiveModalYear }}.</p>
                                 </div>
                             </div>
 
                             <!-- Current: editable -->
                             <div v-else>
-                                <div v-if="!selectedCompany?.npc_status" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500">
+                                <div v-if="!selectedCompany?.npc_status" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                     Save validity dates first (Step 1) before updating the workflow checklist.
                                 </div>
                                 <div v-else class="space-y-3">
                                     <div class="mb-4 flex items-center justify-between">
-                                        <div class="text-xs font-black uppercase tracking-widest text-gray-500">Application Workflow Checklist</div>
+                                        <div class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Application Workflow Checklist</div>
                                         <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{{ workflowProgress }}%</span>
                                     </div>
-                                    <div v-for="step in workflowForm" :key="step.key" class="rounded-lg border border-gray-200 p-3">
+                                    <div v-for="step in workflowForm" :key="step.key" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
-                                            <label class="flex min-w-[190px] items-center gap-2 text-sm font-bold text-gray-800">
-                                                <input v-model="step.is_done" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" @change="markCompletedDate(step)">
+                                            <label class="flex min-w-[190px] items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                                                <input v-model="step.is_done" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600" @change="markCompletedDate(step)">
                                                 {{ step.label }}
                                             </label>
                                             <div class="grid flex-1 grid-cols-1 gap-3 md:grid-cols-[170px_minmax(260px,1fr)]">
-                                                <input v-model="step.completed_at" :disabled="!step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:bg-gray-100">
-                                                <textarea v-model="step.remarks" rows="2" class="rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="Remarks"></textarea>
+                                                <input v-model="step.completed_at" :disabled="!step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                <textarea v-model="step.remarks" rows="2" class="rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" placeholder="Remarks"></textarea>
                                             </div>
                                         </div>
                                     </div>
@@ -427,19 +427,19 @@
                         <!-- Step 4: Stores & CCTV -->
                         <div v-if="activeStep === 4">
                             <!-- Historical: info only -->
-                            <div v-if="isHistoricalYear" class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center">
-                                <div class="text-3xl font-black text-gray-900">{{ cctvSummary(selectedCompany).total }}</div>
-                                <div class="mt-1 text-xs font-bold uppercase tracking-widest text-gray-500">Stores Currently Assigned</div>
-                                <div class="mt-2 text-sm font-semibold text-gray-600">CCTV Ready: {{ cctvSummary(selectedCompany).complete }}/{{ cctvSummary(selectedCompany).total }}</div>
-                                <p class="mt-4 text-xs text-gray-400">Store assignments are managed for the current year only. Historical assignment data is not retained.</p>
+                            <div v-if="isHistoricalYear" class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:bg-gray-900/50 dark:border-gray-700">
+                                <div class="text-3xl font-black text-gray-900 dark:text-gray-100">{{ cctvSummary(selectedCompany).total }}</div>
+                                <div class="mt-1 text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Stores Currently Assigned</div>
+                                <div class="mt-2 text-sm font-semibold text-gray-600 dark:text-gray-300">CCTV Ready: {{ cctvSummary(selectedCompany).complete }}/{{ cctvSummary(selectedCompany).total }}</div>
+                                <p class="mt-4 text-xs text-gray-400 dark:text-gray-400">Store assignments are managed for the current year only. Historical assignment data is not retained.</p>
                             </div>
 
                             <!-- Current: editable -->
                             <div v-else>
                                 <div class="mb-4 space-y-3">
-                                    <input v-model="storeSearch" type="text" placeholder="Search stores by name, code, area, or brand..." class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                    <input v-model="storeSearch" type="text" placeholder="Search stores by name, code, area, or brand..." class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
                                     <div class="flex overflow-x-auto">
-                                        <div class="inline-flex min-w-max gap-1 rounded-lg bg-white p-1 shadow-sm ring-1 ring-gray-200">
+                                        <div class="inline-flex min-w-max gap-1 rounded-lg bg-white p-1 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800">
                                             <button
                                                 v-for="tab in storeAssignmentTabs"
                                                 :key="tab.value"
@@ -464,12 +464,12 @@
                                         :class="isStoreDisabled(store) ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-gray-200 bg-white'"
                                     >
                                         <div class="flex items-start gap-3">
-                                            <input v-model="selectedStoreIds" :value="store.id" :disabled="isStoreDisabled(store)" type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                            <input v-model="selectedStoreIds" :value="store.id" :disabled="isStoreDisabled(store)" type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                                             <div class="min-w-0 flex-1">
                                                 <div class="flex items-start justify-between gap-2">
                                                     <div class="min-w-0">
-                                                        <div class="truncate text-sm font-bold text-gray-900">{{ store.name }}</div>
-                                                        <div class="text-xs text-gray-500">{{ store.code }} — {{ store.area }} — {{ store.brand }}</div>
+                                                        <div class="truncate text-sm font-bold text-gray-900 dark:text-gray-100">{{ store.name }}</div>
+                                                        <div class="text-xs text-gray-500 dark:text-gray-300">{{ store.code }} — {{ store.area }} — {{ store.brand }}</div>
                                                     </div>
                                                     <span :class="store.cctv_seal_notice ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'" class="rounded-full px-2 py-0.5 text-[10px] font-black">
                                                         {{ store.cctv_seal_notice ? 'CCTV Ready' : 'No CCTV' }}
@@ -478,19 +478,19 @@
                                                 <div v-if="isStoreDisabled(store)" class="mt-1 text-[11px] font-bold text-amber-700">
                                                     Assigned to {{ store.assigned_company_name }}
                                                 </div>
-                                                <div v-if="selectedStoreIds.includes(store.id) && !isStoreDisabled(store)" class="mt-3 flex flex-col gap-2 rounded-md bg-gray-50 p-2 sm:flex-row sm:items-center sm:justify-between">
+                                                <div v-if="selectedStoreIds.includes(store.id) && !isStoreDisabled(store)" class="mt-3 flex flex-col gap-2 rounded-md bg-gray-50 p-2 sm:flex-row sm:items-center sm:justify-between dark:bg-gray-900/50">
                                                     <a v-if="store.cctv_seal_notice" :href="store.cctv_seal_notice.url" class="truncate text-xs font-bold text-blue-600 hover:underline">
                                                         {{ store.cctv_seal_notice.name || 'Download CCTV Seal Notice' }}
                                                     </a>
-                                                    <span v-else class="text-xs font-bold text-gray-500">Upload one-time CCTV Seal Notice</span>
-                                                    <input :key="fileInputKey + '-cctv-' + store.id" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="max-w-[220px] text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700" @change="uploadCctvSealNotice(store, $event)">
+                                                    <span v-else class="text-xs font-bold text-gray-500 dark:text-gray-300">Upload one-time CCTV Seal Notice</span>
+                                                    <input :key="fileInputKey + '-cctv-' + store.id" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="max-w-[220px] text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="uploadCctvSealNotice(store, $event)">
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div v-if="filteredStores.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center">
-                                    <p class="text-sm font-bold text-gray-500">No stores found for this tab.</p>
+                                <div v-if="filteredStores.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center dark:bg-gray-900/50 dark:border-gray-700">
+                                    <p class="text-sm font-bold text-gray-500 dark:text-gray-300">No stores found for this tab.</p>
                                 </div>
                             </div>
                         </div>
@@ -498,17 +498,17 @@
                     </div>
 
                     <!-- Modal Footer -->
-                    <div class="flex items-center justify-between border-t bg-white p-4">
+                    <div class="flex items-center justify-between border-t bg-white p-4 dark:bg-gray-800">
                         <button
                             v-if="activeStep > 1"
                             type="button"
                             @click="activeStep--"
-                            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                         >← Back</button>
                         <div v-else></div>
 
                         <div class="flex items-center gap-3">
-                            <button type="button" @click="closeModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200">Cancel</button>
+                            <button type="button" @click="closeModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
 
                             <!-- Step 1 -->
                             <template v-if="activeStep === 1">

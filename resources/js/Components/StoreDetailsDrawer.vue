@@ -107,9 +107,9 @@ const formatDate = (value) => {
                 leave-active-class="transform transition ease-in duration-200"
                 leave-from-class="translate-x-0" leave-to-class="translate-x-full"
             >
-                <div v-if="show" class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col">
+                <div v-if="show" class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col dark:bg-gray-800">
                     <!-- Header -->
-                    <div class="px-5 py-4 border-b border-gray-100 bg-gradient-to-br from-blue-600 to-indigo-600 text-white">
+                    <div class="px-5 py-4 border-b border-gray-100 bg-gradient-to-br from-blue-600 to-indigo-600 text-white dark:border-gray-700">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <h3 class="text-base font-black truncate">{{ store?.name || 'Store Details' }}</h3>
@@ -138,7 +138,7 @@ const formatDate = (value) => {
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"></path>
                             </svg>
-                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">Loading...</p>
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest dark:text-gray-400">Loading...</p>
                         </div>
 
                         <div v-else-if="error" class="m-5 p-4 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
@@ -148,133 +148,133 @@ const formatDate = (value) => {
                         <div v-else-if="store" class="p-5 space-y-6">
                             <!-- Overview -->
                             <section>
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Overview</h4>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Overview</h4>
                                 <dl class="grid grid-cols-2 gap-3">
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Brand</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.brand || '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Brand</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.brand || '—' }}</dd>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Area</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.area || '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Area</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.area || '—' }}</dd>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Class</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.class || '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Class</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.class || '—' }}</dd>
                                     </div>
                                 </dl>
                                 <div class="mt-3">
-                                    <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Clusters</dt>
+                                    <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Clusters</dt>
                                     <div v-if="store.clusters?.length" class="flex flex-wrap gap-1">
                                         <span v-for="c in store.clusters" :key="c.id" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-100">{{ c.name }}</span>
                                     </div>
-                                    <span v-else class="text-sm text-gray-400">—</span>
+                                    <span v-else class="text-sm text-gray-400 dark:text-gray-400">—</span>
                                 </div>
                                 <div class="mt-3">
-                                    <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Sector {{ store.sector }} — Assigned Personnel</dt>
+                                    <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Sector {{ store.sector }} — Assigned Personnel</dt>
                                     <div v-if="sectorUsers.length" class="space-y-1">
                                         <div v-for="u in sectorUsers" :key="u.id" class="flex items-center gap-2">
                                             <div class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-700 shrink-0">{{ u.name.charAt(0) }}</div>
                                             <div class="min-w-0">
-                                                <div class="text-xs text-gray-700 truncate">{{ u.name }}</div>
-                                                <div v-if="u.position" class="text-[10px] text-gray-400 truncate">{{ u.position }}</div>
+                                                <div class="text-xs text-gray-700 truncate dark:text-gray-300">{{ u.name }}</div>
+                                                <div v-if="u.position" class="text-[10px] text-gray-400 truncate dark:text-gray-400">{{ u.position }}</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <span v-else class="text-sm text-gray-400">No personnel assigned to this sector</span>
+                                    <span v-else class="text-sm text-gray-400 dark:text-gray-400">No personnel assigned to this sector</span>
                                 </div>
                             </section>
 
                             <!-- Contact -->
-                            <section class="pt-4 border-t border-gray-100">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Contact</h4>
+                            <section class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Contact</h4>
                                 <dl class="space-y-2">
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Contact Person (AOM)</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.contact_person || '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Contact Person (AOM)</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.contact_person || '—' }}</dd>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Contact Details</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.contact_details || '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Contact Details</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.contact_details || '—' }}</dd>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Email</dt>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Email</dt>
                                         <dd class="text-sm font-semibold">
                                             <a v-if="store.email" :href="`mailto:${store.email}`" class="text-blue-600 hover:underline">{{ store.email }}</a>
-                                            <span v-else class="text-gray-400">—</span>
+                                            <span v-else class="text-gray-400 dark:text-gray-400">—</span>
                                         </dd>
                                     </div>
                                 </dl>
                             </section>
 
                             <!-- Connectivity & Systems -->
-                            <section class="pt-4 border-t border-gray-100">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Connectivity & Systems</h4>
+                            <section class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Connectivity & Systems</h4>
                                 <div class="space-y-3">
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Hookup</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.hookup || '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Hookup</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.hookup || '—' }}</dd>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Telco</dt>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Telco</dt>
                                         <div v-if="telcos.length" class="flex flex-wrap gap-1">
                                             <span v-for="t in telcos" :key="t" class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">{{ t }}</span>
                                         </div>
-                                        <span v-else class="text-sm text-gray-400">—</span>
+                                        <span v-else class="text-sm text-gray-400 dark:text-gray-400">—</span>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Connectivity Type</dt>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Connectivity Type</dt>
                                         <div v-if="connectivity.length" class="flex flex-wrap gap-1">
                                             <span v-for="c in connectivity" :key="c" class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-100">{{ c }}</span>
                                         </div>
-                                        <span v-else class="text-sm text-gray-400">—</span>
+                                        <span v-else class="text-sm text-gray-400 dark:text-gray-400">—</span>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Systems Deployed</dt>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Systems Deployed</dt>
                                         <div v-if="systems.length" class="flex flex-wrap gap-1">
                                             <span v-for="s in systems" :key="s" class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">{{ s }}</span>
                                         </div>
-                                        <span v-else class="text-sm text-gray-400">—</span>
+                                        <span v-else class="text-sm text-gray-400 dark:text-gray-400">—</span>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Remote Apps</dt>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Remote Apps</dt>
                                         <div v-if="remoteApps.length" class="space-y-1">
-                                            <div v-for="(r, idx) in remoteApps" :key="idx" class="flex items-center justify-between gap-2 bg-gray-50 rounded-lg border border-gray-100 px-3 py-1.5">
-                                                <span class="text-xs font-bold text-gray-700">{{ r.app }}</span>
-                                                <span class="text-xs font-mono text-gray-500 truncate">{{ r.id || '—' }}</span>
+                                            <div v-for="(r, idx) in remoteApps" :key="idx" class="flex items-center justify-between gap-2 bg-gray-50 rounded-lg border border-gray-100 px-3 py-1.5 dark:bg-gray-900/50 dark:border-gray-700">
+                                                <span class="text-xs font-bold text-gray-700 dark:text-gray-300">{{ r.app }}</span>
+                                                <span class="text-xs font-mono text-gray-500 truncate dark:text-gray-300">{{ r.id || '—' }}</span>
                                             </div>
                                         </div>
-                                        <span v-else class="text-sm text-gray-400">—</span>
+                                        <span v-else class="text-sm text-gray-400 dark:text-gray-400">—</span>
                                     </div>
                                 </div>
                             </section>
 
                             <!-- Files & Location -->
-                            <section class="pt-4 border-t border-gray-100">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Files & Location</h4>
+                            <section class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 dark:text-gray-400">Files & Location</h4>
                                 <div class="space-y-3">
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase">Opening Date</dt>
-                                        <dd class="text-sm font-semibold text-gray-900">{{ store.opening_date ? formatDate(store.opening_date) : '—' }}</dd>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Opening Date</dt>
+                                        <dd class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ store.opening_date ? formatDate(store.opening_date) : '—' }}</dd>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Blueprints</dt>
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Blueprints</dt>
                                         <div v-if="store.blueprints?.length" class="space-y-1.5">
                                             <a v-for="bp in store.blueprints" :key="bp.id" :href="blueprintUrl(bp)" target="_blank" rel="noopener noreferrer"
-                                               class="flex items-center justify-between gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2 hover:border-blue-300 hover:bg-blue-50/40 transition-colors">
+                                               class="flex items-center justify-between gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2 hover:border-blue-300 hover:bg-blue-50/40 transition-colors dark:bg-gray-800 dark:border-gray-700">
                                                 <span class="text-xs font-bold text-blue-600 truncate">{{ bp.file_name }}</span>
                                                 <span class="flex items-center gap-1.5 shrink-0">
-                                                    <span class="text-[10px] text-gray-400">{{ formatBytes(bp.file_size_bytes) }}</span>
+                                                    <span class="text-[10px] text-gray-400 dark:text-gray-400">{{ formatBytes(bp.file_size_bytes) }}</span>
                                                     <ArrowDownTrayIcon class="w-3.5 h-3.5 text-blue-500" />
                                                 </span>
                                             </a>
                                         </div>
-                                        <span v-else class="text-sm text-gray-400">No blueprint files</span>
+                                        <span v-else class="text-sm text-gray-400 dark:text-gray-400">No blueprint files</span>
                                     </div>
                                     <div>
-                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1">Geofencing</dt>
-                                        <div v-if="hasGeo" class="text-sm text-gray-900 space-y-1">
-                                            <div class="flex items-center gap-1.5 text-xs text-gray-600">
+                                        <dt class="text-[10px] font-bold text-gray-400 uppercase mb-1 dark:text-gray-400">Geofencing</dt>
+                                        <div v-if="hasGeo" class="text-sm text-gray-900 space-y-1 dark:text-gray-100">
+                                            <div class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
                                                 <MapPinIcon class="w-4 h-4 text-emerald-500" />
                                                 {{ store.latitude }}, {{ store.longitude }} · {{ store.radius_meters }}m
                                             </div>
@@ -283,7 +283,7 @@ const formatDate = (value) => {
                                                 View on Maps <ArrowTopRightOnSquareIcon class="w-3.5 h-3.5" />
                                             </a>
                                         </div>
-                                        <span v-else class="text-sm text-gray-400">Not set</span>
+                                        <span v-else class="text-sm text-gray-400 dark:text-gray-400">Not set</span>
                                     </div>
                                 </div>
                             </section>

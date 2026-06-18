@@ -1,10 +1,10 @@
 <template>
     <div class="space-y-4">
         <!-- toolbar + quarter windows -->
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 space-y-3">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 space-y-3 dark:bg-gray-800 dark:border-gray-700">
             <div>
-                <p class="text-sm font-black text-gray-800">Performance Appraisal Forms</p>
-                <p class="text-xs text-gray-400 mt-0.5">
+                <p class="text-sm font-black text-gray-800 dark:text-gray-200">Performance Appraisal Forms</p>
+                <p class="text-xs text-gray-400 mt-0.5 dark:text-gray-400">
                     Auto-generated from confirmed PCFs. Grading opens the 1st of the month after each quarter ends.
                 </p>
             </div>
@@ -24,14 +24,14 @@
             </div>
         </div>
 
-        <div v-if="pcfs.length === 0" class="bg-white rounded-xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm">
+        <div v-if="pcfs.length === 0" class="bg-white rounded-xl border border-dashed border-gray-200 p-10 text-center text-gray-400 text-sm dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
             No PCF records to appraise for this year.
         </div>
 
-        <div v-else class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div v-else class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
             <table class="min-w-full text-sm">
                 <thead>
-                    <tr class="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500">
+                    <tr class="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500 dark:bg-gray-900/50 dark:text-gray-300">
                         <th class="px-4 py-3 text-left font-bold">Team Member</th>
                         <th class="px-4 py-3 text-center font-bold">WIGs</th>
                         <th class="px-4 py-3 text-center font-bold">Annual Score</th>
@@ -39,16 +39,16 @@
                         <th class="px-4 py-3 text-right font-bold">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                     <tr v-for="p in pcfs" :key="p.id" class="hover:bg-gray-50/60">
                         <td class="px-4 py-3">
-                            <p class="font-bold text-gray-800">{{ p.user?.name }}</p>
-                            <p class="text-xs text-gray-500">{{ p.user?.position }}</p>
+                            <p class="font-bold text-gray-800 dark:text-gray-200">{{ p.user?.name }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-300">{{ p.user?.position }}</p>
                         </td>
-                        <td class="px-4 py-3 text-center font-bold text-gray-700">{{ p.items.length }}</td>
+                        <td class="px-4 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{{ p.items.length }}</td>
                         <td class="px-4 py-3 text-center">
                             <span class="text-lg font-black text-blue-600">{{ Number(p.paf_total).toFixed(2) }}</span>
-                            <span class="text-xs text-gray-400"> / 4.00</span>
+                            <span class="text-xs text-gray-400 dark:text-gray-400"> / 4.00</span>
                         </td>
                         <td class="px-4 py-3 text-center">
                             <span :class="p.for_rehire ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'"

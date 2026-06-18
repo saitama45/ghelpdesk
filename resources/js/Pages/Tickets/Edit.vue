@@ -1185,10 +1185,10 @@ const slaRuntime = computed(() => {
         state,
         stateLabel: state === 'running' ? 'Running' : (state === 'paused' ? 'Paused' : 'Stopped'),
         stateClass: state === 'running'
-            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:border-emerald-400/30'
             : (state === 'paused'
-                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                : 'bg-gray-100 text-gray-700 border-gray-200'),
+                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-400/30'
+                : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'),
         activeMilliseconds,
         pausedMilliseconds,
         clock: formatDurationClock(activeMilliseconds),
@@ -1235,7 +1235,7 @@ const calculateCountdown = (targetAt, pausedAt) => {
         clock,
         isBreached,
         label: isBreached ? 'Breached' : 'Remaining',
-        class: isBreached ? 'text-red-600' : 'text-emerald-600',
+        class: isBreached ? 'text-red-600 dark:text-red-300' : 'text-emerald-600 dark:text-emerald-300',
     };
 };
 
@@ -1997,7 +1997,7 @@ const linkify = (text) => {
                 </Link>
                 <div class="flex flex-col">
                     <h1 class="text-lg font-bold tracking-tight">
-                        <span class="text-blue-600">{{ ticket.ticket_key }}</span> <span class="text-gray-900 truncate max-w-[200px] sm:max-w-none">{{ ticket.title }}</span>
+                        <span class="text-blue-600">{{ ticket.ticket_key }}</span> <span class="text-gray-900 truncate max-w-[200px] sm:max-w-none dark:text-gray-100">{{ ticket.title }}</span>
                     </h1>
                 </div>
             </div>
@@ -2007,24 +2007,24 @@ const linkify = (text) => {
             <div class="flex flex-col lg:grid lg:grid-cols-3 gap-6">
                 <!-- Right Column (Metadata) moved to TOP on mobile -->
                 <div class="lg:col-span-1 space-y-6 order-1 lg:order-2">
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-6 lg:sticky lg:top-6">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-6 lg:sticky lg:top-6 dark:bg-gray-800 dark:border-gray-700">
                         <div class="space-y-4 sm:space-y-6">
-                            <div class="rounded-lg border border-indigo-100 bg-indigo-50 p-4 space-y-3">
+                            <div class="rounded-lg border border-indigo-100 bg-indigo-50 p-4 space-y-3 dark:border-indigo-400/20 dark:bg-indigo-500/10">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
-                                        <h3 class="text-xs font-black text-indigo-700 uppercase tracking-widest">Top 3 Leaders For This Item</h3>
-                                        <p class="text-[11px] font-semibold text-indigo-900/70 truncate">
+                                        <h3 class="text-xs font-black text-indigo-700 uppercase tracking-widest dark:text-indigo-200">Top 3 Leaders For This Item</h3>
+                                        <p class="text-[11px] font-semibold text-indigo-900/70 truncate dark:text-indigo-100/80">
                                             {{ selectedItem?.name || 'No item selected' }}
                                         </p>
                                     </div>
-                                    <div class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-indigo-700 border border-indigo-100 shrink-0">
+                                    <div class="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-indigo-700 border border-indigo-100 shrink-0 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200">
                                         Overall
                                     </div>
                                 </div>
 
                                 <div v-if="itemLeaderRows.length" class="space-y-2">
                                     <div v-for="leader in itemLeaderRows" :key="leader.agent_id"
-                                        class="flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm"
+                                        class="flex items-center gap-3 rounded-lg border bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
                                         :class="{
                                             'border-yellow-200': leader.rank === 1,
                                             'border-slate-200': leader.rank === 2,
@@ -2038,48 +2038,48 @@ const linkify = (text) => {
                                             }">
                                             #{{ leader.rank }}
                                         </div>
-                                        <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100 ring-2 ring-white shrink-0">
+                                        <div class="h-10 w-10 overflow-hidden rounded-full bg-gray-100 ring-2 ring-white shrink-0 dark:bg-slate-800 dark:ring-slate-700">
                                             <img v-if="leader.profile_photo" :src="'/serve-storage/' + leader.profile_photo" class="h-full w-full object-cover" :alt="leader.name">
-                                            <div v-else class="flex h-full w-full items-center justify-center bg-indigo-100 text-sm font-black text-indigo-700">
+                                            <div v-else class="flex h-full w-full items-center justify-center bg-indigo-100 text-sm font-black text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
                                                 {{ String(leader.name || '').charAt(0).toUpperCase() || '?' }}
                                             </div>
                                         </div>
                                         <div class="min-w-0 flex-1">
-                                            <div class="truncate text-sm font-black text-gray-900">{{ leader.name }}</div>
-                                            <div class="text-[11px] font-semibold text-gray-500">
+                                            <div class="truncate text-sm font-black text-gray-900 dark:text-gray-100">{{ leader.name }}</div>
+                                            <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-300">
                                                 {{ leader.ticket_count }} ticket{{ leader.ticket_count !== 1 ? 's' : '' }}
                                             </div>
                                             <div class="mt-2 grid grid-cols-2 gap-2">
-                                                <div class="rounded-md bg-indigo-50 px-2 py-1">
-                                                    <div class="text-[8px] font-black uppercase tracking-widest text-indigo-400">Response</div>
-                                                    <div class="text-[11px] font-black text-indigo-800">{{ formatMinutesCompact(leader.fastest_response_min) }}</div>
+                                                <div class="rounded-md bg-indigo-50 px-2 py-1 dark:bg-indigo-500/15">
+                                                    <div class="text-[8px] font-black uppercase tracking-widest text-indigo-400 dark:text-indigo-300">Response</div>
+                                                    <div class="text-[11px] font-black text-indigo-800 dark:text-indigo-100">{{ formatMinutesCompact(leader.fastest_response_min) }}</div>
                                                 </div>
-                                                <div class="rounded-md bg-emerald-50 px-2 py-1">
-                                                    <div class="text-[8px] font-black uppercase tracking-widest text-emerald-500">Closed</div>
-                                                    <div class="text-[11px] font-black text-emerald-800">{{ formatMinutesCompact(leader.fastest_close_min) }}</div>
+                                                <div class="rounded-md bg-emerald-50 px-2 py-1 dark:bg-emerald-500/15">
+                                                    <div class="text-[8px] font-black uppercase tracking-widest text-emerald-500 dark:text-emerald-300">Closed</div>
+                                                    <div class="text-[11px] font-black text-emerald-800 dark:text-emerald-100">{{ formatMinutesCompact(leader.fastest_close_min) }}</div>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="text-right shrink-0">
-                                            <div class="text-sm font-black text-indigo-700">{{ Number(leader.total_points || 0).toLocaleString() }}</div>
-                                            <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">pts</div>
+                                            <div class="text-sm font-black text-indigo-700 dark:text-indigo-200">{{ Number(leader.total_points || 0).toLocaleString() }}</div>
+                                            <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-slate-300">pts</div>
                                         </div>
                                     </div>
                                 </div>
-                                <div v-else class="rounded-lg border border-dashed border-indigo-200 bg-white/70 px-3 py-4 text-center text-xs font-semibold text-indigo-900/50">
+                                <div v-else class="rounded-lg border border-dashed border-indigo-200 bg-white/70 px-3 py-4 text-center text-xs font-semibold text-indigo-900/50 dark:border-indigo-400/30 dark:bg-slate-900/70 dark:text-indigo-100/70">
                                     No leadership points for this item yet.
                                 </div>
                             </div>
 
-                            <div v-if="slaRuntime" class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4">
+                            <div v-if="slaRuntime" class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex items-center gap-3 min-w-0">
-                                        <div class="h-9 w-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 shrink-0">
+                                        <div class="h-9 w-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-blue-600 shrink-0 dark:bg-gray-800 dark:border-gray-700">
                                             <ClockIcon class="w-5 h-5" />
                                         </div>
                                         <div class="min-w-0">
-                                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">SLA Timer</h3>
-                                            <p class="text-[11px] font-semibold text-gray-600 truncate">Requester created date</p>
+                                            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest dark:text-gray-400">SLA Timer</h3>
+                                            <p class="text-[11px] font-semibold text-gray-600 truncate dark:text-gray-300">Requester created date</p>
                                         </div>
                                     </div>
                                     <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shrink-0" :class="slaRuntime.stateClass">
@@ -2088,58 +2088,58 @@ const linkify = (text) => {
                                 </div>
 
                                 <div>
-                                    <div class="font-mono text-3xl sm:text-4xl font-black text-gray-900 tracking-normal tabular-nums leading-none">
+                                    <div class="font-mono text-3xl sm:text-4xl font-black text-gray-900 tracking-normal tabular-nums leading-none dark:text-gray-100">
                                         {{ slaRuntime.clock }}
                                     </div>
                                     <div class="mt-2 grid grid-cols-2 gap-2">
-                                        <div class="rounded-md border border-gray-200 bg-white px-3 py-2">
-                                            <div class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Minutes</div>
-                                            <div class="text-sm font-black text-gray-900 tabular-nums">{{ slaRuntime.totalMinutes }}</div>
+                                        <div class="rounded-md border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                            <div class="text-[9px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Total Minutes</div>
+                                            <div class="text-sm font-black text-gray-900 tabular-nums dark:text-gray-100">{{ slaRuntime.totalMinutes }}</div>
                                         </div>
-                                        <div class="rounded-md border border-gray-200 bg-white px-3 py-2">
-                                            <div class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Total Hours</div>
-                                            <div class="text-sm font-black text-gray-900 tabular-nums">{{ slaRuntime.totalHours }}</div>
+                                        <div class="rounded-md border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                            <div class="text-[9px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Total Hours</div>
+                                            <div class="text-sm font-black text-gray-900 tabular-nums dark:text-gray-100">{{ slaRuntime.totalHours }}</div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 text-[11px]">
-                                    <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
-                                        <span class="font-black text-gray-400 uppercase tracking-widest">Started</span>
-                                        <span class="font-bold text-gray-800 text-right">{{ formatDate(slaRuntime.startedAt) }}</span>
+                                    <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Started</span>
+                                        <span class="font-bold text-gray-800 text-right dark:text-gray-200">{{ formatDate(slaRuntime.startedAt) }}</span>
                                     </div>
-                                    <div v-if="slaRuntime.stoppedAt" class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
-                                        <span class="font-black text-gray-400 uppercase tracking-widest">{{ getStatusLabel(slaRuntime.stoppedStatus) }}</span>
-                                        <span class="font-bold text-gray-800 text-right">{{ formatDate(slaRuntime.stoppedAt) }}</span>
+                                    <div v-if="slaRuntime.stoppedAt" class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">{{ getStatusLabel(slaRuntime.stoppedStatus) }}</span>
+                                        <span class="font-bold text-gray-800 text-right dark:text-gray-200">{{ formatDate(slaRuntime.stoppedAt) }}</span>
                                     </div>
-                                    <div v-else class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
-                                        <span class="font-black text-gray-400 uppercase tracking-widest">Status</span>
-                                        <span class="font-bold text-gray-800 text-right">{{ getStatusLabel(editForm.status || ticket.status) }}</span>
+                                    <div v-else class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Status</span>
+                                        <span class="font-bold text-gray-800 text-right dark:text-gray-200">{{ getStatusLabel(editForm.status || ticket.status) }}</span>
                                     </div>
-                                    <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2">
-                                        <span class="font-black text-gray-400 uppercase tracking-widest">Waiting Paused</span>
-                                        <span class="font-mono font-black text-gray-900 text-right tabular-nums">{{ slaRuntime.pausedClock }}</span>
+                                    <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <span class="font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Waiting Paused</span>
+                                        <span class="font-mono font-black text-gray-900 text-right tabular-nums dark:text-gray-100">{{ slaRuntime.pausedClock }}</span>
                                     </div>
                                 </div>
                             </div>
 
                             <!-- SLA Widget -->
-                            <div v-if="ticket.sla_metric" class="pt-6 border-t space-y-4">
-                                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Ticket SLA</h3>
+                            <div v-if="ticket.sla_metric" class="pt-6 border-t border-gray-200 space-y-4 dark:border-slate-700">
+                                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Ticket SLA</h3>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                                     <!-- Response SLA -->
-                                    <div class="p-3 rounded-lg border" :class="(ticket.sla_metric.is_response_breached || responseSLA?.isBreached) ? 'bg-red-50 border-red-100' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                    <div class="p-3 rounded-lg border" :class="(ticket.sla_metric.is_response_breached || responseSLA?.isBreached) ? 'bg-red-50 border-red-100 dark:bg-red-500/15 dark:border-red-400/30' : (ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100 dark:bg-emerald-500/15 dark:border-emerald-400/30' : 'bg-gray-50 border-gray-100 dark:bg-slate-900/80 dark:border-slate-700')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Response</span>
-                                            <span v-if="ticket.sla_metric.is_response_breached || responseSLA?.isBreached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
-                                            <span v-else-if="ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
-                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-slate-300">Response</span>
+                                            <span v-if="ticket.sla_metric.is_response_breached || responseSLA?.isBreached" class="text-[9px] font-black text-red-600 uppercase dark:text-red-300">BREACHED</span>
+                                            <span v-else-if="ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase dark:text-emerald-300">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase dark:text-blue-300">ACTIVE</span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-slate-100">
                                             {{ ticket.sla_metric.first_response_at ? formatDate(ticket.sla_metric.first_response_at) : (ticket.sla_metric.response_target_at ? formatDate(ticket.sla_metric.response_target_at) : 'No target') }}
                                         </div>
-                                        <div v-if="responseSLA" class="mt-2 pt-2 border-t border-gray-200/50 flex justify-between items-baseline">
-                                            <span class="text-[8px] font-black text-gray-400 uppercase tracking-tighter">{{ responseSLA.label }}</span>
+                                        <div v-if="responseSLA" class="mt-2 pt-2 border-t border-gray-200/50 flex justify-between items-baseline dark:border-slate-700">
+                                            <span class="text-[8px] font-black text-gray-500 uppercase tracking-tighter dark:text-slate-300">{{ responseSLA.label }}</span>
                                             <span class="font-mono text-sm font-black tabular-nums" :class="responseSLA.class">
                                                 {{ responseSLA.isBreached ? '-' : '' }}{{ responseSLA.clock }}
                                             </span>
@@ -2147,18 +2147,18 @@ const linkify = (text) => {
                                     </div>
 
                                     <!-- Resolution SLA -->
-                                    <div class="p-3 rounded-lg border" :class="(ticket.sla_metric.is_resolution_breached || resolutionSLA?.isBreached) ? 'bg-red-50 border-red-100' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-gray-50 border-gray-100')">
+                                    <div class="p-3 rounded-lg border" :class="(ticket.sla_metric.is_resolution_breached || resolutionSLA?.isBreached) ? 'bg-red-50 border-red-100 dark:bg-red-500/15 dark:border-red-400/30' : (ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100 dark:bg-emerald-500/15 dark:border-emerald-400/30' : 'bg-gray-50 border-gray-100 dark:bg-slate-900/80 dark:border-slate-700')">
                                         <div class="flex justify-between items-center mb-1">
-                                            <span class="text-[9px] font-black text-gray-500 uppercase">Resolution</span>
-                                            <span v-if="ticket.sla_metric.is_resolution_breached || resolutionSLA?.isBreached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
-                                            <span v-else-if="ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
-                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                            <span class="text-[9px] font-black text-gray-500 uppercase dark:text-slate-300">Resolution</span>
+                                            <span v-if="ticket.sla_metric.is_resolution_breached || resolutionSLA?.isBreached" class="text-[9px] font-black text-red-600 uppercase dark:text-red-300">BREACHED</span>
+                                            <span v-else-if="ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase dark:text-emerald-300">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase dark:text-blue-300">ACTIVE</span>
                                         </div>
-                                        <div class="text-[11px] font-bold text-gray-900 truncate">
+                                        <div class="text-[11px] font-bold text-gray-900 truncate dark:text-slate-100">
                                             {{ ticket.sla_metric.resolved_at ? formatDate(ticket.sla_metric.resolved_at) : (ticket.sla_metric.resolution_target_at ? formatDate(ticket.sla_metric.resolution_target_at) : 'No target') }}
                                         </div>
-                                        <div v-if="resolutionSLA" class="mt-2 pt-2 border-t border-gray-200/50 flex justify-between items-baseline">
-                                            <span class="text-[8px] font-black text-gray-400 uppercase tracking-tighter">{{ resolutionSLA.label }}</span>
+                                        <div v-if="resolutionSLA" class="mt-2 pt-2 border-t border-gray-200/50 flex justify-between items-baseline dark:border-slate-700">
+                                            <span class="text-[8px] font-black text-gray-500 uppercase tracking-tighter dark:text-slate-300">{{ resolutionSLA.label }}</span>
                                             <span class="font-mono text-sm font-black tabular-nums" :class="resolutionSLA.class">
                                                 {{ resolutionSLA.isBreached ? '-' : '' }}{{ resolutionSLA.clock }}
                                             </span>
@@ -2168,7 +2168,7 @@ const linkify = (text) => {
                             </div>
                              
                             <!-- Requester Configuration -->
-                            <div class="relative bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4">
+                            <div class="relative bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-4 dark:bg-gray-900/50 dark:border-gray-700">
                                 <button
                                     v-if="hasPermission('tickets.edit') && (ticket.status === 'resolved' || ticket.status === 'closed')"
                                     type="button"
@@ -2181,42 +2181,42 @@ const linkify = (text) => {
                                 <label class="flex items-center space-x-3 cursor-pointer">
                                     <div class="relative">
                                         <input type="checkbox" :checked="editForm.is_self_requester" @change="handleSelfRequesterToggle" class="sr-only peer" :disabled="!hasPermission('tickets.edit')">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
                                     </div>
-                                    <span class="text-xs font-bold text-gray-700">I am the requester</span>
+                                    <span class="text-xs font-bold text-gray-700 dark:text-gray-300">I am the requester</span>
                                 </label>
 
-                                <div class="pt-2 border-t border-gray-200">
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Current Requester</label>
-                                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-2">
-                                        <div class="text-xs font-bold text-gray-900">{{ requesterDisplayName }}</div>
-                                        <div v-if="requesterDisplayEmail" class="text-[11px] text-gray-500 truncate">{{ requesterDisplayEmail }}</div>
+                                <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Current Requester</label>
+                                    <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                        <div class="text-xs font-bold text-gray-900 dark:text-gray-100">{{ requesterDisplayName }}</div>
+                                        <div v-if="requesterDisplayEmail" class="text-[11px] text-gray-500 truncate dark:text-gray-300">{{ requesterDisplayEmail }}</div>
                                     </div>
                                 </div>
 
-                                <div v-if="showExternalRequesterFields" class="space-y-3 pt-2 border-t border-gray-200">
+                                <div v-if="showExternalRequesterFields" class="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
                                     <div>
-                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Name</label>
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Requester Name</label>
                                         <input v-model="requesterDraft.sender_name" type="text" list="existing-requesters" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
                                                @blur="updateRequesterDetails"
-                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600">
                                         <datalist id="existing-requesters">
                                             <option v-for="name in existingRequesters" :key="name" :value="name"></option>
                                         </datalist>
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Requester Email</label>
+                                        <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Requester Email</label>
                                         <input v-model="requesterDraft.sender_email" type="email" list="existing-emails" maxlength="255" required :disabled="!hasPermission('tickets.edit')"
                                                @blur="updateRequesterDetails"
-                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs">
+                                               class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600">
                                         <datalist id="existing-emails">
                                             <option v-for="email in existingEmails" :key="email" :value="email"></option>
                                         </datalist>
                                     </div>
                                 </div>
 
-                                <div class="pt-2 border-t border-gray-200">
-                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Department</label>
+                                <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Department</label>
                                     <HierarchySelector
                                         v-model="requesterDraft.department"
                                         :nodes="departmentNodes"
@@ -2229,7 +2229,7 @@ const linkify = (text) => {
                             </div>
 
                             <div v-if="availableCompanies.length > 0">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Company</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Company</label>
                                 <Autocomplete
                                     v-model="editForm.company_id"
                                     :options="availableCompanies"
@@ -2243,7 +2243,7 @@ const linkify = (text) => {
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-6">
                                 <div>
                                     <div class="flex items-center justify-between mb-2">
-                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Store</label>
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Store</label>
                                         <button
                                             v-if="editForm.store_id"
                                             type="button"
@@ -2266,7 +2266,7 @@ const linkify = (text) => {
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Item</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Item</label>
                                     <Autocomplete
                                         v-model="editForm.item_id"
                                         :options="items"
@@ -2279,7 +2279,7 @@ const linkify = (text) => {
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Vendor Escalation</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Vendor Escalation</label>
                                     <Autocomplete
                                         v-model="editForm.vendor_id"
                                         :options="vendors"
@@ -2294,7 +2294,7 @@ const linkify = (text) => {
 
                             <div class="grid grid-cols-2 gap-4 lg:grid-cols-1 lg:gap-6">
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Status</label>
                                     <CustomSelect
                                         v-model="editForm.status"
                                         :options="availableStatuses"
@@ -2310,13 +2310,13 @@ const linkify = (text) => {
                                             <span v-if="selected" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black capitalize border" :class="getStatusColor(selected)">
                                                 {{ getStatusLabel(selected) }}
                                             </span>
-                                            <span v-else class="text-gray-400 text-sm">Select Status</span>
+                                            <span v-else class="text-gray-400 text-sm dark:text-gray-400">Select Status</span>
                                         </template>
                                     </CustomSelect>
                                 </div>
 
-                                <div v-if="editForm.priority" class="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Priority</label>
+                                <div v-if="editForm.priority" class="p-3 bg-gray-50 rounded-lg border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Priority</label>
                                     <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize shadow-sm" :class="getPriorityColor(editForm.priority)">
                                         {{ getPriorityLabel(editForm.priority) }}
                                     </span>
@@ -2325,7 +2325,7 @@ const linkify = (text) => {
                         </div>
 
                         <div v-if="hasPermission('tickets.assign')">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Assignee</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Assignee</label>
                             <p v-if="!isClassificationComplete" class="text-[9px] text-amber-600 font-black uppercase mb-2 bg-amber-50 p-1.5 rounded border border-amber-100 flex items-center">
                                 <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                                 Set Company, Store, Item & Department first
@@ -2343,10 +2343,10 @@ const linkify = (text) => {
                         <!-- Affected Assets -->
                         <div class="pt-6 border-t">
                             <div class="flex items-center justify-between mb-2">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Affected Assets</label>
-                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400">{{ taggedAssets.length }} tagged</span>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Affected Assets</label>
+                                <span class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ taggedAssets.length }} tagged</span>
                             </div>
-                            <p class="text-[10px] text-gray-400 mb-2">Tag the specific physical unit (serial/barcode) concerned by this ticket. The action you log (PM, repair, deployment, etc.) appears in that unit's inventory history.</p>
+                            <p class="text-[10px] text-gray-400 mb-2 dark:text-gray-400">Tag the specific physical unit (serial/barcode) concerned by this ticket. The action you log (PM, repair, deployment, etc.) appears in that unit's inventory history.</p>
 
                             <!-- Store required hint -->
                             <div v-if="hasPermission('tickets.edit') && !editForm.store_id" class="mb-3 text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2 border border-amber-100">
@@ -2361,16 +2361,16 @@ const linkify = (text) => {
                                     @blur="hideAssetDropdownSoon"
                                     type="text"
                                     placeholder="Search by serial, barcode, code, brand..."
-                                    class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                 />
-                                <div v-if="showAssetDropdown && (assetResults.length > 0 || assetSearchLoading)" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
-                                    <div v-if="assetSearchLoading" class="px-3 py-2 text-[10px] text-gray-400">Searching...</div>
+                                <div v-if="showAssetDropdown && (assetResults.length > 0 || assetSearchLoading)" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
+                                    <div v-if="assetSearchLoading" class="px-3 py-2 text-[10px] text-gray-400 dark:text-gray-400">Searching...</div>
                                     <button
                                         v-for="result in assetResults"
                                         :key="result.result_type + '-' + (result.stock_in_id || result.asset_id)"
                                         type="button"
                                         @mousedown.prevent="selectAssetToAdd(result)"
-                                        class="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                        class="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0 dark:border-gray-700"
                                     >
                                         <div class="flex items-center justify-between gap-2">
                                             <span v-if="result.result_type === 'unit'" class="text-xs font-bold text-blue-700 font-mono truncate">{{ unitSerialLabel(result) }}</span>
@@ -2378,12 +2378,12 @@ const linkify = (text) => {
                                             <span v-if="result.result_type === 'unit'" class="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 shrink-0">Fixed</span>
                                             <span v-else class="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 shrink-0">SOH: {{ result.soh_at_store }}</span>
                                         </div>
-                                        <div class="text-[10px] text-gray-600 truncate">
-                                            <span v-if="result.result_type === 'unit'" class="font-semibold text-gray-500">{{ result.item_code }} · </span>{{ result.brand }} {{ result.model }}
+                                        <div class="text-[10px] text-gray-600 truncate dark:text-gray-300">
+                                            <span v-if="result.result_type === 'unit'" class="font-semibold text-gray-500 dark:text-gray-300">{{ result.item_code }} · </span>{{ result.brand }} {{ result.model }}
                                         </div>
-                                        <div v-if="result.result_type === 'unit' && result.barcode" class="text-[9px] text-gray-400 truncate">Barcode: {{ result.barcode }}</div>
+                                        <div v-if="result.result_type === 'unit' && result.barcode" class="text-[9px] text-gray-400 truncate dark:text-gray-400">Barcode: {{ result.barcode }}</div>
                                     </button>
-                                    <div v-if="!assetSearchLoading && assetResults.length === 0" class="px-3 py-2 text-[10px] text-gray-400">No units found at this store.</div>
+                                    <div v-if="!assetSearchLoading && assetResults.length === 0" class="px-3 py-2 text-[10px] text-gray-400 dark:text-gray-400">No units found at this store.</div>
                                 </div>
                             </div>
 
@@ -2392,25 +2392,25 @@ const linkify = (text) => {
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="min-w-0">
                                         <div v-if="pendingAsset.result_type === 'unit'" class="text-xs font-bold text-blue-700 font-mono truncate">{{ unitSerialLabel(pendingAsset) }}</div>
-                                        <div class="text-[11px] font-bold text-gray-700 font-mono truncate">{{ pendingAsset.item_code }}</div>
-                                        <div class="text-[10px] text-gray-600 truncate">{{ pendingAsset.brand }} {{ pendingAsset.model }}</div>
-                                        <div v-if="pendingAsset.result_type === 'unit' && pendingAsset.barcode" class="text-[9px] text-gray-400 truncate">Barcode: {{ pendingAsset.barcode }}</div>
+                                        <div class="text-[11px] font-bold text-gray-700 font-mono truncate dark:text-gray-300">{{ pendingAsset.item_code }}</div>
+                                        <div class="text-[10px] text-gray-600 truncate dark:text-gray-300">{{ pendingAsset.brand }} {{ pendingAsset.model }}</div>
+                                        <div v-if="pendingAsset.result_type === 'unit' && pendingAsset.barcode" class="text-[9px] text-gray-400 truncate dark:text-gray-400">Barcode: {{ pendingAsset.barcode }}</div>
                                     </div>
-                                    <button type="button" @click="cancelAddAsset" class="text-gray-400 hover:text-red-600 shrink-0">
+                                    <button type="button" @click="cancelAddAsset" class="text-gray-400 hover:text-red-600 shrink-0 dark:text-gray-400">
                                         <XMarkIcon class="w-4 h-4" />
                                     </button>
                                 </div>
                                 <div>
-                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Action / Transaction</label>
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Action / Transaction</label>
                                     <CustomSelect v-model="addAssetForm.transaction_type" :options="assetTransactionTypes" placeholder="Select type" />
                                 </div>
                                 <div v-if="quantityRelevant(addAssetForm.transaction_type)">
-                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Quantity</label>
-                                    <input v-model.number="addAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs">
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Quantity</label>
+                                    <input v-model.number="addAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs dark:border-gray-600">
                                 </div>
                                 <div>
-                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Notes</label>
-                                    <textarea v-model="addAssetForm.notes" rows="2" placeholder="e.g. PM performed, replaced thermal paste, done 2026-06-03" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs"></textarea>
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Notes</label>
+                                    <textarea v-model="addAssetForm.notes" rows="2" placeholder="e.g. PM performed, replaced thermal paste, done 2026-06-03" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs dark:border-gray-600"></textarea>
                                 </div>
                                 <button type="button" @click="submitAddAsset" :disabled="assetSubmitting" class="w-full px-3 py-1.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 uppercase tracking-widest disabled:opacity-60">
                                     {{ assetSubmitting ? 'Tagging...' : 'Tag Asset' }}
@@ -2418,30 +2418,30 @@ const linkify = (text) => {
                             </div>
 
                             <!-- Tagged list -->
-                            <div v-if="taggedAssets.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200">
+                            <div v-if="taggedAssets.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                                 No assets tagged yet.
                             </div>
                             <div v-else class="space-y-2">
-                                <div v-for="link in taggedAssets" :key="link.id" class="rounded-lg border border-gray-200 bg-white p-2.5">
+                                <div v-for="link in taggedAssets" :key="link.id" class="rounded-lg border border-gray-200 bg-white p-2.5 dark:bg-gray-800 dark:border-gray-700">
                                     <!-- Inline edit mode -->
                                     <div v-if="editingAssetId === link.id" class="space-y-2">
                                         <div v-if="link.serial_no || link.barcode" class="text-xs font-bold text-blue-700 font-mono truncate">{{ link.serial_no || link.barcode }}</div>
-                                        <div class="text-[11px] font-bold text-gray-700 font-mono">{{ link.asset?.item_code }}</div>
+                                        <div class="text-[11px] font-bold text-gray-700 font-mono dark:text-gray-300">{{ link.asset?.item_code }}</div>
                                         <div>
-                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Action / Transaction</label>
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Action / Transaction</label>
                                             <CustomSelect v-model="editAssetForm.transaction_type" :options="assetTransactionTypes" placeholder="Select type" />
                                         </div>
                                         <div v-if="quantityRelevant(editAssetForm.transaction_type)">
-                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Quantity</label>
-                                            <input v-model.number="editAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs">
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Quantity</label>
+                                            <input v-model.number="editAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs dark:border-gray-600">
                                         </div>
                                         <div>
-                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Notes</label>
-                                            <textarea v-model="editAssetForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs"></textarea>
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Notes</label>
+                                            <textarea v-model="editAssetForm.notes" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs dark:border-gray-600"></textarea>
                                         </div>
                                         <div class="flex gap-1.5">
                                             <button type="button" @click="submitEditAsset(link)" :disabled="assetSubmitting" class="flex-1 px-3 py-1.5 text-xs font-black text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 uppercase tracking-widest disabled:opacity-60">Save</button>
-                                            <button type="button" @click="cancelEditAsset" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+                                            <button type="button" @click="cancelEditAsset" class="px-3 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                                         </div>
                                     </div>
                                     <!-- Display mode -->
@@ -2453,12 +2453,12 @@ const linkify = (text) => {
                                                 <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider" :class="assetTypeBadgeClass(link.transaction_type)">
                                                     {{ link.transaction_type }}
                                                 </span>
-                                                <span v-if="quantityRelevant(link.transaction_type)" class="text-[9px] font-bold text-gray-500">×{{ link.quantity }}</span>
+                                                <span v-if="quantityRelevant(link.transaction_type)" class="text-[9px] font-bold text-gray-500 dark:text-gray-300">×{{ link.quantity }}</span>
                                             </div>
-                                            <div class="text-[10px] text-gray-600 truncate">
-                                                <span v-if="link.serial_no || link.barcode" class="font-semibold text-gray-500">{{ link.asset?.item_code }} · </span>{{ link.asset?.brand }} {{ link.asset?.model }}
+                                            <div class="text-[10px] text-gray-600 truncate dark:text-gray-300">
+                                                <span v-if="link.serial_no || link.barcode" class="font-semibold text-gray-500 dark:text-gray-300">{{ link.asset?.item_code }} · </span>{{ link.asset?.brand }} {{ link.asset?.model }}
                                             </div>
-                                            <div v-if="link.notes" class="mt-1 text-[10px] text-gray-700 whitespace-pre-wrap">{{ link.notes }}</div>
+                                            <div v-if="link.notes" class="mt-1 text-[10px] text-gray-700 whitespace-pre-wrap dark:text-gray-300">{{ link.notes }}</div>
                                         </div>
                                         <div v-if="hasPermission('tickets.edit')" class="flex items-center gap-1 shrink-0">
                                             <button type="button" @click="startEditAsset(link)" class="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Edit">
@@ -2476,13 +2476,13 @@ const linkify = (text) => {
                         <!-- CC Recipients -->
                         <div class="pt-6 border-t">
                             <div class="flex items-center justify-between mb-2">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">CC on Notifications</label>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">CC on Notifications</label>
                                 <span v-if="isChildTicket" class="text-[9px] font-black uppercase tracking-widest text-purple-600">Inherited</span>
                             </div>
 
                             <!-- Child ticket: read-only display of parent's CC list -->
                             <div v-if="isChildTicket">
-                                <div v-if="inheritedCcs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-3 border border-dashed border-gray-200">
+                                <div v-if="inheritedCcs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-3 border border-dashed border-gray-200 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                                     Parent ticket has no CC recipients.
                                 </div>
                                 <div v-else class="flex flex-wrap gap-1.5">
@@ -2491,12 +2491,12 @@ const linkify = (text) => {
                                         {{ cc.name || cc.email }}
                                     </span>
                                 </div>
-                                <p class="text-[10px] text-gray-400 mt-2">Managed on the parent ticket.</p>
+                                <p class="text-[10px] text-gray-400 mt-2 dark:text-gray-400">Managed on the parent ticket.</p>
                             </div>
 
                             <!-- Parent ticket: editable CC manager -->
                             <div v-else class="space-y-2">
-                                <div v-if="ccForm.ccs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200">
+                                <div v-if="ccForm.ccs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-2 border border-dashed border-gray-200 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                                     No CC recipients. Add emails below to notify them on comments, status changes, and assignment changes.
                                 </div>
                                 <div v-else class="flex flex-wrap gap-1.5">
@@ -2518,18 +2518,18 @@ const linkify = (text) => {
                                             @blur="hideCcDropdownSoon"
                                             type="text"
                                             placeholder="Search internal users..."
-                                            class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                            class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                         />
-                                        <div v-if="showCcUserDropdown && ccUserOptions.length > 0" class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                        <div v-if="showCcUserDropdown && ccUserOptions.length > 0" class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
                                             <button
                                                 v-for="user in ccUserOptions"
                                                 :key="user.id"
                                                 type="button"
                                                 @mousedown.prevent="addCcUser(user)"
-                                                class="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                                class="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0 dark:border-gray-700"
                                             >
-                                                <div class="text-xs font-bold text-gray-800">{{ user.name }}</div>
-                                                <div class="text-[10px] text-gray-500">{{ user.email }}</div>
+                                                <div class="text-xs font-bold text-gray-800 dark:text-gray-200">{{ user.name }}</div>
+                                                <div class="text-[10px] text-gray-500 dark:text-gray-300">{{ user.email }}</div>
                                             </button>
                                         </div>
                                     </div>
@@ -2541,7 +2541,7 @@ const linkify = (text) => {
                                             @keydown.enter.prevent="addCcEmail"
                                             type="email"
                                             placeholder="Add external email..."
-                                            class="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                            class="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                         />
                                         <button type="button" @click="addCcEmail" class="px-3 py-1.5 text-xs font-black text-white bg-blue-600 rounded-lg hover:bg-blue-700 uppercase tracking-widest">
                                             Add
@@ -2565,7 +2565,7 @@ const linkify = (text) => {
                                 v-if="hasPermission('tickets.edit') && ['open', 'in_progress', 'for_schedule'].includes(ticket.status)"
                                 type="button" 
                                 @click="openChildModal" 
-                                class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-black text-blue-600 bg-white hover:bg-blue-50 transition-colors uppercase tracking-widest"
+                                class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-black text-blue-600 bg-white hover:bg-blue-50 transition-colors uppercase tracking-widest dark:bg-gray-800"
                             >
                                 Create Child Ticket
                             </button>
@@ -2595,17 +2595,17 @@ const linkify = (text) => {
                     </div>
 
                     <!-- Children Tickets -->
-                    <div v-if="ticket.children && ticket.children.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
-                        <h3 class="text-sm font-black text-gray-900 uppercase tracking-widest">Child Tickets</h3>
+                    <div v-if="ticket.children && ticket.children.length > 0" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4 dark:bg-gray-800 dark:border-gray-700">
+                        <h3 class="text-sm font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">Child Tickets</h3>
                         <div class="space-y-3">
-                            <div v-for="child in ticket.children" :key="child.id" class="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                            <div v-for="child in ticket.children" :key="child.id" class="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0 flex-1">
                                         <Link :href="route('tickets.edit', child.id)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ child.ticket_key }}
                                         </Link>
-                                        <div class="mt-0.5 text-xs font-bold text-gray-900 break-words">{{ child.title }}</div>
-                                        <div class="mt-1 text-[10px] text-gray-500">
+                                        <div class="mt-0.5 text-xs font-bold text-gray-900 break-words dark:text-gray-100">{{ child.title }}</div>
+                                        <div class="mt-1 text-[10px] text-gray-500 dark:text-gray-300">
                                             {{ childRequesterName(child) }}<span v-if="childRequesterEmail(child)"> - {{ childRequesterEmail(child) }}</span>
                                         </div>
                                     </div>
@@ -2620,28 +2620,28 @@ const linkify = (text) => {
                                 </div>
 
                                 <div class="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
-                                    <div class="rounded-lg border border-white bg-white px-3 py-2">
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Location</div>
-                                        <div class="mt-0.5 font-bold text-gray-700">{{ childLocationName(child) }}</div>
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Location</div>
+                                        <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ childLocationName(child) }}</div>
                                     </div>
-                                    <div class="rounded-lg border border-white bg-white px-3 py-2">
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Item</div>
-                                        <div class="mt-0.5 font-bold text-gray-700">{{ childItemName(child) }}</div>
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Item</div>
+                                        <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ childItemName(child) }}</div>
                                     </div>
-                                    <div v-if="child.assignee" class="rounded-lg border border-white bg-white px-3 py-2">
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Assignee</div>
-                                        <div class="mt-0.5 font-bold text-gray-700">{{ child.assignee.name }}</div>
+                                    <div v-if="child.assignee" class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Assignee</div>
+                                        <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ child.assignee.name }}</div>
                                     </div>
-                                    <div class="rounded-lg border border-white bg-white px-3 py-2">
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400">Created</div>
-                                        <div class="mt-0.5 font-bold text-gray-700">{{ formatDate(parseDate(child.created_at)) }}</div>
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Created</div>
+                                        <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ formatDate(parseDate(child.created_at)) }}</div>
                                     </div>
                                 </div>
 
-                                <div v-if="child.description" class="rounded-lg border border-gray-100 bg-white px-3 py-2">
-                                    <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Description</div>
-                                    <div v-if="hasRichHtml(child.description_html)" class="email-html-body text-xs leading-relaxed text-gray-700" v-html="child.description_html"></div>
-                                    <div v-else class="text-xs leading-relaxed text-gray-700 whitespace-pre-wrap" v-html="linkify(child.description)"></div>
+                                <div v-if="child.description" class="rounded-lg border border-gray-100 bg-white px-3 py-2 dark:bg-gray-800 dark:border-gray-700">
+                                    <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1 dark:text-gray-400">Description</div>
+                                    <div v-if="hasRichHtml(child.description_html)" class="email-html-body text-xs leading-relaxed text-gray-700 dark:text-gray-300" v-html="child.description_html"></div>
+                                    <div v-else class="text-xs leading-relaxed text-gray-700 whitespace-pre-wrap dark:text-gray-300" v-html="linkify(child.description)"></div>
                                 </div>
 
                                 <div v-if="child.attachments?.length" class="flex flex-wrap gap-2">
@@ -2649,7 +2649,7 @@ const linkify = (text) => {
                                         v-for="attachment in child.attachments"
                                         :key="attachment.id"
                                         :href="getAttachmentDownloadUrl(attachment)"
-                                        class="inline-flex items-center rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50"
+                                        class="inline-flex items-center rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50 dark:bg-gray-800"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
@@ -2666,10 +2666,10 @@ const linkify = (text) => {
                 <div class="lg:col-span-2 space-y-6 order-2 lg:order-1">
                     
                     <!-- Title Section -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 transition-all duration-200 hover:shadow-md">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 transition-all duration-200 hover:shadow-md dark:bg-gray-800 dark:border-gray-700">
                         <div v-if="!isEditingTitle" 
-                             class="group relative -m-2 p-2 rounded-lg hover:bg-gray-50 transition-colors duration-200">
-                            <h1 class="text-xl sm:text-3xl font-bold text-gray-900 leading-tight tracking-tight">
+                             class="group relative -m-2 p-2 rounded-lg hover:bg-gray-50 transition-colors duration-200 dark:hover:bg-gray-700">
+                            <h1 class="text-xl sm:text-3xl font-bold text-gray-900 leading-tight tracking-tight dark:text-gray-100">
                                 {{ ticket.title }}
                             </h1>
                             <div v-if="hasPermission('tickets.edit')" 
@@ -2688,20 +2688,20 @@ const linkify = (text) => {
                                 v-model="editForm.title" 
                                 type="text" 
                                 maxlength="255"
-                                class="block w-full text-lg sm:text-3xl font-bold text-gray-900 leading-tight border-0 border-b-2 border-blue-500 focus:ring-0 focus:border-blue-600 px-0 py-1 bg-transparent placeholder-gray-300"
+                                class="block w-full text-lg sm:text-3xl font-bold text-gray-900 leading-tight border-0 border-b-2 border-blue-500 focus:ring-0 focus:border-blue-600 px-0 py-1 bg-transparent placeholder-gray-300 dark:text-gray-100"
                                 placeholder="Enter ticket title..."
                                 @blur="saveTitle"
                                 @keydown.enter="saveTitle"
                                 @keydown.esc="cancelTitleEdit"
                             >
-                            <div class="mt-2 text-[10px] text-gray-500 flex justify-end">Press Enter to save, Esc to cancel</div>
+                            <div class="mt-2 text-[10px] text-gray-500 flex justify-end dark:text-gray-300">Press Enter to save, Esc to cancel</div>
                         </div>
                     </div>
 
                     <!-- Activity / Timeline -->
-                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 pb-0 relative">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 pb-0 relative dark:bg-gray-800 dark:border-gray-700">
                         <div class="flex items-center justify-between mb-6">
-                            <h3 class="text-lg font-black text-gray-900 uppercase tracking-widest">Activity Timeline</h3>
+                            <h3 class="text-lg font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">Activity Timeline</h3>
                             <button 
                                 type="button"
                                 @click="showAuditTrails = !showAuditTrails"
@@ -2716,7 +2716,7 @@ const linkify = (text) => {
                         </div>
 
                         <!-- Timeline List -->
-                        <div class="relative pl-4 border-l-2 border-gray-200 space-y-8 mb-8 pb-6">
+                        <div class="relative pl-4 border-l-2 border-gray-200 space-y-8 mb-8 pb-6 dark:border-gray-700">
                             <!-- Loop Activities (Comments + History + Description) -->
                             <div v-for="activity in filteredActivities" :key="activity.activity_type + '-' + activity.id" class="relative">
                                 
@@ -2724,18 +2724,18 @@ const linkify = (text) => {
                                 <template v-if="activity.activity_type === 'description'">
                                     <!-- Parent Context Card (for Child Tickets) -->
                                     <div v-if="ticket.parent_id && ticket.parent" class="mb-6 bg-purple-50 border border-purple-100 rounded-xl overflow-hidden shadow-sm">
-                                        <div class="px-4 py-3 bg-white border-b border-purple-100 flex items-center justify-between">
+                                        <div class="px-4 py-3 bg-white border-b border-purple-100 flex items-center justify-between dark:bg-gray-800">
                                             <div class="flex flex-col">
                                                 <span class="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Originating Parent Ticket</span>
-                                                <h4 class="text-sm font-bold text-gray-900 leading-tight">{{ ticket.parent.title }}</h4>
+                                                <h4 class="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">{{ ticket.parent.title }}</h4>
                                             </div>
                                             <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-purple-100 text-purple-700 border border-purple-200">
                                                 {{ ticket.parent.ticket_key }}
                                             </span>
                                         </div>
                                         <div class="p-4">
-                                            <div v-if="hasRichHtml(ticket.parent.description_html)" class="email-html-body text-sm text-gray-600 leading-relaxed line-clamp-3" v-html="ticket.parent.description_html"></div>
-                                            <div v-else class="text-sm text-gray-600 leading-relaxed line-clamp-3 italic whitespace-pre-wrap" v-html="linkify(ticket.parent.description)"></div>
+                                            <div v-if="hasRichHtml(ticket.parent.description_html)" class="email-html-body text-sm text-gray-600 leading-relaxed line-clamp-3 dark:text-gray-300" v-html="ticket.parent.description_html"></div>
+                                            <div v-else class="text-sm text-gray-600 leading-relaxed line-clamp-3 italic whitespace-pre-wrap dark:text-gray-300" v-html="linkify(ticket.parent.description)"></div>
                                             <div class="mt-3 flex justify-end">
                                                 <Link :href="route('tickets.edit', ticket.parent_id)" class="text-[10px] font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center group">
                                                     View Parent Details
@@ -2769,7 +2769,7 @@ const linkify = (text) => {
                                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-700 border border-blue-200">
                                                     {{ (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.status }}
                                                 </span>
-                                                <button v-if="canEditSchedule" @click="openEditScheduleModal" type="button" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest text-blue-700 bg-white border border-blue-200 hover:bg-blue-50">
+                                                <button v-if="canEditSchedule" @click="openEditScheduleModal" type="button" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 dark:bg-gray-800">
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                                     Edit
                                                 </button>
@@ -2778,32 +2778,32 @@ const linkify = (text) => {
                                         
                                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div class="flex flex-col">
-                                                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Scheduled Time</span>
-                                                <span class="text-xs font-bold text-gray-700">
+                                                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-400">Scheduled Time</span>
+                                                <span class="text-xs font-bold text-gray-700 dark:text-gray-300">
                                                     {{ formatDate((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.start_time) }} – 
                                                     {{ formatDate((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.end_time) }}
                                                 </span>
                                             </div>
                                             <div v-if="activity.store || activity.schedule_store?.store || activity.scheduleStore?.store" class="flex flex-col">
-                                                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Store Branch</span>
-                                                <span class="text-xs font-bold text-gray-700">
+                                                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-400">Store Branch</span>
+                                                <span class="text-xs font-bold text-gray-700 dark:text-gray-300">
                                                     {{ (activity.store || activity.schedule_store?.store || activity.scheduleStore?.store)?.name }}
                                                 </span>
                                             </div>
                                         </div>
 
                                         <div v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start || (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start" class="flex flex-col gap-2 pt-2 border-t border-blue-50">
-                                            <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">Operational Windows</span>
+                                            <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-400">Operational Windows</span>
                                             <div class="flex flex-wrap gap-2">
-                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Pickup: {{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start) }}–{{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_end) }}</span>
+                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600 dark:bg-gray-800">Pickup: {{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start) }}–{{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_end) }}</span>
                                                 <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.pickup_start && (activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start"> &nbsp;|&nbsp; </span>
-                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600">Backlogs: {{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start) }}–{{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_end) }}</span>
+                                                <span v-if="(activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start" class="bg-white px-2 py-1 rounded text-[10px] font-medium border border-blue-100 text-blue-600 dark:bg-gray-800">Backlogs: {{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_start) }}–{{ formatTime((activity.schedule || activity.schedule_store?.schedule || activity.scheduleStore?.schedule)?.backlogs_end) }}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- Dot (Avatar) -->
-                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white dark:bg-gray-800">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white">
                                             {{ activity.user ? activity.user.name.charAt(0) : '?' }}
@@ -2812,10 +2812,10 @@ const linkify = (text) => {
                                     
                                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1 gap-1">
                                         <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                            <span class="font-bold text-gray-900 text-sm">
+                                            <span class="font-bold text-gray-900 text-sm dark:text-gray-100">
                                                 {{ activity.user ? activity.user.name : (activity.sender_name || 'External User') }}
                                             </span>
-                                            <span class="text-[10px] sm:text-xs text-gray-500 font-medium">
+                                            <span class="text-[10px] sm:text-xs text-gray-500 font-medium dark:text-gray-300">
                                                 on {{ formatDate(activity.date) }}
                                             </span>
                                         </div>
@@ -2823,12 +2823,12 @@ const linkify = (text) => {
                                     
                                     <!-- Editable Description Area -->
                                     <div v-if="!isEditingDescription" 
-                                         class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors">
-                                        <div v-if="hasRichHtml(activity.text_html)" class="email-html-body text-gray-700 text-sm sm:text-base leading-relaxed" v-html="activity.text_html"></div>
-                                        <div v-else class="text-gray-700 text-sm sm:text-base leading-relaxed">
+                                         class="group relative border border-transparent rounded p-2 -ml-2 hover:bg-gray-50 hover:border-gray-200 transition-colors dark:hover:bg-gray-700">
+                                        <div v-if="hasRichHtml(activity.text_html)" class="email-html-body text-gray-700 text-sm sm:text-base leading-relaxed dark:text-gray-300" v-html="activity.text_html"></div>
+                                        <div v-else class="text-gray-700 text-sm sm:text-base leading-relaxed dark:text-gray-300">
                                             <template v-for="line in getDescriptionLines(activity.text)" :key="line.index">
                                                 <div v-if="line.storeList" class="flex flex-wrap items-center gap-1.5 min-h-[1.5rem]">
-                                                    <span class="font-semibold text-gray-800" v-html="linkify(line.storeList.prefix)"></span>
+                                                    <span class="font-semibold text-gray-800 dark:text-gray-200" v-html="linkify(line.storeList.prefix)"></span>
                                                     <span
                                                         v-for="store in visibleStoresForLine(line.storeList.stores, getStoreListKey(activity, line.index))"
                                                         :key="`${getStoreListKey(activity, line.index)}-${store}`"
@@ -2840,7 +2840,7 @@ const linkify = (text) => {
                                                         v-if="hiddenStoreCountForLine(line.storeList.stores, getStoreListKey(activity, line.index)) > 0"
                                                         type="button"
                                                         @click="toggleStoreList(getStoreListKey(activity, line.index))"
-                                                        class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-black text-blue-600 hover:border-blue-200 hover:bg-blue-50"
+                                                        class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-black text-blue-600 hover:border-blue-200 hover:bg-blue-50 dark:bg-gray-800 dark:border-gray-700"
                                                     >
                                                         +{{ hiddenStoreCountForLine(line.storeList.stores, getStoreListKey(activity, line.index)) }} more
                                                     </button>
@@ -2848,7 +2848,7 @@ const linkify = (text) => {
                                                         v-else-if="isStoreListExpanded(getStoreListKey(activity, line.index)) && line.storeList.stores.length > STORE_LIST_DISPLAY_LIMIT"
                                                         type="button"
                                                         @click="toggleStoreList(getStoreListKey(activity, line.index))"
-                                                        class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-black text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                                                        class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-black text-gray-500 hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                                                     >
                                                         Show less
                                                     </button>
@@ -2857,7 +2857,7 @@ const linkify = (text) => {
                                             </template>
                                         </div>
                                         <div v-if="hasPermission('tickets.edit')" 
-                                             class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 cursor-pointer hover:text-blue-600 transition-colors"
+                                             class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-gray-400 cursor-pointer hover:text-blue-600 transition-colors dark:text-gray-400"
                                              @click="startEditingDescription"
                                              title="Edit Description">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -2868,22 +2868,22 @@ const linkify = (text) => {
                                             ref="descriptionInput"
                                             v-model="editForm.description" 
                                             rows="6" 
-                                            class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-2 text-sm sm:text-base"
+                                            class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 mb-2 text-sm sm:text-base dark:border-gray-600"
                                             @keydown.esc="cancelDescriptionEdit"
                                         ></textarea>
                                         <div class="flex justify-end space-x-2">
-                                            <button @click="cancelDescriptionEdit" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                                            <button @click="cancelDescriptionEdit" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-300">Cancel</button>
                                             <button @click="saveDescription" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
                                         </div>
                                     </div>
 
                                     <!-- Description Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                        <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white dark:bg-gray-800 dark:border-gray-700">
                                             <a
                                                 v-if="getAttachmentDownloadUrl(attachment)"
                                                 :href="getAttachmentDownloadUrl(attachment)"
-                                                class="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-blue-600 hover:text-white"
+                                                class="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-blue-600 hover:text-white dark:text-gray-300"
                                                 title="Download attachment"
                                                 aria-label="Download attachment"
                                                 @click.stop
@@ -2891,7 +2891,7 @@ const linkify = (text) => {
                                                 <ArrowDownTrayIcon class="h-4 w-4" />
                                             </a>
                                             <div v-if="isMedia(attachment.file_name) && !failedImages.has(attachment.id)" 
-                                                 class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
+                                                 class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative dark:bg-gray-800"
                                                  @click="openImageViewer(attachment)">
                                                 <video v-if="isVideo(attachment.file_name)" 
                                                        :src="getThumbnailUrl(attachment)" 
@@ -2906,9 +2906,9 @@ const linkify = (text) => {
                                                     <svg class="w-8 h-8 text-white drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
                                                 </div>
                                             </div>
-                                            <div v-else class="h-24 sm:h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
-                                                <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                                                <span class="text-[10px] text-gray-500 text-center truncate w-full px-2">{{ attachment.file_name }}</span>
+                                            <div v-else class="h-24 sm:h-32 flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-900/50">
+                                                <svg class="w-8 h-8 text-gray-400 mb-2 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                                <span class="text-[10px] text-gray-500 text-center truncate w-full px-2 dark:text-gray-300">{{ attachment.file_name }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2917,7 +2917,7 @@ const linkify = (text) => {
                                 <!-- Comment Item -->
                                 <template v-else-if="activity.activity_type === 'comment'">
                                     <!-- Dot (Avatar) -->
-                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white dark:bg-gray-800">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">
                                             {{ activity.user ? activity.user.name.charAt(0) : (activity.sender_name ? activity.sender_name.charAt(0) : '?') }}
@@ -2925,22 +2925,22 @@ const linkify = (text) => {
                                     </div>
                                     
                                     <div class="flex items-center space-x-2 mb-1">
-                                        <span class="font-bold text-gray-900 text-sm">
+                                        <span class="font-bold text-gray-900 text-sm dark:text-gray-100">
                                             {{ activity.user ? activity.user.name : (activity.sender_name || activity.sender_email || 'External User') }}
                                         </span>
-                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium">{{ formatDate(activity.date) }}</span>
+                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium dark:text-gray-300">{{ formatDate(activity.date) }}</span>
                                     </div>
                                     
-                                    <div v-if="hasRichHtml(activity.comment_html)" class="email-html-body text-gray-700 mb-2 text-sm sm:text-base leading-relaxed" v-html="activity.comment_html"></div>
-                                    <div v-else class="text-gray-700 whitespace-pre-wrap mb-2 text-sm sm:text-base leading-relaxed" v-html="linkify(activity.comment_text)"></div>
+                                    <div v-if="hasRichHtml(activity.comment_html)" class="email-html-body text-gray-700 mb-2 text-sm sm:text-base leading-relaxed dark:text-gray-300" v-html="activity.comment_html"></div>
+                                    <div v-else class="text-gray-700 whitespace-pre-wrap mb-2 text-sm sm:text-base leading-relaxed dark:text-gray-300" v-html="linkify(activity.comment_text)"></div>
 
                                     <!-- Comment Attachments -->
                                     <div v-if="activity.attachments && activity.attachments.length > 0" class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                        <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white">
+                                        <div v-for="attachment in activity.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white dark:bg-gray-800 dark:border-gray-700">
                                             <a
                                                 v-if="getAttachmentDownloadUrl(attachment)"
                                                 :href="getAttachmentDownloadUrl(attachment)"
-                                                class="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-blue-600 hover:text-white"
+                                                class="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-gray-600 shadow-sm ring-1 ring-gray-200 transition hover:bg-blue-600 hover:text-white dark:text-gray-300"
                                                 title="Download attachment"
                                                 aria-label="Download attachment"
                                                 @click.stop
@@ -2948,7 +2948,7 @@ const linkify = (text) => {
                                                 <ArrowDownTrayIcon class="h-4 w-4" />
                                             </a>
                                             <div v-if="isMedia(attachment.file_name) && !failedImages.has(attachment.id)" 
-                                                 class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
+                                                 class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative dark:bg-gray-800"
                                                  @click="openImageViewer(attachment)">
                                                 <video v-if="isVideo(attachment.file_name)" 
                                                        :src="getThumbnailUrl(attachment)" 
@@ -2963,9 +2963,9 @@ const linkify = (text) => {
                                                     <svg class="w-8 h-8 text-white drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
                                                 </div>
                                             </div>
-                                            <div v-else class="h-24 sm:h-32 flex flex-col items-center justify-center p-4 bg-gray-50">
-                                                <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                                                <span class="text-[10px] text-gray-500 text-center truncate w-full px-2">{{ attachment.file_name }}</span>
+                                            <div v-else class="h-24 sm:h-32 flex flex-col items-center justify-center p-4 bg-gray-50 dark:bg-gray-900/50">
+                                                <svg class="w-8 h-8 text-gray-400 mb-2 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                                <span class="text-[10px] text-gray-500 text-center truncate w-full px-2 dark:text-gray-300">{{ attachment.file_name }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2974,7 +2974,7 @@ const linkify = (text) => {
                                 <!-- History Item -->
                                 <template v-else-if="activity.activity_type === 'history'">
                                     <!-- Dot (Avatar) -->
-                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white dark:bg-gray-800">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-gray-400 flex items-center justify-center text-[10px] font-bold text-white">
                                             {{ activity.user ? activity.user.name.charAt(0) : '?' }}
@@ -2982,14 +2982,14 @@ const linkify = (text) => {
                                     </div>
                                     
                                     <div class="flex items-center space-x-2 mb-1">
-                                        <span class="font-bold text-gray-900 text-sm">
+                                        <span class="font-bold text-gray-900 text-sm dark:text-gray-100">
                                             {{ activity.user ? activity.user.name : (ticket.reporter ? ticket.reporter.name : (ticket.sender_name || 'Customer')) }}
                                         </span>
-                                        <span class="text-[10px] text-gray-500">{{ formatDate(activity.date) }}</span>
+                                        <span class="text-[10px] text-gray-500 dark:text-gray-300">{{ formatDate(activity.date) }}</span>
                                     </div>
                                     
-                                    <div class="text-xs sm:text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 leading-relaxed">
-                                        Changed <span class="font-black text-gray-800">{{ formatColumnName(activity.column_changed) }}</span> 
+                                    <div class="text-xs sm:text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-100 leading-relaxed dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
+                                        Changed <span class="font-black text-gray-800 dark:text-gray-200">{{ formatColumnName(activity.column_changed) }}</span> 
                                         from <span class="font-bold text-red-600 bg-red-50 px-1 rounded line-through decoration-red-400">
                                             {{ activity.column_changed === 'assignee_id' && !activity.old_value ? 'Unassigned' : (activity.old_value || '(empty)') }}
                                         </span> 
@@ -3002,15 +3002,15 @@ const linkify = (text) => {
                                 <!-- Child Ticket Item -->
                                 <template v-else-if="activity.activity_type === 'child_ticket'">
                                     <!-- Dot (Avatar) -->
-                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white">
+                                    <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white dark:bg-gray-800">
                                         <div class="w-full h-full bg-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
                                             {{ activity.user ? activity.user.name.charAt(0) : '?' }}
                                         </div>
                                     </div>
 
                                     <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-2">
-                                        <span class="font-bold text-gray-900 text-sm">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
-                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium">
+                                        <span class="font-bold text-gray-900 text-sm dark:text-gray-100">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
+                                        <span class="text-[10px] sm:text-xs text-gray-500 font-medium dark:text-gray-300">
                                             {{ activity.child_event_type === 'merged' ? 'merged ticket' : 'created child ticket' }}
                                             <Link :href="route('tickets.edit', activity.id)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
                                             {{ activity.child_event_type === 'merged' ? 'into this parent' : '' }}
@@ -3022,7 +3022,7 @@ const linkify = (text) => {
                                         <div class="flex items-start justify-between gap-3 border-b border-purple-100 pb-2">
                                             <div class="min-w-0">
                                                 <Link :href="route('tickets.edit', activity.id)" class="text-sm font-black text-blue-700 hover:underline break-words">{{ activity.ticket_key }}</Link>
-                                                <div class="mt-0.5 text-sm font-bold text-gray-900 break-words">{{ activity.title }}</div>
+                                                <div class="mt-0.5 text-sm font-bold text-gray-900 break-words dark:text-gray-100">{{ activity.title }}</div>
                                             </div>
                                             <div class="flex shrink-0 flex-col items-end gap-1">
                                                 <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter" :class="getStatusColor(activity.status)">
@@ -3036,33 +3036,33 @@ const linkify = (text) => {
                                         <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                                             <div class="flex items-center gap-2">
                                                 <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Requester</span>
-                                                <span class="font-semibold text-gray-800 truncate">{{ childRequesterName(activity) }}</span>
+                                                <span class="font-semibold text-gray-800 truncate dark:text-gray-200">{{ childRequesterName(activity) }}</span>
                                             </div>
                                             <div v-if="childRequesterEmail(activity)" class="flex items-center gap-2">
                                                 <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Email</span>
-                                                <span class="font-semibold text-gray-800 truncate">{{ childRequesterEmail(activity) }}</span>
+                                                <span class="font-semibold text-gray-800 truncate dark:text-gray-200">{{ childRequesterEmail(activity) }}</span>
                                             </div>
                                             <div class="flex items-center gap-2">
                                                 <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Location</span>
-                                                <span class="font-semibold text-gray-800 truncate">{{ childLocationName(activity) }}</span>
+                                                <span class="font-semibold text-gray-800 truncate dark:text-gray-200">{{ childLocationName(activity) }}</span>
                                             </div>
                                             <div class="flex items-center gap-2">
                                                 <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Item</span>
-                                                <span class="font-semibold text-gray-800 truncate">{{ childItemName(activity) }}</span>
+                                                <span class="font-semibold text-gray-800 truncate dark:text-gray-200">{{ childItemName(activity) }}</span>
                                             </div>
                                             <div class="flex items-center gap-2">
                                                 <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Created</span>
-                                                <span class="font-semibold text-gray-800">{{ formatDate(parseDate(activity.original_created_at)) }}</span>
+                                                <span class="font-semibold text-gray-800 dark:text-gray-200">{{ formatDate(parseDate(activity.original_created_at)) }}</span>
                                             </div>
                                         </div>
                                         <div v-if="activity.assignee" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Assigned To</span>
-                                            <span class="font-semibold text-gray-800">{{ activity.assignee.name }}</span>
+                                            <span class="font-semibold text-gray-800 dark:text-gray-200">{{ activity.assignee.name }}</span>
                                         </div>
                                         <div v-if="activity.description" class="flex items-start gap-2 border-t border-purple-100 pt-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Details</span>
-                                            <span v-if="hasRichHtml(activity.description_html)" class="email-html-body text-gray-700" v-html="activity.description_html"></span>
-                                            <span v-else class="text-gray-700 whitespace-pre-wrap" v-html="linkify(activity.description)"></span>
+                                            <span v-if="hasRichHtml(activity.description_html)" class="email-html-body text-gray-700 dark:text-gray-300" v-html="activity.description_html"></span>
+                                            <span v-else class="text-gray-700 whitespace-pre-wrap dark:text-gray-300" v-html="linkify(activity.description)"></span>
                                         </div>
                                         <div v-if="activity.scheduleContext?.schedule?.status" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Schedule</span>
@@ -3072,13 +3072,13 @@ const linkify = (text) => {
                                         </div>
                                         <div v-if="activity.scheduleContext?.start_time && activity.scheduleContext?.end_time" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Time</span>
-                                            <span class="text-gray-700">
+                                            <span class="text-gray-700 dark:text-gray-300">
                                                 {{ formatDate(activity.scheduleContext.start_time) }} - {{ formatDate(activity.scheduleContext.end_time) }}
                                             </span>
                                         </div>
                                         <div v-if="activity.scheduleContext?.pickup_start || activity.scheduleContext?.backlogs_start" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Add'l Times</span>
-                                            <span class="text-gray-600 text-[11px]">
+                                            <span class="text-gray-600 text-[11px] dark:text-gray-300">
                                                 <span v-if="activity.scheduleContext?.pickup_start">Pickup: {{ formatTime(activity.scheduleContext.pickup_start) }}-{{ formatTime(activity.scheduleContext.pickup_end) }}</span>
                                                 <span v-if="activity.scheduleContext?.pickup_start && activity.scheduleContext?.backlogs_start"> | </span>
                                                 <span v-if="activity.scheduleContext?.backlogs_start">Backlogs: {{ formatTime(activity.scheduleContext.backlogs_start) }}-{{ formatTime(activity.scheduleContext.backlogs_end) }}</span>
@@ -3086,11 +3086,11 @@ const linkify = (text) => {
                                         </div>
                                         <div v-if="activity.scheduleContext?.store" class="flex items-center gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0">Store</span>
-                                            <span class="text-gray-700">{{ activity.scheduleContext.store.name }}</span>
+                                            <span class="text-gray-700 dark:text-gray-300">{{ activity.scheduleContext.store.name }}</span>
                                         </div>
                                         <div v-if="activity.scheduleContext?.remarks" class="flex items-start gap-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-0.5">Remarks</span>
-                                            <span class="text-gray-700 whitespace-pre-wrap">{{ activity.scheduleContext.remarks }}</span>
+                                            <span class="text-gray-700 whitespace-pre-wrap dark:text-gray-300">{{ activity.scheduleContext.remarks }}</span>
                                         </div>
                                         <div v-if="activity.attachments?.length" class="flex items-start gap-2 border-t border-purple-100 pt-2">
                                             <span class="text-[10px] font-bold text-purple-500 uppercase tracking-wider w-20 flex-shrink-0 mt-1">Files</span>
@@ -3099,7 +3099,7 @@ const linkify = (text) => {
                                                     v-for="attachment in activity.attachments"
                                                     :key="attachment.id"
                                                     :href="getAttachmentDownloadUrl(attachment)"
-                                                    class="inline-flex items-center rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50"
+                                                    class="inline-flex items-center rounded-md border border-blue-100 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50 dark:bg-gray-800"
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                 >
@@ -3115,7 +3115,7 @@ const linkify = (text) => {
                         </div>
 
                         <!-- Sticky Comment Input -->
-                        <div v-if="ticket.status !== 'closed'" class="sticky bottom-0 z-10 -mx-4 sm:-mx-6 -mb-0 p-4 sm:p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg">
+                        <div v-if="ticket.status !== 'closed'" class="ticket-response-shell sticky bottom-0 z-10 -mx-4 sm:-mx-6 -mb-0 p-4 sm:p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg dark:border-slate-700 dark:bg-slate-950/95 dark:shadow-black/30">
                             <div class="flex space-x-3 sm:space-x-4">
                                 <div class="flex-shrink-0 hidden xs:block">
                                     <div v-if="$page.props.auth.user.profile_photo" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">
@@ -3126,20 +3126,20 @@ const linkify = (text) => {
                                     </div>
                                 </div>
                                 <div class="flex-grow">
-                                    <div class="bg-white border-2 border-blue-100 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all duration-200">
+                                    <div class="ticket-response-composer bg-white border-2 border-blue-100 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all duration-200 dark:!border-slate-700 dark:!bg-slate-900 dark:focus-within:!border-blue-500 dark:focus-within:ring-blue-500/40">
                                         <textarea 
                                             v-model="commentForm.comment_text" 
                                             rows="2" 
-                                            class="block w-full border-0 focus:ring-0 resize-y bg-transparent p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400 transition-all duration-300 ease-in-out focus:min-h-[50vh]" 
+                                            class="ticket-response-textarea block w-full border-0 focus:ring-0 resize-y bg-white p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400 transition-all duration-300 ease-in-out focus:min-h-[50vh] dark:!bg-slate-900 dark:!text-slate-100 dark:placeholder-slate-400 dark:focus:!bg-slate-900" 
                                             placeholder="Write your response..."
                                             @paste="handlePaste"
                                         ></textarea>
                                         
                                         <!-- Attachment Preview -->
-                                        <div v-if="commentForm.attachments.length > 0" class="px-3 pb-3 flex flex-nowrap overflow-x-auto gap-3 border-t border-blue-50 pt-3 custom-scrollbar scrollbar-hide">
-                                            <div v-for="(attachment, index) in commentForm.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white flex-shrink-0 w-24">
+                                        <div v-if="commentForm.attachments.length > 0" class="px-3 pb-3 flex flex-nowrap overflow-x-auto gap-3 border-t border-blue-50 pt-3 custom-scrollbar scrollbar-hide dark:border-slate-700">
+                                            <div v-for="(attachment, index) in commentForm.attachments" :key="attachment.id" class="relative group border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition bg-white flex-shrink-0 w-24 dark:border-slate-700 dark:bg-slate-800">
                                                 <div v-if="isMedia(attachment.file_name) && attachment.preview" 
-                                                     class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative"
+                                                     class="aspect-w-16 aspect-h-9 bg-gray-100 cursor-pointer relative dark:bg-gray-800"
                                                      @click="openImageViewer(attachment)">
                                                     <video v-if="isVideo(attachment.file_name)" 
                                                            :src="attachment.preview" 
@@ -3151,9 +3151,9 @@ const linkify = (text) => {
                                                         <svg class="w-6 h-6 text-white drop-shadow-md" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
                                                     </div>
                                                 </div>
-                                                <div v-else class="h-24 flex flex-col items-center justify-center p-2 bg-gray-50">
-                                                    <svg class="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                                                    <span class="text-[9px] text-gray-500 text-center truncate w-full px-1">{{ attachment.file_name }}</span>
+                                                <div v-else class="h-24 flex flex-col items-center justify-center p-2 bg-gray-50 dark:bg-gray-900/50">
+                                                    <svg class="w-8 h-8 text-gray-400 mb-1 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                                    <span class="text-[9px] text-gray-500 text-center truncate w-full px-1 dark:text-gray-300">{{ attachment.file_name }}</span>
                                                 </div>
                                                 <button type="button" @click="removeCommentAttachment(index)" class="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full shadow-sm hover:bg-red-600">
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -3161,7 +3161,7 @@ const linkify = (text) => {
                                             </div>
                                         </div>
 
-                                        <div class="flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 border-t border-blue-50 bg-blue-50/50 rounded-b-xl gap-3">
+                                        <div class="ticket-response-toolbar flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 border-t border-blue-50 bg-blue-50/50 rounded-b-xl gap-3 dark:border-slate-700 dark:bg-slate-800/80">
                                             <div class="flex items-center space-x-2">
                                                 <input ref="commentFileInput" type="file" multiple accept="image/*,video/*" class="hidden" @change="handleCommentFileSelect">
                                                 <button type="button" @click="commentFileInput.click()" class="p-1.5 text-blue-600 hover:text-blue-800 rounded-lg hover:bg-blue-100 transition-all" title="Attach Media">
@@ -3181,19 +3181,19 @@ const linkify = (text) => {
                                                         </svg>
                                                     </button>
                                                     
-                                                    <div v-if="showCannedMessages" class="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
-                                                        <div class="p-2 border-b bg-gray-50 flex justify-between items-center">
-                                                            <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Canned Messages</span>
-                                                            <button @click="showCannedMessages = false" class="text-gray-400 hover:text-gray-600">
+                                                    <div v-if="showCannedMessages" class="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                                                        <div class="p-2 border-b bg-gray-50 flex justify-between items-center dark:bg-gray-900/50">
+                                                            <span class="text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-300">Canned Messages</span>
+                                                            <button @click="showCannedMessages = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                                             </button>
                                                         </div>
-                                                        <div class="p-2 border-b bg-white">
+                                                        <div class="p-2 border-b bg-white dark:bg-gray-800">
                                                             <input 
                                                                 v-model="cannedMessageSearch" 
                                                                 type="text" 
                                                                 placeholder="Search messages..." 
-                                                                class="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                                class="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:border-gray-700"
                                                                 @click.stop
                                                             >
                                                         </div>
@@ -3206,10 +3206,10 @@ const linkify = (text) => {
                                                                     class="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
                                                                 >
                                                                     <div class="font-bold text-xs text-blue-700 mb-1">{{ message.title }}</div>
-                                                                    <div class="text-[10px] text-gray-600 line-clamp-2">{{ message.content }}</div>
+                                                                    <div class="text-[10px] text-gray-600 line-clamp-2 dark:text-gray-300">{{ message.content }}</div>
                                                                 </button>
                                                             </template>
-                                                            <div v-else class="px-4 py-8 text-center text-gray-500 text-xs italic">
+                                                            <div v-else class="px-4 py-8 text-center text-gray-500 text-xs italic dark:text-gray-300">
                                                                 {{ cannedMessageSearch ? 'No matching messages found.' : 'No canned messages found.' }}
                                                             </div>
                                                         </div>
@@ -3236,7 +3236,7 @@ const linkify = (text) => {
                                                         </span>
                                                     </button>
 
-                                                    <div v-if="showInternalNotesPopover" class="absolute bottom-full left-0 mb-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col">
+                                                    <div v-if="showInternalNotesPopover" class="absolute bottom-full left-0 mb-2 w-80 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 overflow-hidden flex flex-col dark:bg-gray-800 dark:border-gray-700">
                                                         <div class="p-3 border-b bg-amber-50 flex justify-between items-center shrink-0">
                                                             <span class="text-xs font-black text-amber-800 uppercase tracking-widest">Internal Notes</span>
                                                             <button @click="showInternalNotesPopover = false" class="text-amber-400 hover:text-amber-600">
@@ -3246,12 +3246,12 @@ const linkify = (text) => {
                                                         
                                                         <!-- Notes List (Resizable) -->
                                                         <div class="resize-y overflow-y-auto min-h-[200px] max-h-[60vh] p-2 space-y-2 bg-gray-50/30 custom-scrollbar">
-                                                            <div v-for="note in internalNotes" :key="note.id" class="p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm">
+                                                            <div v-for="note in internalNotes" :key="note.id" class="p-2.5 bg-white border border-gray-100 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
                                                                 <div class="flex justify-between items-start mb-1">
-                                                                    <span class="text-[10px] font-black text-gray-700 uppercase">{{ note.user?.name }}</span>
-                                                                    <span class="text-[9px] text-gray-400">{{ formatDate(parseDate(note.created_at)) }}</span>
+                                                                    <span class="text-[10px] font-black text-gray-700 uppercase dark:text-gray-300">{{ note.user?.name }}</span>
+                                                                    <span class="text-[9px] text-gray-400 dark:text-gray-400">{{ formatDate(parseDate(note.created_at)) }}</span>
                                                                 </div>
-                                                                <p class="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{{ note.comment_text }}</p>
+                                                                <p class="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed dark:text-gray-300">{{ note.comment_text }}</p>
                                                                 
                                                                 <!-- Note Attachments (Images Only) -->
                                                                 <div v-if="note.attachments && note.attachments.length > 0" class="mt-2 flex flex-wrap gap-1">
@@ -3260,19 +3260,19 @@ const linkify = (text) => {
                                                                         :key="attachment.id"
                                                                         :href="getThumbnailUrl(attachment)"
                                                                         target="_blank"
-                                                                        class="block w-12 h-12 border border-gray-200 rounded overflow-hidden hover:opacity-80 transition-opacity"
+                                                                        class="block w-12 h-12 border border-gray-200 rounded overflow-hidden hover:opacity-80 transition-opacity dark:border-gray-700"
                                                                     >
                                                                         <img :src="getThumbnailUrl(attachment)" class="w-full h-full object-cover" :alt="attachment.file_name">
                                                                     </a>
                                                                 </div>
                                                             </div>
-                                                            <div v-if="internalNotes.length === 0" class="py-10 text-center text-gray-400 text-xs italic">
+                                                            <div v-if="internalNotes.length === 0" class="py-10 text-center text-gray-400 text-xs italic dark:text-gray-400">
                                                                 No internal notes yet.
                                                             </div>
                                                         </div>
 
                                                         <!-- Add Note Form -->
-                                                        <div class="p-3 border-t bg-white">
+                                                        <div class="p-3 border-t bg-white dark:bg-gray-800">
                                                             <!-- Selected Images Preview -->
                                                             <div v-if="noteForm.attachments.length > 0" class="flex flex-wrap gap-2 mb-2">
                                                                 <div v-for="(attachment, index) in noteForm.attachments" :key="attachment.id" class="relative group w-12 h-12">
@@ -3294,7 +3294,7 @@ const linkify = (text) => {
                                                             <textarea 
                                                                 v-model="noteForm.comment_text"
                                                                 rows="2"
-                                                                class="block w-full border-gray-200 rounded-lg text-xs focus:ring-amber-500 focus:border-amber-500 resize-none mb-3"
+                                                                class="block w-full border-gray-200 rounded-lg text-xs focus:ring-amber-500 focus:border-amber-500 resize-none mb-3 dark:border-gray-700"
                                                                 placeholder="Type an internal note..."
                                                                 @paste="handleNotePaste"
                                                             ></textarea>
@@ -3349,7 +3349,7 @@ const linkify = (text) => {
                                                         >
                                                             <ChevronDownIcon class="w-5 h-5" />
                                                         </button>
-                                                        <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                                                        <div v-if="showStatusDropdown" class="absolute bottom-full right-0 mb-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                                                             <div class="py-1">
                                                                 <button v-for="s in availableStatuses" :key="s" @click="submitWithStatus(s)" :class="['w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors hover:opacity-80', getStatusColor(s)]">
                                                                     Send and set as {{ getStatusLabel(s) }}
@@ -3373,10 +3373,10 @@ const linkify = (text) => {
         <Modal :show="showChildModal" max-width="2xl" @close="showChildModal = false">
             <div class="p-4 sm:p-6">
                 <div class="flex justify-between items-center mb-6">
-                    <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest">
+                    <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest dark:text-gray-100">
                         Create Child Ticket
                     </h3>
-                    <button @click="showChildModal = false" class="text-gray-400 hover:text-gray-600">
+                    <button @click="showChildModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
@@ -3384,11 +3384,11 @@ const linkify = (text) => {
                 <form @submit.prevent="submitChildTicket" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned User</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Assigned User</label>
                             <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location{{ isChildLocationRequired ? '' : ' (Optional)' }}</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Location{{ isChildLocationRequired ? '' : ' (Optional)' }}</label>
                             <Autocomplete
                                 v-model="childForm.store_id"
                                 :options="childStoreOptions"
@@ -3401,57 +3401,57 @@ const linkify = (text) => {
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Schedule Status</label>
-                            <select v-model="childForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Schedule Status</label>
+                            <select v-model="childForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
                             </select>
                         </div>
                         <div class="md:col-span-2">
                             <label class="inline-flex items-center gap-2 cursor-pointer">
-                                <input v-model="childForm.set_schedule" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                <span class="text-xs font-bold text-gray-700 uppercase tracking-wider">Set schedule times</span>
+                                <input v-model="childForm.set_schedule" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
+                                <span class="text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-300">Set schedule times</span>
                             </label>
-                            <p class="text-[10px] text-gray-500 mt-1">Uncheck to create the child ticket without a fixed schedule (can be scheduled later).</p>
+                            <p class="text-[10px] text-gray-500 mt-1 dark:text-gray-300">Uncheck to create the child ticket without a fixed schedule (can be scheduled later).</p>
                         </div>
                         <div v-if="childForm.set_schedule">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
-                            <input v-model="childForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Start Time</label>
+                            <input v-model="childForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                         </div>
                         <div v-if="childForm.set_schedule">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
-                            <input v-model="childForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">End Time</label>
+                            <input v-model="childForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                         </div>
                     </div>
 
-                    <div v-if="childForm.set_schedule" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Times</h4>
+                    <div v-if="childForm.set_schedule" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Additional Times</h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-2">
-                                <label class="block text-xs font-medium text-gray-600">Pickup Time (From - To)</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Pickup Time (From - To)</label>
                                 <div class="flex items-center space-x-2">
-                                    <input v-model="childForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-                                    <span class="text-gray-400">-</span>
-                                    <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <input v-model="childForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    <span class="text-gray-400 dark:text-gray-400">-</span>
+                                    <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 </div>
                             </div>
                             <div class="space-y-2">
-                                <label class="block text-xs font-medium text-gray-600">Backlogs Time (From - To)</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Backlogs Time (From - To)</label>
                                 <div class="flex items-center space-x-2">
-                                    <input v-model="childForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-                                    <span class="text-gray-400">-</span>
-                                    <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <input v-model="childForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    <span class="text-gray-400 dark:text-gray-400">-</span>
+                                    <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Remarks</label>
-                        <textarea v-model="childForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Activity details..."></textarea>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Remarks</label>
+                        <textarea v-model="childForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Activity details..."></textarea>
                     </div>
 
                     <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
-                        <button type="button" @click="showChildModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest">
+                        <button type="button" @click="showChildModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button type="submit" class="px-6 py-2 text-sm font-black text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95 uppercase tracking-widest">
@@ -3466,10 +3466,10 @@ const linkify = (text) => {
         <Modal :show="showAssignScheduleModal" max-width="2xl" @close="showAssignScheduleModal = false">
             <div class="p-6">
                 <div class="flex justify-between items-center mb-4 pb-3 border-b">
-                    <h3 class="text-base font-black text-gray-900 uppercase tracking-widest">
+                    <h3 class="text-base font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">
                         {{ assignScheduleMode === 'edit' ? 'Edit Schedule' : 'Assign Schedule' }}
                     </h3>
-                    <button @click="showAssignScheduleModal = false" class="text-gray-400 hover:text-gray-600">
+                    <button @click="showAssignScheduleModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
@@ -3477,11 +3477,11 @@ const linkify = (text) => {
                 <form @submit.prevent="submitAssignSchedule" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Assigned User</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Assigned User</label>
                             <Autocomplete v-model="assignScheduleForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Location{{ isAssignLocationRequired ? '' : ' (Optional)' }}</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Location{{ isAssignLocationRequired ? '' : ' (Optional)' }}</label>
                             <Autocomplete
                                 v-model="assignScheduleForm.store_id"
                                 :options="assignStoreOptions"
@@ -3494,51 +3494,51 @@ const linkify = (text) => {
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Schedule Status</label>
-                            <select v-model="assignScheduleForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Schedule Status</label>
+                            <select v-model="assignScheduleForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
                             </select>
                         </div>
                         <div></div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Start Time</label>
-                            <input v-model="assignScheduleForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Start Time</label>
+                            <input v-model="assignScheduleForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">End Time</label>
-                            <input v-model="assignScheduleForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">End Time</label>
+                            <input v-model="assignScheduleForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                         </div>
                     </div>
 
-                    <div class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider">Additional Times</h4>
+                    <div class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Additional Times</h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="space-y-2">
-                                <label class="block text-xs font-medium text-gray-600">Pickup Time (From - To)</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Pickup Time (From - To)</label>
                                 <div class="flex items-center space-x-2">
-                                    <input v-model="assignScheduleForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-                                    <span class="text-gray-400">-</span>
-                                    <input v-model="assignScheduleForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <input v-model="assignScheduleForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    <span class="text-gray-400 dark:text-gray-400">-</span>
+                                    <input v-model="assignScheduleForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 </div>
                             </div>
                             <div class="space-y-2">
-                                <label class="block text-xs font-medium text-gray-600">Backlogs Time (From - To)</label>
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Backlogs Time (From - To)</label>
                                 <div class="flex items-center space-x-2">
-                                    <input v-model="assignScheduleForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
-                                    <span class="text-gray-400">-</span>
-                                    <input v-model="assignScheduleForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm">
+                                    <input v-model="assignScheduleForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    <span class="text-gray-400 dark:text-gray-400">-</span>
+                                    <input v-model="assignScheduleForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Remarks</label>
-                        <textarea v-model="assignScheduleForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Schedule notes..."></textarea>
+                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Remarks</label>
+                        <textarea v-model="assignScheduleForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Schedule notes..."></textarea>
                     </div>
 
                     <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
-                        <button type="button" @click="showAssignScheduleModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest">
+                        <button type="button" @click="showAssignScheduleModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button type="submit" :disabled="assignScheduleForm.processing" :class="['px-6 py-2 text-sm font-black text-white rounded-lg shadow-md transition-all active:scale-95 uppercase tracking-widest disabled:opacity-60', assignScheduleMode === 'edit' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700']">
@@ -3617,12 +3617,12 @@ const linkify = (text) => {
             <div class="p-4 sm:p-6">
                 <div class="flex justify-between items-center mb-6">
                     <div>
-                        <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest">
+                        <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest dark:text-gray-100">
                             {{ commentForm.status === 'closed' ? 'Close Ticket' : 'Resolve Ticket' }}
                         </h3>
-                        <p class="text-xs text-gray-500 mt-1">Please provide the details of the resolution.</p>
+                        <p class="text-xs text-gray-500 mt-1 dark:text-gray-300">Please provide the details of the resolution.</p>
                     </div>
-                    <button @click="showResolutionModal = false" class="text-gray-400 hover:text-gray-600">
+                    <button @click="showResolutionModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
@@ -3633,45 +3633,45 @@ const linkify = (text) => {
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center">
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center dark:text-gray-300">
                             Action Taken
                             <span class="ml-1 text-red-500">*</span>
                         </label>
                         <textarea
                             v-model="commentForm.action_taken"
                             rows="4"
-                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm dark:border-gray-600"
                             placeholder="Describe what was done to resolve the issue..."
                         ></textarea>
                     </div>
 
                     <div v-if="requiresRcaOnResolve">
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center">
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 flex items-center dark:text-gray-300">
                             Root Cause Analysis (RCA)
                             <span class="ml-1 text-red-500">*</span>
                         </label>
                         <textarea
                             v-model="commentForm.root_cause_analysis"
                             rows="4"
-                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm dark:border-gray-600"
                             placeholder="Explain the root cause for this issue..."
                         ></textarea>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2">
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-2 dark:text-gray-300">
                             Resolution Note (Optional)
                         </label>
                         <textarea
                             v-model="commentForm.comment_text"
                             rows="3"
-                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm dark:border-gray-600"
                             placeholder="Any final comments to the requester..."
                         ></textarea>
                     </div>
 
                     <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t">
-                        <button type="button" @click="showResolutionModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest">
+                        <button type="button" @click="showResolutionModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button 
@@ -3706,6 +3706,28 @@ const linkify = (text) => {
 }
 .animate-bounce-short {
   animation: bounce-short 1s ease-in-out infinite;
+}
+
+.ticket-response-shell:where(.dark, .dark *) {
+  background-color: rgb(2 6 23 / 0.95) !important;
+}
+
+.ticket-response-composer:where(.dark, .dark *),
+.ticket-response-toolbar:where(.dark, .dark *) {
+  background-color: rgb(15 23 42) !important;
+  border-color: rgb(51 65 85) !important;
+}
+
+.ticket-response-textarea:where(.dark, .dark *),
+.ticket-response-textarea:where(.dark, .dark *):focus {
+  background-color: rgb(15 23 42) !important;
+  color: rgb(241 245 249) !important;
+  box-shadow: none !important;
+  color-scheme: dark;
+}
+
+.ticket-response-textarea:where(.dark, .dark *)::placeholder {
+  color: rgb(148 163 184) !important;
 }
 
 /* Rendered email HTML (preserved tables / rich formatting from fetched emails).

@@ -8,7 +8,7 @@
                     <!-- Top Bar: View Tabs & Primary Actions -->
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <!-- Modern Segmented Control / Tabs -->
-                        <div class="inline-flex p-1 bg-gray-100 rounded-xl shadow-inner-sm">
+                        <div class="inline-flex p-1 bg-gray-100 rounded-xl shadow-inner-sm dark:bg-gray-800">
                             <button
                                 @click="switchView('calendar')"
                                 :class="['inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-all duration-200 rounded-lg', currentView === 'calendar' ? 'bg-white text-blue-600 shadow-md transform scale-100' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50']"
@@ -62,7 +62,7 @@
                             <button
                                 v-if="currentView === 'calendar'"
                                 @click="showPageFilters = !showPageFilters"
-                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border rounded-lg text-xs font-bold shadow-sm transition-all duration-200 whitespace-nowrap"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border rounded-lg text-xs font-bold shadow-sm transition-all duration-200 whitespace-nowrap dark:bg-gray-800"
                                 :class="showPageFilters
                                     ? 'border-blue-200 text-blue-700 bg-blue-50'
                                     : 'border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300'"
@@ -76,7 +76,7 @@
                             <button
                                 v-if="currentView !== 'complete-schedules' && currentView !== 'pending-requests'"
                                 @click="exportPdf"
-                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 group whitespace-nowrap"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 group whitespace-nowrap dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                             >
                                 <svg class="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -84,7 +84,7 @@
                                 <span>{{ currentView === 'report' ? 'Export Report' : (currentView === 'missing-schedules' ? 'Export Missing' : 'Export PDF') }}</span>
                             </button>
 
-                            <div class="h-7 w-[1px] bg-gray-200 mx-0.5 hidden lg:block"></div>
+                            <div class="h-7 w-[1px] bg-gray-200 mx-0.5 hidden lg:block dark:bg-gray-700"></div>
 
                             <button
                                 v-if="hasPermission('schedules.create')"
@@ -124,10 +124,10 @@
                     <!-- Filter Bar -->
                     <div
                         v-if="currentView !== 'calendar' || showPageFilters"
-                        class="flex flex-wrap items-center bg-white rounded-2xl border border-gray-100 shadow-sm"
+                        class="flex flex-wrap items-center bg-white rounded-2xl border border-gray-100 shadow-sm dark:bg-gray-800 dark:border-gray-700"
                         :class="currentView === 'calendar' ? 'gap-2 p-2.5' : 'gap-4 p-4'"
                     >
-                        <div class="flex items-center gap-2 text-gray-400 mr-2">
+                        <div class="flex items-center gap-2 text-gray-400 mr-2 dark:text-gray-400">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                             </svg>
@@ -183,9 +183,9 @@
                             />
                         </div>
 
-                        <div v-if="currentView === 'calendar'" class="w-full border-t border-gray-100 pt-2 space-y-2">
+                        <div v-if="currentView === 'calendar'" class="w-full border-t border-gray-100 pt-2 space-y-2 dark:border-gray-700">
                             <div class="flex flex-wrap items-center gap-1.5">
-                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</span>
+                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Status</span>
                                 <button
                                     v-for="status in statusFilterOptions"
                                     :key="status.status"
@@ -202,7 +202,7 @@
                             </div>
 
                             <div class="flex flex-wrap items-center gap-1.5">
-                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest">Concern</span>
+                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Concern</span>
                                 <button
                                     v-for="concernType in concernTypeFilterOptions"
                                     :key="concernType.key"
@@ -226,7 +226,7 @@
                             </div>
 
                             <div class="flex flex-wrap items-center gap-1.5">
-                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest">Priority</span>
+                                <span class="w-24 text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Priority</span>
                                 <button
                                     v-for="priority in priorityFilterOptions"
                                     :key="priority.key"
@@ -257,24 +257,24 @@
                                     v-model="visibleRange.start" 
                                     type="date" 
                                     @change="applyFilter"
-                                    class="h-10 pl-3 pr-2 rounded-xl border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 focus:ring-blue-500 focus:border-blue-500 border transition-all"
+                                    class="h-10 pl-3 pr-2 rounded-xl border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 focus:ring-blue-500 focus:border-blue-500 border transition-all dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700"
                                 >
                             </div>
-                            <span class="text-gray-400 font-bold">→</span>
+                            <span class="text-gray-400 font-bold dark:text-gray-400">→</span>
                             <div class="relative">
                                 <input 
                                     v-model="visibleRange.end" 
                                     type="date" 
                                     @change="applyFilter"
-                                    class="h-10 pl-3 pr-2 rounded-xl border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 focus:ring-blue-500 focus:border-blue-500 border transition-all"
+                                    class="h-10 pl-3 pr-2 rounded-xl border-gray-200 bg-gray-50 text-sm font-bold text-gray-700 focus:ring-blue-500 focus:border-blue-500 border transition-all dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700"
                                 >
                             </div>
                         </div>
 
                         <!-- Year compare (report only) -->
                         <div v-if="currentView === 'report'" class="flex items-center gap-3 ml-auto">
-                            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">Compare:</span>
-                            <div class="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                            <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap dark:text-gray-400">Compare:</span>
+                            <div class="flex gap-1 bg-gray-100 p-1 rounded-lg dark:bg-gray-800">
                                 <button
                                     v-for="year in availableYears"
                                     :key="year"
@@ -294,7 +294,7 @@
                         <button
                             v-if="currentView === 'calendar'"
                             @click="showPageFilters = false"
-                            class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:border-blue-200 hover:text-blue-600 transition-all"
+                            class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-bold text-gray-500 hover:border-blue-200 hover:text-blue-600 transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                         >
                             Hide
                         </button>
@@ -320,43 +320,43 @@
                 </div>
 
                 <!-- Pending Requests View -->
-                <div v-else-if="currentView === 'pending-requests'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900">Schedule Change Requests</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Pending approval workflow</span>
+                <div v-else-if="currentView === 'pending-requests'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Schedule Change Requests</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest dark:text-gray-300">Pending approval workflow</span>
                     </div>
                     <div class="overflow-x-auto custom-scrollbar">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-100">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-100 dark:bg-gray-800">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Request</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Requester</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Requested Change</th>
-                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Status</th>
-                                    <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-widest">Actions</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Request</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Requester</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Requested Change</th>
+                                    <th class="px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Status</th>
+                                    <th class="px-6 py-3 text-right text-[10px] font-black text-gray-500 uppercase tracking-widest dark:text-slate-300">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                                <tr v-for="request in scheduleChangeRequests" :key="request.id" class="hover:bg-gray-50 transition-colors">
+                            <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                                <tr v-for="request in scheduleChangeRequests" :key="request.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-black text-gray-900">#{{ request.id }}</div>
-                                        <div class="text-[10px] font-bold text-gray-400 uppercase">Schedule #{{ request.schedule_id }} • {{ formatAuditDateTime(request.created_at) }}</div>
+                                        <div class="text-sm font-black text-gray-900 dark:text-gray-100">#{{ request.id }}</div>
+                                        <div class="text-[10px] font-bold text-gray-400 uppercase dark:text-gray-400">Schedule #{{ request.schedule_id }} • {{ formatAuditDateTime(request.created_at) }}</div>
                                         <div class="mt-1 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
                                             {{ requestTypeLabel(request) }}
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-bold text-gray-900">{{ request.requester_name || '-' }}</div>
-                                        <div class="text-xs text-gray-500">{{ request.schedule_user_name || '-' }}</div>
+                                        <div class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ request.requester_name || '-' }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-300">{{ request.schedule_user_name || '-' }}</div>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <div class="text-xs font-bold text-gray-700">
+                                        <div class="text-xs font-bold text-gray-700 dark:text-gray-300">
                                             {{ requestSummaryTitle(request) }}
                                         </div>
-                                        <div class="text-[10px] font-medium text-gray-400 mt-1">
+                                        <div class="text-[10px] font-medium text-gray-400 mt-1 dark:text-gray-400">
                                             {{ summarizeRequestWindow(request.requested_payload) }}
                                         </div>
-                                        <div v-if="request.requester_remarks" class="text-[10px] text-gray-500 mt-1 max-w-md truncate">
+                                        <div v-if="request.requester_remarks" class="text-[10px] text-gray-500 mt-1 max-w-md truncate dark:text-gray-300">
                                             {{ request.requester_remarks }}
                                         </div>
                                     </td>
@@ -364,7 +364,7 @@
                                         <span :class="requestStatusClass(request.status)" class="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">
                                             {{ request.status }}
                                         </span>
-                                        <div v-if="request.approver_remarks" class="text-[10px] text-gray-400 mt-1 max-w-[180px] truncate">{{ request.approver_remarks }}</div>
+                                        <div v-if="request.approver_remarks" class="text-[10px] text-gray-400 mt-1 max-w-[180px] truncate dark:text-gray-400">{{ request.approver_remarks }}</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="inline-flex items-center gap-2">
@@ -396,7 +396,7 @@
                                                 v-if="request.can_cancel"
                                                 type="button"
                                                 @click="openScheduleRequestDecision(request, 'cancel')"
-                                                class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors"
+                                                class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                                             >
                                                 Cancel
                                             </button>
@@ -404,7 +404,7 @@
                                     </td>
                                 </tr>
                                 <tr v-if="scheduleChangeRequests.length === 0">
-                                    <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                    <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 italic dark:text-gray-300">
                                         No schedule change requests to show.
                                     </td>
                                 </tr>
@@ -414,18 +414,18 @@
                 </div>
 
                 <!-- Pivot Report View -->
-                <div v-else-if="currentView === 'report'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900">{{ reportTitle }}</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Live Report</span>
+                <div v-else-if="currentView === 'report'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">{{ reportTitle }}</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest dark:text-gray-300">Live Report</span>
                     </div>
                     <div class="overflow-x-auto custom-scrollbar">
-                        <table class="min-w-full divide-y divide-gray-200 border-b border-gray-200">
-                            <thead class="bg-gray-100">
+                        <table class="min-w-full divide-y divide-gray-200 border-b border-gray-200 dark:border-gray-700 dark:divide-gray-700">
+                            <thead class="bg-gray-100 dark:bg-gray-800">
                                 <!-- Year Headers -->
                                 <tr>
-                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-0 min-w-[100px]">Unit</th>
-                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[100px] min-w-[150px]">Name</th>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-0 min-w-[100px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Unit</th>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[100px] min-w-[150px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Name</th>
                                     <th v-for="year in activePivotYears" :key="'header-' + year" :colspan="pivotStatuses.length" class="px-4 py-2 text-center text-xs font-black text-white bg-slate-700 uppercase tracking-widest border-r border-slate-600 last:border-r-0">
                                         {{ year }}
                                     </th>
@@ -433,17 +433,17 @@
                                 <!-- Status Headers -->
                                 <tr>
                                     <template v-for="year in activePivotYears" :key="'status-' + year">
-                                        <th v-for="status in pivotStatuses" :key="year + '-' + status" class="px-2 py-2 text-center text-[9px] font-black text-gray-500 uppercase tracking-tighter border-r border-gray-200 border-t last:border-r-0" :class="status === 'Holiday' ? 'bg-red-50/50' : (status === 'Restday' ? 'bg-gray-50/50' : 'bg-white')">
+                                        <th v-for="status in pivotStatuses" :key="year + '-' + status" class="px-2 py-2 text-center text-[9px] font-black text-gray-500 uppercase tracking-tighter border-r border-gray-200 border-t last:border-r-0 dark:text-slate-300 dark:border-gray-700" :class="status === 'Holiday' ? 'bg-red-50/50' : (status === 'Restday' ? 'bg-gray-50/50' : 'bg-white')">
                                             {{ status === 'On-site' ? 'On-site' : (status === 'Off-site' ? 'Off-site' : (status === 'Restday' ? 'RD' : status)) }}
                                         </th>
                                     </template>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
+                            <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 <!-- Loading state -->
                                 <tr v-if="isPivotLoading">
                                     <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center">
-                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-300">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
@@ -454,11 +454,11 @@
                                 </tr>
                                 <template v-else>
                                     <tr v-for="row in pivotData" :key="row.name + row.unit" class="hover:bg-blue-50/50 transition-colors">
-                                        <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10">{{ row.unit || '-' }}</td>
-                                        <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10">{{ row.name }}</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">{{ row.unit || '-' }}</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">{{ row.name }}</td>
 
                                         <template v-for="year in activePivotYears" :key="'data-' + year">
-                                            <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0" :class="[
+                                            <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0 dark:border-gray-700" :class="[
                                                 (row.years[year] && row.years[year][status] > 0) ? 'font-black text-blue-700' : 'font-medium text-gray-300',
                                                 status === 'Holiday' ? 'bg-red-50/30' : (status === 'Restday' ? 'bg-gray-50/30' : '')
                                             ]">
@@ -467,7 +467,7 @@
                                         </template>
                                     </tr>
                                     <tr v-if="pivotData.length === 0">
-                                        <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic dark:text-gray-300">
                                             No schedule data found for the reporting period.
                                         </td>
                                     </tr>
@@ -478,28 +478,28 @@
                 </div>
 
                 <!-- Missing Schedules View -->
-                <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900">Missing Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Missing Days / Location / Actual Times</span>
+                <div v-else-if="currentView === 'missing-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Missing Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest dark:text-gray-300">Missing Days / Location / Actual Times</span>
                     </div>
                     <div class="max-h-[60vh] min-h-[140px] overflow-auto custom-scrollbar">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="sticky top-0 z-20 bg-gray-100 shadow-sm">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="sticky top-0 z-20 bg-gray-100 shadow-sm dark:bg-gray-800">
                                 <tr>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Days</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Location</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time In</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Missing Actual Time Out</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Sub-Unit</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Name</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Missing Days</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Missing Location</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Missing Actual Time In</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Missing Actual Time Out</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Count</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
+                            <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 <tr v-if="isMissingSchedulesLoading">
                                     <td colspan="7" class="px-6 py-12 text-center">
-                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-300">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
@@ -509,9 +509,9 @@
                                     </td>
                                 </tr>
                                 <template v-else>
-                                    <tr v-for="user in missingSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
-                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ formatSubUnitDisplay(user.sub_unit || user.org_path) }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
+                                    <tr v-for="user in missingSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
+                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500 dark:text-gray-300">{{ formatSubUnitDisplay(user.sub_unit || user.org_path) }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">{{ user.name }}</td>
                                         <td class="px-6 py-4 text-sm text-red-600 font-medium max-w-md">
                                             <div class="flex flex-wrap gap-1">
                                                 <span v-for="(day, i) in user.missing_days" :key="i" class="bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[10px] whitespace-nowrap">
@@ -544,10 +544,10 @@
                                                 <span v-if="!user.missing_actual_time_outs?.length" class="text-gray-300 text-xs">-</span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.missing_days_count ?? 0 }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700 dark:text-gray-300">{{ user.missing_days_count ?? 0 }}</td>
                                     </tr>
                                     <tr v-if="missingSchedulesData.length === 0">
-                                        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic dark:text-gray-300">
                                             All users have schedules, locations, and actual times for this period.
                                         </td>
                                     </tr>
@@ -557,8 +557,8 @@
                     </div>
 
                     <!-- Pagination Footer -->
-                    <div v-if="missingSchedulesPagination.total > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-                        <div class="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                    <div v-if="missingSchedulesPagination.total > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between dark:bg-gray-900/50 dark:border-gray-700">
+                        <div class="text-[10px] text-gray-400 font-black uppercase tracking-widest dark:text-gray-400">
                             Showing {{ (missingSchedulesPagination.current_page - 1) * missingSchedulesPagination.per_page + 1 }} 
                             to {{ Math.min(missingSchedulesPagination.current_page * missingSchedulesPagination.per_page, missingSchedulesPagination.total) }} 
                             of {{ missingSchedulesPagination.total }}
@@ -567,7 +567,7 @@
                             <button 
                                 @click="fetchMissingSchedulesData(missingSchedulesPagination.current_page - 1)"
                                 :disabled="missingSchedulesPagination.current_page === 1"
-                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                             </button>
@@ -591,7 +591,7 @@
                             <button 
                                 @click="fetchMissingSchedulesData(missingSchedulesPagination.current_page + 1)"
                                 :disabled="missingSchedulesPagination.current_page === missingSchedulesPagination.last_page"
-                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                             </button>
@@ -600,28 +600,28 @@
                 </div>
 
                 <!-- Complete Schedules View -->
-                <div v-else-if="currentView === 'complete-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                        <h3 class="text-lg font-bold text-gray-900">Complete Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">Full Days / Location / Actual Times</span>
+                <div v-else-if="currentView === 'complete-schedules'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Complete Schedules ({{ visibleRange.start }} to {{ visibleRange.end }})</h3>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest dark:text-gray-300">Full Days / Location / Actual Times</span>
                     </div>
                     <div class="max-h-[60vh] min-h-[140px] overflow-auto custom-scrollbar">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="sticky top-0 z-20 bg-gray-100 shadow-sm">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="sticky top-0 z-20 bg-gray-100 shadow-sm dark:bg-gray-800">
                                 <tr>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Sub-Unit</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Name</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Days</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Location</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Actual Time In</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Complete Actual Time Out</th>
-                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest">Count</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Sub-Unit</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Name</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Complete Days</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Complete Location</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Complete Actual Time In</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Complete Actual Time Out</th>
+                                    <th class="bg-gray-100 px-6 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest dark:bg-gray-800 dark:text-slate-300">Count</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
+                            <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 <tr v-if="isCompleteSchedulesLoading">
                                     <td colspan="7" class="px-6 py-12 text-center">
-                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                        <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-300">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                                                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
@@ -631,9 +631,9 @@
                                     </td>
                                 </tr>
                                 <template v-else>
-                                    <tr v-for="user in completeSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors">
-                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500">{{ formatSubUnitDisplay(user.sub_unit || user.org_path) }}</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">{{ user.name }}</td>
+                                    <tr v-for="user in completeSchedulesData" :key="user.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
+                                        <td class="px-6 py-4 whitespace-nowrap text-xs font-bold text-gray-500 dark:text-gray-300">{{ formatSubUnitDisplay(user.sub_unit || user.org_path) }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-gray-100">{{ user.name }}</td>
                                         <td class="px-6 py-4 text-sm text-emerald-700 font-medium max-w-md">
                                             <div class="flex flex-wrap gap-1">
                                                 <span v-for="(day, i) in user.complete_days" :key="i" class="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 text-[10px] whitespace-nowrap">
@@ -666,10 +666,10 @@
                                                 <span v-if="!user.complete_actual_time_outs?.length" class="text-gray-300 text-xs">-</span>
                                             </div>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700">{{ user.complete_days_count ?? 0 }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-black text-gray-700 dark:text-gray-300">{{ user.complete_days_count ?? 0 }}</td>
                                     </tr>
                                     <tr v-if="completeSchedulesData.length === 0">
-                                        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic">
+                                        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500 italic dark:text-gray-300">
                                             No users have complete schedule coverage for this period.
                                         </td>
                                     </tr>
@@ -679,8 +679,8 @@
                     </div>
 
                     <!-- Pagination Footer -->
-                    <div v-if="completeSchedulesPagination.total > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-                        <div class="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                    <div v-if="completeSchedulesPagination.total > 0" class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between dark:bg-gray-900/50 dark:border-gray-700">
+                        <div class="text-[10px] text-gray-400 font-black uppercase tracking-widest dark:text-gray-400">
                             Showing {{ (completeSchedulesPagination.current_page - 1) * completeSchedulesPagination.per_page + 1 }} 
                             to {{ Math.min(completeSchedulesPagination.current_page * completeSchedulesPagination.per_page, completeSchedulesPagination.total) }} 
                             of {{ completeSchedulesPagination.total }}
@@ -689,7 +689,7 @@
                             <button 
                                 @click="fetchCompleteSchedulesData(completeSchedulesPagination.current_page - 1)"
                                 :disabled="completeSchedulesPagination.current_page === 1"
-                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                             </button>
@@ -713,7 +713,7 @@
                             <button 
                                 @click="fetchCompleteSchedulesData(completeSchedulesPagination.current_page + 1)"
                                 :disabled="completeSchedulesPagination.current_page === completeSchedulesPagination.last_page"
-                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                class="p-2 bg-white border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
                             >
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                             </button>
@@ -727,17 +727,17 @@
         <div v-if="showScheduleRequestDecisionModal && selectedScheduleRequest" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" @click="closeScheduleRequestDecision"></div>
-                <div class="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
-                    <div class="flex items-start justify-between border-b border-gray-100 bg-gray-50 px-6 py-5">
+                <div class="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex items-start justify-between border-b border-gray-100 bg-gray-50 px-6 py-5 dark:bg-gray-900/50 dark:border-gray-700">
                         <div>
-                            <h3 class="text-lg font-black text-gray-900">
+                            <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">
                                 {{ scheduleRequestDecisionTitle }}
                             </h3>
-                            <p class="mt-1 text-xs font-bold text-gray-500">
+                            <p class="mt-1 text-xs font-bold text-gray-500 dark:text-gray-300">
                                 Request #{{ selectedScheduleRequest.id }} for {{ selectedScheduleRequest.schedule_user_name || '-' }}
                             </p>
                         </div>
-                        <button type="button" @click="closeScheduleRequestDecision" class="rounded-xl p-2 text-gray-400 transition-colors hover:bg-white hover:text-gray-600">
+                        <button type="button" @click="closeScheduleRequestDecision" class="rounded-xl p-2 text-gray-400 transition-colors hover:bg-white hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -746,39 +746,39 @@
 
                     <div class="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5 custom-scrollbar">
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                            <div class="rounded-xl border border-gray-100 bg-white p-4">
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Requester</div>
-                                <div class="mt-1 text-sm font-bold text-gray-800">{{ selectedScheduleRequest.requester_name || '-' }}</div>
+                            <div class="rounded-xl border border-gray-100 bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Requester</div>
+                                <div class="mt-1 text-sm font-bold text-gray-800 dark:text-gray-200">{{ selectedScheduleRequest.requester_name || '-' }}</div>
                             </div>
-                            <div class="rounded-xl border border-gray-100 bg-white p-4">
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Submitted</div>
-                                <div class="mt-1 text-sm font-bold text-gray-800">{{ formatAuditDateTime(selectedScheduleRequest.created_at) }}</div>
+                            <div class="rounded-xl border border-gray-100 bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Submitted</div>
+                                <div class="mt-1 text-sm font-bold text-gray-800 dark:text-gray-200">{{ formatAuditDateTime(selectedScheduleRequest.created_at) }}</div>
                             </div>
-                            <div class="rounded-xl border border-gray-100 bg-white p-4">
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">Request Status</div>
-                                <div class="mt-1 text-sm font-bold text-gray-800">{{ selectedScheduleRequest.status || '-' }}</div>
+                            <div class="rounded-xl border border-gray-100 bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Request Status</div>
+                                <div class="mt-1 text-sm font-bold text-gray-800 dark:text-gray-200">{{ selectedScheduleRequest.status || '-' }}</div>
                             </div>
                         </div>
 
                         <div>
                             <div class="mb-2 flex items-center justify-between">
-                                <h4 class="text-xs font-black uppercase tracking-widest text-gray-500">Entries</h4>
-                                <span class="text-[10px] font-bold text-gray-400">{{ scheduleRequestEntryRows.length }} row(s)</span>
+                                <h4 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Entries</h4>
+                                <span class="text-[10px] font-bold text-gray-400 dark:text-gray-400">{{ scheduleRequestEntryRows.length }} row(s)</span>
                             </div>
-                            <div class="overflow-x-auto rounded-xl border border-gray-200 custom-scrollbar">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-100">
+                            <div class="overflow-x-auto rounded-xl border border-gray-200 custom-scrollbar dark:border-gray-700">
+                                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead class="bg-gray-100 dark:bg-gray-800">
                                         <tr>
-                                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-500">From</th>
-                                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-500">To</th>
+                                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-slate-300">From</th>
+                                            <th class="px-3 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-slate-300">To</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-gray-100 bg-white">
+                                    <tbody class="divide-y divide-gray-100 bg-white dark:bg-gray-800 dark:divide-gray-700">
                                         <tr v-for="row in scheduleRequestEntryRows" :key="row.key">
                                             <td class="px-3 py-3 align-top">
-                                                <div class="space-y-1 text-xs font-bold text-gray-700">
-                                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400">{{ row.label }}</div>
-                                                    <div v-for="line in row.from.lines" :key="line.label" class="text-gray-600">{{ line.text }}</div>
+                                                <div class="space-y-1 text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                    <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ row.label }}</div>
+                                                    <div v-for="line in row.from.lines" :key="line.label" class="text-gray-600 dark:text-gray-300">{{ line.text }}</div>
                                                 </div>
                                             </td>
                                             <td class="px-3 py-3 align-top">
@@ -795,7 +795,7 @@
                                             </td>
                                         </tr>
                                         <tr v-if="scheduleRequestEntryRows.length === 0">
-                                            <td colspan="2" class="px-3 py-8 text-center text-sm text-gray-500">No entries submitted.</td>
+                                            <td colspan="2" class="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-300">No entries submitted.</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -804,22 +804,22 @@
 
                         <div v-if="selectedScheduleRequest.requester_remarks" class="rounded-xl border border-blue-100 bg-blue-50 p-4">
                             <div class="text-[10px] font-black uppercase tracking-widest text-blue-500">Requester Remarks</div>
-                            <div class="mt-1 text-sm font-bold text-gray-700">{{ selectedScheduleRequest.requester_remarks }}</div>
+                            <div class="mt-1 text-sm font-bold text-gray-700 dark:text-gray-300">{{ selectedScheduleRequest.requester_remarks }}</div>
                         </div>
 
                         <div v-if="scheduleDecisionAction === 'approve' || scheduleDecisionAction === 'reject'">
-                            <label class="mb-1 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400">Approver Remarks</label>
+                            <label class="mb-1 ml-1 block text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Approver Remarks</label>
                             <textarea
                                 v-model="scheduleDecisionRemarks"
                                 rows="3"
-                                class="w-full rounded-xl border-gray-200 text-sm font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                class="w-full rounded-xl border-gray-200 text-sm font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500 dark:text-gray-300 dark:border-gray-700"
                                 :placeholder="scheduleDecisionAction === 'approve' ? 'Optional approval remarks' : 'Reason for rejection'"
                             ></textarea>
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
-                        <button type="button" @click="closeScheduleRequestDecision" class="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-500 transition-colors hover:bg-white hover:text-gray-700">
+                    <div class="flex items-center justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4 dark:bg-gray-900/50 dark:border-gray-700">
+                        <button type="button" @click="closeScheduleRequestDecision" class="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-500 transition-colors hover:bg-white hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700">
                             {{ scheduleDecisionAction === 'view' ? 'Close' : 'Cancel' }}
                         </button>
                         <button
@@ -843,13 +843,13 @@
         <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" @click="closeImportModal"></div>
-                <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 border border-gray-100 transform transition-all">
+                <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-8">
                         <div>
-                            <h3 class="text-xl font-bold text-gray-900">Import Schedules</h3>
-                            <p class="text-xs font-medium text-gray-400 mt-1">Upload your excel template below</p>
+                            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Schedules</h3>
+                            <p class="text-xs font-medium text-gray-400 mt-1 dark:text-gray-400">Upload your excel template below</p>
                         </div>
-                        <button @click="closeImportModal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
+                        <button @click="closeImportModal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -871,25 +871,25 @@
                         </div>
 
                         <!-- Template Download -->
-                        <div class="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-5 space-y-4">
+                        <div class="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-5 space-y-4 dark:border-gray-700">
                             <div>
-                                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">1. Download Template</p>
+                                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">1. Download Template</p>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Start Date</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Start Date</label>
                                     <input
                                         v-model="importTemplateRange.start"
                                         type="date"
-                                        class="block w-full rounded-lg border-gray-200 bg-white text-xs font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                        class="block w-full rounded-lg border-gray-200 bg-white text-xs font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                                     >
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">End Date</label>
+                                    <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">End Date</label>
                                     <input
                                         v-model="importTemplateRange.end"
                                         type="date"
-                                        class="block w-full rounded-lg border-gray-200 bg-white text-xs font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500"
+                                        class="block w-full rounded-lg border-gray-200 bg-white text-xs font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                                     >
                                 </div>
                             </div>
@@ -908,25 +908,25 @@
                                     </svg>
                                 </div>
                                 <div class="ml-4 overflow-hidden">
-                                    <div class="text-sm font-bold text-gray-900 truncate">Schedules Template</div>
-                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Range: {{ importTemplateRange.start }} to {{ importTemplateRange.end }}</div>
+                                    <div class="text-sm font-bold text-gray-900 truncate dark:text-gray-100">Schedules Template</div>
+                                    <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider dark:text-gray-400">Range: {{ importTemplateRange.start }} to {{ importTemplateRange.end }}</div>
                                 </div>
                             </a>
                         </div>
 
                         <!-- File Upload -->
                         <div class="space-y-3">
-                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">2. Upload File</p>
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 dark:text-gray-400">2. Upload File</p>
                             <div v-if="!importFile"
                                  @click="importFileInput.click()"
-                                 class="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-blue-300 p-8 text-center cursor-pointer transition-all group">
-                                <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 class="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-blue-300 p-8 text-center cursor-pointer transition-all group dark:border-gray-700 dark:hover:bg-gray-700">
+                                <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform dark:bg-gray-800 dark:border-gray-700">
+                                    <svg class="w-6 h-6 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                     </svg>
                                 </div>
-                                <p class="text-sm text-gray-900 font-bold">Choose Excel file</p>
-                                <p class="text-xs text-gray-400 mt-1">XLSX format up to 5MB</p>
+                                <p class="text-sm text-gray-900 font-bold dark:text-gray-100">Choose Excel file</p>
+                                <p class="text-xs text-gray-400 mt-1 dark:text-gray-400">XLSX format up to 5MB</p>
                             </div>
                             <div v-else class="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
                                 <div class="flex items-center space-x-3 min-w-0">
@@ -935,7 +935,7 @@
                                     </div>
                                     <span class="text-sm font-bold text-emerald-900 truncate">{{ importFile.name }}</span>
                                 </div>
-                                <button @click="removeImportFile" type="button" class="p-1.5 text-emerald-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors">
+                                <button @click="removeImportFile" type="button" class="p-1.5 text-emerald-400 hover:text-red-500 hover:bg-white rounded-lg transition-colors dark:hover:bg-gray-700">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>
@@ -959,9 +959,9 @@
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-end gap-3 pt-8 mt-8 border-t border-gray-100">
+                    <div class="flex items-center justify-end gap-3 pt-8 mt-8 border-t border-gray-100 dark:border-gray-700">
                         <button type="button" @click="closeImportModal"
-                                class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
+                                class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button type="button" @click="submitImport" :disabled="!importFile || isImporting"
@@ -978,42 +978,42 @@
         <div v-if="showDuplicateModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" @click="closeDuplicateModal"></div>
-                <div class="relative w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl overflow-hidden">
+                <div class="relative w-full max-w-5xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                     <div class="mb-8 flex items-start justify-between">
                         <div>
-                            <h3 class="text-2xl font-bold text-gray-900">Duplicate Detection</h3>
+                            <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Duplicate Detection</h3>
                             <div class="flex items-center gap-2 mt-1">
-                                <span class="text-xs font-black uppercase tracking-widest text-gray-400">Scanning Period:</span>
+                                <span class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Scanning Period:</span>
                                 <span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-[10px] font-black">{{ visibleRange.start }} – {{ visibleRange.end }}</span>
                             </div>
                         </div>
-                        <button @click="closeDuplicateModal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors">
+                        <button @click="closeDuplicateModal" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors dark:text-gray-400 dark:hover:bg-gray-700">
                             <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
 
-                    <div v-if="isFindingDuplicates" class="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100">
+                    <div v-if="isFindingDuplicates" class="flex flex-col items-center justify-center py-20 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100 dark:border-gray-700">
                         <div class="relative w-12 h-12 mb-4">
                             <div class="absolute inset-0 rounded-full border-4 border-blue-100"></div>
                             <div class="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
                         </div>
-                        <p class="text-sm font-bold text-gray-500">Analyzing schedule database...</p>
+                        <p class="text-sm font-bold text-gray-500 dark:text-gray-300">Analyzing schedule database...</p>
                     </div>
 
-                    <div v-else-if="!hasScannedDuplicates" class="flex flex-col items-center justify-center py-16 bg-gray-50/50 rounded-2xl border border-gray-100">
-                        <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center mb-4">
-                            <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div v-else-if="!hasScannedDuplicates" class="flex flex-col items-center justify-center py-16 bg-gray-50/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                        <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center mb-4 dark:bg-gray-800 dark:border-gray-700">
+                            <svg class="w-8 h-8 text-gray-500 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h8m-8 4h8m-8 4h5M5 5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5z" />
                             </svg>
                         </div>
-                        <p class="text-lg font-bold text-gray-900">Ready to scan</p>
-                        <p class="text-sm font-medium text-gray-500 mt-1">No duplicate check has been run for this period yet.</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-gray-100">Ready to scan</p>
+                        <p class="text-sm font-medium text-gray-500 mt-1 dark:text-gray-300">No duplicate check has been run for this period yet.</p>
                     </div>
 
                     <div v-else-if="duplicateGroups.length === 0" class="flex flex-col items-center justify-center py-16 bg-emerald-50/50 rounded-2xl border border-emerald-100">
-                        <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-emerald-100 flex items-center justify-center mb-4">
+                        <div class="w-16 h-16 bg-white rounded-2xl shadow-sm border border-emerald-100 flex items-center justify-center mb-4 dark:bg-gray-800">
                             <svg class="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         </div>
                         <p class="text-lg font-bold text-emerald-900">All Clear!</p>
@@ -1025,33 +1025,33 @@
 
                     <div v-else class="space-y-6">
                         <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Impacted Users</div>
-                                <div class="text-3xl font-black text-gray-900">{{ duplicateSummary.groupCount }}</div>
+                            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Impacted Users</div>
+                                <div class="text-3xl font-black text-gray-900 dark:text-gray-100">{{ duplicateSummary.groupCount }}</div>
                             </div>
-                            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Total Duplicates</div>
+                            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Total Duplicates</div>
                                 <div class="text-3xl font-black text-red-500">{{ duplicateSummary.duplicateCount }}</div>
                             </div>
-                            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Linked Logs</div>
+                            <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Linked Logs</div>
                                 <div class="text-3xl font-black text-blue-600">{{ duplicateSummary.attendanceLogCount }}</div>
                             </div>
                         </div>
 
                         <div class="max-h-[50vh] space-y-4 overflow-y-auto pr-3 custom-scrollbar">
-                            <div v-for="group in duplicateGroups" :key="group.key" class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                            <div v-for="group in duplicateGroups" :key="group.key" class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                                 <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4">
                                     <div class="flex items-center gap-3">
-                                        <div class="h-10 w-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500 font-bold">
+                                        <div class="h-10 w-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-500 font-bold dark:bg-gray-800 dark:text-gray-300">
                                             {{ group.user_name.charAt(0) }}
                                         </div>
                                         <div>
                                             <div class="flex items-center gap-2">
-                                                <span class="text-base font-bold text-gray-900">{{ group.user_name }}</span>
+                                                <span class="text-base font-bold text-gray-900 dark:text-gray-100">{{ group.user_name }}</span>
                                                 <span class="px-2 py-0.5 bg-red-50 text-red-700 rounded-md text-[10px] font-bold uppercase">{{ group.duplicate_count }} Duplicates</span>
                                             </div>
-                                            <p class="text-xs font-medium text-gray-400 mt-0.5">
+                                            <p class="text-xs font-medium text-gray-400 mt-0.5 dark:text-gray-400">
                                                 {{ group.store_name || 'Generic Location' }} • {{ formatDateTime(group.start_time) }}
                                             </p>
                                         </div>
@@ -1074,7 +1074,7 @@
                                                 {{ row.store_name || 'No location' }}{{ row.ticket_key ? ' • Ticket ' + row.ticket_key : '' }}
                                             </div>
                                         </div>
-                                        <span class="shrink-0 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-white shadow-sm" :class="row.action === 'keep' ? 'text-emerald-600' : 'text-red-500'">
+                                        <span class="shrink-0 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-white shadow-sm dark:bg-gray-800" :class="row.action === 'keep' ? 'text-emerald-600' : 'text-red-500'">
                                             {{ row.action }}
                                         </span>
                                     </div>
@@ -1083,16 +1083,16 @@
                         </div>
                     </div>
 
-                    <div class="mt-10 flex flex-col gap-4 border-t border-gray-100 pt-6 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="flex items-center gap-2 text-gray-400">
+                    <div class="mt-10 flex flex-col gap-4 border-t border-gray-100 pt-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+                        <div class="flex items-center gap-2 text-gray-400 dark:text-gray-400">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <p class="text-xs font-medium">Rows with verified attendance logs are prioritized for keeping.</p>
                         </div>
                         <div class="flex justify-end gap-3">
-                            <button type="button" @click="closeDuplicateModal" class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
+                            <button type="button" @click="closeDuplicateModal" class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
-                            <button type="button" @click="fetchDuplicateSchedules" :disabled="isFindingDuplicates || isDeletingDuplicates" class="px-5 py-2.5 bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all">
+                            <button type="button" @click="fetchDuplicateSchedules" :disabled="isFindingDuplicates || isDeletingDuplicates" class="px-5 py-2.5 bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700">
                                 {{ hasScannedDuplicates ? 'Refresh Scan' : 'Find Duplicates' }}
                             </button>
                             <button v-if="duplicateGroups.length" type="button" @click="deleteDuplicateSchedules" :disabled="isDeletingDuplicates" class="px-6 py-2.5 bg-red-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-red-100 hover:bg-red-700 hover:shadow-red-200 transform active:scale-95 transition-all">
@@ -1108,13 +1108,13 @@
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-8">
                 <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" @click="closeModal"></div>
-                <div class="relative w-full max-w-2xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div class="relative w-full max-w-2xl rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-between items-center mb-8">
                         <div>
-                            <h3 class="text-2xl font-bold text-gray-900">
+                            <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
                                 {{ isViewingOnly ? 'Schedule Details' : (isEditing ? 'Edit Schedule' : 'New Schedule Entry') }}
                             </h3>
-                            <p class="text-xs font-medium text-gray-400 mt-1">Management and planning workspace</p>
+                            <p class="text-xs font-medium text-gray-400 mt-1 dark:text-gray-400">Management and planning workspace</p>
                         </div>
                         <div class="flex items-center gap-2">
                             <button 
@@ -1128,7 +1128,7 @@
                                 </svg>
                             </button>
                             
-                            <button @click="closeModal" class="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+                            <button @click="closeModal" class="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all dark:text-gray-400 dark:hover:bg-gray-700">
                                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
@@ -1139,7 +1139,7 @@
                     <form @submit.prevent="submitForm" class="space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Team Member</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 dark:text-gray-400">Team Member</label>
                                 <template v-if="isManager && !isViewingOnly">
                                     <Autocomplete
                                         v-model="form.user_id"
@@ -1151,15 +1151,15 @@
                                     />
                                 </template>
                                 <template v-else>
-                                    <div class="px-4 py-2.5 text-sm font-bold text-gray-700 bg-gray-50 rounded-xl border border-gray-100">
+                                    <div class="px-4 py-2.5 text-sm font-bold text-gray-700 bg-gray-50 rounded-xl border border-gray-100 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                         {{ (props.users ?? []).find(u => Number(u.id) === Number(form.user_id))?.name || authUser.name }}
                                     </div>
                                 </template>
                             </div>
                             <div>
-                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Duty Status</label>
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 dark:text-gray-400">Duty Status</label>
                                 <select v-model="form.status" required :disabled="isViewingOnly"
-                                        class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-50 disabled:text-gray-400">
+                                        class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-50 disabled:text-gray-400 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                     <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
                                 </select>
                             </div>
@@ -1168,7 +1168,7 @@
                         <!-- Store Entries Repeater -->
                         <div class="space-y-4">
                             <div class="flex items-center justify-between px-1">
-                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Deployment Plan</label>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Deployment Plan</label>
                                 <button v-if="!isViewingOnly" type="button" @click="addStore"
                                         class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
@@ -1178,17 +1178,17 @@
 
                             <div class="space-y-4 max-h-[35vh] overflow-y-auto pr-2 custom-scrollbar">
                                 <div v-for="(entry, index) in form.stores" :key="index"
-                                     class="relative p-5 bg-slate-50/50 rounded-2xl border border-slate-100/50 group/item transition-all hover:bg-slate-50 hover:border-slate-200">
+                                     class="relative p-5 bg-slate-50/50 rounded-2xl border border-slate-100/50 group/item transition-all hover:bg-slate-50 hover:border-slate-200 dark:bg-slate-800/50 dark:border-slate-700/50 dark:hover:bg-slate-800 dark:hover:border-slate-600">
                                     
                                     <!-- Remove button -->
                                     <button v-if="!isViewingOnly && form.stores.length > 1" type="button" @click="removeStore(index)"
-                                            class="absolute -top-2 -right-2 p-1.5 bg-white text-red-400 hover:text-red-600 rounded-lg shadow-sm border border-gray-100 transition-all transform scale-0 group-hover/item:scale-100" title="Remove">
+                                            class="absolute -top-2 -right-2 p-1.5 bg-white text-red-400 hover:text-red-600 rounded-lg shadow-sm border border-gray-100 transition-all transform scale-0 group-hover/item:scale-100 dark:bg-gray-800 dark:border-gray-700" title="Remove">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                     </button>
 
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                         <div class="md:col-span-2">
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Location{{ isLocationRequired ? '' : ' (Optional)' }}</label>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">Location{{ isLocationRequired ? '' : ' (Optional)' }}</label>
                                             <Autocomplete
                                                 v-model="entry.store_id"
                                                 :options="storeSelectOptions"
@@ -1200,24 +1200,24 @@
                                             />
                                         </div>
                                         <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Start Time</label>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">Start Time</label>
                                             <input v-model="entry.start_time" type="datetime-local" required :disabled="isViewingOnly"
-                                                   class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 transition-all disabled:bg-gray-50/50">
+                                                   class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 transition-all disabled:bg-gray-50/50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                         </div>
                                         <div>
-                                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">End Time</label>
+                                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">End Time</label>
                                             <input v-model="entry.end_time" type="datetime-local" required :disabled="isViewingOnly"
-                                                   class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 transition-all disabled:bg-gray-50/50">
+                                                   class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 transition-all disabled:bg-gray-50/50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                         </div>
                                     </div>
 
                                     <!-- Segment Footer: Actual Times & Remarks -->
                                     <div class="space-y-3 pt-3 border-t border-slate-200/50">
                                         <div v-if="entry.ticket || (isEditing && (entry.actual_time_in || entry.actual_time_out))"
-                                             class="flex flex-wrap items-center gap-4 bg-white/80 p-3 rounded-xl border border-white shadow-sm">
+                                             class="flex flex-wrap items-center gap-4 bg-white/80 p-3 rounded-xl border border-white shadow-sm dark:bg-gray-800/80 dark:border-gray-700 dark:shadow-none">
                                             
-                                            <div v-if="entry.ticket" class="flex items-center gap-2 pr-4 border-r border-gray-100">
-                                                <div class="h-6 w-6 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                                            <div v-if="entry.ticket" class="flex items-center gap-2 pr-4 border-r border-gray-100 dark:border-gray-700">
+                                                <div class="h-6 w-6 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center dark:bg-blue-500/15 dark:text-blue-400">
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5z" /></svg>
                                                 </div>
                                                 <Link :href="route('tickets.edit', entry.ticket.id)" class="text-xs font-black text-blue-600 hover:underline">#{{ entry.ticket.ticket_key }}</Link>
@@ -1229,44 +1229,44 @@
                                             </div>
                                         </div>
 
-                                        <div v-if="canAdjustActualTimes" class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+                                        <div v-if="canAdjustActualTimes" class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 dark:bg-emerald-900/10 dark:border-emerald-900/30">
                                             <div class="mb-3 flex items-center justify-between gap-3">
                                                 <div>
                                                     <div class="text-[10px] font-black uppercase tracking-widest text-emerald-600">Actual Times</div>
-                                                    <div class="text-[10px] font-bold text-gray-500">{{ entry.schedule_date || form.scope_date || '-' }}</div>
+                                                    <div class="text-[10px] font-bold text-gray-500 dark:text-gray-300">{{ entry.schedule_date || form.scope_date || '-' }}</div>
                                                 </div>
                                                 <div class="flex flex-wrap justify-end gap-2">
                                                     <span v-if="entry.actual_time_pending_request" class="rounded bg-amber-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-amber-700">Pending Request #{{ entry.actual_time_pending_request.id }}</span>
                                                     <span v-if="selectedScheduleCanRequestActualTime && !selectedScheduleCanEditActualTime" class="rounded bg-blue-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-blue-700">Approval Required</span>
                                                 </div>
                                             </div>
-                                            <div v-if="entry.actual_time_pending_request" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
+                                            <div v-if="entry.actual_time_pending_request" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 dark:bg-amber-900/10 dark:border-amber-900/30 dark:text-amber-400">
                                                 {{ actualTimePendingRequestMessage(entry) }}
                                             </div>
                                             <div class="grid gap-3 md:grid-cols-2">
                                                 <div>
-                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Actual Time In</label>
+                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Actual Time In</label>
                                                     <input
                                                         v-model="entry.actual_time_in_input"
                                                         type="datetime-local"
                                                         :disabled="entry.clear_time_in || isSubmittingActualTime"
-                                                        class="w-full rounded-lg border-gray-200 text-xs font-bold text-gray-700 focus:border-emerald-500 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                                        class="w-full rounded-lg border-gray-200 text-xs font-bold text-gray-700 focus:border-emerald-500 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:disabled:bg-gray-800"
                                                     >
-                                                    <label class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-                                                        <input v-model="entry.clear_time_in" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                                                    <label class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-300">
+                                                        <input v-model="entry.clear_time_in" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600">
                                                         Clear existing In
                                                     </label>
                                                 </div>
                                                 <div>
-                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500">Actual Time Out</label>
+                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Actual Time Out</label>
                                                     <input
                                                         v-model="entry.actual_time_out_input"
                                                         type="datetime-local"
                                                         :disabled="entry.clear_time_out || isSubmittingActualTime"
-                                                        class="w-full rounded-lg border-gray-200 text-xs font-bold text-gray-700 focus:border-emerald-500 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400"
+                                                        class="w-full rounded-lg border-gray-200 text-xs font-bold text-gray-700 focus:border-emerald-500 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-400 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:disabled:bg-gray-800"
                                                     >
-                                                    <label class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-500">
-                                                        <input v-model="entry.clear_time_out" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                                                    <label class="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-300">
+                                                        <input v-model="entry.clear_time_out" type="checkbox" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600">
                                                         Clear existing Out
                                                     </label>
                                                 </div>
@@ -1285,14 +1285,14 @@
 
                                         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div>
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Grace (m)</label>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Grace (m)</label>
                                                 <input v-model.number="entry.grace_period_minutes" type="number" min="0" :disabled="isViewingOnly"
-                                                       class="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500">
+                                                       class="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                             </div>
                                             <div class="md:col-span-3">
-                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">Activities / Remarks</label>
+                                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1 dark:text-gray-400">Activities / Remarks</label>
                                                 <input v-model="entry.remarks" :disabled="isViewingOnly"
-                                                       class="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500"
+                                                       class="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                                                        placeholder="What needs to be done here?">
                                             </div>
                                         </div>
@@ -1301,23 +1301,23 @@
                             </div>
                         </div>
 
-                        <div class="bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Operations Buffer</h4>
+                        <div class="bg-gray-50 rounded-2xl p-5 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 dark:text-gray-400">Operations Buffer</h4>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-tighter ml-1">Inventory / Pickup Window</label>
+                                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-tighter ml-1 dark:text-gray-300">Inventory / Pickup Window</label>
                                     <div class="flex items-center gap-2">
-                                        <input v-model="form.pickup_start" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                                        <input v-model="form.pickup_start" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                         <span class="text-gray-300">→</span>
-                                        <input v-model="form.pickup_end" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                                        <input v-model="form.pickup_end" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                     </div>
                                 </div>
                                 <div class="space-y-2">
-                                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-tighter ml-1">Documentation / Backlogs Window</label>
+                                    <label class="text-[10px] font-black text-gray-500 uppercase tracking-tighter ml-1 dark:text-gray-300">Documentation / Backlogs Window</label>
                                     <div class="flex items-center gap-2">
-                                        <input v-model="form.backlogs_start" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                                        <input v-model="form.backlogs_start" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                         <span class="text-gray-300">→</span>
-                                        <input v-model="form.backlogs_end" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                                        <input v-model="form.backlogs_end" type="time" :disabled="isViewingOnly" class="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                     </div>
                                 </div>
                             </div>
@@ -1328,32 +1328,32 @@
                             <textarea
                                 v-model="form.requester_remarks"
                                 rows="3"
-                                class="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500"
+                                class="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-300"
                                 placeholder="Reason for this schedule change"
                             ></textarea>
                         </div>
 
                         <!-- Audit Footer -->
                         <div v-if="isEditing" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm">
-                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest">Creator</div>
-                                <div class="text-[10px] font-bold text-gray-600 truncate">{{ modalAudit.createdBy }}</div>
+                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Creator</div>
+                                <div class="text-[10px] font-bold text-gray-600 truncate dark:text-gray-300">{{ modalAudit.createdBy }}</div>
                             </div>
-                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm">
-                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest">Date</div>
-                                <div class="text-[10px] font-bold text-gray-600 truncate">{{ modalAudit.createdAt }}</div>
+                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Date</div>
+                                <div class="text-[10px] font-bold text-gray-600 truncate dark:text-gray-300">{{ modalAudit.createdAt }}</div>
                             </div>
-                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm">
-                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest">Modifier</div>
-                                <div class="text-[10px] font-bold text-gray-600 truncate">{{ modalAudit.updatedBy }}</div>
+                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Modifier</div>
+                                <div class="text-[10px] font-bold text-gray-600 truncate dark:text-gray-300">{{ modalAudit.updatedBy }}</div>
                             </div>
-                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm">
-                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest">Modified</div>
-                                <div class="text-[10px] font-bold text-gray-600 truncate">{{ modalAudit.updatedAt }}</div>
+                            <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-inner-sm dark:bg-gray-800 dark:border-gray-700">
+                                <div class="text-[8px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Modified</div>
+                                <div class="text-[10px] font-bold text-gray-600 truncate dark:text-gray-300">{{ modalAudit.updatedAt }}</div>
                             </div>
                         </div>
 
-                        <div class="flex items-center justify-between pt-8 border-t border-gray-100 mt-8">
+                        <div class="flex items-center justify-between pt-8 border-t border-gray-100 mt-8 dark:border-gray-700">
                             <button
                                 v-if="canDeleteSchedule"
                                 type="button"
@@ -1374,7 +1374,7 @@
                                 </p>
                                 <div class="flex gap-3">
                                     <button type="button" @click="closeModal"
-                                            class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all">
+                                            class="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all dark:text-gray-300 dark:hover:bg-gray-700">
                                         {{ isViewingOnly ? 'Close' : 'Cancel' }}
                                     </button>
                                     <button v-if="!isViewingOnly" type="submit"
