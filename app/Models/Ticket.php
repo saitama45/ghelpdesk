@@ -40,6 +40,13 @@ class Ticket extends Model
         'is_deleted',
     ];
 
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->firstOrFail();
+    }
+
     public function parent()
     {
         return $this->belongsTo(Ticket::class, 'parent_id');
