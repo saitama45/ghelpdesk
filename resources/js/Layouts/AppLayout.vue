@@ -152,7 +152,7 @@ const isCurrentRoute = (routeName) => {
 
                         <!-- Active entity badge (display only, no switching) -->
                         <div v-if="activeCompany" class="hidden lg:flex items-center mr-4 pr-4 border-r border-gray-200 dark:border-gray-700">
-                            <span class="h-8 w-8 rounded-md overflow-hidden bg-white border border-gray-200 dark:border-gray-700 flex items-center justify-center flex-shrink-0">
+                            <span class="h-8 w-8 rounded-md overflow-hidden border border-gray-200 dark:border-gray-700 flex items-center justify-center flex-shrink-0" style="background-color: #ffffff;">
                                 <img v-if="activeCompanyLogo" :src="activeCompanyLogo" :alt="activeCompany.name" class="h-8 w-8 object-contain">
                                 <span v-else class="text-xs font-bold text-gray-500">{{ activeCompany.name?.charAt(0) }}</span>
                             </span>

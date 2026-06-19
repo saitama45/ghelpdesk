@@ -44,7 +44,7 @@
                         <tr v-for="company in data" :key="company.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
-                                    <div class="h-10 w-10 rounded-full flex items-center justify-center shadow-sm overflow-hidden flex-shrink-0">
+                                    <div class="h-10 w-10 rounded-full flex items-center justify-center shadow-sm overflow-hidden flex-shrink-0" style="background-color: #ffffff;">
                                         <img v-if="company.logo" :src="`/serve-storage/${company.logo}`" :alt="company.name" class="h-10 w-10 object-cover rounded-full" />
                                         <div v-else class="h-10 w-10 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
                                             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,7 +121,7 @@
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Company Logo</label>
                             <div class="flex items-center space-x-4">
                                 <!-- Preview -->
-                                <div class="h-16 w-16 rounded-full overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-700 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                                <div class="h-16 w-16 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600" :style="logoPreview ? 'background-color: #ffffff;' : ''">
                                     <img v-if="logoPreview" :src="logoPreview" alt="Logo preview" class="h-16 w-16 object-cover rounded-full" />
                                     <svg v-else class="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />

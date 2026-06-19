@@ -180,3 +180,15 @@
 .dark table tbody tr:hover {
     background-color: rgb(30 41 59 / 0.7);
 }
+
+/* Inertia progress bar — white in dark mode so it's visible on the dark top nav */
+.dark #nprogress .bar {
+    background: #ffffff !important;
+}
+.dark #nprogress .peg {
+    box-shadow: 0 0 10px #ffffff, 0 0 5px #ffffff !important;
+}
+.dark #nprogress .spinner-icon {
+    border-top-color: #ffffff !important;
+    border-left-color: #ffffff !important;
+}

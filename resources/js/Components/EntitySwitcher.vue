@@ -76,9 +76,13 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
             ]"
             :title="isCollapsed ? activeCompany.name : (canSwitch ? 'Switch entity' : activeCompany.name)"
         >
-            <span class="h-8 w-8 rounded-md overflow-hidden bg-white flex items-center justify-center flex-shrink-0">
+            <span
+                class="h-8 w-8 rounded-md overflow-hidden flex items-center justify-center flex-shrink-0"
+                :class="!logoUrl(activeCompany) ? 'bg-gray-600' : ''"
+                :style="logoUrl(activeCompany) ? 'background-color: #ffffff;' : ''"
+            >
                 <img v-if="logoUrl(activeCompany)" :src="logoUrl(activeCompany)" :alt="activeCompany.name" class="h-8 w-8 object-contain" />
-                <BuildingOffice2Icon v-else class="h-5 w-5 text-gray-500" />
+                <BuildingOffice2Icon v-else class="h-5 w-5 text-gray-300" />
             </span>
             <template v-if="!isCollapsed">
                 <span class="ml-3 flex-1 min-w-0 text-left">
@@ -111,9 +115,13 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
                         isActive(company) ? 'bg-gray-800' : 'hover:bg-gray-800',
                     ]"
                 >
-                    <span class="h-7 w-7 rounded-md overflow-hidden bg-white flex items-center justify-center flex-shrink-0">
+                    <span
+                        class="h-7 w-7 rounded-md overflow-hidden flex items-center justify-center flex-shrink-0"
+                        :class="!logoUrl(company) ? 'bg-gray-600' : ''"
+                        :style="logoUrl(company) ? 'background-color: #ffffff;' : ''"
+                    >
                         <img v-if="logoUrl(company)" :src="logoUrl(company)" :alt="company.name" class="h-7 w-7 object-contain" />
-                        <BuildingOffice2Icon v-else class="h-4 w-4 text-gray-500" />
+                        <BuildingOffice2Icon v-else class="h-4 w-4 text-gray-300" />
                     </span>
                     <span class="ml-3 flex-1 min-w-0">
                         <span class="block text-sm font-medium text-white truncate">{{ company.name }}</span>
