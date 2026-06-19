@@ -82,6 +82,16 @@ Route::middleware('auth')->group(function () {
         Route::delete('pcf/{pcf}', [\App\Http\Controllers\WigsController::class, 'destroyPcf'])->name('pcf.destroy');
     });
 
+    // Mall Hookup — daily POS auto-sending compliance monitoring
+    Route::prefix('mall-hookups')->name('mall-hookups.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\MallHookupController::class, 'index'])->name('index');
+        Route::get('import-template', [\App\Http\Controllers\MallHookupController::class, 'importTemplate'])->name('import-template');
+        Route::post('import', [\App\Http\Controllers\MallHookupController::class, 'importLogs'])->name('import');
+        Route::get('export', [\App\Http\Controllers\MallHookupController::class, 'export'])->name('export');
+        Route::post('daily', [\App\Http\Controllers\MallHookupController::class, 'saveDailyLogs'])->name('daily.save');
+        Route::put('locations/{mallHookup}', [\App\Http\Controllers\MallHookupController::class, 'updateHookup'])->name('locations.update');
+    });
+
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     

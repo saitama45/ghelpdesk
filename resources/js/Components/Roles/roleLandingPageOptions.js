@@ -42,6 +42,7 @@ export const roleLandingPageOptions = [
             { label: 'CCTV Monitoring', value: 'cctv-monitoring.index' },
             { label: 'WIGS', value: 'wigs.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
+            { label: 'Mall Hookup', value: 'mall-hookups.index' },
         ]
     },
     {

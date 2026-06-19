@@ -93,7 +93,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('service-vehicle-trips.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*')) {
+    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*') || route().current('mall-hookups.*')) {
         openMenus.value.monitoring = true;
     }
     if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
@@ -134,7 +134,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view');
+    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view') || hasPermission('mall_hookup.view');
 });
 
 const canSeeServices = computed(() => {
@@ -393,7 +393,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('monitoring')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*')) && (isCollapsed || !openMenus.monitoring)
+                            (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*') || route().current('mall-hookups.*')) && (isCollapsed || !openMenus.monitoring)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -421,6 +421,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                                 <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('monitoring', 'payments') }}</Link>
                             </div>
+                            <div v-if="hasPermission('mall_hookup.view')" :style="co('monitoring', 'mall-hookups')">
+                                <Link :href="route('mall-hookups.index')" :class="collapsedFlyoutLinkClass(route().current('mall-hookups.*'))">{{ getChildLabel('monitoring', 'mall-hookups') }}</Link>
+                            </div>
                         </div>
                     </div>
 
@@ -436,6 +439,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                             <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'payments') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('mall_hookup.view')" :style="co('monitoring', 'mall-hookups')">
+                            <Link :href="route('mall-hookups.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('mall-hookups.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'mall-hookups') }}</span></Link>
                         </div>
                     </div>
                 </div>

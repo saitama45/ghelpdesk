@@ -252,6 +252,12 @@ class RolesAndPermissionSeeder extends Seeder
             'payments.manage_vendors' => 'Manage payment vendor settings',
             'payments.manage_settings' => 'Manage payment reminder & approval settings',
 
+            // Monitoring - Mall Hookup
+            'mall_hookup.view' => 'View Mall Hookup monitoring',
+            'mall_hookup.create' => 'Add stores & import status logs',
+            'mall_hookup.edit' => 'Edit locations & record daily statuses',
+            'mall_hookup.delete' => 'Remove stores from monitoring',
+
         ];
 
         // Create permissions
@@ -327,6 +333,9 @@ class RolesAndPermissionSeeder extends Seeder
             'payments.create',
             'payments.edit',
             'payments.submit',
+            'mall_hookup.view',
+            'mall_hookup.create',
+            'mall_hookup.edit',
             'stamps.view',
             'stamps.create',
             'stamps.edit',

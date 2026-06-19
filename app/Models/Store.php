@@ -27,6 +27,7 @@ class Store extends Model
         'email',
         'contact_person',
         'contact_details',
+        'mall_contacts',
         'opening_date',
         'hookup',
         'latitude',
@@ -43,6 +44,7 @@ class Store extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'mall_contacts' => 'array',
         'company_id' => 'integer',
         'sector' => 'integer',
         'opening_date' => 'date:Y-m-d',

@@ -170,6 +170,11 @@ class StoreController extends Controller implements HasMiddleware
             'email' => 'nullable|email|max:255',
             'contact_person' => 'nullable|string|max:255',
             'contact_details' => 'nullable|string|max:255',
+            'mall_contacts' => 'nullable|array',
+            'mall_contacts.*.name' => 'nullable|string|max:255',
+            'mall_contacts.*.contact_number' => 'nullable|string|max:255',
+            'mall_contacts.*.email' => 'nullable|email|max:255',
+            'mall_contacts.*.operating_hours' => 'nullable|string|max:255',
             'opening_date' => 'nullable|date',
             'hookup' => 'nullable|string|max:100',
             'latitude' => 'nullable|numeric|between:-90,90',
@@ -231,11 +236,23 @@ class StoreController extends Controller implements HasMiddleware
      */
     private function scalarStoreAttributes(array $validated): array
     {
-        return collect($validated)->only([
+        $attrs = collect($validated)->only([
             'code', 'name', 'sector', 'area', 'company_id', 'brand', 'class', 'email',
-            'contact_person', 'contact_details', 'opening_date', 'hookup',
+            'contact_person', 'contact_details', 'mall_contacts', 'opening_date', 'hookup',
             'latitude', 'longitude', 'radius_meters', 'is_active',
         ])->all();
+
+        // Strip blank mall_contact rows before persisting; the model array cast
+        // handles JSON serialization so we pass an array (or null), not a string.
+        if (array_key_exists('mall_contacts', $attrs)) {
+            $contacts = array_values(array_filter(
+                $attrs['mall_contacts'] ?? [],
+                fn($c) => !empty($c['name']) || !empty($c['contact_number']) || !empty($c['email'])
+            ));
+            $attrs['mall_contacts'] = $contacts ?: null;
+        }
+
+        return $attrs;
     }
 
     /**

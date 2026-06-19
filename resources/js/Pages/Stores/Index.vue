@@ -281,6 +281,65 @@
                                     <input v-model="form.email" type="email"
                                            class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                                 </div>
+
+                                <!-- Mall Contacts -->
+                                <div class="md:col-span-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Mall Contacts</label>
+                                        <button type="button" @click="addMallContact"
+                                            class="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                            Add Contact
+                                        </button>
+                                    </div>
+
+                                    <div v-if="form.mall_contacts.length === 0" class="text-xs text-gray-400 italic py-3 text-center border border-dashed border-gray-200 rounded-lg dark:border-gray-700 dark:text-gray-500">
+                                        No mall contacts added yet.
+                                    </div>
+
+                                    <div v-else class="border border-gray-200 rounded-lg overflow-hidden dark:border-gray-700">
+                                        <!-- Header row -->
+                                        <div class="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 dark:bg-gray-800/60 dark:border-gray-700">
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Mall Admin / Mall IT</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Contact Number</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Mall Contact Email</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Operating Hours</span>
+                                            <span></span>
+                                        </div>
+                                        <!-- Rows -->
+                                        <div v-for="(contact, idx) in form.mall_contacts" :key="idx"
+                                             class="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 items-center border-b border-gray-100 last:border-b-0 dark:border-gray-700">
+                                            <input
+                                                v-model="contact.name"
+                                                type="text"
+                                                placeholder="Name(s)"
+                                                class="block w-full text-xs border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
+                                            />
+                                            <input
+                                                v-model="contact.contact_number"
+                                                type="text"
+                                                placeholder="e.g. 0917-1234567"
+                                                class="block w-full text-xs border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
+                                            />
+                                            <input
+                                                v-model="contact.email"
+                                                type="email"
+                                                placeholder="email@mall.com"
+                                                class="block w-full text-xs border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
+                                            />
+                                            <input
+                                                v-model="contact.operating_hours"
+                                                type="text"
+                                                placeholder="e.g. 10AM–10PM"
+                                                class="block w-full text-xs border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
+                                            />
+                                            <button type="button" @click="removeMallContact(idx)"
+                                                class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors dark:hover:bg-red-900/20">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- ── Connectivity & Systems ── -->
@@ -654,6 +713,7 @@ const form = reactive({
     email: '',
     contact_person: '',
     contact_details: '',
+    mall_contacts: [],
     opening_date: '',
     hookup: '',
     systems: [],
@@ -735,6 +795,7 @@ const editStore = (store) => {
     form.email = store.email || ''
     form.contact_person = store.contact_person || ''
     form.contact_details = store.contact_details || ''
+    form.mall_contacts = Array.isArray(store.mall_contacts) ? store.mall_contacts.map(c => ({ ...c })) : []
     form.opening_date = store.opening_date || ''
     form.hookup = store.hookup || ''
     form.systems = groupStoreOptions(store.options, 'system')
@@ -766,6 +827,7 @@ const resetForm = () => {
     form.email = ''
     form.contact_person = ''
     form.contact_details = ''
+    form.mall_contacts = []
     form.opening_date = ''
     form.hookup = ''
     form.systems = []
@@ -782,6 +844,14 @@ const resetForm = () => {
 
 const closeModal = () => {
     showModal.value = false
+}
+
+// ── Mall contacts (repeatable rows) ─────────────────────────────────────
+const addMallContact = () => {
+    form.mall_contacts.push({ name: '', contact_number: '', email: '', operating_hours: '' })
+}
+const removeMallContact = (index) => {
+    form.mall_contacts.splice(index, 1)
 }
 
 // ── Remote apps (repeatable app + id rows) ──────────────────────────────
