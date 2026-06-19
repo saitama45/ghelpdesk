@@ -262,10 +262,17 @@ class EmailTicketService
                 'company_id' => $companyId,
             ]);
 
-            // Auto-assign based on sender email rules
-            $assigneeId = app(\App\Services\AutoAssigneeService::class)->resolveAssignee($senderEmail);
-            if ($assigneeId && \App\Models\User::where('id', $assigneeId)->exists()) {
-                $ticket->update(['assignee_id' => $assigneeId]);
+            // Auto-assign based on sender email rules (may also set company/entity)
+            $resolved = app(\App\Services\AutoAssigneeService::class)->resolveAssignee($senderEmail);
+            $autoUpdateData = [];
+            if ($resolved['assignee_id'] && \App\Models\User::where('id', $resolved['assignee_id'])->exists()) {
+                $autoUpdateData['assignee_id'] = $resolved['assignee_id'];
+            }
+            if ($resolved['company_id']) {
+                $autoUpdateData['company_id'] = $resolved['company_id'];
+            }
+            if (!empty($autoUpdateData)) {
+                $ticket->update($autoUpdateData);
             }
 
             // Add the email's To/CC recipients to the ticket CC list so replies notify them.

@@ -8,11 +8,17 @@ use Illuminate\Support\Facades\Log;
 
 class AutoAssigneeService
 {
-    public function resolveAssignee(string $senderEmail): ?int
+    /**
+     * Resolve auto-assignee for the given sender email.
+     *
+     * Returns ['assignee_id' => int|null, 'company_id' => int|null].
+     * company_id is only set when the matched rule explicitly specifies one.
+     */
+    public function resolveAssignee(string $senderEmail): array
     {
         $senderEmail = strtolower(trim($senderEmail));
         if ($senderEmail === '') {
-            return null;
+            return ['assignee_id' => null, 'company_id' => null];
         }
 
         $rulesRaw = Setting::get('auto_assignee_rules', '[]');
@@ -29,7 +35,12 @@ class AutoAssigneeService
                 continue;
             }
 
-            return $this->pickRoundRobin("rule:{$ruleEmail}", $ids);
+            $companyId = isset($rule['company_id']) && $rule['company_id'] ? (int) $rule['company_id'] : null;
+
+            return [
+                'assignee_id' => $this->pickRoundRobin("rule:{$ruleEmail}", $ids),
+                'company_id'  => $companyId,
+            ];
         }
 
         $defaultsRaw = Setting::get('auto_assignee_defaults', '[]');
@@ -37,10 +48,13 @@ class AutoAssigneeService
         $defaultIds = array_values(array_filter(array_map('intval', $defaultIds)));
 
         if (empty($defaultIds)) {
-            return null;
+            return ['assignee_id' => null, 'company_id' => null];
         }
 
-        return $this->pickRoundRobin('defaults', $defaultIds);
+        return [
+            'assignee_id' => $this->pickRoundRobin('defaults', $defaultIds),
+            'company_id'  => null,
+        ];
     }
 
     private function pickRoundRobin(string $key, array $ids): int

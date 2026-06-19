@@ -645,20 +645,24 @@ class TicketController extends Controller
                 }
             }
 
-            $ticket = Ticket::create($data);
-
-            // Auto-assign when no assignee was explicitly provided
-            if (!$ticket->assignee_id) {
+            // Apply auto-assign rule BEFORE creating so the observer generates
+            // ticket_key using the correct company code from the start.
+            if (empty($data['assignee_id'])) {
                 $lookupEmail = $isSelfRequester
                     ? (auth()->user()->email ?? '')
                     : ($data['sender_email'] ?? '');
                 if ($lookupEmail) {
-                    $assigneeId = $this->autoAssignee->resolveAssignee($lookupEmail);
-                    if ($assigneeId && User::where('id', $assigneeId)->exists()) {
-                        $ticket->update(['assignee_id' => $assigneeId]);
+                    $resolved = $this->autoAssignee->resolveAssignee($lookupEmail);
+                    if ($resolved['assignee_id'] && User::where('id', $resolved['assignee_id'])->exists()) {
+                        $data['assignee_id'] = $resolved['assignee_id'];
+                    }
+                    if ($resolved['company_id']) {
+                        $data['company_id'] = $resolved['company_id'];
                     }
                 }
             }
+
+            $ticket = Ticket::create($data);
 
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\OrganizationReferenceService;
@@ -29,24 +30,27 @@ class SettingsController extends Controller implements HasMiddleware
     {
         $settings = Setting::all()->pluck('value', 'key');
         $subUnits = User::whereNotNull('org_path')->distinct()->pluck('org_path');
-        
+
         $assignableStaff = User::whereHas('roles', fn($q) => $q->where('is_assignable', true))
             ->select('id', 'name', 'email')
             ->orderBy('name')
             ->get();
+
+        $companies = Company::where('is_active', true)->select('id', 'name', 'code')->orderBy('name')->get();
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'subUnits' => $subUnits,
             'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'assignableStaff' => $assignableStaff,
+            'companies' => $companies,
         ]);
     }
 
     public function update(Request $request)
     {
         $settings = $request->all();
-        
+
         foreach ($settings as $key => $value) {
             // Skip internal inertia/laravel keys if any
             if (str_starts_with($key, '_')) continue;
@@ -71,10 +75,10 @@ class SettingsController extends Controller implements HasMiddleware
             } elseif ($key === 'ticket_retention_unit' && !in_array($value, ['months', 'years'], true)) {
                 $value = 'months';
             }
-            
+
             // Handle array values (like working_days)
             $finalValue = is_array($value) ? json_encode($value) : $value;
-            
+
             Setting::set($key, $finalValue, $group);
         }
 

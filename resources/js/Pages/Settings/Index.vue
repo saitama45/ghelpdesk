@@ -6,6 +6,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import InputError from '@/Components/InputError.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
 import draggable from 'vuedraggable';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
@@ -34,6 +35,7 @@ const props = defineProps({
     subUnits: Array,
     departmentReferences: Array,
     assignableStaff: Array,
+    companies: Array,
 });
 
 const requestedTab = new URLSearchParams(window.location.search).get('tab');
@@ -154,6 +156,7 @@ const autoRules = ref(
     parseJsonSetting('auto_assignee_rules', []).map(r => ({
         email: r.email ?? '',
         assignee_ids: Array.isArray(r.assignee_ids) ? r.assignee_ids.map(Number) : [],
+        company_id: r.company_id ? Number(r.company_id) : null,
     }))
 );
 const autoDefaults = ref(parseJsonSetting('auto_assignee_defaults', []).map(Number));
@@ -175,6 +178,14 @@ const filteredRuleIndexes = computed(() => {
         return acc;
     }, []);
 });
+
+const companyOptions = computed(() => [
+    { id: null, label: '— Any entity —' },
+    ...(props.companies ?? []).map(c => ({
+        id: c.id,
+        label: c.code ? `${c.name} (${c.code})` : c.name,
+    })),
+]);
 
 const getAgent = (id) => props.assignableStaff?.find(a => a.id === id) ?? null;
 const getAgentInitials = (id) => {
@@ -202,7 +213,7 @@ const openDropdown = (key) => { activeDropdown.value = key; };
 const closeDropdown = () => { setTimeout(() => { activeDropdown.value = null; }, 150); };
 
 const addAutoRule = () => {
-    autoRules.value.unshift({ email: '', assignee_ids: [] });
+    autoRules.value.unshift({ email: '', assignee_ids: [], company_id: null });
     ruleSearchQueries.value.unshift('');
     editingRuleIndex.value = 0;
     rulesListSearch.value = '';
@@ -1249,9 +1260,10 @@ const syncEmails = () => {
                                     <!-- Rules table -->
                                     <div class="border border-gray-200 rounded-xl overflow-hidden dark:border-gray-700">
                                         <!-- Column headers -->
-                                        <div class="grid grid-cols-[1fr_140px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2 dark:bg-gray-800/80 dark:border-gray-700">
+                                        <div class="grid grid-cols-[1fr_140px_130px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2 dark:bg-gray-800/80 dark:border-gray-700">
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Requester Email</span>
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Assignees</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Entity</span>
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider text-right dark:text-gray-300">Actions</span>
                                         </div>
 
@@ -1272,7 +1284,7 @@ const syncEmails = () => {
                                                 <!-- Collapsed row -->
                                                 <div
                                                     :class="[
-                                                        'grid grid-cols-[1fr_140px_72px] items-center px-4 py-3 gap-3 cursor-pointer transition-colors select-none',
+                                                        'grid grid-cols-[1fr_140px_130px_72px] items-center px-4 py-3 gap-3 cursor-pointer transition-colors select-none',
                                                         editingRuleIndex === i ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                                                     ]"
                                                     @click="toggleEditRule(i)"
@@ -1303,6 +1315,14 @@ const syncEmails = () => {
                                                         </template>
                                                     </div>
 
+                                                    <!-- Entity -->
+                                                    <div class="min-w-0">
+                                                        <span v-if="autoRules[i].company_id" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 truncate max-w-full">
+                                                            {{ props.companies?.find(c => c.id === autoRules[i].company_id)?.code ?? props.companies?.find(c => c.id === autoRules[i].company_id)?.name ?? '—' }}
+                                                        </span>
+                                                        <span v-else class="text-[10px] text-gray-400 italic dark:text-gray-500">Any</span>
+                                                    </div>
+
                                                     <!-- Actions -->
                                                     <div class="flex items-center justify-end gap-1">
                                                         <span :class="['p-1.5 rounded-md transition-colors', editingRuleIndex === i ? 'bg-blue-600 text-white' : 'text-gray-400']">
@@ -1326,16 +1346,32 @@ const syncEmails = () => {
 
                                                 <!-- Inline editor (expanded) -->
                                                 <div v-if="editingRuleIndex === i" class="bg-blue-50/60 border-t border-blue-100 px-5 py-4 space-y-4 dark:bg-blue-900/10 dark:border-blue-800">
-                                                    <!-- Email input -->
-                                                    <div class="max-w-sm">
-                                                        <InputLabel :for="`rule_email_${i}`" value="Requester Email (exact match)" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
-                                                        <TextInput
-                                                            :id="`rule_email_${i}`"
-                                                            type="email"
-                                                            class="mt-1 block w-full"
-                                                            v-model="autoRules[i].email"
-                                                            placeholder="customer@company.com"
-                                                        />
+                                                    <!-- Email + Entity row -->
+                                                    <div class="flex flex-wrap gap-4">
+                                                        <div class="min-w-[220px] flex-1 max-w-sm">
+                                                            <InputLabel :for="`rule_email_${i}`" value="Requester Email (exact match)" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
+                                                            <TextInput
+                                                                :id="`rule_email_${i}`"
+                                                                type="email"
+                                                                class="mt-1 block w-full"
+                                                                v-model="autoRules[i].email"
+                                                                placeholder="customer@company.com"
+                                                            />
+                                                        </div>
+                                                        <div class="min-w-[180px] flex-1 max-w-xs">
+                                                            <InputLabel value="Assign to Entity" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
+                                                            <Autocomplete
+                                                                class="mt-1"
+                                                                :model-value="autoRules[i].company_id"
+                                                                @update:model-value="v => autoRules[i].company_id = v === null || v === '' ? null : Number(v)"
+                                                                :options="companyOptions"
+                                                                value-key="id"
+                                                                label-key="label"
+                                                                placeholder="— Any entity —"
+                                                                size="sm"
+                                                            />
+                                                            <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">Ticket will be assigned to this entity on match.</p>
+                                                        </div>
                                                     </div>
 
                                                     <!-- Assignee picker with drag-to-reorder -->
