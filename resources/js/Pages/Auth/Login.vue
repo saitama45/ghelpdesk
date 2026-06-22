@@ -80,7 +80,7 @@ const submit = () => {
         <!-- Login Header -->
         <div class="mb-8">
             <h2 class="text-3xl font-black text-slate-900 tracking-tight mb-2">Welcome Back</h2>
-            <p class="text-slate-500 font-medium">Please sign in to access your portal.</p>
+            <p class="text-slate-500 font-medium">Please sign in to access your hub.</p>
         </div>
 
         <form @submit.prevent="submit" class="space-y-6">

@@ -190,16 +190,16 @@ const canSeeSettings = computed(() => {
         ]"
     >
         <!-- Sidebar Header -->
-        <div class="relative flex items-center px-4 border-b border-gray-800 shrink-0 h-16">
-            <div v-if="!isCollapsed" class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="h-10 px-3 bg-white rounded-lg flex items-center justify-center flex-shrink-0 pointer-events-auto shadow-sm" style="background-color: white !important;">
-                    <img src="/images/company_logo.png" alt="Company Logo" class="h-7 w-auto object-contain">
+        <div class="relative flex items-center justify-between px-4 border-b border-gray-800 shrink-0 h-16 w-full">
+            <div v-if="!isCollapsed" class="flex items-center flex-shrink-0">
+                <div class="h-10 px-3 bg-white rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm" style="background-color: white !important;">
+                    <img src="/images/company_logo.png" alt="Company Logo" class="h-7 w-auto object-contain flex-shrink-0">
                 </div>
             </div>
 
             <button
                 @click="toggleSidebar"
-                class="relative z-10 ml-auto p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
+                class="relative z-10 p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200 flex-shrink-0"
                 :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
             >
                 <Bars3Icon v-if="isCollapsed" class="w-5 h-5 text-gray-400 group-hover:text-white dark:text-gray-400" />

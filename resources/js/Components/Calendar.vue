@@ -525,33 +525,44 @@ const showDayModal = ref(false);
 const selectedDayDate = ref(null);
 const selectedDayEvents = ref([]);
 const unscheduledUsers = ref([]);
+const expandedModalGroups = ref({});
+
+const toggleModalGroup = (groupId) => {
+    expandedModalGroups.value[groupId] = !expandedModalGroups.value[groupId];
+};
 
 const selectedDayEventGroups = computed(() => {
     const grouped = new Map();
 
     for (const event of selectedDayEvents.value) {
-        const status = event.status || fallbackStatusMeta.label;
-        if (!grouped.has(status)) grouped.set(status, []);
-        grouped.get(status).push(event);
+        const baseStatus = event.status || fallbackStatusMeta.label;
+        let groupKey = baseStatus;
+        if (event.store?.name) {
+            groupKey = `${baseStatus} (${event.store.name})`;
+        }
+        
+        if (!grouped.has(groupKey)) grouped.set(groupKey, { status: baseStatus, events: [] });
+        grouped.get(groupKey).events.push(event);
     }
 
     return [...grouped.entries()]
-        .sort(([statusA], [statusB]) => {
-            const rankA = STATUS_ORDER.get(statusA) ?? STATUS_FILTERS.length;
-            const rankB = STATUS_ORDER.get(statusB) ?? STATUS_FILTERS.length;
+        .sort(([keyA, dataA], [keyB, dataB]) => {
+            const rankA = STATUS_ORDER.get(dataA.status) ?? STATUS_FILTERS.length;
+            const rankB = STATUS_ORDER.get(dataB.status) ?? STATUS_FILTERS.length;
 
             if (rankA !== rankB) return rankA - rankB;
 
-            return statusA.localeCompare(statusB);
+            return keyA.localeCompare(keyB);
         })
-        .map(([status, events]) => {
-            const meta = getStatusMeta(status);
+        .map(([key, data]) => {
+            const meta = getStatusMeta(data.status);
 
             return {
-                status,
-                label: meta.label,
+                id: key,
+                status: data.status,
+                label: key,
                 colorClass: meta.bg,
-                events,
+                events: data.events,
             };
         });
 });
@@ -566,6 +577,13 @@ const openDayModal = (date) => {
         if (u.date_hired && u.date_hired > dateKey) return false;
         return true;
     });
+    
+    const initialExpanded = {};
+    for (const group of selectedDayEventGroups.value) {
+        initialExpanded[group.id] = true;
+    }
+    expandedModalGroups.value = initialExpanded;
+    
     showDayModal.value = true;
 };
 
@@ -896,14 +914,27 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
 
                         <div
                             v-for="group in selectedDayEventGroups"
-                            :key="group.status"
+                            :key="group.id"
                             class="space-y-1.5 pt-1 first:pt-0"
                         >
-                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5 dark:text-gray-400">
-                                <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="group.colorClass"></span>
-                                {{ group.label }} ({{ group.events.length }})
-                            </p>
+                            <button 
+                                @click="toggleModalGroup(group.id)"
+                                class="w-full flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest gap-1.5 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 p-1.5 rounded transition-colors -ml-1.5"
+                            >
+                                <div class="flex items-center gap-1.5">
+                                    <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="group.colorClass"></span>
+                                    {{ group.label }} ({{ group.events.length }})
+                                </div>
+                                <svg 
+                                    class="w-3 h-3 transition-transform duration-200" 
+                                    :class="expandedModalGroups[group.id] ? 'rotate-180' : ''" 
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                >
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
 
+                            <div v-show="expandedModalGroups[group.id]" class="space-y-1.5">
                             <div
                                 v-for="event in group.events"
                                 :key="event.id"
@@ -944,6 +975,7 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                     </div>
                                     </div>
                                 </div>
+                            </div>
                             </div>
                         </div>
                     </div>

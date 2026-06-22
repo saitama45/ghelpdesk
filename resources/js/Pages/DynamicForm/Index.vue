@@ -15,11 +15,16 @@ const props = defineProps({
     form: Object, // Includes requestTypes relation
     records: Object,
     copyTransferPayload: { type: Object, default: null },
+    filters: Object,
 })
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy: deleteRequest } = useErrorHandler()
+
+const status = ref(props.filters?.status ?? '')
+const onboarding_date_from = ref(props.filters?.onboarding_date_from ?? '')
+const onboarding_date_to = ref(props.filters?.onboarding_date_to ?? '')
 
 const { 
     data: paginatedData, 
@@ -31,8 +36,23 @@ const {
     isLoading, 
     goToPage, 
     changePerPage, 
-    updateData 
-} = usePagination(props.records, 'dynamic-form.index', { slug: props.form.slug })
+    updateData,
+    performSearch
+} = usePagination(props.records, 'dynamic-form.index', () => ({
+    slug: props.form.slug,
+    status: status.value,
+    onboarding_date_from: onboarding_date_from.value,
+    onboarding_date_to: onboarding_date_to.value,
+}))
+
+watch([status, onboarding_date_from, onboarding_date_to], () => {
+    currentPage.value = 1
+    performSearch()
+})
+
+watch(() => props.records, (newVal) => {
+    updateData(newVal)
+}, { deep: true })
 
 const { hasPermission } = usePermission()
 
@@ -457,6 +477,25 @@ const getStageDisplay = (record) => {
                     @change-per-page="changePerPage"
                 >
                     <template #actions>
+                        <div v-if="form.form_schema?.fields?.some(f => f.key === 'onboarding_date')" class="flex items-center space-x-2 bg-white dark:bg-gray-800 rounded-xl px-2 shadow-sm border border-gray-300 dark:border-gray-600">
+                            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">Onboarding:</span>
+                            <input type="date" 
+                                   v-model="onboarding_date_from" 
+                                   class="border-none focus:ring-0 text-sm font-bold text-gray-700 bg-transparent dark:text-gray-300 py-1 px-1"
+                                   title="From Date">
+                            <span class="text-gray-400">-</span>
+                            <input type="date" 
+                                   v-model="onboarding_date_to" 
+                                   class="border-none focus:ring-0 text-sm font-bold text-gray-700 bg-transparent dark:text-gray-300 py-1 px-1"
+                                   title="To Date">
+                        </div>
+                        <select v-model="status" class="border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-xl text-sm font-bold text-gray-700 bg-white shadow-sm dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600">
+                            <option value="">All Statuses</option>
+                            <option value="Open">Open</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Rejected">Rejected</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
                         <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
                             <template #trigger>
                                 <button class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">

@@ -34,7 +34,6 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
     const toCamelCase = (str) => str.replace(/[-_](\w)/g, (_, c) => c.toUpperCase())
 
     const performSearch = (url = null, additionalParams = {}) => {
-        const searchUrl = url || route(routeName)
         const globalParams = typeof extraParams === 'function' ? extraParams() : extraParams
         const params = {
             [searchKey]: search.value,
@@ -43,6 +42,8 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
             ...globalParams,
             ...additionalParams
         }
+        
+        const searchUrl = url || route(routeName, params)
 
         isLoading.value = true
         router.get(searchUrl, params, {

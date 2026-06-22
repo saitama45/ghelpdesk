@@ -55,6 +55,18 @@ class DynamicFormController extends Controller
             $query->where('data', 'like', "%{$search}%");
         }
 
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('onboarding_date_from')) {
+            $query->where('data->onboarding_date', '>=', $request->onboarding_date_from);
+        }
+
+        if ($request->filled('onboarding_date_to')) {
+            $query->where('data->onboarding_date', '<=', $request->onboarding_date_to);
+        }
+
         $records = $query->with(['creator', 'updator', 'requestType', 'approvals', 'ticket:id,ticket_key,status'])
                         ->latest()
                         ->paginate($request->get('per_page', 10))
@@ -63,6 +75,7 @@ class DynamicFormController extends Controller
         return Inertia::render('DynamicForm/Index', [
             'form' => $form,
             'records' => $records,
+            'filters' => $request->only(['search', 'status', 'onboarding_date_from', 'onboarding_date_to']),
             'copyTransferPayload' => session('copy_transfer_payload'),
         ]);
     }

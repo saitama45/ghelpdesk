@@ -31,8 +31,14 @@ Route::get('/serve-storage/{path}', function (string $path) {
 })->where('path', '.*')->name('storage.file');
 
 Route::get('/', function () {
-    return redirect()->route('login');
-});
+    if (auth()->check()) {
+        return redirect()->route('dashboard');
+    }
+
+    return Inertia::render('Landing', [
+        'canLogin' => Route::has('login'),
+    ]);
+})->name('home');
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
