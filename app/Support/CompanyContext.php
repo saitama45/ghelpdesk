@@ -24,6 +24,12 @@ class CompanyContext
     public const SESSION_KEY = 'active_company_id';
 
     /**
+     * The entity every user is defaulted to on a fresh sign-in, as long as
+     * they can access it. Resolved by company `code`.
+     */
+    public const DEFAULT_COMPANY_CODE = 'TGI';
+
+    /**
      * Tables whose new records should be auto-stamped with the active entity.
      * This is the single source of truth: the add-company_id migration targets
      * exactly this list (minus the few that already had the column).
@@ -152,6 +158,13 @@ class CompanyContext
         $sessionId = session(static::SESSION_KEY);
         if ($sessionId && $accessible->contains('id', (int) $sessionId)) {
             return (int) $sessionId;
+        }
+
+        // Fresh sign-in: default to the configured entity (TGI) when the user
+        // can access it, before falling back to their own / first entity.
+        $default = $accessible->firstWhere('code', static::DEFAULT_COMPANY_CODE);
+        if ($default) {
+            return (int) $default->id;
         }
 
         if ($user->company_id && $accessible->contains('id', (int) $user->company_id)) {
