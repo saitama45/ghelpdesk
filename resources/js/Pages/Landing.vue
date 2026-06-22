@@ -279,7 +279,7 @@ onBeforeUnmount(() => {
                             :href="route('login')"
                             class="group relative inline-flex items-center justify-center gap-3 rounded-full border border-transparent bg-[#ffffff] px-8 py-4 text-base font-black text-[#050814] shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] transition-all hover:scale-105 hover:shadow-[0_0_60px_-15px_rgba(255,255,255,0.5)] active:scale-95"
                         >
-                            Access Portal
+                            Access Link Hub
                             <svg class="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                         </Link>
                         <button
