@@ -1323,13 +1323,14 @@
                             </div>
                         </div>
 
-                        <div v-if="isRequestingScheduleChange || isRequestingActualTimeAdjustment" class="bg-blue-50 rounded-2xl p-5 border border-blue-100">
-                            <label class="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 ml-1">Request Remarks</label>
+                        <div v-if="isRequestingScheduleChange || isRequestingActualTimeAdjustment" class="bg-blue-50 rounded-2xl p-5 border border-blue-100 dark:bg-blue-900/20 dark:border-blue-800">
+                            <label class="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 ml-1 dark:text-blue-300">Request Remarks <span class="text-rose-500">*</span></label>
                             <textarea
                                 v-model="form.requester_remarks"
                                 rows="3"
-                                class="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-300"
-                                placeholder="Reason for this schedule change"
+                                required
+                                class="w-full px-3 py-2 bg-white border border-blue-100 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100 dark:border-blue-800 dark:placeholder-gray-400"
+                                placeholder="Reason for this schedule change (required)"
                             ></textarea>
                         </div>
 
@@ -2776,6 +2777,11 @@ const submitForm = () => {
     const editingScheduleId = isEditing.value ? currentScheduleId.value : null
     const isUpdatingSchedule = Boolean(editingScheduleId)
     const isChangeRequest = isRequestingScheduleChange.value
+
+    if (isChangeRequest && !form.requester_remarks?.trim()) {
+        showError('Please enter your request remarks before submitting.')
+        return
+    }
     const url = isChangeRequest ? `/schedules/${editingScheduleId}/change-requests` : (isUpdatingSchedule ? `/schedules/${editingScheduleId}` : '/schedules')
     const requestMethod = isChangeRequest ? post : (isUpdatingSchedule ? put : post)
     
@@ -2793,6 +2799,12 @@ const submitForm = () => {
 const submitActualTimeAdjustment = (entry) => {
     if (!currentScheduleId.value || isSubmittingActualTime.value) return
 
+    const isActualTimeRequest = selectedScheduleCanRequestActualTime.value && !selectedScheduleCanEditActualTime.value
+    if (isActualTimeRequest && !form.requester_remarks?.trim()) {
+        showError('Please enter your request remarks before submitting.')
+        return
+    }
+
     const payload = {
         schedule_store_id: entry.id || null,
         schedule_date: entry.schedule_date || form.scope_date || getManilaDateKey(entry.start_time),
@@ -2809,7 +2821,7 @@ const submitActualTimeAdjustment = (entry) => {
     }
 
     isSubmittingActualTime.value = true
-    const isRequest = selectedScheduleCanRequestActualTime.value && !selectedScheduleCanEditActualTime.value
+    const isRequest = isActualTimeRequest
     const url = isRequest
         ? `/schedules/${currentScheduleId.value}/actual-time-requests`
         : `/schedules/${currentScheduleId.value}/actual-times`

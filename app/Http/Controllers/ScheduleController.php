@@ -374,6 +374,10 @@ class ScheduleController extends Controller implements HasMiddleware
         abort_unless((int) $schedule->user_id === (int) $request->user()->id, 403, 'You can only request changes for your own schedule.');
         abort_if($request->user()->can('schedules.edit'), 403, 'Users with direct edit access should update schedules directly.');
 
+        $request->validate([
+            'requester_remarks' => 'required|string|max:1000',
+        ], [], ['requester_remarks' => 'request remarks']);
+
         $payload = $this->validateScheduleUpdatePayload($request->all());
 
         if ((int) $payload['user_id'] !== (int) $schedule->user_id) {
@@ -441,6 +445,10 @@ class ScheduleController extends Controller implements HasMiddleware
 
     public function storeActualTimeRequest(Request $request, Schedule $schedule)
     {
+        $request->validate([
+            'requester_remarks' => 'required|string|max:1000',
+        ], [], ['requester_remarks' => 'request remarks']);
+
         $payload = $this->validateActualTimePayload($request->all(), $schedule);
 
         abort_unless(
