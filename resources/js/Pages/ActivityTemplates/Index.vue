@@ -1,8 +1,7 @@
 <template>
-    <AppLayout title="Project Templates">
-        <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                <DataTable
+    <AppLayout title="Project Templates" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-6">
+            <DataTable
                     title="Project Activity Blueprints"
                     subtitle="Manage predefined activity sets for different project types and store classes"
                     search-placeholder="Search templates by name..."
@@ -109,8 +108,7 @@
                             </td>
                         </tr>
                     </template>
-                </DataTable>
-            </div>
+            </DataTable>
         </div>
 
         <!-- Create/Edit Modal -->
@@ -194,13 +192,26 @@
                         </div>
 
                         <div class="space-y-4">
-                            <div v-for="(activities, milestone, milestoneIndex) in milestoneGroups" :key="milestoneIndex" class="overflow-hidden border rounded-xl shadow-sm bg-white dark:bg-gray-800">
+                            <div v-for="(activities, milestone, milestoneIndex) in milestoneGroups" :key="milestoneIndex"
+                                 class="overflow-hidden border rounded-xl shadow-sm bg-white dark:bg-gray-800 transition-all"
+                                 :class="{ 'opacity-40': drag.type === 'milestone' && drag.key === milestone, 'ring-2 ring-blue-400 ring-offset-1': drag.type === 'milestone' && drag.overKey === milestone && drag.key !== milestone }"
+                                 @dragover.prevent="drag.type === 'milestone' && onDragOver(milestone)"
+                                 @drop.prevent="drag.type === 'milestone' && onDropMilestone(milestone)">
                                 <div class="flex flex-wrap items-center justify-between gap-3 bg-gray-50 border-b px-4 py-3 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="flex items-center gap-3 min-w-0 flex-1">
+                                        <!-- Milestone drag handle -->
+                                        <div draggable="true"
+                                             @dragstart.stop="onDragStartMilestone($event, milestone)"
+                                             @dragend.stop="onDragEnd"
+                                             class="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 shrink-0 select-none"
+                                             title="Drag to reorder milestone">
+                                            <EllipsisVerticalIcon class="w-4 h-4" />
+                                        </div>
                                         <input
                                             :value="milestone"
                                             type="text"
                                             @input="renameMilestone(milestone, $event.target.value)"
+                                            @dragstart.stop
                                             class="w-full max-w-sm text-xs border-gray-200 rounded-lg p-1.5 font-black text-gray-700 uppercase tracking-widest focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900"
                                             placeholder="Milestone name"
                                         >
@@ -222,6 +233,7 @@
                                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead class="bg-white dark:bg-gray-800">
                                             <tr>
+                                                <th class="px-1 py-2 w-6"></th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-16 dark:text-slate-300">Ord</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[220px] dark:text-slate-300">Activity / Sub-task</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Department</th>
@@ -233,7 +245,19 @@
                                         </thead>
                                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                                             <template v-for="act in activities" :key="act.client_key">
-                                                <tr class="group hover:bg-slate-50 transition-colors dark:hover:bg-gray-700/50">
+                                                <tr class="group hover:bg-slate-50 transition-colors dark:hover:bg-gray-700/50"
+                                                    :class="{ 'opacity-40': drag.key === act.client_key, 'border-t-2 border-blue-400': drag.type === 'activity' && drag.overKey === act.client_key && drag.key !== act.client_key }"
+                                                    @dragover.prevent="drag.type === 'activity' && onDragOver(act.client_key)"
+                                                    @drop.prevent="drag.type === 'activity' && onDropActivity(milestone, act.client_key)">
+                                                    <td class="px-1 py-2 w-6">
+                                                        <div draggable="true"
+                                                             @dragstart="onDragStartActivity($event, act.client_key)"
+                                                             @dragend="onDragEnd"
+                                                             class="cursor-grab active:cursor-grabbing text-gray-200 hover:text-gray-500 flex justify-center select-none"
+                                                             title="Drag to reorder">
+                                                            <EllipsisVerticalIcon class="w-4 h-4" />
+                                                        </div>
+                                                    </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="act.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
@@ -290,7 +314,20 @@
                                                     </td>
                                                 </tr>
 
-                                                <tr v-for="subTask in subTasksFor(act)" :key="subTask.client_key" class="group bg-slate-50/70 hover:bg-slate-100 transition-colors dark:bg-gray-800/70 dark:hover:bg-gray-700">
+                                                <tr v-for="subTask in subTasksFor(act)" :key="subTask.client_key"
+                                                    class="group bg-slate-50/70 hover:bg-slate-100 transition-colors dark:bg-gray-800/70 dark:hover:bg-gray-700"
+                                                    :class="{ 'opacity-40': drag.key === subTask.client_key, 'border-t-2 border-blue-400': drag.type === 'subtask' && drag.overKey === subTask.client_key && drag.key !== subTask.client_key }"
+                                                    @dragover.prevent.stop="drag.type === 'subtask' && onDragOver(subTask.client_key)"
+                                                    @drop.prevent.stop="onDropSubTask(act.client_key, subTask.client_key)">
+                                                    <td class="px-1 py-2 w-6">
+                                                        <div draggable="true"
+                                                             @dragstart="onDragStartSubTask($event, subTask.client_key)"
+                                                             @dragend="onDragEnd"
+                                                             class="cursor-grab active:cursor-grabbing text-gray-200 hover:text-gray-500 flex justify-center select-none"
+                                                             title="Drag to reorder">
+                                                            <EllipsisVerticalIcon class="w-4 h-4" />
+                                                        </div>
+                                                    </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="subTask.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
@@ -359,12 +396,19 @@
                     </div>
                 </form>
             </div>
+
+            <!-- Scroll-to-top: fixed corner, always visible while modal is open -->
+            <button type="button" @click="scrollModalTop"
+                    title="Scroll to top"
+                    class="fixed bottom-6 right-6 z-[9999] flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-colors">
+                <ChevronUpIcon class="w-5 h-5" />
+            </button>
         </Modal>
     </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useForm, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -378,16 +422,18 @@ import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
-import { 
-    PlusIcon, 
-    TrashIcon, 
-    PencilSquareIcon, 
+import {
+    PlusIcon,
+    TrashIcon,
+    PencilSquareIcon,
     XMarkIcon,
     ClockIcon,
     DocumentTextIcon,
     BeakerIcon,
     ArrowsPointingOutIcon,
-    BuildingOfficeIcon
+    BuildingOfficeIcon,
+    EllipsisVerticalIcon,
+    ChevronUpIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -408,6 +454,90 @@ const pagination = usePagination(props.templates, 'activity-templates.index')
 const { hasPermission } = usePermission()
 
 const selectedClass = ref(props.filters.store_class || 'Regular')
+
+/* ---- Drag-to-sort ---- */
+const drag = reactive({ type: null, key: null, overKey: null })
+
+const onDragOver = (key) => { drag.overKey = key }
+const onDragEnd = () => { drag.type = null; drag.key = null; drag.overKey = null }
+
+const onDragStartMilestone = (e, milestone) => {
+    e.dataTransfer.effectAllowed = 'move'
+    drag.type = 'milestone'
+    drag.key = milestone
+}
+const onDragStartActivity = (e, key) => {
+    e.dataTransfer.effectAllowed = 'move'
+    drag.type = 'activity'
+    drag.key = key
+}
+const onDragStartSubTask = (e, key) => {
+    e.dataTransfer.effectAllowed = 'move'
+    drag.type = 'subtask'
+    drag.key = key
+}
+
+const onDropMilestone = (targetMilestone) => {
+    if (!drag.key || drag.key === targetMilestone || drag.type !== 'milestone') { onDragEnd(); return }
+    const milestones = Object.keys(milestoneGroups.value)
+    const fromIdx = milestones.indexOf(drag.key)
+    const toIdx = milestones.indexOf(targetMilestone)
+    if (fromIdx === -1 || toIdx === -1) { onDragEnd(); return }
+    milestones.splice(fromIdx, 1)
+    milestones.splice(toIdx, 0, drag.key)
+    milestones.forEach((ms, i) => {
+        form.activities.forEach(a => {
+            if ((a.milestone || 'General') === ms) a.milestone_order = i + 1
+        })
+    })
+    onDragEnd()
+}
+
+const onDropActivity = (milestone, targetKey) => {
+    if (!drag.key || drag.key === targetKey || drag.type !== 'activity') { onDragEnd(); return }
+    const fromAct = form.activities.find(a => a.client_key === drag.key)
+    if (!fromAct) { onDragEnd(); return }
+
+    // Gather the activity and all its sub-tasks as a unit
+    const subKeys = new Set(form.activities.filter(a => a.parent_client_key === fromAct.client_key).map(a => a.client_key))
+    const allKeys = new Set([fromAct.client_key, ...subKeys])
+    const draggedItems = form.activities.filter(a => allKeys.has(a.client_key))
+
+    // Build new array without the dragged unit, then insert before target
+    const newArr = form.activities.filter(a => !allKeys.has(a.client_key))
+    const insertIdx = newArr.findIndex(a => a.client_key === targetKey)
+    if (insertIdx === -1) { onDragEnd(); return }
+    newArr.splice(insertIdx, 0, ...draggedItems)
+
+    // Apply back — this drives the visual order (milestoneGroups iterates form.activities in order)
+    form.activities.splice(0, form.activities.length, ...newArr)
+
+    // Recalculate order values within the milestone
+    newArr.filter(a => !a.parent_client_key && (a.milestone || 'General') === milestone)
+          .forEach((a, i) => { a.order = i + 1 })
+
+    onDragEnd()
+}
+
+const onDropSubTask = (parentKey, targetKey) => {
+    if (!drag.key || drag.key === targetKey || drag.type !== 'subtask') { onDragEnd(); return }
+    const subs = form.activities
+        .filter(a => a.parent_client_key === parentKey)
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+    const fromIdx = subs.findIndex(a => a.client_key === drag.key)
+    const toIdx = subs.findIndex(a => a.client_key === targetKey)
+    if (fromIdx === -1 || toIdx === -1) { onDragEnd(); return }
+    const [moved] = subs.splice(fromIdx, 1)
+    subs.splice(toIdx, 0, moved)
+    subs.forEach((a, i) => { a.order = i + 1 })
+    onDragEnd()
+}
+
+/* ---- Modal scroll-to-top — targets scroll-region inside the <dialog> element ---- */
+const scrollModalTop = () => {
+    const el = document.querySelector('dialog [scroll-region]')
+    if (el) el.scrollTop = 0
+}
 
 const filterByClass = (className) => {
     selectedClass.value = className
