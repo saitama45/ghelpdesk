@@ -840,8 +840,29 @@ class TicketController extends Controller
             'days' => json_decode(\App\Models\Setting::getScoped('working_days', '[1,2,3,4,5]', $assignee?->department_id, $assignee?->department_node_id, $subUnit), true),
         ];
 
+        // Record the current user's view (one row per user, refreshed to the latest
+        // visit) and build the "viewed by" list, most-recently-viewed first.
+        \App\Models\TicketView::updateOrCreate(
+            ['ticket_id' => $ticket->id, 'user_id' => auth()->id()],
+            ['viewed_at' => now()]
+        );
+
+        $viewers = $ticket->views()
+            ->with('user:id,name,profile_photo')
+            ->orderByDesc('viewed_at')
+            ->get()
+            ->map(fn ($view) => [
+                'id' => $view->user_id,
+                'name' => $view->user?->name ?? 'Unknown user',
+                'profile_photo' => $view->user?->profile_photo,
+                'viewed_at' => optional($view->viewed_at)->timezone('Asia/Manila')->format('M d, Y g:i A'),
+                'viewed_at_human' => optional($view->viewed_at)->diffForHumans(),
+            ])
+            ->values();
+
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
+            'viewers' => $viewers,
             'itemLeaders' => $this->buildItemLeaders($ticket->item_id),
             'staff' => $staff,
             'companies' => $companies,

@@ -160,10 +160,10 @@ const isCurrentRoute = (routeName) => {
                         </div>
 
                         <!-- Desktop Page Title -->
-                        <div class="hidden lg:block">
-                            <h1 class="text-lg font-semibold text-gray-900 truncate dark:text-gray-100">
-                                <slot name="header"></slot>
-                            </h1>
+                        <!-- min-w-0 + max-w bounds the title so it can't run into the search bar;
+                             overflow stays visible so header dropdowns/tooltips aren't clipped. -->
+                        <div class="hidden lg:flex min-w-0 max-w-[48vw] xl:max-w-[58vw] items-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+                            <slot name="header"></slot>
                         </div>
                     </div>
 

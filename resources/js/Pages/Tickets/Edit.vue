@@ -17,6 +17,10 @@ import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDo
 
 const props = defineProps({
     ticket: Object,
+    viewers: {
+        type: Array,
+        default: () => [],
+    },
     itemLeaders: {
         type: Array,
         default: () => [],
@@ -1989,16 +1993,46 @@ const linkify = (text) => {
 
     <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <template #header>
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center gap-3 min-w-0 w-full">
                 <Link :href="route('tickets.index')" class="text-blue-600 hover:text-blue-800 flex-shrink-0 transition-colors">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                     </svg>
                 </Link>
-                <div class="flex flex-col">
-                    <h1 class="text-lg font-bold tracking-tight">
-                        <span class="text-blue-600">{{ ticket.ticket_key }}</span> <span class="text-gray-900 truncate max-w-[200px] sm:max-w-none dark:text-gray-100">{{ ticket.title }}</span>
-                    </h1>
+                <h1 class="text-lg font-bold tracking-tight flex items-baseline gap-2 min-w-0">
+                    <span class="text-blue-600 flex-shrink-0">{{ ticket.ticket_key }}</span>
+                    <span class="text-gray-900 truncate dark:text-gray-100">{{ ticket.title }}</span>
+                </h1>
+
+                <!-- Viewed-by indicator: hover the eye to see who has opened this ticket -->
+                <div v-if="viewers.length" class="group relative flex-shrink-0">
+                    <div class="inline-flex cursor-default items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-bold text-gray-600 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                        <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        {{ viewers.length }}
+                    </div>
+
+                    <div class="invisible absolute right-0 top-full z-50 mt-2 w-72 origin-top-right rounded-xl border border-gray-200 bg-white p-2 opacity-0 shadow-xl transition-all duration-150 group-hover:visible group-hover:opacity-100 dark:border-gray-700 dark:bg-gray-800">
+                        <div class="px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">
+                            Viewed by ({{ viewers.length }})
+                        </div>
+                        <div class="max-h-72 overflow-y-auto custom-scrollbar">
+                            <div v-for="viewer in viewers" :key="viewer.id" class="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-xs font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-200">
+                                    <img v-if="viewer.profile_photo" :src="'/serve-storage/' + viewer.profile_photo" class="h-full w-full object-cover" :alt="viewer.name">
+                                    <span v-else>{{ (viewer.name || '?').charAt(0).toUpperCase() }}</span>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="truncate text-sm font-bold text-gray-800 dark:text-gray-100">{{ viewer.name }}</div>
+                                    <div class="text-[11px] font-medium text-gray-400 dark:text-gray-400">
+                                        {{ viewer.viewed_at }}<span v-if="viewer.viewed_at_human"> · {{ viewer.viewed_at_human }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </template>
@@ -3115,7 +3149,7 @@ const linkify = (text) => {
                         </div>
 
                         <!-- Sticky Comment Input -->
-                        <div v-if="ticket.status !== 'closed'" class="ticket-response-shell sticky bottom-0 z-10 -mx-4 sm:-mx-6 -mb-0 p-4 sm:p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg dark:border-slate-700 dark:bg-slate-950/95 dark:shadow-black/30">
+                        <div v-if="ticket.status !== 'closed'" class="ticket-response-shell sticky bottom-0 z-30 -mx-4 sm:-mx-6 -mb-0 p-4 sm:p-6 bg-blue-50/95 backdrop-blur-sm border-t-2 border-blue-200 shadow-[0_-8px_15px_-3px_rgba(0,0,0,0.1)] rounded-b-lg dark:border-slate-700 dark:bg-slate-950/95 dark:shadow-black/30">
                             <div class="flex space-x-3 sm:space-x-4">
                                 <div class="flex-shrink-0 hidden xs:block">
                                     <div v-if="$page.props.auth.user.profile_photo" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full overflow-hidden border-2 border-white shadow-sm">

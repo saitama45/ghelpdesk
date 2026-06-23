@@ -136,6 +136,11 @@ class Ticket extends Model
         return $this->hasMany(TicketAsset::class);
     }
 
+    public function views()
+    {
+        return $this->hasMany(TicketView::class);
+    }
+
     protected $casts = [
         'reporter_id' => 'integer',
         'assignee_id' => 'integer',
