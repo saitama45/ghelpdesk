@@ -25,6 +25,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\ValidationException;
 
@@ -384,8 +385,15 @@ class ScheduleController extends Controller implements HasMiddleware
         $approverIds = $this->resolveScheduleChangeApproverIds($request->user());
 
         if (empty($approverIds)) {
+            Log::warning('Schedule change request blocked: no eligible approver resolved.', [
+                'requester_id' => $request->user()->id,
+                'requester_name' => $request->user()->name,
+                'schedule_id' => $schedule->id,
+                'hint' => 'Ensure an active manager/admin in the requester\'s reporting line has the "schedules.approve" permission, then reset the permission cache.',
+            ]);
+
             return redirect()->back()->withErrors([
-                'approver' => 'No eligible schedule approver is available for this request.',
+                'approver' => 'No eligible schedule approver is available for this request. Please contact your administrator to assign a schedule approver.',
             ]);
         }
 
@@ -444,8 +452,15 @@ class ScheduleController extends Controller implements HasMiddleware
         $approverIds = $this->resolveScheduleChangeApproverIds($request->user());
 
         if (empty($approverIds)) {
+            Log::warning('Actual time adjustment request blocked: no eligible approver resolved.', [
+                'requester_id' => $request->user()->id,
+                'requester_name' => $request->user()->name,
+                'schedule_id' => $schedule->id,
+                'hint' => 'Ensure an active manager/admin in the requester\'s reporting line has the "schedules.approve" permission, then reset the permission cache.',
+            ]);
+
             return redirect()->back()->withErrors([
-                'approver' => 'No eligible schedule approver is available for this request.',
+                'approver' => 'No eligible schedule approver is available for this request. Please contact your administrator to assign a schedule approver.',
             ]);
         }
 
@@ -2670,8 +2685,26 @@ class ScheduleController extends Controller implements HasMiddleware
             ->whereNotNull('email')
             ->get();
 
+        if ($approvers->isEmpty()) {
+            Log::warning('Schedule change request has no notifiable approvers.', [
+                'change_request_id' => $changeRequest->id,
+                'assigned_approver_ids' => $changeRequest->assigned_approver_ids,
+            ]);
+            return;
+        }
+
         foreach ($approvers as $approver) {
-            Mail::to($approver->email)->send(new ScheduleChangeRequestNotification($changeRequest, 'submitted', true));
+            try {
+                Mail::to($approver->email)->send(new ScheduleChangeRequestNotification($changeRequest, 'submitted', true));
+            } catch (\Throwable $e) {
+                // A mail/SMTP failure must not roll back or break the request submission.
+                Log::error('Failed to email schedule change approver.', [
+                    'change_request_id' => $changeRequest->id,
+                    'approver_id' => $approver->id,
+                    'approver_email' => $approver->email,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 
@@ -2681,7 +2714,16 @@ class ScheduleController extends Controller implements HasMiddleware
             return;
         }
 
-        Mail::to($changeRequest->requester->email)->send(new ScheduleChangeRequestNotification($changeRequest, $action));
+        try {
+            Mail::to($changeRequest->requester->email)->send(new ScheduleChangeRequestNotification($changeRequest, $action));
+        } catch (\Throwable $e) {
+            Log::error('Failed to email schedule change requester.', [
+                'change_request_id' => $changeRequest->id,
+                'requester_id' => $changeRequest->requester_id,
+                'action' => $action,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function scheduleChangeRequestRows(User $user)

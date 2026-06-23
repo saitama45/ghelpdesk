@@ -71,6 +71,11 @@ onMounted(async () => {
         if (props.preFillPayload.form_data) form.form_data = JSON.parse(JSON.stringify(props.preFillPayload.form_data))
         if (props.preFillPayload.items) form.items = JSON.parse(JSON.stringify(props.preFillPayload.items))
     }
+
+    // New requests are always filed under the TGI entity; lock it in regardless of prefill.
+    if (lockCompanyToTgi.value) {
+        form.company_id = tgiCompany.value.id
+    }
 })
 
 const selectedRequestType = computed(() =>
@@ -79,6 +84,12 @@ const selectedRequestType = computed(() =>
 const selectedCompany = computed(() =>
     props.companies.find(c => c.id == form.company_id)
 )
+// Resolve TGI by name (robust across environments where the id may differ).
+const tgiCompany = computed(() =>
+    props.companies.find(c => String(c.name ?? '').trim().toUpperCase() === 'TGI')
+)
+// On the create form, the entity is fixed to TGI and not editable.
+const lockCompanyToTgi = computed(() => !props.sapRequest && !!tgiCompany.value)
 const activeFormComponent = computed(() => {
     if (!selectedRequestType.value) return null
     return FORM_MAP[selectedRequestType.value.name] ?? null
@@ -208,11 +219,16 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Entity / Company <span class="text-rose-500">*</span></label>
                     <select v-model="form.company_id"
-                        :class="form.errors.company_id ? 'border-rose-400' : 'border-slate-200'"
-                        class="w-full bg-white border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
+                        :disabled="lockCompanyToTgi"
+                        :class="[
+                            form.errors.company_id ? 'border-rose-400' : 'border-slate-200',
+                            lockCompanyToTgi ? 'bg-slate-100 text-slate-500 cursor-not-allowed dark:bg-gray-700' : 'bg-white dark:bg-gray-800'
+                        ]"
+                        class="w-full border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
                         <option value="">Select entity...</option>
                         <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
                     </select>
+                    <p v-if="lockCompanyToTgi" class="mt-1 text-[11px] text-slate-400 font-medium">Entity is fixed to TGI for new requests.</p>
                     <p v-if="form.errors.company_id" class="mt-1 text-xs text-rose-500 font-bold">{{ form.errors.company_id }}</p>
                 </div>
 
