@@ -37,7 +37,7 @@
                         <p class="text-xl font-bold text-gray-900 mt-1 dark:text-gray-100">₱{{ formatAmount(summary.monthly_mrc) }}</p>
                     </div>
                     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
-                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Annual MRC</p>
+                        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Annual Cost</p>
                         <p class="text-xl font-bold text-purple-600 mt-1">₱{{ formatAmount(summary.annual_mrc) }}</p>
                     </div>
                     <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
@@ -75,6 +75,14 @@
                             <select v-model="monitoringBrand" class="border-gray-300 rounded-lg text-sm pl-2 pr-7 dark:border-gray-600">
                                 <option value="">All Brands</option>
                                 <option v-for="b in brands" :key="b" :value="b">{{ b }}</option>
+                            </select>
+                            <select v-model="monitoringTelco" class="border-gray-300 rounded-lg text-sm pl-2 pr-7 dark:border-gray-600">
+                                <option value="">All Telcos</option>
+                                <option v-for="t in monitoringTelcoOptions" :key="t" :value="t">{{ t }}</option>
+                            </select>
+                            <select v-model="monitoringVendor" class="border-gray-300 rounded-lg text-sm pl-2 pr-7 dark:border-gray-600">
+                                <option value="">All Vendors</option>
+                                <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
                             </select>
                             <input v-model="monitoringSearch" type="text" placeholder="Search code, name, address..."
                                    class="border-gray-300 rounded-lg text-sm w-56 dark:border-gray-600" />
@@ -351,7 +359,15 @@
             </div>
 
             <!-- ============ APPROVALS TAB ============ -->
-            <div v-if="currentTab === 'approvals'">
+            <div v-if="currentTab === 'approvals'" class="space-y-4">
+                <div class="flex flex-wrap gap-2">
+                    <select :value="recordsPagination.filters?.rec_vendor_id || ''"
+                            @change="recordsPagination.updateSearchParam('rec_vendor_id', $event.target.value || null)"
+                            class="ml-auto border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
+                        <option value="">All Telcos / Vendors</option>
+                        <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
+                    </select>
+                </div>
                 <DataTable
                     title="Payment Records (Approval Chain)"
                     subtitle="Submitted payments awaiting approval / posting"
@@ -428,6 +444,12 @@
                                 class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700">
                             Clear
                         </button>
+                        <select :value="renewalsPagination.filters?.vendor_id || ''"
+                                @change="renewalsPagination.updateSearchParam('vendor_id', $event.target.value || null)"
+                                class="ml-auto border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
+                            <option value="">All Telcos / Vendors</option>
+                            <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
+                        </select>
                     </div>
                     <DataTable
                         title="Recurring Renewals"
@@ -528,6 +550,12 @@
                                 class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700">
                             Clear
                         </button>
+                        <select :value="invoicesPagination.filters?.inv_vendor_id || ''"
+                                @change="invoicesPagination.updateSearchParam('inv_vendor_id', $event.target.value || null)"
+                                class="ml-auto border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
+                            <option value="">All Telcos / Vendors</option>
+                            <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
+                        </select>
                     </div>
                     <DataTable
                         title="SOA / Vendor Invoices"
@@ -650,7 +678,27 @@
                 </div>
 
                 <!-- Weekly Plans -->
-                <div v-if="payablesTab === 'weekly'">
+                <div v-if="payablesTab === 'weekly'" class="space-y-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button v-for="s in ['Planned', 'Released', 'Paid']" :key="s"
+                                @click="weeklyPagination.updateSearchParam('wp_status', s)"
+                                :class="[
+                                    'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                                    weeklyPagination.filters?.wp_status === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                                ]">
+                            {{ s }}
+                        </button>
+                        <button @click="weeklyPagination.updateSearchParam('wp_status', null)"
+                                class="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-400 border-gray-100 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 dark:hover:bg-gray-700">
+                            Clear
+                        </button>
+                        <select :value="weeklyPagination.filters?.wp_vendor_id || ''"
+                                @change="weeklyPagination.updateSearchParam('wp_vendor_id', $event.target.value || null)"
+                                class="ml-auto border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
+                            <option value="">All Telcos / Vendors</option>
+                            <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
+                        </select>
+                    </div>
                     <DataTable
                         title="Weekly Payment Plans"
                         subtitle="Per-project weekly disbursement schedule (Datche, Vantage, etc.)"
@@ -1406,8 +1454,22 @@ const locationTypes = [
 ]
 const monitoringType = ref('store')
 const monitoringBrand = ref('')
+const monitoringTelco = ref('')
+const monitoringVendor = ref('')
 const monitoringSearch = ref('')
 const collapsedBrands = reactive({})
+
+/* Telco options for the monitoring filter — distinct telco values actually present
+   on the loaded connectivity services, so the dropdown never lists unused entries. */
+const monitoringTelcoOptions = computed(() => {
+    const set = new Set()
+    for (const l of (props.locations || [])) {
+        for (const sv of (l.services || [])) {
+            if (sv.telco) set.add(sv.telco)
+        }
+    }
+    return Array.from(set).sort((a, b) => String(a).localeCompare(String(b)))
+})
 const toggleBrand = (b) => { collapsedBrands[b] = !collapsedBrands[b] }
 
 const officeCount = computed(() => (props.locations || []).filter(l => l.type === 'office').length)
@@ -1417,15 +1479,28 @@ const locationMrc = (loc) => (loc.services || []).reduce((s, sv) => s + (sv.stat
 
 const filteredLocations = computed(() => {
     const term = monitoringSearch.value.trim().toLowerCase()
-    return (props.locations || []).filter((l) => {
-        if (l.type !== monitoringType.value) return false
-        if (monitoringBrand.value && l.brand !== monitoringBrand.value) return false
-        if (term) {
-            const hay = `${l.code || ''} ${l.name || ''} ${l.address || ''} ${l.legal_company || ''}`.toLowerCase()
-            if (!hay.includes(term)) return false
-        }
-        return true
-    })
+    const hasProviderFilter = !!(monitoringTelco.value || monitoringVendor.value)
+    const matchesProvider = (sv) =>
+        (!monitoringTelco.value || sv.telco === monitoringTelco.value) &&
+        (!monitoringVendor.value || sv.vendor_id === monitoringVendor.value)
+
+    return (props.locations || [])
+        .filter((l) => {
+            if (l.type !== monitoringType.value) return false
+            if (monitoringBrand.value && l.brand !== monitoringBrand.value) return false
+            // Telco / Vendor filter: only keep locations that have a matching service.
+            if (hasProviderFilter && !(l.services || []).some(matchesProvider)) return false
+            if (term) {
+                const hay = `${l.code || ''} ${l.name || ''} ${l.address || ''} ${l.legal_company || ''}`.toLowerCase()
+                if (!hay.includes(term)) return false
+            }
+            return true
+        })
+        // When a provider filter is active, show only the matching service rows so the
+        // table reflects the selected telco/vendor (MRC and counts follow suit).
+        .map((l) => hasProviderFilter
+            ? { ...l, services: (l.services || []).filter(matchesProvider) }
+            : l)
 })
 
 const groupedByBrand = computed(() => {
@@ -1487,7 +1562,7 @@ const renewalsPagination = usePagination(props.renewals, 'payments.index', () =>
     tab: 'renewals',
     ...renewalsPagination.filters
 }), { dataKey: 'renewals' })
-renewalsPagination.filters = reactive({ status: null })
+renewalsPagination.filters = reactive({ status: null, vendor_id: null })
 renewalsPagination.updateSearchParam = (key, val) => {
     renewalsPagination.filters[key] = val
     renewalsPagination.currentPage.value = 1
@@ -1498,7 +1573,7 @@ const invoicesPagination = usePagination(props.invoices, 'payments.index', () =>
     tab: 'invoices',
     ...invoicesPagination.filters
 }), { dataKey: 'invoices', searchKey: 'inv_search' })
-invoicesPagination.filters = reactive({ inv_status: null })
+invoicesPagination.filters = reactive({ inv_status: null, inv_vendor_id: null })
 invoicesPagination.updateSearchParam = (key, val) => {
     invoicesPagination.filters[key] = val
     invoicesPagination.currentPage.value = 1
