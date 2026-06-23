@@ -8,13 +8,25 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class Project extends Model
 {
     use HasFactory, SoftDeletes;
 
+    const PROJECT_TYPES = [
+        'Store Opening',
+        'IT Deployment',
+        'Internal Initiative',
+        'Vendor Project',
+        'General',
+    ];
+
     protected $fillable = [
         'store_id',
+        'project_type',
+        'subject_type',
+        'subject_id',
         'name',
         'status',
         'turn_over_date',
@@ -29,20 +41,38 @@ class Project extends Model
     ];
 
     protected $casts = [
-        'store_id' => 'integer',
+        'store_id'   => 'integer',
+        'subject_id' => 'integer',
         'turn_over_date' => 'date',
-        'training_date' => 'date',
-        'testing_date' => 'date',
-        'mock_service_date' => 'date',
+        'training_date'  => 'date',
+        'testing_date'   => 'date',
+        'mock_service_date'           => 'date',
         'turn_over_to_franchisee_date' => 'date',
         'target_go_live' => 'date',
-        'board_month' => 'integer',
-        'board_year' => 'integer',
+        'board_month'    => 'integer',
+        'board_year'     => 'integer',
     ];
 
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    /** Polymorphic subject for non-store project types (Vendor, Department, etc.) */
+    public function subject(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /** Human-readable subject label for display across all project types. */
+    public function getSubjectLabelAttribute(): ?string
+    {
+        if ($this->project_type === 'Store Opening') {
+            return $this->store?->name;
+        }
+        $subject = $this->subject;
+        if (!$subject) return null;
+        return $subject->name ?? null;
     }
 
     public function tasks(): HasMany

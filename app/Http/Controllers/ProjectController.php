@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
 use App\Models\Project;
 use App\Models\ProjectAsset;
 use App\Models\ProjectTask;
 use App\Models\Store;
 use App\Models\User;
+use App\Models\Vendor;
 use App\Models\ProjectTemplate;
 use App\Services\ProjectTaskBoardSyncService;
 use App\Services\OrganizationReferenceService;
@@ -24,17 +26,17 @@ class ProjectController extends Controller
 
     public function index(Request $request)
     {
-        $search = trim((string) $request->input('search', ''));
-        $status = trim((string) $request->input('status', ''));
-        $storeId = $request->input('store_id');
+        $search     = trim((string) $request->input('search', ''));
+        $status     = trim((string) $request->input('status', ''));
+        $storeId    = $request->input('store_id');
+        $typeFilter = trim((string) $request->input('type', ''));
 
-        $projects = Project::with(['store', 'tasks'])
+        $projects = Project::with(['store', 'tasks', 'subject'])
+            ->when($typeFilter !== '', fn ($query) => $query->where('project_type', $typeFilter))
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
-                        ->orWhereHas('store', function ($query) use ($search) {
-                            $query->where('name', 'like', "%{$search}%");
-                        });
+                        ->orWhereHas('store', fn ($q) => $q->where('name', 'like', "%{$search}%"));
                 });
             })
             ->when($status !== '', fn ($query) => $query->where('status', $status))
@@ -55,45 +57,73 @@ class ProjectController extends Controller
             ])
             ->values();
 
+        $stats = [
+            'total'           => Project::count(),
+            'in_progress'     => Project::where('status', 'In Progress')->count(),
+            'delayed'         => Project::where('status', 'Delayed')->count(),
+            'completed'       => Project::where('status', 'Completed')->count(),
+            'planning'        => Project::whereIn('status', ['Planning', 'Pending'])->count(),
+            'going_live_soon' => Project::whereMonth('target_go_live', now()->month)
+                ->whereYear('target_go_live', now()->year)
+                ->whereNotIn('status', ['Completed', 'Cancelled'])
+                ->count(),
+        ];
+
+        // Per-type counts for tab badges
+        $typeCounts = Project::query()
+            ->selectRaw('project_type, count(*) as total')
+            ->groupBy('project_type')
+            ->pluck('total', 'project_type')
+            ->toArray();
+
         return Inertia::render('Projects/Index', [
-            'projects' => $projects,
+            'projects'    => $projects,
+            'stats'       => $stats,
+            'typeCounts'  => $typeCounts,
+            'projectTypes' => Project::PROJECT_TYPES,
             'filters' => [
-                'search' => $search,
-                'status' => $status,
+                'search'   => $search,
+                'status'   => $status,
                 'store_id' => $storeId ? (int) $storeId : null,
+                'type'     => $typeFilter,
             ],
             'statusOptions' => $statusOptions,
             'storeOptions' => Store::orderBy('name')->get(['id', 'name'])
-                ->map(fn (Store $store) => [
-                    'label' => $store->name,
-                    'value' => $store->id,
-                ]),
+                ->map(fn (Store $store) => ['label' => $store->name, 'value' => $store->id]),
         ]);
     }
 
     public function create()
     {
         return Inertia::render('Projects/Create', [
-            'stores' => Store::orderBy('name')->get(['id', 'name']),
-            'boardYears' => $this->boardYears(),
+            'stores'       => Store::orderBy('name')->get(['id', 'name']),
+            'vendors'      => Vendor::active()->orderBy('name')->get(['id', 'name']),
+            'departments'  => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'projectTypes' => Project::PROJECT_TYPES,
+            'boardYears'   => $this->boardYears(),
         ]);
     }
 
     public function store(Request $request)
     {
+        $isStoreOpening = $request->input('project_type') === 'Store Opening';
+
         $validated = $request->validate([
-            'store_id' => 'required|exists:stores,id',
-            'name' => 'required|string|max:255',
-            'status' => 'required|string',
-            'turn_over_date' => 'nullable|date',
-            'training_date' => 'nullable|date',
-            'testing_date' => 'nullable|date',
-            'mock_service_date' => 'nullable|date',
+            'project_type'  => 'required|string|in:' . implode(',', Project::PROJECT_TYPES),
+            'store_id'      => $isStoreOpening ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
+            'subject_type'  => 'nullable|string',
+            'subject_id'    => 'nullable|integer',
+            'name'          => 'required|string|max:255',
+            'status'        => 'required|string',
+            'turn_over_date'               => 'nullable|date',
+            'training_date'                => 'nullable|date',
+            'testing_date'                 => 'nullable|date',
+            'mock_service_date'            => 'nullable|date',
             'turn_over_to_franchisee_date' => 'nullable|date',
             'target_go_live' => 'nullable|date',
-            'board_month' => 'nullable|integer|min:1|max:12',
-            'board_year' => 'nullable|integer|min:2000|max:2100',
-            'remarks' => 'nullable|string',
+            'board_month'    => 'nullable|integer|min:1|max:12',
+            'board_year'     => 'nullable|integer|min:2000|max:2100',
+            'remarks'        => 'nullable|string',
         ]);
 
         $project = Project::create($validated);
@@ -107,6 +137,7 @@ class ProjectController extends Controller
     {
         $project->load([
             'store',
+            'subject',
             'teamMembers.user:id,name,profile_photo,department,org_path',
             'taskBoard:id,project_id,title,closed_at',
             'tasks',
@@ -118,12 +149,15 @@ class ProjectController extends Controller
         $storeClass = $project->store->class ?? 'Regular';
 
         return Inertia::render('Projects/Show', [
-            'project' => $project,
-            'users' => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
-            'stores' => Store::orderBy('name')->get(['id', 'name']),
+            'project'      => $project,
+            'projectTypes' => Project::PROJECT_TYPES,
+            'users'        => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
+            'stores'       => Store::orderBy('name')->get(['id', 'name']),
+            'vendors'      => Vendor::active()->orderBy('name')->get(['id', 'name']),
+            'departments'  => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'departmentOptions' => $this->departmentOptions(),
             'hierarchicalDepartments' => $this->organizationReferenceService->tree(true),
-            'boardYears' => $this->boardYears(),
+            'boardYears'   => $this->boardYears(),
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
             'project_templates' => ProjectTemplate::whereIn('store_class', [$storeClass, 'Both'])
                 ->withCount('activities')
@@ -133,19 +167,24 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project)
     {
+        $isStoreOpening = $request->input('project_type', $project->project_type) === 'Store Opening';
+
         $validated = $request->validate([
-            'store_id' => 'required|exists:stores,id',
-            'name' => 'required|string|max:255',
-            'status' => 'required|string',
-            'turn_over_date' => 'nullable|date',
-            'training_date' => 'nullable|date',
-            'testing_date' => 'nullable|date',
-            'mock_service_date' => 'nullable|date',
+            'project_type'  => 'required|string|in:' . implode(',', Project::PROJECT_TYPES),
+            'store_id'      => $isStoreOpening ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
+            'subject_type'  => 'nullable|string',
+            'subject_id'    => 'nullable|integer',
+            'name'          => 'required|string|max:255',
+            'status'        => 'required|string',
+            'turn_over_date'               => 'nullable|date',
+            'training_date'                => 'nullable|date',
+            'testing_date'                 => 'nullable|date',
+            'mock_service_date'            => 'nullable|date',
             'turn_over_to_franchisee_date' => 'nullable|date',
             'target_go_live' => 'nullable|date',
-            'board_month' => 'nullable|integer|min:1|max:12',
-            'board_year' => 'nullable|integer|min:2000|max:2100',
-            'remarks' => 'nullable|string',
+            'board_month'    => 'nullable|integer|min:1|max:12',
+            'board_year'     => 'nullable|integer|min:2000|max:2100',
+            'remarks'        => 'nullable|string',
         ]);
 
         $project->update($validated);

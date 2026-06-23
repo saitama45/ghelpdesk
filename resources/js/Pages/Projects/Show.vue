@@ -30,8 +30,11 @@ import {
 
 const props = defineProps({
     project: Object,
+    projectTypes: { type: Array, default: () => [] },
     users: Array,
     stores: Array,
+    vendors: { type: Array, default: () => [] },
+    departments: { type: Array, default: () => [] },
     departmentOptions: Array,
     hierarchicalDepartments: Array,
     boardYears: Array,
@@ -110,8 +113,11 @@ const userOptions = computed(() => {
 
 const showEditProjectModal = ref(false);
 const editForm = useForm({
+    project_type: props.project.project_type || 'Store Opening',
     name: props.project.name,
     store_id: props.project.store_id,
+    subject_type: props.project.subject_type || '',
+    subject_id: props.project.subject_id || '',
     status: props.project.status,
     turn_over_date: formatDateForInput(props.project.turn_over_date),
     training_date: formatDateForInput(props.project.training_date),
@@ -247,8 +253,11 @@ const selectedDepartment = computed(() => {
 });
 
 const openEditModal = () => {
+    editForm.project_type = props.project.project_type || 'Store Opening';
     editForm.name = props.project.name;
     editForm.store_id = props.project.store_id;
+    editForm.subject_type = props.project.subject_type || '';
+    editForm.subject_id = props.project.subject_id || '';
     editForm.status = props.project.status;
     editForm.turn_over_date = formatDateForInput(props.project.turn_over_date);
     editForm.training_date = formatDateForInput(props.project.training_date);
@@ -395,7 +404,7 @@ const getStatusColor = (status) => {
 <template>
     <Head :title="project.name" />
 
-    <AppLayout>
+    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <template #header>
             Project Detail
         </template>
@@ -415,18 +424,30 @@ const getStatusColor = (status) => {
                         <!-- Basic Info -->
                         <div class="space-y-4">
                             <div>
+                                <InputLabel for="edit_project_type" value="Project Type" />
+                                <select
+                                    id="edit_project_type"
+                                    v-model="editForm.project_type"
+                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600 pl-2 pr-7"
+                                >
+                                    <option v-for="type in (projectTypes ?? [])" :key="type" :value="type">{{ type }}</option>
+                                </select>
+                                <InputError :message="editForm.errors.project_type" />
+                            </div>
+
+                            <div>
                                 <InputLabel for="edit_name" value="Project Name" />
-                                <TextInput 
-                                    id="edit_name" 
-                                    type="text" 
-                                    v-model="editForm.name" 
-                                    class="w-full" 
-                                    required 
+                                <TextInput
+                                    id="edit_name"
+                                    type="text"
+                                    v-model="editForm.name"
+                                    class="w-full"
+                                    required
                                 />
                                 <InputError :message="editForm.errors.name" />
                             </div>
 
-                            <div>
+                            <div v-if="editForm.project_type === 'Store Opening'">
                                 <InputLabel for="edit_store_id" value="Store Branch" />
                                 <Autocomplete
                                     v-model="editForm.store_id"
@@ -436,6 +457,28 @@ const getStatusColor = (status) => {
                                     placeholder="Select a store"
                                 />
                                 <InputError :message="editForm.errors.store_id" />
+                            </div>
+
+                            <div v-if="editForm.project_type === 'Vendor Project'">
+                                <InputLabel value="Vendor / Partner" />
+                                <Autocomplete
+                                    :model-value="editForm.subject_id || null"
+                                    :options="(vendors ?? []).map(v => ({ label: v.name, value: v.id }))"
+                                    placeholder="Select a vendor"
+                                    @update:modelValue="(val) => { editForm.subject_type = val ? 'App\\Models\\Vendor' : ''; editForm.subject_id = val || ''; }"
+                                />
+                                <InputError :message="editForm.errors.subject_id" />
+                            </div>
+
+                            <div v-if="editForm.project_type === 'Internal Initiative'">
+                                <InputLabel value="Owning Department" />
+                                <Autocomplete
+                                    :model-value="editForm.subject_id || null"
+                                    :options="(departments ?? []).map(d => ({ label: d.name, value: d.id }))"
+                                    placeholder="Select a department"
+                                    @update:modelValue="(val) => { editForm.subject_type = val ? 'App\\Models\\Department' : ''; editForm.subject_id = val || ''; }"
+                                />
+                                <InputError :message="editForm.errors.subject_id" />
                             </div>
 
                             <div>
@@ -701,11 +744,14 @@ const getStatusColor = (status) => {
                             <ChevronLeftIcon class="h-6 w-6" />
                         </Link>
                         <div>
-                            <div class="flex items-center gap-3 mb-2">
-                                <span class="px-3 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-blue-100">
-                                    {{ project.store?.name || 'Project' }}
+                            <div class="flex items-center gap-2 mb-2 flex-wrap">
+                                <span class="px-2.5 py-1 bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest rounded-full border border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
+                                    {{ project.project_type || 'Store Opening' }}
                                 </span>
-                                <span :class="['px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border', getStatusColor(project.status)]">
+                                <span v-if="project.store?.name || project.subject?.name" class="px-2.5 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
+                                    {{ project.store?.name || project.subject?.name }}
+                                </span>
+                                <span :class="['px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border', getStatusColor(project.status)]">
                                     {{ project.status }}
                                 </span>
                             </div>
