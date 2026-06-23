@@ -37,6 +37,7 @@ const props = defineProps({
     board: Object,
     statuses: Array,
     users: Array,
+    projectsForLink: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -57,6 +58,10 @@ const isSaving = ref(false);
 const isCreatingCard = ref(false);
 const isCreatingSubTask = ref(false);
 const isSyncingProject = ref(false);
+const showLinkProjectModal = ref(false);
+const linkProjectSearch = ref('');
+const linkProjectId = ref(null);
+const isLinkingProject = ref(false);
 const attachmentInput = ref(null);
 const filterInput = ref(null);
 const cardComposerInputs = ref({});
@@ -138,6 +143,10 @@ const editingChecklistId = ref(null);
 const editingChecklistTitle = ref('');
 const checklistTitleInputs = ref({});
 const isUpdatingChecklist = ref(false);
+const editingItemId = ref(null);
+const editingItemTitle = ref('');
+const itemTitleInputs = ref({});
+const isUpdatingItem = ref(false);
 const bulkPasteTarget = ref('');
 const newSubTaskTitle = ref('');
 const showSubTaskInput = ref(false);
@@ -1313,6 +1322,57 @@ const updateChecklistItemAssignee = async (item, value) => {
     await updateChecklistItem(item, { assigned_to: value || null });
 };
 
+const setItemTitleInput = (itemId, el) => {
+    if (el) {
+        itemTitleInputs.value[itemId] = el;
+    } else {
+        delete itemTitleInputs.value[itemId];
+    }
+};
+
+const startEditingItem = async (item) => {
+    if (!canEditBoard.value) return;
+
+    editingItemId.value = item.id;
+    editingItemTitle.value = item.title || '';
+
+    await nextTick();
+    itemTitleInputs.value[item.id]?.focus();
+    itemTitleInputs.value[item.id]?.select();
+};
+
+const cancelEditingItem = () => {
+    editingItemId.value = null;
+    editingItemTitle.value = '';
+};
+
+const saveItemTitle = async (item) => {
+    const title = editingItemTitle.value.trim();
+    if (!item || !canEditBoard.value || isUpdatingItem.value) return;
+
+    if (!title) {
+        showError('Enter an item title first.');
+        return;
+    }
+
+    if (title === item.title) {
+        cancelEditingItem();
+        return;
+    }
+
+    isUpdatingItem.value = true;
+
+    try {
+        const response = await axios.put(route('task-checklist-items.update', item.id), { title });
+        replaceCard(response.data.card);
+        cancelEditingItem();
+    } catch (error) {
+        handleApiError(error, 'Unable to rename item');
+    } finally {
+        isUpdatingItem.value = false;
+    }
+};
+
 const itemSubUnit = (item) => item.assignee?.sub_unit || 'No Sub-Unit';
 
 const deleteChecklist = async (checklist) => {
@@ -1530,13 +1590,33 @@ const syncProjectBoard = () => {
 
     router.post(route('task-boards.sync-project', localBoard.value.id), {}, {
         preserveScroll: true,
-        onStart: () => {
-            isSyncingProject.value = true;
-        },
-        onFinish: () => {
-            isSyncingProject.value = false;
-        },
+        onStart: () => { isSyncingProject.value = true; },
+        onFinish: () => { isSyncingProject.value = false; },
     });
+};
+
+const filteredProjectsForLink = computed(() => {
+    const q = linkProjectSearch.value.toLowerCase();
+    return (props.projectsForLink ?? []).filter(p =>
+        !q || p.name.toLowerCase().includes(q)
+    );
+});
+
+const canLinkProject = computed(() =>
+    !isProjectBoard.value &&
+    localBoard.value.board_source === 'manual' &&
+    canEditBoard.value &&
+    (props.projectsForLink ?? []).length > 0
+);
+
+const confirmLinkProject = () => {
+    if (!linkProjectId.value || isLinkingProject.value) return;
+    isLinkingProject.value = true;
+    router.post(
+        route('task-boards.link-to-project', localBoard.value.id),
+        { project_id: linkProjectId.value },
+        { onFinish: () => { isLinkingProject.value = false; } }
+    );
 };
 
 const handleKeyboard = (event) => {
@@ -1633,6 +1713,10 @@ onUnmounted(() => {
                         <button v-if="isProjectBoard && canEditBoard" type="button" @click="syncProjectBoard" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
                             <ClipboardDocumentCheckIcon class="h-4 w-4" />
                             {{ isSyncingProject ? 'Syncing...' : 'Sync' }}
+                        </button>
+                        <button v-if="canLinkProject" type="button" @click="showLinkProjectModal = true" class="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/20">
+                            <LinkIcon class="h-4 w-4" />
+                            Link to Project
                         </button>
                         <button type="button" @click="toggleStar" class="rounded-lg p-2 transition-colors hover:bg-white/15" title="Star board">
                             <StarSolidIcon v-if="localBoard.starred" class="h-5 w-5 text-yellow-300" />
@@ -2144,8 +2228,25 @@ onUnmounted(() => {
                                                     <button type="button" @click="toggleChecklistItem(item)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="item.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
                                                         <CheckIcon v-if="item.is_complete" class="h-3.5 w-3.5" />
                                                     </button>
-                                                    <span class="min-w-0 flex-1 text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
-                                                    <div class="flex items-center gap-2">
+                                                    <form v-if="editingItemId === item.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveItemTitle(item)">
+                                                        <input
+                                                            :ref="(el) => setItemTitleInput(item.id, el)"
+                                                            v-model="editingItemTitle"
+                                                            :disabled="isUpdatingItem"
+                                                            type="text"
+                                                            maxlength="255"
+                                                            class="h-8 min-w-0 flex-1 rounded-lg border-gray-300 text-sm font-semibold text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:text-gray-100 dark:border-gray-600"
+                                                            @keydown.esc.prevent="cancelEditingItem"
+                                                        >
+                                                        <button type="submit" :disabled="isUpdatingItem || !editingItemTitle.trim()" title="Save" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                                            <CheckIcon class="h-4 w-4" />
+                                                        </button>
+                                                        <button type="button" :disabled="isUpdatingItem" title="Cancel" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700" @click="cancelEditingItem">
+                                                            <XMarkIcon class="h-4 w-4" />
+                                                        </button>
+                                                    </form>
+                                                    <span v-else class="min-w-0 flex-1 text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
+                                                    <div v-if="editingItemId !== item.id" class="flex items-center gap-2">
                                                         <button v-if="item.children?.length" type="button" class="text-gray-400 hover:text-gray-600 dark:text-gray-400" @click="toggleSubTaskItems(item.id)">
                                                             <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isSubTaskOpen(item.id) ? '' : '-rotate-90'" />
                                                         </button>
@@ -2159,6 +2260,9 @@ onUnmounted(() => {
                                                             <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                                         </select>
                                                         <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(item) }}</span>
+                                                        <button v-if="canEditBoard" type="button" title="Rename item" class="text-gray-300 hover:text-blue-600" @click="startEditingItem(item)">
+                                                            <PencilSquareIcon class="h-4 w-4" />
+                                                        </button>
                                                         <button v-if="canEditBoard" type="button" title="Duplicate item" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(item)">
                                                             <DocumentDuplicateIcon class="h-4 w-4" />
                                                         </button>
@@ -2174,8 +2278,25 @@ onUnmounted(() => {
                                                     <button type="button" @click="toggleChecklistItem(child)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="child.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
                                                         <CheckIcon v-if="child.is_complete" class="h-3.5 w-3.5" />
                                                     </button>
-                                                    <span class="min-w-0 flex-1 text-sm" :class="child.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ child.title }}</span>
-                                                    <div class="flex items-center gap-2">
+                                                    <form v-if="editingItemId === child.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveItemTitle(child)">
+                                                        <input
+                                                            :ref="(el) => setItemTitleInput(child.id, el)"
+                                                            v-model="editingItemTitle"
+                                                            :disabled="isUpdatingItem"
+                                                            type="text"
+                                                            maxlength="255"
+                                                            class="h-8 min-w-0 flex-1 rounded-lg border-gray-300 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:text-gray-100 dark:border-gray-600"
+                                                            @keydown.esc.prevent="cancelEditingItem"
+                                                        >
+                                                        <button type="submit" :disabled="isUpdatingItem || !editingItemTitle.trim()" title="Save" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                                            <CheckIcon class="h-4 w-4" />
+                                                        </button>
+                                                        <button type="button" :disabled="isUpdatingItem" title="Cancel" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700" @click="cancelEditingItem">
+                                                            <XMarkIcon class="h-4 w-4" />
+                                                        </button>
+                                                    </form>
+                                                    <span v-else class="min-w-0 flex-1 text-sm" :class="child.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ child.title }}</span>
+                                                    <div v-if="editingItemId !== child.id" class="flex items-center gap-2">
                                                         <select
                                                             :value="child.assigned_to || ''"
                                                             :disabled="!canEditBoard"
@@ -2186,6 +2307,9 @@ onUnmounted(() => {
                                                             <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                                         </select>
                                                         <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(child) }}</span>
+                                                        <button v-if="canEditBoard" type="button" title="Rename sub-task" class="text-gray-300 hover:text-blue-600" @click="startEditingItem(child)">
+                                                            <PencilSquareIcon class="h-4 w-4" />
+                                                        </button>
                                                         <button v-if="canEditBoard" type="button" title="Duplicate sub-task" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(child)">
                                                             <DocumentDuplicateIcon class="h-4 w-4" />
                                                         </button>
@@ -2476,6 +2600,69 @@ onUnmounted(() => {
                     <input v-model="labelForm.color" type="color" class="h-10 w-12 rounded-lg border border-gray-300 bg-white p-1 dark:bg-gray-800 dark:border-gray-600">
                     <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Create</button>
                 </form>
+            </div>
+        </Modal>
+
+        <!-- Link to Project Modal -->
+        <Modal :show="showLinkProjectModal" @close="showLinkProjectModal = false" maxWidth="md">
+            <div class="p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Link Board to Project</h2>
+                    <button type="button" @click="showLinkProjectModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                    Select a project to link this board to. All task cards on this board will be imported as project tasks (only if the project has no tasks yet).
+                </p>
+
+                <!-- Search -->
+                <div class="relative mb-3">
+                    <input
+                        v-model="linkProjectSearch"
+                        type="text"
+                        placeholder="Search projects…"
+                        class="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    />
+                    <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" /></svg>
+                    </span>
+                </div>
+
+                <!-- Project list -->
+                <div class="max-h-60 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600">
+                    <button
+                        v-for="project in filteredProjectsForLink"
+                        :key="project.id"
+                        type="button"
+                        @click="linkProjectId = project.id"
+                        :class="[
+                            'flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors',
+                            linkProjectId === project.id
+                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                        ]"
+                    >
+                        <span class="font-medium">{{ project.name }}</span>
+                        <span class="ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">{{ project.status }}</span>
+                    </button>
+                    <p v-if="filteredProjectsForLink.length === 0" class="px-4 py-6 text-center text-sm text-gray-400">No projects found.</p>
+                </div>
+
+                <div class="mt-4 flex items-center justify-end gap-3">
+                    <button type="button" @click="showLinkProjectModal = false" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        :disabled="!linkProjectId || isLinkingProject"
+                        @click="confirmLinkProject"
+                        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
+                    >
+                        {{ isLinkingProject ? 'Linking…' : 'Link & Import Tasks' }}
+                    </button>
+                </div>
             </div>
         </Modal>
     </AppLayout>

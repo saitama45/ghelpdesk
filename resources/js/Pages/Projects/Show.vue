@@ -14,7 +14,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { useConfirm } from '@/Composables/useConfirm.js';
 import { usePermission } from '@/Composables/usePermission.js';
-import { 
+import {
     ChevronLeftIcon,
     CalendarIcon,
     UserGroupIcon,
@@ -22,6 +22,7 @@ import {
     CpuChipIcon,
     ClipboardDocumentCheckIcon,
     InformationCircleIcon,
+    LinkIcon,
     PlusIcon,
     TrashIcon,
     XMarkIcon,
@@ -38,6 +39,7 @@ const props = defineProps({
     departmentOptions: Array,
     hierarchicalDepartments: Array,
     boardYears: Array,
+    availableBoards: { type: Array, default: () => [] },
     taskListTargets: Object,
     project_templates: Array
 });
@@ -112,6 +114,29 @@ const userOptions = computed(() => {
 });
 
 const showEditProjectModal = ref(false);
+const showAttachBoardModal = ref(false);
+const attachBoardId = ref(null);
+const attachBoardSearch = ref('');
+const isAttachingBoard = ref(false);
+
+const filteredAvailableBoards = computed(() => {
+    const q = attachBoardSearch.value.toLowerCase();
+    return (props.availableBoards ?? []).filter(b => !q || b.title.toLowerCase().includes(q));
+});
+
+const confirmAttachBoard = () => {
+    if (!attachBoardId.value || isAttachingBoard.value) return;
+    isAttachingBoard.value = true;
+    router.post(
+        route('task-boards.link-to-project', attachBoardId.value),
+        { project_id: props.project.id },
+        {
+            onSuccess: () => { showAttachBoardModal.value = false; },
+            onFinish: () => { isAttachingBoard.value = false; },
+        }
+    );
+};
+
 const editForm = useForm({
     project_type: props.project.project_type || 'Store Opening',
     name: props.project.name,
@@ -896,6 +921,20 @@ const getStatusColor = (status) => {
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Attach Existing Board (only when no task board linked yet and boards are available) -->
+                        <div v-if="!project.task_board && availableBoards.length > 0 && hasPermission('projects.edit')" class="rounded-lg border-2 border-dashed border-gray-200 p-5 dark:border-gray-700">
+                            <h3 class="mb-1 text-sm font-bold text-gray-700 dark:text-gray-300">Link Existing Board</h3>
+                            <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Attach a manual task board to this project and import its cards as project tasks.</p>
+                            <button
+                                type="button"
+                                @click="showAttachBoardModal = true"
+                                class="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300"
+                            >
+                                <LinkIcon class="h-4 w-4" />
+                                Attach Board
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -915,5 +954,61 @@ const getStatusColor = (status) => {
                 </div>
             </div>
         </div>
+
+        <!-- Attach Existing Board Modal -->
+        <Modal :show="showAttachBoardModal" @close="showAttachBoardModal = false" maxWidth="md">
+            <div class="p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Attach Existing Board</h2>
+                    <button type="button" @click="showAttachBoardModal = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
+                </div>
+                <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                    Select a manual task board to link to this project. Its cards will be imported as project tasks if this project has no tasks yet.
+                </p>
+                <div class="relative mb-3">
+                    <input
+                        v-model="attachBoardSearch"
+                        type="text"
+                        placeholder="Search boards…"
+                        class="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    />
+                    <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" /></svg>
+                    </span>
+                </div>
+                <div class="max-h-60 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600">
+                    <button
+                        v-for="board in filteredAvailableBoards"
+                        :key="board.id"
+                        type="button"
+                        @click="attachBoardId = board.id"
+                        :class="[
+                            'flex w-full items-center px-4 py-2.5 text-left text-sm transition-colors',
+                            attachBoardId === board.id
+                                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                        ]"
+                    >
+                        <span class="font-medium">{{ board.title }}</span>
+                    </button>
+                    <p v-if="filteredAvailableBoards.length === 0" class="px-4 py-6 text-center text-sm text-gray-400">No available boards found.</p>
+                </div>
+                <div class="mt-4 flex items-center justify-end gap-3">
+                    <button type="button" @click="showAttachBoardModal = false" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300">
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        :disabled="!attachBoardId || isAttachingBoard"
+                        @click="confirmAttachBoard"
+                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-40"
+                    >
+                        {{ isAttachingBoard ? 'Attaching…' : 'Attach & Import' }}
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>

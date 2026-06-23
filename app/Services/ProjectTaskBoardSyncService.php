@@ -113,6 +113,63 @@ class ProjectTaskBoardSyncService
         ];
     }
 
+    /**
+     * Import task cards from a manual board into a project as ProjectTask records.
+     * Skips import if the project already has tasks.
+     * Returns true if import ran, false if skipped.
+     */
+    public function importBoardCardsAsProjectTasks(TaskBoard $board, Project $project): bool
+    {
+        if ($project->tasks()->exists()) {
+            return false;
+        }
+
+        $cards = $board->cards()
+            ->with(['column:id,name', 'assignees:id'])
+            ->reorder()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($cards as $index => $card) {
+            $status   = $this->mapColumnNameToTaskStatus($card->column?->name ?? '');
+            $progress = match ($status) {
+                'Done'    => 100,
+                'Ongoing' => 50,
+                default   => 0,
+            };
+
+            ProjectTask::create([
+                'project_id'  => $project->id,
+                'name'        => $card->title,
+                'status'      => $status,
+                'progress'    => $progress,
+                'start_date'  => $card->start_date,
+                'end_date'    => $card->due_date,
+                'assigned_to' => $card->assignees->first()?->id,
+                'comments'    => $card->description,
+                'order'       => $index,
+            ]);
+        }
+
+        return true;
+    }
+
+    public function mapColumnNameToTaskStatus(string $columnName): string
+    {
+        $name = strtolower($columnName);
+        if (str_contains($name, 'done') || str_contains($name, 'complet') || str_contains($name, 'finish')) {
+            return 'Done';
+        }
+        if (str_contains($name, 'progress') || str_contains($name, 'ongoing') || str_contains($name, 'active')) {
+            return 'Ongoing';
+        }
+        if (str_contains($name, 'n/a') || str_contains($name, 'n-a') || str_contains($name, 'not applicable')) {
+            return 'N/A';
+        }
+        return 'Pending';
+    }
+
     public function syncProjectTask(ProjectTask $task, ?User $actor = null, ?TaskBoard $board = null): ?TaskBoard
     {
         $task->loadMissing(['project.teamMembers.user']);

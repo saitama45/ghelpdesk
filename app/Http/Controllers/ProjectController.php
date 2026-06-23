@@ -95,12 +95,20 @@ class ProjectController extends Controller
 
     public function create()
     {
+        $availableBoards = \App\Models\TaskBoard::whereNull('project_id')
+            ->where('board_source', 'manual')
+            ->orderBy('title')
+            ->get(['id', 'title'])
+            ->map(fn ($b) => ['id' => $b->id, 'title' => $b->title])
+            ->values();
+
         return Inertia::render('Projects/Create', [
-            'stores'       => Store::orderBy('name')->get(['id', 'name']),
-            'vendors'      => Vendor::active()->orderBy('name')->get(['id', 'name']),
-            'departments'  => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'projectTypes' => Project::PROJECT_TYPES,
-            'boardYears'   => $this->boardYears(),
+            'stores'          => Store::orderBy('name')->get(['id', 'name']),
+            'vendors'         => Vendor::active()->orderBy('name')->get(['id', 'name']),
+            'departments'     => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'projectTypes'    => Project::PROJECT_TYPES,
+            'boardYears'      => $this->boardYears(),
+            'availableBoards' => $availableBoards,
         ]);
     }
 
@@ -115,6 +123,7 @@ class ProjectController extends Controller
             'subject_id'    => 'nullable|integer',
             'name'          => 'required|string|max:255',
             'status'        => 'required|string',
+            'board_id'      => 'nullable|exists:task_boards,id',
             'turn_over_date'               => 'nullable|date',
             'training_date'                => 'nullable|date',
             'testing_date'                 => 'nullable|date',
@@ -126,8 +135,21 @@ class ProjectController extends Controller
             'remarks'        => 'nullable|string',
         ]);
 
+        $boardId = $validated['board_id'] ?? null;
+        unset($validated['board_id']);
+
         $project = Project::create($validated);
         $project->recalculateStatus();
+
+        // Link existing board to this new project (board cards become project tasks)
+        if ($boardId) {
+            $board = \App\Models\TaskBoard::find($boardId);
+            if ($board && $board->project_id === null) {
+                $board->update(['project_id' => $project->id]);
+                $this->projectTaskBoards->importBoardCardsAsProjectTasks($board, $project);
+                $project->recalculateStatus();
+            }
+        }
 
         return redirect()->route('projects.show', $project->id)
             ->with('success', 'Project created successfully.');
@@ -148,16 +170,25 @@ class ProjectController extends Controller
 
         $storeClass = $project->store->class ?? 'Regular';
 
+        // Manual boards not yet linked to any project — for "Attach Board" modal
+        $availableBoards = \App\Models\TaskBoard::whereNull('project_id')
+            ->where('board_source', 'manual')
+            ->orderBy('title')
+            ->get(['id', 'title', 'department', 'sub_unit', 'created_at'])
+            ->map(fn ($b) => ['id' => $b->id, 'title' => $b->title])
+            ->values();
+
         return Inertia::render('Projects/Show', [
-            'project'      => $project,
-            'projectTypes' => Project::PROJECT_TYPES,
-            'users'        => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
-            'stores'       => Store::orderBy('name')->get(['id', 'name']),
-            'vendors'      => Vendor::active()->orderBy('name')->get(['id', 'name']),
-            'departments'  => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'project'        => $project,
+            'projectTypes'   => Project::PROJECT_TYPES,
+            'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
+            'stores'         => Store::orderBy('name')->get(['id', 'name']),
+            'vendors'        => Vendor::active()->orderBy('name')->get(['id', 'name']),
+            'departments'    => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'departmentOptions' => $this->departmentOptions(),
             'hierarchicalDepartments' => $this->organizationReferenceService->tree(true),
-            'boardYears'   => $this->boardYears(),
+            'boardYears'     => $this->boardYears(),
+            'availableBoards' => $availableBoards,
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
             'project_templates' => ProjectTemplate::whereIn('store_class', [$storeClass, 'Both'])
                 ->withCount('activities')

@@ -6,11 +6,12 @@ import { ChevronLeftIcon } from '@heroicons/vue/24/outline';
 import Autocomplete from '@/Components/Autocomplete.vue';
 
 const props = defineProps({
-    stores:       Array,
-    vendors:      Array,
-    departments:  Array,
-    projectTypes: Array,
-    boardYears:   Array,
+    stores:           Array,
+    vendors:          Array,
+    departments:      Array,
+    projectTypes:     Array,
+    boardYears:       Array,
+    availableBoards:  { type: Array, default: () => [] },
 });
 
 const now = new Date();
@@ -29,8 +30,13 @@ const sortedDepartments = computed(() =>
     (props.departments ?? []).map(d => ({ label: d.name, value: d.id }))
 );
 
+const boardOptions = computed(() =>
+    (props.availableBoards ?? []).map(b => ({ label: b.title, value: b.id }))
+);
+
 const form = useForm({
     project_type: 'Store Opening',
+    board_id:     null,
     store_id:     '',
     subject_type: '',
     subject_id:   '',
@@ -262,6 +268,21 @@ const submit = () => {
                             rows="3"
                             class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         />
+                    </div>
+
+                    <!-- Link existing board (optional) -->
+                    <div v-if="boardOptions.length > 0" class="rounded-lg border border-dashed border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-800 dark:bg-indigo-900/10">
+                        <label class="mb-1 block text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                            Link Existing Task Board <span class="font-normal text-gray-400">(optional)</span>
+                        </label>
+                        <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">Import cards from an existing manual board as project tasks when this project is created.</p>
+                        <Autocomplete
+                            :model-value="form.board_id"
+                            :options="boardOptions"
+                            placeholder="Select a board to link…"
+                            @update:modelValue="form.board_id = $event || null"
+                        />
+                        <div v-if="form.errors.board_id" class="mt-1 text-xs text-red-500">{{ form.errors.board_id }}</div>
                     </div>
                 </div>
 

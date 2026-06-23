@@ -399,8 +399,16 @@ class TaskBoardController extends Controller implements HasMiddleware
             ->orderBy('id')
             ->get();
 
+        // Projects list for "Link to Project" modal (only loaded for manual, unlinked boards)
+        $projectsForLink = (!$taskBoard->project_id && $taskBoard->board_source === 'manual')
+            ? Project::orderBy('name')->get(['id', 'name', 'status', 'store_id'])
+                ->map(fn (Project $p) => ['id' => $p->id, 'name' => $p->name, 'status' => $p->status])
+                ->values()
+            : collect();
+
         return Inertia::render('TaskBoards/Show', [
             'board' => $this->boardDetail($taskBoard, $cards, $request->user()),
+            'projectsForLink' => $projectsForLink,
             'statuses' => TaskCard::STATUSES,
             'users' => $this->activeUsers(),
         ]);
@@ -473,6 +481,36 @@ class TaskBoardController extends Controller implements HasMiddleware
         }
 
         return redirect()->back()->with('success', 'Project activities synced to this task board.');
+    }
+
+    public function linkToProject(Request $request, TaskBoard $taskBoard)
+    {
+        $this->ensureBoardEditor($taskBoard, $request->user());
+
+        abort_if($taskBoard->project_id !== null, 422, 'This board is already linked to a project.');
+        abort_unless($taskBoard->board_source === 'manual' || $taskBoard->board_source === null, 422, 'Only manual boards can be linked to a project.');
+
+        $data = $request->validate([
+            'project_id' => 'required|exists:projects,id',
+        ]);
+
+        $project = Project::findOrFail($data['project_id']);
+        $hasExistingTasks = $project->tasks()->exists();
+
+        $imported = false;
+        DB::transaction(function () use ($taskBoard, $project, &$imported) {
+            $taskBoard->update(['project_id' => $project->id]);
+            $imported = $this->projectTaskBoards->importBoardCardsAsProjectTasks($taskBoard, $project);
+            if ($imported) {
+                $project->recalculateStatus();
+            }
+        });
+
+        $message = $imported
+            ? 'Board linked and task cards imported as project tasks.'
+            : 'Board linked to project. Tasks were not imported because the project already has tasks.';
+
+        return redirect()->route('projects.show', $project->id)->with('success', $message);
     }
 
     public function toggleStar(Request $request, TaskBoard $taskBoard)
