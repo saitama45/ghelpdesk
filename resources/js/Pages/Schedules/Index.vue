@@ -802,9 +802,9 @@
                             </div>
                         </div>
 
-                        <div v-if="selectedScheduleRequest.requester_remarks" class="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                            <div class="text-[10px] font-black uppercase tracking-widest text-blue-500">Requester Remarks</div>
-                            <div class="mt-1 text-sm font-bold text-gray-700 dark:text-gray-300">{{ selectedScheduleRequest.requester_remarks }}</div>
+                        <div v-if="selectedScheduleRequest.requester_remarks" class="rounded-xl border border-blue-100 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                            <div class="text-[10px] font-black uppercase tracking-widest text-blue-500 dark:text-blue-300">Requester Remarks</div>
+                            <div class="mt-1 text-sm font-bold text-gray-700 dark:text-gray-100">{{ selectedScheduleRequest.requester_remarks }}</div>
                         </div>
 
                         <div v-if="scheduleDecisionAction === 'approve' || scheduleDecisionAction === 'reject'">
@@ -812,7 +812,7 @@
                             <textarea
                                 v-model="scheduleDecisionRemarks"
                                 rows="3"
-                                class="w-full rounded-xl border-gray-200 text-sm font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500 dark:text-gray-300 dark:border-gray-700"
+                                class="w-full rounded-xl border-gray-200 text-sm font-bold text-gray-700 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
                                 :placeholder="scheduleDecisionAction === 'approve' ? 'Optional approval remarks' : 'Reason for rejection'"
                             ></textarea>
                         </div>

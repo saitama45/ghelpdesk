@@ -57,7 +57,16 @@ class UserController extends Controller
                 default => null,
             };
         }
-        
+
+        if ($request->filled('role')) {
+            $role = $request->input('role');
+            if ($role === 'none') {
+                $query->whereDoesntHave('roles');
+            } else {
+                $query->whereHas('roles', fn ($q) => $q->where('name', $role));
+            }
+        }
+
         $users = $query->paginate($request->get('per_page', 10))->withQueryString();
         $roles = Role::with('permissions:id,name', 'companies:id,name')->get();
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
@@ -77,6 +86,7 @@ class UserController extends Controller
             'filters' => [
                 'search' => $request->input('search', ''),
                 'status' => $request->input('status', ''),
+                'role' => $request->input('role', ''),
             ],
         ]);
     }

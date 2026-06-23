@@ -34,6 +34,7 @@ const editingUser = ref(null);
 const resetPasswordUser = ref(null);
 const selectedUserStores = ref([]);
 const filterStatus = ref(props.filters?.status || '');
+const filterRole = ref(props.filters?.role || '');
 const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
 const { showError } = useToast();
@@ -106,12 +107,19 @@ const statusFilterOptions = [
     { label: 'Pending Approval', value: 'pending_approval' },
 ];
 
+const roleFilterOptions = computed(() => [
+    { label: 'All Roles', value: '' },
+    ...(props.roles || []).map(r => ({ label: r.name, value: r.name })),
+    { label: 'No Role', value: 'none' },
+]);
+
 const toggleAllStores = (form) => {
     form.store_ids = isAllStoresSelected(form.store_ids) ? [] : [...allStoreIds.value];
 };
 
 const pagination = usePagination(props.users, 'users.index', () => ({
     status: filterStatus.value,
+    role: filterRole.value,
 }));
 
 onMounted(() => {
@@ -123,7 +131,7 @@ watch(() => props.users, (newUsers) => {
     pagination.updateData(newUsers);
 }, { deep: true });
 
-watch(filterStatus, () => {
+watch([filterStatus, filterRole], () => {
     pagination.currentPage.value = 1;
     pagination.performSearch();
 });
@@ -448,7 +456,7 @@ const sortRolePermissions = (permissions) => {
 <template>
     <Head title="Users - Help Desk" />
 
-    <AppLayout>
+    <AppLayout content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <template #header>
             Users
         </template>
@@ -472,6 +480,16 @@ const sortRolePermissions = (permissions) => {
                 @change-per-page="pagination.changePerPage"
             >
                 <template #actions>
+                    <div class="w-full sm:w-48">
+                        <Autocomplete
+                            v-model="filterRole"
+                            :options="roleFilterOptions"
+                            label-key="label"
+                            value-key="value"
+                            placeholder="Filter role..."
+                            size="sm"
+                        />
+                    </div>
                     <div class="w-full sm:w-48">
                         <Autocomplete
                             v-model="filterStatus"
