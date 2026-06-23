@@ -54,7 +54,7 @@ class StoreReportService
         $activeTickets = $displayTicketsQuery->with(['assignee', 'store'])
             ->get()
             ->filter(fn ($ticket) => !$isCtMode || (int) $ticket->store?->sector === 0)
-            ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
+            ->filter(fn ($ticket) => $this->ticketHasReportableStoreSector($ticket))
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
         $reportData = $activeTickets->groupBy(function ($ticket) use ($sectorAssignments, $isCtMode) {
@@ -132,7 +132,7 @@ class StoreReportService
             ->with(['assignee', 'store'])
             ->get()
             ->filter(fn ($ticket) => !$isCtMode || (int) $ticket->store?->sector === 0)
-            ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
+            ->filter(fn ($ticket) => $this->ticketHasReportableStoreSector($ticket))
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
         if ($isCtMode) {
@@ -332,19 +332,17 @@ class StoreReportService
         ];
     }
 
-    private function ticketMatchesAssigneeSector(Ticket $ticket, array $sectorAssignments): bool
+    /**
+     * Sector health is computed purely from the ticket's configured store sector.
+     * A ticket is reportable as long as it sits on an active store that has a
+     * sector assigned — the ticket's assignee (and which sector that assignee
+     * happens to belong to) is intentionally ignored here.
+     */
+    private function ticketHasReportableStoreSector(Ticket $ticket): bool
     {
-        if (!$ticket->store || !$ticket->store->is_active || $ticket->store->sector === null) {
-            return false;
-        }
-
-        $assignedSectors = $sectorAssignments['by_user_id'][$ticket->assignee?->id] ?? [];
-
-        if (empty($assignedSectors)) {
-            return true;
-        }
-
-        return in_array((int) $ticket->store->sector, $assignedSectors, true);
+        return $ticket->store
+            && $ticket->store->is_active
+            && $ticket->store->sector !== null;
     }
 
     private function ticketMatchesDisplayUser(Ticket $ticket, $userId, array $sectorAssignments): bool

@@ -165,7 +165,7 @@ class StoreReportController extends Controller implements HasMiddleware
 
         $sectorAssignments = $this->sectorAssignments();
         $tickets = $query->latest()->get()
-            ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
+            ->filter(fn ($ticket) => $this->ticketHasReportableStoreSector($ticket))
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments))
             ->values();
 
@@ -212,7 +212,7 @@ class StoreReportController extends Controller implements HasMiddleware
 
         $sectorAssignments = $this->sectorAssignments();
         $tickets = $query->latest()->get()
-            ->filter(fn ($ticket) => $this->ticketMatchesAssigneeSector($ticket, $sectorAssignments))
+            ->filter(fn ($ticket) => $this->ticketHasReportableStoreSector($ticket))
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments))
             ->values();
 
@@ -267,19 +267,16 @@ class StoreReportController extends Controller implements HasMiddleware
         return $byUserId;
     }
 
-    private function ticketMatchesAssigneeSector(Ticket $ticket, array $sectorAssignments): bool
+    /**
+     * Drill-downs mirror the sector summary: a ticket is reportable purely on the
+     * basis of its active store's configured sector, regardless of which sector the
+     * assignee belongs to.
+     */
+    private function ticketHasReportableStoreSector(Ticket $ticket): bool
     {
-        if (!$ticket->store || !$ticket->store->is_active || $ticket->store->sector === null) {
-            return false;
-        }
-
-        $assignedSectors = $sectorAssignments[$ticket->assignee?->id] ?? [];
-
-        if (empty($assignedSectors)) {
-            return true;
-        }
-
-        return in_array((int) $ticket->store->sector, $assignedSectors, true);
+        return $ticket->store
+            && $ticket->store->is_active
+            && $ticket->store->sector !== null;
     }
 
     private function ticketMatchesDisplayUser(Ticket $ticket, $userId, array $sectorAssignments): bool

@@ -383,7 +383,7 @@ class StoreHealthSectorTest extends TestCase
         $this->assertSame(['S601'], $stores->pluck('code')->all());
     }
 
-    public function test_report_table_and_boxes_exclude_stores_outside_assigned_user_sector(): void
+    public function test_report_table_and_boxes_count_stores_by_store_sector_regardless_of_assignee(): void
     {
         $department = Department::create(['name' => 'IT']);
         $southArea = DepartmentNode::create([
@@ -417,9 +417,12 @@ class StoreHealthSectorTest extends TestCase
         $sectorSixStore = $this->store('S601', 6);
         $sectorTwoStore = $this->store('S201', 2);
 
-        $included = $this->ticket('HD-601', $sectorSixStore, $sectorSixUser, 'open', '2026-05-20 09:00:00');
+        // A sector-6 store ticket handled by a sector-6 tech...
+        $sectorSixOwn = $this->ticket('HD-601', $sectorSixStore, $sectorSixUser, 'open', '2026-05-20 09:00:00');
+        // ...a sector-2 store ticket handled by a sector-6 tech (counts toward sector 2)...
         $this->ticket('HD-201', $sectorTwoStore, $sectorSixUser, 'open', '2026-05-20 10:00:00');
-        $this->ticket('HD-602', $sectorSixStore, $sectorTwoUser, 'open', '2026-05-20 11:00:00');
+        // ...and a sector-6 store ticket handled by a sector-2 tech (still counts toward sector 6).
+        $sectorSixCrossAssignee = $this->ticket('HD-602', $sectorSixStore, $sectorTwoUser, 'open', '2026-05-20 11:00:00');
 
         $data = app(StoreReportService::class)->getStoreHealthData([
             'as_of_date' => '2026-05-20',
@@ -430,8 +433,9 @@ class StoreHealthSectorTest extends TestCase
         $north = collect($data['summary']['north'])->keyBy('sector');
         $south = collect($data['summary']['south'])->keyBy('sector');
 
-        $this->assertSame(0, $north[2]['total_tickets']);
-        $this->assertSame(1, $south[6]['total_tickets']);
+        // Pure store-sector: tickets land in the sector of their store, not their assignee.
+        $this->assertSame(1, $north[2]['total_tickets']);
+        $this->assertSame(2, $south[6]['total_tickets']);
 
         $reportStores = collect($data['reportData'])
             ->flatMap(fn (array $userData) => $userData['stores'])
@@ -439,7 +443,7 @@ class StoreHealthSectorTest extends TestCase
             ->all();
 
         $this->assertContains('S601', $reportStores);
-        $this->assertNotContains('S201', $reportStores);
+        $this->assertContains('S201', $reportStores);
 
         \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'reports.store_health']);
         $sectorSixUser->givePermissionTo('reports.store_health');
@@ -450,8 +454,9 @@ class StoreHealthSectorTest extends TestCase
         ]));
 
         $sectorResponse->assertOk()
-            ->assertJsonCount(1, 'tickets')
-            ->assertJsonPath('tickets.0.id', $included->id);
+            ->assertJsonCount(2, 'tickets')
+            ->assertJsonFragment(['id' => $sectorSixOwn->id])
+            ->assertJsonFragment(['id' => $sectorSixCrossAssignee->id]);
 
         $storeResponse = $this->actingAs($sectorSixUser)->getJson(route('reports.store-health.tickets', [
             'store' => $sectorSixStore->id,
@@ -459,8 +464,9 @@ class StoreHealthSectorTest extends TestCase
         ]));
 
         $storeResponse->assertOk()
-            ->assertJsonCount(1, 'tickets')
-            ->assertJsonPath('tickets.0.id', $included->id);
+            ->assertJsonCount(2, 'tickets')
+            ->assertJsonFragment(['id' => $sectorSixOwn->id])
+            ->assertJsonFragment(['id' => $sectorSixCrossAssignee->id]);
     }
 
     public function test_sector_ticket_endpoint_matches_department_filters(): void

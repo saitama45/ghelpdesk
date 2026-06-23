@@ -392,10 +392,16 @@ class DashboardController extends Controller
                 $departmentGroupKey = $grouping['key'] ?? ($ticket->assignee?->org_path ?: 'No Org Path');
                 $departmentGroupLabel = $grouping['label'] ?? $this->extractLastOrgPathSegment($ticket->assignee?->org_path);
                 $departmentGroupSort = null;
-                $storeSector = $ticket->store?->sector ? (int) $ticket->store->sector : null;
+                // Grouping is driven purely by the ticket's store sector, mirroring the
+                // Live Store Health report. Sector 0 (Corporate Technology stores) is a
+                // real sector, so test against null — not truthiness — otherwise a
+                // sector-0 ticket falls through to the assignee org_path and can be
+                // mislabeled as the assignee's own sector (e.g. CFE I shown under "Sector 3").
+                $storeSector = $ticket->store && $ticket->store->sector !== null
+                    ? (int) $ticket->store->sector
+                    : null;
 
-                // store.sector always takes priority over assignee org_path for dept-view grouping
-                if ($storeSector) {
+                if ($storeSector !== null) {
                     $departmentGroupKey = 'sector_'.$storeSector;
                     $departmentGroupLabel = 'Sector '.$storeSector;
                     $departmentGroupSort = $storeSector;
@@ -473,7 +479,7 @@ class DashboardController extends Controller
                                 ? $groupTickets->pluck('store.id')->filter()->unique()->count() . ' store(s)'
                                 : $groupTickets->pluck('assignee')->unique()->count() . ' user(s)'), // sub_unit key now holds org_path value
                         'total' => $groupTickets->count(),
-                        'sort' => $firstTicket['department_group_sort'],
+                        'sort' => $firstTicket['department_group_sort'] ?? 999,
                         'columns' => $columns,
                     ];
                 });
@@ -495,9 +501,12 @@ class DashboardController extends Controller
                 }
             }
 
-            $groups = $useSectorGrouping
-                ? $groups->sortBy([['sort', 'asc'], ['label', 'asc']])
-                : $groups->sortBy([['total', 'desc'], ['label', 'asc']]);
+            // Department view is sector-oriented: always order by sector number
+            // (non-sector groups carry sort 999 and fall to the bottom). User view
+            // stays ranked by workload.
+            $groups = $mode === 'user'
+                ? $groups->sortBy([['total', 'desc'], ['label', 'asc']])
+                : $groups->sortBy([['sort', 'asc'], ['label', 'asc']]);
 
             return $groups
                 ->values()
