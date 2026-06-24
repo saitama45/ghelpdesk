@@ -10,6 +10,7 @@ const props = defineProps({
     vendors:          Array,
     departments:      Array,
     projectTypes:     Array,
+    defaultType:      { type: String, default: 'Store Opening' },
     boardYears:       Array,
     availableBoards:  { type: Array, default: () => [] },
 });
@@ -35,7 +36,7 @@ const boardOptions = computed(() =>
 );
 
 const form = useForm({
-    project_type: 'Store Opening',
+    project_type: props.defaultType,
     board_id:     null,
     store_id:     '',
     subject_type: '',

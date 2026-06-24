@@ -93,7 +93,7 @@ class ProjectController extends Controller
         ]);
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $availableBoards = \App\Models\TaskBoard::whereNull('project_id')
             ->where('board_source', 'manual')
@@ -102,11 +102,16 @@ class ProjectController extends Controller
             ->map(fn ($b) => ['id' => $b->id, 'title' => $b->title])
             ->values();
 
+        $defaultType = in_array($request->query('type'), Project::PROJECT_TYPES, true)
+            ? $request->query('type')
+            : Project::PROJECT_TYPES[0];
+
         return Inertia::render('Projects/Create', [
             'stores'          => Store::orderBy('name')->get(['id', 'name']),
             'vendors'         => Vendor::active()->orderBy('name')->get(['id', 'name']),
             'departments'     => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'projectTypes'    => Project::PROJECT_TYPES,
+            'defaultType'     => $defaultType,
             'boardYears'      => $this->boardYears(),
             'availableBoards' => $availableBoards,
         ]);

@@ -401,7 +401,9 @@ class TaskBoardController extends Controller implements HasMiddleware
 
         // Projects list for "Link to Project" modal (only loaded for manual, unlinked boards)
         $projectsForLink = (!$taskBoard->project_id && $taskBoard->board_source === 'manual')
-            ? Project::orderBy('name')->get(['id', 'name', 'status', 'store_id'])
+            ? Project::orderBy('name')
+                ->whereDoesntHave('taskBoard')
+                ->get(['id', 'name', 'status'])
                 ->map(fn (Project $p) => ['id' => $p->id, 'name' => $p->name, 'status' => $p->status])
                 ->values()
             : collect();
