@@ -225,9 +225,100 @@ class TaskCardController extends Controller implements HasMiddleware
         return response()->json(['card' => $this->freshCard($taskCard)]);
     }
 
+    public function duplicate(Request $request, TaskCard $taskCard)
+    {
+        $this->ensureBoardEditor($taskCard->board, $request->user());
+
+        $taskCard->loadMissing(['assignees', 'labels', 'checklists.items.children']);
+
+        $newCard = DB::transaction(function () use ($request, $taskCard) {
+            $board = $taskCard->board;
+
+            // Place the duplicate right after the original in the same column.
+            $afterSortOrder = (int) $taskCard->sort_order;
+            $newSortOrder = $afterSortOrder + 500;
+
+            // Shift cards that already sit above the insertion point to make room.
+            TaskCard::where('task_board_id', $board->id)
+                ->where('status', $taskCard->status)
+                ->where('sort_order', '>', $afterSortOrder)
+                ->whereNull('archived_at')
+                ->increment('sort_order', 1000);
+
+            $newCard = TaskCard::create([
+                'task_board_id'       => $board->id,
+                'task_board_column_id' => $taskCard->task_board_column_id,
+                'project_id'          => null,
+                'project_task_id'     => null,
+                'title'               => $taskCard->title . ' (Copy)',
+                'description'         => $taskCard->description,
+                'status'              => $taskCard->status,
+                'sort_order'          => $newSortOrder,
+                'start_at'            => $taskCard->start_at,
+                'due_at'              => $taskCard->due_at,
+                'cover_type'          => $taskCard->cover_type,
+                'cover_value'         => $taskCard->cover_value,
+                'created_by'          => $request->user()->id,
+            ]);
+
+            // Copy assignees and labels.
+            $newCard->assignees()->sync($taskCard->assignees->pluck('id')->all());
+            $newCard->labels()->sync($taskCard->labels->pluck('id')->all());
+            $newCard->watchers()->syncWithoutDetaching([$request->user()->id]);
+
+            // Deep-copy checklists → items → subtasks (no project_task_id links on the copy).
+            foreach ($taskCard->checklists as $checklist) {
+                $newChecklist = $newCard->checklists()->create([
+                    'title'      => $checklist->title,
+                    'sort_order' => $checklist->sort_order,
+                ]);
+
+                foreach ($checklist->items as $item) {
+                    $newItem = $newChecklist->allItems()->create([
+                        'title'      => $item->title,
+                        'is_complete' => false,
+                        'weight'     => $item->weight,
+                        'assigned_to' => $item->assigned_to,
+                        'due_at'     => $item->due_at,
+                        'sort_order' => $item->sort_order,
+                    ]);
+
+                    foreach ($item->children as $child) {
+                        $newChecklist->allItems()->create([
+                            'title'        => $child->title,
+                            'is_complete'  => false,
+                            'weight'       => $child->weight,
+                            'assigned_to'  => $child->assigned_to,
+                            'due_at'       => $child->due_at,
+                            'sort_order'   => $child->sort_order,
+                            'parent_item_id' => $newItem->id,
+                        ]);
+                    }
+                }
+            }
+
+            $this->recordActivity($board, $newCard, $request->user()->id, 'card.duplicated', 'duplicated from card #' . $taskCard->id);
+
+            return $newCard;
+        });
+
+        // Sync the duplicate's checklist structure to the project Gantt (creates new tasks).
+        if ($taskCard->board->project_id) {
+            $newCard->setRelation('board', $taskCard->board);
+            $this->projectTaskBoards->syncProjectStructureFromCard($newCard->load('checklists.items.children'), $request->user());
+        }
+
+        return response()->json(['card' => $this->freshCard($newCard)], 201);
+    }
+
     public function archive(Request $request, TaskCard $taskCard)
     {
         $this->ensureBoardEditor($taskCard->board, $request->user());
+
+        // Remove any project tasks mirrored from this card's checklist structure.
+        if ($taskCard->board->project_id) {
+            $this->projectTaskBoards->deleteProjectTasksForCard($taskCard);
+        }
 
         $taskCard->update(['archived_at' => now()]);
         $this->recordActivity($taskCard->board, $taskCard, $request->user()->id, 'card.archived', 'archived this card');
@@ -242,6 +333,11 @@ class TaskCardController extends Controller implements HasMiddleware
         $taskCard->update(['archived_at' => null]);
         $this->recordActivity($taskCard->board, $taskCard, $request->user()->id, 'card.restored', 'restored this card');
 
+        // Re-sync the card's checklist structure back to the project Gantt.
+        if ($taskCard->board->project_id) {
+            $this->projectTaskBoards->syncProjectStructureFromCard($taskCard->fresh(['checklists.items.children']), $request->user());
+        }
+
         return response()->json(['card' => $this->freshCard($taskCard)]);
     }
 
@@ -251,6 +347,11 @@ class TaskCardController extends Controller implements HasMiddleware
 
         if (!$taskCard->archived_at) {
             abort(422, 'Archive the card before deleting it.');
+        }
+
+        // Guard: clean up any remaining project tasks (in case archive was done before this feature).
+        if ($taskCard->board->project_id) {
+            $this->projectTaskBoards->deleteProjectTasksForCard($taskCard);
         }
 
         $taskCard->delete();

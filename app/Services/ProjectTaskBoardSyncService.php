@@ -723,6 +723,41 @@ class ProjectTaskBoardSyncService
         $project?->fresh()?->recalculateStatus();
     }
 
+    /**
+     * Delete all project tasks linked to any checklist item on the given card, then
+     * recalculate the project status. Call this before archiving or deleting a card.
+     */
+    public function deleteProjectTasksForCard(TaskCard $card): void
+    {
+        $card->loadMissing(['checklists.items.children']);
+
+        $taskIds = collect();
+
+        foreach ($card->checklists as $checklist) {
+            foreach ($checklist->items as $item) {
+                foreach (($item->children ?? collect()) as $child) {
+                    if ($child->project_task_id) {
+                        $taskIds->push((int) $child->project_task_id);
+                    }
+                }
+                if ($item->project_task_id) {
+                    $taskIds->push((int) $item->project_task_id);
+                }
+            }
+        }
+
+        if ($taskIds->isEmpty()) {
+            return;
+        }
+
+        $project = ProjectTask::whereIn('id', $taskIds->all())->first()?->project;
+
+        ProjectTask::whereIn('id', $taskIds->all())->whereNotNull('parent_task_id')->delete();
+        ProjectTask::whereIn('id', $taskIds->all())->whereNull('parent_task_id')->delete();
+
+        $project?->fresh()?->recalculateStatus();
+    }
+
     public function cardRelations(): array
     {
         return [

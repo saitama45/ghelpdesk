@@ -769,6 +769,38 @@ const toggleCardWatch = async (card) => {
     }
 };
 
+const duplicatingCardId = ref(null);
+
+const duplicateCard = async (card) => {
+    if (!canEditBoard.value || duplicatingCardId.value) return;
+    const ok = await confirm({
+        title: 'Duplicate Card',
+        message: `Create a copy of "${card.title}"? The duplicate will include all checklists, items, subtasks, assignees, labels, and dates.`,
+        confirmLabel: 'Duplicate',
+        cancelLabel: 'Cancel',
+        variant: 'info',
+    });
+    if (!ok) return;
+    duplicatingCardId.value = card.id;
+    try {
+        const response = await axios.post(route('task-cards.duplicate', card.id));
+        const newCard = response.data.card;
+        // Insert the duplicate right after the original in the local card list.
+        const cards = localBoard.value.cards || [];
+        const idx = cards.findIndex(c => c.id === card.id);
+        if (idx !== -1) {
+            cards.splice(idx + 1, 0, newCard);
+        } else {
+            cards.push(newCard);
+        }
+        localBoard.value.cards = [...cards];
+    } catch (error) {
+        handleApiError(error, 'Unable to duplicate card');
+    } finally {
+        duplicatingCardId.value = null;
+    }
+};
+
 const archiveCard = async (card) => {
     if (!canEditBoard.value) return;
     const closedCardModal = await closeSelectedCardBeforeConfirm(card);
@@ -1917,7 +1949,7 @@ onUnmounted(() => {
                                 v-for="card in visibleCardsForStatus(status)"
                                 :key="card.id"
                                 draggable="true"
-                                class="group cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md dark:bg-gray-800 dark:border-gray-700"
+                                class="group relative cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md dark:bg-gray-800 dark:border-gray-700"
                                 :class="draggedCardId === card.id ? 'opacity-40' : ''"
                                 @click="selectedCardId = card.id"
                                 @dragstart="startDrag($event, card)"
@@ -1976,6 +2008,18 @@ onUnmounted(() => {
                                             <span v-else>{{ initials(member.name) }}</span>
                                         </div>
                                     </div>
+                                </div>
+                                <!-- Hover action: duplicate -->
+                                <div v-if="canEditBoard && !card.archived_at" class="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <button
+                                        type="button"
+                                        title="Duplicate card"
+                                        :disabled="duplicatingCardId === card.id"
+                                        class="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-gray-500 shadow-sm hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 dark:bg-gray-700/90 dark:text-gray-300 dark:hover:bg-gray-600 dark:hover:text-blue-400"
+                                        @click.stop="duplicateCard(card)"
+                                    >
+                                        <DocumentDuplicateIcon class="h-3.5 w-3.5" />
+                                    </button>
                                 </div>
                             </article>
                         </div>

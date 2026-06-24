@@ -395,7 +395,7 @@ const openProjectTaskList = () => {
     confirmAutoCreateMonthlyBoards().then((ok) => {
         if (!ok) return;
 
-        router.post(route('projects.task-list', props.project.id), {
+        router.post(route('projects.task-board', props.project.id), {
             auto_create_monthly_boards: true,
         }, {
         preserveScroll: true,

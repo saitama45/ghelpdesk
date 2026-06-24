@@ -195,6 +195,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('task-columns/{taskBoardColumn}', [\App\Http\Controllers\TaskCardController::class, 'destroyColumn'])->name('task-columns.destroy');
     Route::put('task-cards/{taskCard}', [\App\Http\Controllers\TaskCardController::class, 'update'])->name('task-cards.update');
     Route::post('task-cards/{taskCard}/move', [\App\Http\Controllers\TaskCardController::class, 'move'])->name('task-cards.move');
+    Route::post('task-cards/{taskCard}/duplicate', [\App\Http\Controllers\TaskCardController::class, 'duplicate'])->name('task-cards.duplicate');
     Route::post('task-cards/{taskCard}/archive', [\App\Http\Controllers\TaskCardController::class, 'archive'])->name('task-cards.archive');
     Route::post('task-cards/{taskCard}/restore', [\App\Http\Controllers\TaskCardController::class, 'restore'])->name('task-cards.restore');
     Route::delete('task-cards/{taskCard}', [\App\Http\Controllers\TaskCardController::class, 'destroy'])->name('task-cards.destroy');
