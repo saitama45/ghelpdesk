@@ -35,6 +35,7 @@ class TaskCard extends Model
         'due_complete',
         'cover_type',
         'cover_value',
+        'weight_basis',
         'created_by',
         'archived_at',
     ];
@@ -170,5 +171,95 @@ class TaskCard extends Model
             'total' => $total,
             'complete' => $complete,
         ];
+    }
+
+    /**
+     * Leaf checklist items for a checklist: subtasks if an item has any, otherwise the item itself.
+     */
+    private function checklistLeafItems(TaskChecklist $checklist)
+    {
+        return $checklist->items->flatMap(function ($item) {
+            $children = $item->children ?? collect();
+            return $children->isNotEmpty() ? $children : collect([$item]);
+        });
+    }
+
+    /**
+     * Total of the weights encoded at the card's chosen weighting level (should equal 100).
+     */
+    public function getWeightTotalAttribute(): ?float
+    {
+        $basis = $this->weight_basis;
+        if (!$basis || $basis === 'none') {
+            return null;
+        }
+
+        $sum = 0.0;
+
+        if ($basis === 'checklist') {
+            foreach ($this->checklists as $checklist) {
+                $sum += (float) ($checklist->weight ?? 0);
+            }
+        } elseif ($basis === 'item') {
+            foreach ($this->checklists as $checklist) {
+                foreach ($checklist->items as $item) {
+                    $sum += (float) ($item->weight ?? 0);
+                }
+            }
+        } elseif ($basis === 'subtask') {
+            foreach ($this->checklists as $checklist) {
+                foreach ($checklist->items as $item) {
+                    foreach (($item->children ?? collect()) as $child) {
+                        $sum += (float) ($child->weight ?? 0);
+                    }
+                }
+            }
+        }
+
+        return round($sum, 2);
+    }
+
+    /**
+     * Weighted completion 0-100: sum of the weights of completed units at the chosen level.
+     * A unit counts as complete via its done checkbox; a checklist is complete when all of
+     * its leaf items are complete. Returns null when weighting is off (legacy binary mode).
+     */
+    public function getWeightedCompletionAttribute(): ?int
+    {
+        $basis = $this->weight_basis;
+        if (!$basis || $basis === 'none') {
+            return null;
+        }
+
+        $done = 0.0;
+
+        if ($basis === 'checklist') {
+            foreach ($this->checklists as $checklist) {
+                $leaves = $this->checklistLeafItems($checklist);
+                if ($leaves->isNotEmpty() && $leaves->every(fn ($i) => (bool) $i->is_complete)) {
+                    $done += (float) ($checklist->weight ?? 0);
+                }
+            }
+        } elseif ($basis === 'item') {
+            foreach ($this->checklists as $checklist) {
+                foreach ($checklist->items as $item) {
+                    if ($item->is_complete) {
+                        $done += (float) ($item->weight ?? 0);
+                    }
+                }
+            }
+        } elseif ($basis === 'subtask') {
+            foreach ($this->checklists as $checklist) {
+                foreach ($checklist->items as $item) {
+                    foreach (($item->children ?? collect()) as $child) {
+                        if ($child->is_complete) {
+                            $done += (float) ($child->weight ?? 0);
+                        }
+                    }
+                }
+            }
+        }
+
+        return (int) round(max(0, min(100, $done)));
     }
 }

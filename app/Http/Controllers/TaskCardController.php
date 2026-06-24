@@ -56,12 +56,9 @@ class TaskCardController extends Controller implements HasMiddleware
         ]);
         $validated = $this->normalizeDateTimeFields($validated, ['start_at', 'due_at']);
 
-        if ($taskBoard->project_id) {
-            $card = $this->projectTaskBoards->createProjectCard($taskBoard, $validated, $request->user());
-
-            return response()->json(['card' => $this->freshCard($card)], 201);
-        }
-
+        // A card is only a container — it never becomes a project activity by itself.
+        // Only its checklists (milestones), items (activities), and subtasks sync to the
+        // project. So every card, on any board/column, is created as a plain card.
         $card = DB::transaction(function () use ($request, $taskBoard, $validated) {
             $sortOrder = ((int) $taskBoard->cards()
                 ->reorder()
@@ -112,6 +109,7 @@ class TaskCardController extends Controller implements HasMiddleware
             'due_complete' => 'nullable|boolean',
             'cover_type' => 'nullable|in:color,image',
             'cover_value' => 'nullable|string|max:1000',
+            'weight_basis' => 'nullable|in:none,item,subtask',
             'project_category' => 'nullable|string|max:255',
             'project_progress' => 'nullable|integer|min:0|max:100',
             'project_assigned_to' => 'nullable|integer|exists:users,id',
@@ -139,6 +137,10 @@ class TaskCardController extends Controller implements HasMiddleware
                 }
             }
 
+            if (array_key_exists('weight_basis', $validated)) {
+                $updates['weight_basis'] = $validated['weight_basis'] === 'none' ? null : $validated['weight_basis'];
+            }
+
             if (array_key_exists('status', $validated)) {
                 $updates['task_board_column_id'] = $taskCard->board->columnForName($validated['status'])?->id;
             }
@@ -160,6 +162,9 @@ class TaskCardController extends Controller implements HasMiddleware
             if ($taskCard->project_task_id) {
                 $syncedCard = $this->projectTaskBoards->syncProjectTaskFromCard($taskCard->fresh('projectTask'), $validated, $request->user());
             }
+
+            // When weighting is active, the computed completion is the source of truth for progress.
+            $this->applyWeightedCompletion($taskCard, $request->user());
         });
 
         return response()->json(['card' => $this->freshCard($syncedCard ?: $taskCard)]);
@@ -429,11 +434,14 @@ class TaskCardController extends Controller implements HasMiddleware
         $this->ensureBoardEditor($taskChecklist->card->board, $request->user());
 
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
+            'title' => 'sometimes|required|string|max:255',
+            'weight' => 'nullable|numeric|min:0|max:100',
             'sort_order' => 'nullable|integer|min:0',
         ]);
 
         $taskChecklist->update($validated);
+        $this->projectTaskBoards->syncProjectStructureFromCard($taskChecklist->card, $request->user());
+        $this->applyWeightedCompletion($taskChecklist->card, $request->user());
 
         return response()->json(['card' => $this->freshCard($taskChecklist->card)]);
     }
@@ -443,8 +451,14 @@ class TaskCardController extends Controller implements HasMiddleware
         $this->ensureBoardEditor($taskChecklist->card->board, $request->user());
 
         $card = $taskChecklist->card;
+        // Remove the mirrored project tasks (milestone's activities/subtasks) before deleting.
+        $taskChecklist->loadMissing('items.children');
+        foreach ($taskChecklist->items as $item) {
+            $this->projectTaskBoards->deleteProjectTasksForChecklistItem($item);
+        }
         $taskChecklist->delete();
         $this->recordActivity($card->board, $card, $request->user()->id, 'checklist.deleted', 'deleted a checklist');
+        $this->applyWeightedCompletion($card, $request->user());
 
         return response()->json(['card' => $this->freshCard($card)]);
     }
@@ -478,6 +492,8 @@ class TaskCardController extends Controller implements HasMiddleware
                 ->max('sort_order')) + 1,
         ]);
 
+        $this->projectTaskBoards->syncProjectStructureFromCard($taskChecklist->card, $request->user());
+
         return response()->json(['card' => $this->freshCard($taskChecklist->card)], 201);
     }
 
@@ -488,17 +504,24 @@ class TaskCardController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'is_complete' => 'nullable|boolean',
+            'weight' => 'nullable|numeric|min:0|max:100',
             'assigned_to' => 'nullable|exists:users,id',
             'due_at' => 'nullable|date',
             'sort_order' => 'nullable|integer|min:0',
         ]);
         $validated = $this->normalizeDateTimeFields($validated, ['due_at']);
 
+        // Checking/unchecking an item without an explicit weight drives its progress to
+        // 100%/0% so the board checkbox and the Gantt activity progress stay in lockstep.
+        if (array_key_exists('is_complete', $validated) && !array_key_exists('weight', $validated)) {
+            $validated['weight'] = $validated['is_complete'] ? 100 : 0;
+        }
+
         $taskChecklistItem->update($validated);
 
-        if ($taskChecklistItem->project_task_id) {
-            $this->projectTaskBoards->syncProjectTaskFromChecklistItem($taskChecklistItem->fresh(['projectTask', 'checklist.card.project']), $request->user());
-        }
+        // Board → Project: mirror the rename/complete/structure onto the Gantt.
+        $this->projectTaskBoards->syncProjectStructureFromCard($taskChecklistItem->checklist->card, $request->user());
+        $this->applyWeightedCompletion($taskChecklistItem->checklist->card, $request->user());
 
         return response()->json(['card' => $this->freshCard($taskChecklistItem->checklist->card)]);
     }
@@ -508,7 +531,11 @@ class TaskCardController extends Controller implements HasMiddleware
         $this->ensureBoardEditor($taskChecklistItem->checklist->card->board, $request->user());
 
         $card = $taskChecklistItem->checklist->card;
+        // Remove the mirrored project task(s) before deleting the board item.
+        $taskChecklistItem->loadMissing('children');
+        $this->projectTaskBoards->deleteProjectTasksForChecklistItem($taskChecklistItem);
         $taskChecklistItem->delete();
+        $this->applyWeightedCompletion($card, $request->user());
 
         return response()->json(['card' => $this->freshCard($card)]);
     }
@@ -522,6 +549,7 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $newChecklist = $card->checklists()->create([
             'title' => $taskChecklist->title . ' (Copy)',
+            'weight' => $taskChecklist->weight,
             'sort_order' => $newSortOrder,
         ]);
 
@@ -529,6 +557,7 @@ class TaskCardController extends Controller implements HasMiddleware
             $newItem = $newChecklist->allItems()->create([
                 'title' => $item->title,
                 'is_complete' => false,
+                'weight' => $item->weight,
                 'assigned_to' => $item->assigned_to,
                 'due_at' => $item->due_at,
                 'sort_order' => $item->sort_order,
@@ -538,6 +567,7 @@ class TaskCardController extends Controller implements HasMiddleware
                 $newChecklist->allItems()->create([
                     'title' => $child->title,
                     'is_complete' => false,
+                    'weight' => $child->weight,
                     'assigned_to' => $child->assigned_to,
                     'due_at' => $child->due_at,
                     'sort_order' => $child->sort_order,
@@ -559,6 +589,7 @@ class TaskCardController extends Controller implements HasMiddleware
         $newItem = $checklist->allItems()->create([
             'title' => $taskChecklistItem->title,
             'is_complete' => false,
+            'weight' => $taskChecklistItem->weight,
             'assigned_to' => $taskChecklistItem->assigned_to,
             'due_at' => $taskChecklistItem->due_at,
             'sort_order' => $taskChecklistItem->sort_order + 1,
@@ -570,6 +601,7 @@ class TaskCardController extends Controller implements HasMiddleware
                 $checklist->allItems()->create([
                     'title' => $child->title,
                     'is_complete' => false,
+                    'weight' => $child->weight,
                     'assigned_to' => $child->assigned_to,
                     'due_at' => $child->due_at,
                     'sort_order' => $child->sort_order,
@@ -714,6 +746,33 @@ class TaskCardController extends Controller implements HasMiddleware
         $card->labels()->sync($validIds);
     }
 
+    /**
+     * When a card uses weighted completion and is linked to a project task, push the
+     * computed completion into the project task's progress so it reflects on /projects.
+     */
+    private function applyWeightedCompletion(TaskCard $card, User $user): void
+    {
+        $card = $card->fresh(['checklists.items.children', 'projectTask.project']);
+
+        if (!$card || !$card->weight_basis || !$card->projectTask) {
+            return;
+        }
+
+        $completion = $card->weighted_completion;
+        if ($completion === null) {
+            return;
+        }
+
+        // Directly drive the linked activity's progress from the weighted completion so it
+        // matches exactly on /projects (and the project's overall completion).
+        $task = $card->projectTask;
+        $task->update([
+            'progress' => $completion,
+            'status' => $completion >= 100 ? 'Done' : ($completion > 0 ? 'Ongoing' : 'Pending'),
+        ]);
+        $task->project?->recalculateStatus();
+    }
+
     private function freshCard(TaskCard $card): array
     {
         $card = $card->fresh([
@@ -750,6 +809,9 @@ class TaskCardController extends Controller implements HasMiddleware
             'due_complete' => $card->due_complete,
             'cover_type' => $card->cover_type,
             'cover_value' => $card->cover_value,
+            'weight_basis' => $card->weight_basis,
+            'weighted_completion' => $card->weighted_completion,
+            'weight_total' => $card->weight_total,
             'archived_at' => $card->archived_at,
             'created_at' => $card->created_at,
             'updated_at' => $card->updated_at,

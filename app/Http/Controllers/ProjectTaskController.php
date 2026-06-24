@@ -118,6 +118,7 @@ class ProjectTaskController extends Controller
         });
 
         $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
+        $this->projectTaskBoards->syncLinkedBoardItemsFromProject($project->fresh());
 
         if ($addedCount > 0) {
             return redirect()->back()->with('success', "Applied {$addedCount} activities from \"{$template->name}\" template successfully.");
@@ -242,6 +243,7 @@ class ProjectTaskController extends Controller
 
         $task = ProjectTask::create($validated);
         $this->projectTaskBoards->syncProject($task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
+        $this->projectTaskBoards->syncLinkedBoardItemsFromProject($task->project);
 
         return redirect()->back()->with('success', 'Task added successfully.');
     }
@@ -316,6 +318,7 @@ class ProjectTaskController extends Controller
 
         $projects_task->update($validated);
         $this->projectTaskBoards->syncProject($projects_task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
+        $this->projectTaskBoards->syncLinkedBoardItemsFromProject($projects_task->project);
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'task' => $projects_task]);
@@ -329,6 +332,7 @@ class ProjectTaskController extends Controller
         $project = $projects_task->project;
         $taskIds = $projects_task->subTasks()->pluck('id')->push($projects_task->id);
         $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
+        $this->projectTaskBoards->removeBoardItemsForProjectTasks($taskIds);
 
         $projects_task->subTasks()->delete();
         $projects_task->delete();
@@ -428,6 +432,11 @@ class ProjectTaskController extends Controller
         }
 
         $this->projectTaskBoards->syncProjectTaskIds(collect($validated['tasks'])->pluck('id'), $request->user(), $request->boolean('auto_create_monthly_boards'));
+
+        $firstTask = ProjectTask::find(collect($validated['tasks'])->pluck('id')->first());
+        if ($firstTask?->project) {
+            $this->projectTaskBoards->syncLinkedBoardItemsFromProject($firstTask->project);
+        }
 
         return response()->json(['success' => true]);
     }

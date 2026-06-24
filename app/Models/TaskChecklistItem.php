@@ -17,6 +17,7 @@ class TaskChecklistItem extends Model
         'project_task_id',
         'title',
         'is_complete',
+        'weight',
         'assigned_to',
         'due_at',
         'sort_order',
@@ -28,6 +29,7 @@ class TaskChecklistItem extends Model
         'project_task_id' => 'integer',
         'assigned_to' => 'integer',
         'is_complete' => 'boolean',
+        'weight' => 'float',
         'due_at' => 'datetime:Y-m-d H:i:s',
         'sort_order' => 'integer',
     ];

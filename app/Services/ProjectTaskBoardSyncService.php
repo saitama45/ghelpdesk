@@ -37,6 +37,14 @@ class ProjectTaskBoardSyncService
             return $this->syncLegacyProjectBoard($project, $actor, $board);
         }
 
+        // A manual board that was linked to a project: mirror its checklist structure and
+        // clean up any stray card-level activities. Cards are containers, not activities.
+        if ($board?->project_id && in_array($board->board_source, ['manual', null], true)) {
+            $this->syncManualLinkedBoard($board);
+
+            return $board->fresh();
+        }
+
         return $this->syncProjectToMonthlyBoards($project, $actor, $autoCreateMonthlyBoards)->first();
     }
 
@@ -125,34 +133,85 @@ class ProjectTaskBoardSyncService
         }
 
         $cards = $board->cards()
-            ->with(['column:id,name', 'assignees:id'])
+            ->with(['checklists.items.children'])
             ->reorder()
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
 
-        foreach ($cards as $index => $card) {
-            $status   = $this->mapColumnNameToTaskStatus($card->column?->name ?? '');
-            $progress = match ($status) {
-                'Done'    => 100,
-                'Ongoing' => 50,
-                default   => 0,
-            };
-
-            ProjectTask::create([
-                'project_id'  => $project->id,
-                'name'        => $card->title,
-                'status'      => $status,
-                'progress'    => $progress,
-                'start_date'  => $card->start_date,
-                'end_date'    => $card->due_date,
-                'assigned_to' => $card->assignees->first()?->id,
-                'comments'    => $card->description,
-                'order'       => $index,
-            ]);
+        // Canonical mapping: each card's checklists become milestones, items become
+        // activities, and subtasks become project subtasks (linked for two-way sync).
+        foreach ($cards as $card) {
+            $card->setRelation('board', $board);
+            if ($card->checklists->isNotEmpty()) {
+                $this->syncProjectStructureFromCard($card, null);
+            }
         }
 
         return true;
+    }
+
+    /**
+     * Re-sync a manual board that is linked to a project. The card itself is never a
+     * project activity — only its checklists (milestones), items (activities), and
+     * subtasks (subtasks) map onto the project. This also cleans up any stray
+     * card-level project tasks created by the old card=activity behavior.
+     */
+    public function syncManualLinkedBoard(TaskBoard $board): void
+    {
+        $project = $board->project;
+        if (!$project) {
+            return;
+        }
+
+        DB::transaction(function () use ($board, $project) {
+            // Cards must not be project activities. Capture & detach any that were linked
+            // to a project task directly (legacy card=activity), then drop the orphans.
+            $cardLevelTaskIds = $board->cards()
+                ->whereNotNull('project_task_id')
+                ->pluck('project_task_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique();
+
+            if ($cardLevelTaskIds->isNotEmpty()) {
+                $board->cards()->whereNotNull('project_task_id')->update(['project_task_id' => null]);
+            }
+
+            // Mirror every card's checklist structure onto the project (create/rename/link).
+            $cards = $board->cards()
+                ->whereNull('archived_at')
+                ->with(['checklists.items.children'])
+                ->reorder()
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get();
+
+            foreach ($cards as $card) {
+                $card->setRelation('board', $board);
+                if ($card->checklists->isNotEmpty()) {
+                    $this->syncProjectStructureFromCard($card, null);
+                }
+            }
+
+            // Delete the captured card-level tasks that are not now linked to a checklist
+            // item (i.e. genuine strays). Tasks created directly on the Gantt are left alone
+            // because they were never referenced by a card's project_task_id.
+            if ($cardLevelTaskIds->isNotEmpty()) {
+                $stillLinked = TaskChecklistItem::whereIn('project_task_id', $cardLevelTaskIds->all())
+                    ->pluck('project_task_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->unique();
+
+                $strays = $cardLevelTaskIds->diff($stillLinked);
+
+                if ($strays->isNotEmpty()) {
+                    ProjectTask::whereIn('id', $strays->all())->whereNotNull('parent_task_id')->delete();
+                    ProjectTask::whereIn('id', $strays->all())->delete();
+                }
+            }
+
+            $project->fresh()?->recalculateStatus();
+        });
     }
 
     public function mapColumnNameToTaskStatus(string $columnName): string
@@ -369,6 +428,299 @@ class ProjectTaskBoardSyncService
 
         $task->update($updates);
         $this->syncProject($task->project, $actor);
+    }
+
+    /**
+     * Board → Project structure sync (canonical mapping):
+     *   Checklist  -> Milestone (project task `category`)
+     *   Item       -> Activity  (top-level project task)
+     *   Subtask    -> Subtask   (project task with parent_task_id)
+     *
+     * Creates/renames/links project tasks to mirror the card's checklist structure, so
+     * editing the board shows up on /projects (Gantt). Linked by checklist_item.project_task_id.
+     */
+    public function syncProjectStructureFromCard(TaskCard $card, ?User $actor = null): void
+    {
+        $project = $card->board?->project ?: $card->project;
+        if (!$project) {
+            return;
+        }
+
+        $card->loadMissing(['checklists.items.children']);
+
+        DB::transaction(function () use ($card, $project) {
+            $milestoneOrder = 0;
+
+            foreach ($card->checklists as $checklist) {
+                $milestoneOrder++;
+                $milestone = trim((string) $checklist->title) ?: 'General';
+                $itemOrder = 0;
+
+                foreach ($checklist->items as $item) {
+                    $itemOrder++;
+                    $activity = $this->upsertProjectTaskFromChecklistItem($project, $item, null, $milestone, $milestoneOrder, $itemOrder);
+
+                    if ((int) $item->project_task_id !== (int) $activity->id) {
+                        $item->forceFill(['project_task_id' => $activity->id])->saveQuietly();
+                    }
+
+                    $subOrder = 0;
+                    foreach (($item->children ?? collect()) as $sub) {
+                        $subOrder++;
+                        $subtask = $this->upsertProjectTaskFromChecklistItem($project, $sub, $activity->id, $milestone, $milestoneOrder, $subOrder);
+
+                        if ((int) $sub->project_task_id !== (int) $subtask->id) {
+                            $sub->forceFill(['project_task_id' => $subtask->id])->saveQuietly();
+                        }
+                    }
+                }
+            }
+
+            $project->fresh()?->recalculateStatus();
+        });
+    }
+
+    private function upsertProjectTaskFromChecklistItem(
+        Project $project,
+        TaskChecklistItem $item,
+        ?int $parentTaskId,
+        string $milestone,
+        int $milestoneOrder,
+        int $order
+    ): ProjectTask {
+        $task = $item->project_task_id
+            ? ProjectTask::where('project_id', $project->id)->find($item->project_task_id)
+            : null;
+
+        if (!$task) {
+            $task = new ProjectTask(['project_id' => $project->id]);
+        }
+
+        // The board item's % (weight) is the activity/subtask progress on the Gantt.
+        $progress = (int) round(max(0, min(100, (float) ($item->weight ?? 0))));
+        $status = $progress >= 100 ? 'Done' : ($progress > 0 ? 'Ongoing' : 'Pending');
+
+        $task->forceFill([
+            'parent_task_id' => $parentTaskId,
+            'name' => $item->title,
+            'category' => $milestone,
+            'milestone_order' => $milestoneOrder,
+            'order' => $order,
+            'status' => $status,
+            'progress' => $progress,
+            'assigned_to' => $item->assigned_to ?: null,
+            'external_assignment' => null,
+            'end_date' => $item->due_at?->toDateString(),
+        ])->save();
+
+        return $task;
+    }
+
+    /**
+     * Project → Board (two-way): mirror the project's Gantt structure onto every manual
+     * board linked to the project. Milestones become checklists, activities become items,
+     * and subtasks become child items — creating any that are missing and updating the
+     * rest. This is the inverse of syncProjectStructureFromCard, so adding a milestone /
+     * activity / subtask on /projects shows up on the task board, and vice versa.
+     */
+    public function syncLinkedBoardItemsFromProject(Project $project): void
+    {
+        $boards = TaskBoard::where('project_id', $project->id)
+            ->where(function ($query) {
+                $query->where('board_source', 'manual')->orWhereNull('board_source');
+            })
+            ->get();
+
+        if ($boards->isEmpty()) {
+            return;
+        }
+
+        $tasks = ProjectTask::where('project_id', $project->id)
+            ->orderBy('parent_task_id')
+            ->orderBy('milestone_order')
+            ->orderBy('order')
+            ->orderBy('id')
+            ->get();
+
+        if ($tasks->isEmpty()) {
+            return;
+        }
+
+        $topLevel = $tasks->whereNull('parent_task_id')
+            ->sortBy([['milestone_order', 'asc'], ['order', 'asc'], ['id', 'asc']])
+            ->values();
+        $childrenByParent = $tasks->whereNotNull('parent_task_id')
+            ->sortBy([['order', 'asc'], ['id', 'asc']])
+            ->groupBy('parent_task_id');
+
+        foreach ($boards as $board) {
+            $this->mirrorProjectStructureOntoBoard($board, $topLevel, $childrenByParent);
+        }
+    }
+
+    private function mirrorProjectStructureOntoBoard(TaskBoard $board, Collection $topLevel, Collection $childrenByParent): void
+    {
+        $primaryCard = $this->resolveStructureCard($board);
+        if (!$primaryCard) {
+            return;
+        }
+
+        DB::transaction(function () use ($board, $topLevel, $childrenByParent, $primaryCard) {
+            // Existing board items already linked to project tasks, keyed by project_task_id.
+            $linkedItems = TaskChecklistItem::query()
+                ->whereNotNull('project_task_id')
+                ->whereHas('checklist.card', fn ($query) => $query->where('task_board_id', $board->id))
+                ->get()
+                ->keyBy('project_task_id');
+
+            foreach ($topLevel as $task) {
+                $milestone = $task->category ?: 'General';
+                $item = $linkedItems->get($task->id);
+
+                if ($item) {
+                    // A renamed milestone renames its checklist (each checklist == one milestone).
+                    if ($item->checklist && $item->checklist->title !== $milestone) {
+                        $item->checklist->forceFill(['title' => $milestone])->saveQuietly();
+                    }
+                    $checklistId = $item->task_checklist_id;
+                } else {
+                    $checklist = $this->findOrCreateChecklistByTitle($board, $primaryCard, $milestone);
+                    $item = new TaskChecklistItem(['project_task_id' => $task->id]);
+                    $checklistId = $checklist->id;
+                }
+
+                $this->fillBoardItemFromTask($item, $task, $checklistId, null);
+                $item->saveQuietly();
+
+                foreach (($childrenByParent->get($task->id) ?? collect()) as $sub) {
+                    $childItem = $linkedItems->get($sub->id) ?: new TaskChecklistItem(['project_task_id' => $sub->id]);
+                    $this->fillBoardItemFromTask($childItem, $sub, $item->task_checklist_id, $item->id);
+                    $childItem->saveQuietly();
+                }
+            }
+        });
+    }
+
+    private function fillBoardItemFromTask(TaskChecklistItem $item, ProjectTask $task, int $checklistId, ?int $parentItemId): void
+    {
+        $item->forceFill([
+            'task_checklist_id' => $checklistId,
+            'parent_item_id' => $parentItemId,
+            'project_task_id' => $task->id,
+            'title' => $task->name,
+            'weight' => (int) round(max(0, min(100, (float) $task->progress))),
+            'is_complete' => $task->status === 'Done' || (int) $task->progress >= 100,
+            'assigned_to' => $task->assigned_to ?: null,
+            'due_at' => $task->end_date ? Carbon::parse($task->end_date)->endOfDay()->format('Y-m-d H:i:s') : null,
+            'sort_order' => (int) ($task->order ?? 0),
+        ]);
+    }
+
+    /**
+     * Find a checklist with the given title anywhere on the board, otherwise create it on
+     * the structure card so a brand-new milestone gets a home.
+     */
+    private function findOrCreateChecklistByTitle(TaskBoard $board, TaskCard $primaryCard, string $title): TaskChecklist
+    {
+        $existing = TaskChecklist::query()
+            ->whereHas('card', fn ($query) => $query->where('task_board_id', $board->id))
+            ->where('title', $title)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return $primaryCard->checklists()->create([
+            'title' => $title,
+            'sort_order' => ((int) $primaryCard->checklists()->max('sort_order')) + 1,
+        ]);
+    }
+
+    /**
+     * The card that hosts project structure on a manual board: the one already holding the
+     * most project-linked items, else the first card, else a freshly created card.
+     */
+    private function resolveStructureCard(TaskBoard $board): ?TaskCard
+    {
+        $cards = $board->cards()
+            ->whereNull('archived_at')
+            ->with('checklists.items')
+            ->reorder()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        if ($cards->isEmpty()) {
+            return $this->createStructureCard($board);
+        }
+
+        return $cards
+            ->sortByDesc(fn (TaskCard $card) => $card->checklists
+                ->flatMap->items
+                ->whereNotNull('project_task_id')
+                ->count())
+            ->first();
+    }
+
+    private function createStructureCard(TaskBoard $board): TaskCard
+    {
+        $column = $board->columnForRole('backlog') ?? $board->columns()->first();
+        $statusName = $column?->name ?? 'Backlogs';
+
+        return TaskCard::create([
+            'task_board_id' => $board->id,
+            'task_board_column_id' => $column?->id,
+            'title' => $board->project?->name ?: 'Project Tasks',
+            'status' => $statusName,
+            'sort_order' => $this->nextCardSortOrder($board, $statusName),
+            'created_by' => $board->created_by,
+        ]);
+    }
+
+    /**
+     * Project → Board: drop board checklist items linked to project tasks that were deleted.
+     */
+    public function removeBoardItemsForProjectTasks(iterable $taskIds): void
+    {
+        $ids = collect($taskIds)->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        // Subtask items first, then parents, to avoid orphaning child rows mid-delete.
+        TaskChecklistItem::whereIn('project_task_id', $ids->all())->whereNotNull('parent_item_id')->delete();
+        TaskChecklistItem::whereIn('project_task_id', $ids->all())->delete();
+    }
+
+    /**
+     * Remove the project task(s) mirrored from a checklist item (and its subtask children).
+     */
+    public function deleteProjectTasksForChecklistItem(TaskChecklistItem $item): void
+    {
+        $taskIds = collect();
+
+        // Children first (board subtasks → project subtasks).
+        foreach (($item->children ?? collect()) as $child) {
+            if ($child->project_task_id) {
+                $taskIds->push((int) $child->project_task_id);
+            }
+        }
+        if ($item->project_task_id) {
+            $taskIds->push((int) $item->project_task_id);
+        }
+
+        if ($taskIds->isEmpty()) {
+            return;
+        }
+
+        $project = ProjectTask::whereIn('id', $taskIds->all())->first()?->project;
+
+        // Delete subtasks before parents to avoid parent_task_id constraint issues.
+        ProjectTask::whereIn('id', $taskIds->all())->whereNotNull('parent_task_id')->delete();
+        ProjectTask::whereIn('id', $taskIds->all())->whereNull('parent_task_id')->delete();
+
+        $project?->fresh()?->recalculateStatus();
     }
 
     public function cardRelations(): array

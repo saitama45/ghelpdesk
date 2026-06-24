@@ -1315,11 +1315,20 @@ const updateChecklistItem = async (item, payload) => {
 };
 
 const toggleChecklistItem = async (item) => {
-    await updateChecklistItem(item, { is_complete: !item.is_complete });
+    const done = !item.is_complete;
+    // Done checkbox and the % stay in lock-step (100% when done, 0% when not).
+    await updateChecklistItem(item, { is_complete: done, weight: done ? 100 : 0 });
 };
 
 const updateChecklistItemAssignee = async (item, value) => {
     await updateChecklistItem(item, { assigned_to: value || null });
+};
+
+// ── Per-item / per-subtask progress (%) — syncs straight to the project Gantt ──
+const updateItemWeight = async (item, value) => {
+    const weight = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    // The % is the item/subtask progress; keep the done checkbox in sync.
+    await updateChecklistItem(item, { weight, is_complete: weight >= 100 });
 };
 
 const setItemTitleInput = (itemId, el) => {
@@ -1661,11 +1670,56 @@ const closeColumnMenu = () => {
     activeColumnMenu.value = null;
 };
 
+// ── Auto-sync (project boards) ────────────────────────────────────────────────
+// Replaces the manual "Sync" click: a quiet sync runs on an idle interval while the
+// tab is visible, on tab re-focus, and ~4s after a card is closed (debounced after
+// edits). It is skipped while a card modal is open so it never disrupts active edits.
+const AUTO_SYNC_INTERVAL_MS = 45000;
+let autoSyncTimer = null;
+let autoSyncDebounce = null;
+
+const runAutoSync = async () => {
+    if (!isProjectBoard.value || !canEditBoard.value) return;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    if (selectedCardId.value) return;
+    if (isSyncingProject.value) return;
+
+    isSyncingProject.value = true;
+    try {
+        await axios.post(route('task-boards.sync-project', localBoard.value.id));
+        router.reload({ only: ['board'], preserveScroll: true });
+    } catch (error) {
+        // Background sync — stay quiet on failure rather than nagging the user.
+    } finally {
+        isSyncingProject.value = false;
+    }
+};
+
+const scheduleAutoSync = (delay = 4000) => {
+    if (!isProjectBoard.value) return;
+    clearTimeout(autoSyncDebounce);
+    autoSyncDebounce = setTimeout(runAutoSync, delay);
+};
+
+const handleVisibilitySync = () => {
+    if (document.visibilityState === 'visible') scheduleAutoSync(1000);
+};
+
+// Closing a card (after edits) triggers a debounced sync.
+watch(selectedCardId, (val, oldVal) => {
+    if (oldVal && !val) scheduleAutoSync();
+});
+
 onMounted(() => {
     window.addEventListener('keydown', handleKeyboard);
     document.addEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
     document.addEventListener('focusin', handleDetailsBoundaryFocusIn, true);
     document.addEventListener('click', closeColumnMenu);
+
+    if (isProjectBoard.value) {
+        autoSyncTimer = setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
+        document.addEventListener('visibilitychange', handleVisibilitySync);
+    }
 });
 
 onUnmounted(() => {
@@ -1673,6 +1727,10 @@ onUnmounted(() => {
     document.removeEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
     document.removeEventListener('focusin', handleDetailsBoundaryFocusIn, true);
     document.removeEventListener('click', closeColumnMenu);
+
+    clearInterval(autoSyncTimer);
+    clearTimeout(autoSyncDebounce);
+    document.removeEventListener('visibilitychange', handleVisibilitySync);
 });
 </script>
 
@@ -1710,9 +1768,9 @@ onUnmounted(() => {
                             <LinkIcon class="h-4 w-4" />
                             Project
                         </Link>
-                        <button v-if="isProjectBoard && canEditBoard" type="button" @click="syncProjectBoard" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
-                            <ClipboardDocumentCheckIcon class="h-4 w-4" />
-                            {{ isSyncingProject ? 'Syncing...' : 'Sync' }}
+                        <button v-if="isProjectBoard && canEditBoard" type="button" @click="syncProjectBoard" title="Auto-syncs periodically — click to sync now" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
+                            <ClipboardDocumentCheckIcon class="h-4 w-4" :class="isSyncingProject ? 'animate-spin' : ''" />
+                            {{ isSyncingProject ? 'Syncing...' : 'Sync now' }}
                         </button>
                         <button v-if="canLinkProject" type="button" @click="showLinkProjectModal = true" class="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/20">
                             <LinkIcon class="h-4 w-4" />
@@ -2184,6 +2242,7 @@ onUnmounted(() => {
                                     <button type="submit" :disabled="isBulkPastingChecklistTarget()" class="rounded-lg bg-gray-900 px-3 text-xs font-bold text-white disabled:opacity-50">{{ isBulkPastingChecklistTarget() ? 'Adding...' : 'Add' }}</button>
                                 </form>
                             </div>
+
                             <div class="space-y-4">
                                 <div v-for="checklist in selectedCard.checklists" :key="checklist.id" class="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:bg-gray-900/50 dark:border-gray-700">
                                     <div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2224,8 +2283,8 @@ onUnmounted(() => {
                                     <div v-show="isChecklistOpen(checklist.id)" class="space-y-3">
                                         <div v-for="item in checklist.items" :key="item.id" class="space-y-2">
                                             <div class="rounded-lg bg-white px-3 py-2 shadow-sm dark:bg-gray-800">
-                                                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                                    <button type="button" @click="toggleChecklistItem(item)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="item.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
+                                                <div class="flex items-start gap-2">
+                                                    <button type="button" @click="toggleChecklistItem(item)" :disabled="!canEditBoard" class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="item.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
                                                         <CheckIcon v-if="item.is_complete" class="h-3.5 w-3.5" />
                                                     </button>
                                                     <form v-if="editingItemId === item.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveItemTitle(item)">
@@ -2245,68 +2304,88 @@ onUnmounted(() => {
                                                             <XMarkIcon class="h-4 w-4" />
                                                         </button>
                                                     </form>
-                                                    <span v-else class="min-w-0 flex-1 text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
-                                                    <div v-if="editingItemId !== item.id" class="flex items-center gap-2">
-                                                        <button v-if="item.children?.length" type="button" class="text-gray-400 hover:text-gray-600 dark:text-gray-400" @click="toggleSubTaskItems(item.id)">
-                                                            <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isSubTaskOpen(item.id) ? '' : '-rotate-90'" />
-                                                        </button>
-                                                        <select
-                                                            :value="item.assigned_to || ''"
-                                                            :disabled="!canEditBoard"
-                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
-                                                            @change="updateChecklistItemAssignee(item, $event.target.value)"
+                                                    <span v-else class="min-w-0 flex-1 break-words text-sm font-semibold" :class="item.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ item.title }}</span>
+                                                </div>
+                                                <div v-if="editingItemId !== item.id" class="ml-7 mt-1.5 flex flex-wrap items-center gap-1.5">
+                                                    <button v-if="item.children?.length" type="button" class="text-gray-400 hover:text-gray-600 dark:text-gray-400" @click="toggleSubTaskItems(item.id)">
+                                                        <ChevronDownIcon class="h-4 w-4 transition-transform duration-200" :class="isSubTaskOpen(item.id) ? '' : '-rotate-90'" />
+                                                    </button>
+                                                    <select
+                                                        :value="item.assigned_to || ''"
+                                                        :disabled="!canEditBoard"
+                                                        class="h-8 max-w-[7rem] rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
+                                                        @change="updateChecklistItemAssignee(item, $event.target.value)"
+                                                    >
+                                                        <option value="">Unassigned</option>
+                                                        <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
+                                                    </select>
+                                                    <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(item) }}</span>
+                                                    <div v-if="canEditBoard" class="flex items-center gap-0.5" title="Progress (%) — syncs to the project Gantt activity">
+                                                        <input
+                                                            :value="item.weight ?? 0"
+                                                            type="number" min="0" max="100" step="1"
+                                                            class="h-8 w-16 rounded-lg border-gray-300 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                                                            @change="updateItemWeight(item, $event.target.value)"
                                                         >
-                                                            <option value="">Unassigned</option>
-                                                            <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
-                                                        </select>
-                                                        <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(item) }}</span>
-                                                        <button v-if="canEditBoard" type="button" title="Rename item" class="text-gray-300 hover:text-blue-600" @click="startEditingItem(item)">
-                                                            <PencilSquareIcon class="h-4 w-4" />
-                                                        </button>
-                                                        <button v-if="canEditBoard" type="button" title="Duplicate item" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(item)">
-                                                            <DocumentDuplicateIcon class="h-4 w-4" />
-                                                        </button>
-                                                        <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(item)" class="text-gray-300 hover:text-red-600">
-                                                            <XMarkIcon class="h-4 w-4" />
-                                                        </button>
+                                                        <span class="text-[10px] font-black text-gray-400">%</span>
                                                     </div>
+                                                    <button v-if="canEditBoard" type="button" title="Rename item" class="text-gray-300 hover:text-blue-600" @click="startEditingItem(item)">
+                                                        <PencilSquareIcon class="h-4 w-4" />
+                                                    </button>
+                                                    <button v-if="canEditBoard" type="button" title="Duplicate item" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(item)">
+                                                        <DocumentDuplicateIcon class="h-4 w-4" />
+                                                    </button>
+                                                    <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(item)" class="text-gray-300 hover:text-red-600">
+                                                        <XMarkIcon class="h-4 w-4" />
+                                                    </button>
                                                 </div>
                                             </div>
 
                                             <div v-show="item.children?.length && isSubTaskOpen(item.id)" class="ml-5 space-y-2 border-l border-gray-200 pl-3 dark:border-gray-700">
-                                                <div v-for="child in item.children" :key="child.id" class="flex flex-col gap-2 rounded-lg bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center dark:bg-gray-800">
-                                                    <button type="button" @click="toggleChecklistItem(child)" :disabled="!canEditBoard" class="flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="child.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
-                                                        <CheckIcon v-if="child.is_complete" class="h-3.5 w-3.5" />
-                                                    </button>
-                                                    <form v-if="editingItemId === child.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveItemTitle(child)">
-                                                        <input
-                                                            :ref="(el) => setItemTitleInput(child.id, el)"
-                                                            v-model="editingItemTitle"
-                                                            :disabled="isUpdatingItem"
-                                                            type="text"
-                                                            maxlength="255"
-                                                            class="h-8 min-w-0 flex-1 rounded-lg border-gray-300 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:text-gray-100 dark:border-gray-600"
-                                                            @keydown.esc.prevent="cancelEditingItem"
-                                                        >
-                                                        <button type="submit" :disabled="isUpdatingItem || !editingItemTitle.trim()" title="Save" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-                                                            <CheckIcon class="h-4 w-4" />
+                                                <div v-for="child in item.children" :key="child.id" class="rounded-lg bg-white px-3 py-2 shadow-sm dark:bg-gray-800">
+                                                    <div class="flex items-start gap-2">
+                                                        <button type="button" @click="toggleChecklistItem(child)" :disabled="!canEditBoard" class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border" :class="child.is_complete ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white'">
+                                                            <CheckIcon v-if="child.is_complete" class="h-3.5 w-3.5" />
                                                         </button>
-                                                        <button type="button" :disabled="isUpdatingItem" title="Cancel" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700" @click="cancelEditingItem">
-                                                            <XMarkIcon class="h-4 w-4" />
-                                                        </button>
-                                                    </form>
-                                                    <span v-else class="min-w-0 flex-1 text-sm" :class="child.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ child.title }}</span>
-                                                    <div v-if="editingItemId !== child.id" class="flex items-center gap-2">
+                                                        <form v-if="editingItemId === child.id" class="flex min-w-0 flex-1 items-center gap-2" @submit.prevent="saveItemTitle(child)">
+                                                            <input
+                                                                :ref="(el) => setItemTitleInput(child.id, el)"
+                                                                v-model="editingItemTitle"
+                                                                :disabled="isUpdatingItem"
+                                                                type="text"
+                                                                maxlength="255"
+                                                                class="h-8 min-w-0 flex-1 rounded-lg border-gray-300 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:text-gray-100 dark:border-gray-600"
+                                                                @keydown.esc.prevent="cancelEditingItem"
+                                                            >
+                                                            <button type="submit" :disabled="isUpdatingItem || !editingItemTitle.trim()" title="Save" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                                                <CheckIcon class="h-4 w-4" />
+                                                            </button>
+                                                            <button type="button" :disabled="isUpdatingItem" title="Cancel" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700" @click="cancelEditingItem">
+                                                                <XMarkIcon class="h-4 w-4" />
+                                                            </button>
+                                                        </form>
+                                                        <span v-else class="min-w-0 flex-1 break-words text-sm" :class="child.is_complete ? 'text-gray-400 line-through' : 'text-gray-700'">{{ child.title }}</span>
+                                                    </div>
+                                                    <div v-if="editingItemId !== child.id" class="ml-7 mt-1.5 flex flex-wrap items-center gap-1.5">
                                                         <select
                                                             :value="child.assigned_to || ''"
                                                             :disabled="!canEditBoard"
-                                                            class="h-8 rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
+                                                            class="h-8 max-w-[7rem] rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                                             @change="updateChecklistItemAssignee(child, $event.target.value)"
                                                         >
                                                             <option value="">Unassigned</option>
                                                             <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                                                         </select>
                                                         <span class="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">{{ itemSubUnit(child) }}</span>
+                                                        <div v-if="canEditBoard" class="flex items-center gap-0.5" title="Progress (%) — syncs to the project Gantt subtask">
+                                                            <input
+                                                                :value="child.weight ?? 0"
+                                                                type="number" min="0" max="100" step="1"
+                                                                class="h-8 w-16 rounded-lg border-gray-300 text-xs font-bold shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                                                                @change="updateItemWeight(child, $event.target.value)"
+                                                            >
+                                                            <span class="text-[10px] font-black text-gray-400">%</span>
+                                                        </div>
                                                         <button v-if="canEditBoard" type="button" title="Rename sub-task" class="text-gray-300 hover:text-blue-600" @click="startEditingItem(child)">
                                                             <PencilSquareIcon class="h-4 w-4" />
                                                         </button>

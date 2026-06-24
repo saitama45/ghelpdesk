@@ -14,11 +14,13 @@ class TaskChecklist extends Model
     protected $fillable = [
         'task_card_id',
         'title',
+        'weight',
         'sort_order',
     ];
 
     protected $casts = [
         'task_card_id' => 'integer',
+        'weight' => 'float',
         'sort_order' => 'integer',
     ];
 
