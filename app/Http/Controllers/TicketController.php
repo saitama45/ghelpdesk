@@ -1688,7 +1688,15 @@ class TicketController extends Controller
         $comment->setRelation('attachments', $attachments);
         $this->notifyTicketCommentRecipients($ticket, $comment, $attachments);
 
-        return redirect()->back()->with('success', $this->commentSuccessMessage($kbGenerationStatus));
+        $successMessage = $this->commentSuccessMessage($kbGenerationStatus);
+
+        // Resolution modal submits request a redirect to the listing instead of
+        // staying on the ticket; the success flash still rides along to the toast.
+        if ($request->boolean('redirect_to_index')) {
+            return redirect()->route('tickets.index')->with('success', $successMessage);
+        }
+
+        return redirect()->back()->with('success', $successMessage);
     }
 
     private function commentSuccessMessage(?string $kbGenerationStatus): string

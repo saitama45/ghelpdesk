@@ -70,6 +70,22 @@
                 <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">No records found</h3>
                 <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">{{ emptyMessage }}</p>
             </div>
+
+            <!-- Infinite Scroll Sentinel -->
+            <div
+                v-if="infiniteScroll && data.length > 0"
+                ref="sentinel"
+                class="flex items-center justify-center py-6 text-sm text-gray-500 dark:text-gray-400"
+            >
+                <div v-if="loadingMore" class="flex items-center space-x-2">
+                    <svg class="animate-spin h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Loading more…</span>
+                </div>
+                <span v-else-if="!hasMore" class="text-gray-400 dark:text-gray-500">You've reached the end</span>
+            </div>
         </div>
 
         <!-- Pagination Footer -->
@@ -81,7 +97,7 @@
                 </div>
 
                 <!-- Pagination Controls -->
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-8">
+                <div v-if="!infiniteScroll" class="flex flex-col sm:flex-row items-center justify-center gap-8">
                     <!-- Per Page Selector -->
                     <div class="flex items-center space-x-2 text-sm">
                         <span class="text-gray-700 font-medium dark:text-gray-300">Show</span>
@@ -147,7 +163,7 @@
 </template>
 
 <script setup>
-import { computed, toRefs } from 'vue'
+import { computed, toRefs, ref, watch, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
     title: {
@@ -178,12 +194,57 @@ const props = defineProps({
     freezeHeader: {
         type: Boolean,
         default: false
+    },
+    // Infinite scroll (opt-in). When enabled, the numbered pager and per-page
+    // selector are hidden and `loadMore` is emitted as the sentinel scrolls into view.
+    infiniteScroll: {
+        type: Boolean,
+        default: false
+    },
+    hasMore: {
+        type: Boolean,
+        default: false
+    },
+    loadingMore: {
+        type: Boolean,
+        default: false
     }
 })
 
-const emit = defineEmits(['update:search', 'goToPage', 'changePerPage'])
+const emit = defineEmits(['update:search', 'goToPage', 'changePerPage', 'loadMore'])
 
 const { search, currentPage, lastPage } = toRefs(props)
+
+// --- Infinite scroll sentinel ---
+const sentinel = ref(null)
+let observer = null
+
+const maybeLoadMore = () => {
+    if (props.infiniteScroll && props.hasMore && !props.loadingMore && !props.isLoading) {
+        emit('loadMore')
+    }
+}
+
+watch(sentinel, (el) => {
+    if (observer) {
+        observer.disconnect()
+        observer = null
+    }
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    observer = new IntersectionObserver((entries) => {
+        if (entries.some(entry => entry.isIntersecting)) {
+            maybeLoadMore()
+        }
+    }, { rootMargin: '200px' })
+    observer.observe(el)
+})
+
+onBeforeUnmount(() => {
+    if (observer) {
+        observer.disconnect()
+        observer = null
+    }
+})
 
 const visiblePages = computed(() => {
     const pages = []

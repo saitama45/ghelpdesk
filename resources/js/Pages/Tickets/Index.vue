@@ -169,11 +169,16 @@ onMounted(() => {
         currentTime.value = new Date();
     }, 60000); // Update every minute
 
+    const scrollEl = getScrollContainer() || window;
+    scrollEl.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
 });
 
 import { onUnmounted } from 'vue';
 onUnmounted(() => {
     if (timer) clearInterval(timer);
+    const scrollEl = getScrollContainer() || window;
+    scrollEl.removeEventListener('scroll', handleScroll);
 });
 
 const isNearlyDue = (targetAt) => {
@@ -362,6 +367,81 @@ const ticketFilterParams = () => ({
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
 
+// --- Infinite scroll accumulation ---
+// Rows are accumulated client-side across pages. The watcher on props.tickets
+// (below) replaces the buffer on any filter/search change (current_page <= 1)
+// and appends, deduped, when a "load more" page arrives (current_page > 1).
+const accumulatedTickets = ref([...(props.tickets?.data || [])]);
+const ticketsMeta = ref({
+    current_page: props.tickets?.current_page || 1,
+    last_page: props.tickets?.last_page || 1,
+    total: props.tickets?.total || 0,
+});
+const loadingMoreTickets = ref(false);
+
+const mergeTicketPage = (payload) => {
+    if (!payload) return;
+    const incoming = payload.data || [];
+    if ((payload.current_page || 1) <= 1) {
+        accumulatedTickets.value = [...incoming];
+    } else {
+        const seen = new Set(accumulatedTickets.value.map(t => t.id));
+        accumulatedTickets.value = [
+            ...accumulatedTickets.value,
+            ...incoming.filter(t => !seen.has(t.id)),
+        ];
+    }
+    ticketsMeta.value = {
+        current_page: payload.current_page || 1,
+        last_page: payload.last_page || 1,
+        total: payload.total || 0,
+    };
+};
+
+const hasMoreTickets = computed(
+    () => ticketsMeta.value.current_page < ticketsMeta.value.last_page
+);
+
+const ticketsShowingText = computed(() => {
+    const total = ticketsMeta.value.total || 0;
+    if (total === 0) return 'No records found';
+    return `Showing ${accumulatedTickets.value.length} of ${total} records`;
+});
+
+const loadMoreTickets = () => {
+    if (loadingMoreTickets.value || !hasMoreTickets.value) return;
+    loadingMoreTickets.value = true;
+    const nextPage = ticketsMeta.value.current_page + 1;
+    router.reload({
+        only: ['tickets'],
+        data: {
+            ...ticketFilterParams(),
+            search: pagination.search.value,
+            per_page: pagination.perPage.value,
+            page: nextPage,
+        },
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            loadingMoreTickets.value = false;
+        },
+    });
+};
+
+// --- Scroll to top ---
+// The page scrolls inside AppLayout's `<main scroll-region>` element, not the
+// window, so we attach to that container.
+const showScrollTop = ref(false);
+const getScrollContainer = () => document.querySelector('main[scroll-region]');
+const handleScroll = () => {
+    const el = getScrollContainer();
+    showScrollTop.value = (el ? el.scrollTop : window.scrollY) > 400;
+};
+const scrollToTop = () => {
+    const el = getScrollContainer();
+    (el || window).scrollTo({ top: 0, behavior: 'smooth' });
+};
+
 const applyFilter = () => {
     const params = {
         ...ticketFilterParams(),
@@ -463,6 +543,7 @@ const clearFilters = () => {
 
 watch(() => props.tickets, (newTickets) => {
     pagination.updateData(newTickets);
+    mergeTicketPage(newTickets);
 }, { deep: true });
 
 const acceptForm = useForm({
@@ -610,7 +691,9 @@ const toggleAll = () => {
     selectedIds.value = allSelected.value ? [] : displayedTickets.value.map(t => t.id)
 }
 
-watch(() => [pagination.currentPage.value, pagination.search.value], () => {
+// Clear selection when the result set changes (search). Page growth via
+// infinite scroll must NOT clear the current selection.
+watch(() => pagination.search.value, () => {
     selectedIds.value = []
 })
 
@@ -707,7 +790,7 @@ const mergeForm = useForm({
 
 const openSplitModal = () => {
     if (selectedIds.value.length !== 1) return;
-    const ticket = pagination.data.value.find(t => t.id === selectedIds.value[0]);
+    const ticket = accumulatedTickets.value.find(t => t.id === selectedIds.value[0]);
     if (!ticket) return;
     
     splitForm.original_title = ticket.title;
@@ -767,7 +850,7 @@ const submitMerge = async () => {
 };
 
 const getSelectedTickets = computed(() => {
-    return pagination.data.value.filter(t => selectedIds.value.includes(t.id));
+    return accumulatedTickets.value.filter(t => selectedIds.value.includes(t.id));
 });
 
 const canCreateChildTickets = computed(() =>
@@ -1302,7 +1385,7 @@ const summaryCards = computed(() => {
 });
 
 const displayedTickets = computed(() => {
-    const data = pagination.data.value || [];
+    const data = accumulatedTickets.value || [];
 
     switch (activeDashboardFilter.value) {
         case 'new':
@@ -1617,7 +1700,7 @@ const requesterTabs = computed(() => {
                             </div>
                             <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md transition-colors hover:bg-white/10">
                                 <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Scope</div>
-                                <div class="mt-2 text-lg font-light text-white">{{ pagination.showingText.value }}</div>
+                                <div class="mt-2 text-lg font-light text-white">{{ ticketsShowingText }}</div>
                                 <div class="mt-1 text-xs text-slate-400">Metrics below reflect all matching tickets.</div>
                             </div>
                         </div>
@@ -1990,11 +2073,13 @@ const requesterTabs = computed(() => {
                     :current-page="pagination.currentPage.value"
                     :last-page="pagination.lastPage.value"
                     :per-page="pagination.perPage.value"
-                    :showing-text="pagination.showingText.value"
+                    :showing-text="ticketsShowingText"
                     :is-loading="pagination.isLoading.value"
+                    infinite-scroll
+                    :has-more="hasMoreTickets"
+                    :loading-more="loadingMoreTickets"
                     @update:search="pagination.search.value = $event"
-                    @go-to-page="pagination.goToPage"
-                    @change-per-page="pagination.changePerPage"
+                    @load-more="loadMoreTickets"
                 >
                 <template #actions>
                     <!-- Columns Dropdown -->
@@ -3016,6 +3101,29 @@ const requesterTabs = computed(() => {
             </div>
         </div>
     </div>
+
+    <!-- Scroll to top -->
+    <Transition
+        enter-active-class="transition ease-out duration-200"
+        enter-from-class="opacity-0 translate-y-2"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition ease-in duration-150"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 translate-y-2"
+    >
+        <button
+            v-show="showScrollTop"
+            @click="scrollToTop"
+            type="button"
+            title="Scroll to top"
+            aria-label="Scroll to top"
+            class="fixed bottom-6 right-6 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg ring-1 ring-blue-700/40 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors dark:ring-blue-400/30"
+        >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7" />
+            </svg>
+        </button>
+    </Transition>
 
     </AppLayout>
 </template>

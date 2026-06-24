@@ -850,6 +850,19 @@ const commentForm = useForm({
 
 const showStatusDropdown = ref(false);
 const showResolutionModal = ref(false);
+
+// Response composer expansion. Once focused, the composer stays expanded while
+// the user interacts with its inner controls (e.g. the "Send as" dropdown) or
+// while it still holds content. It only collapses when focus leaves the composer
+// entirely AND nothing has been written/attached.
+const responseExpanded = ref(false);
+const responseComposerRef = ref(null);
+const onComposerFocusOut = (event) => {
+    const next = event.relatedTarget;
+    if (next && responseComposerRef.value?.contains(next)) return;
+    if (commentForm.comment_text.trim() || commentForm.attachments.length > 0) return;
+    responseExpanded.value = false;
+};
 const syncingTicketState = ref(false);
 
 const selectedItem = computed(() => {
@@ -968,9 +981,22 @@ const submitWithStatus = (newStatus) => {
 
 const submitResolution = () => {
     if (!validateResolutionBeforeSubmit(commentForm.status)) return;
-    
-    addComment();
+
+    addComment({ redirectToIndex: true });
     showResolutionModal.value = false;
+};
+
+// Dismissing the resolution modal (X / Cancel / backdrop) must discard the
+// unsubmitted resolution inputs. Otherwise leftover Action Taken / RCA text would
+// make hasValidResolutionDetails() pass on the next terminal-status click, silently
+// saving the ticket instead of re-opening this modal to require those fields.
+const closeResolutionModal = () => {
+    showResolutionModal.value = false;
+    commentForm.action_taken = '';
+    commentForm.root_cause_analysis = '';
+    if (requiresResolutionDetails(commentForm.status)) {
+        commentForm.status = '';
+    }
 };
 
 const commentFileInput = ref(null);
@@ -1794,18 +1820,19 @@ const cancelDescriptionEdit = () => {
     isEditingDescription.value = false;
 };
 
-const addComment = () => {
+const addComment = ({ redirectToIndex = false } = {}) => {
     if (!canSubmitCurrentComment()) return;
-    
+
     const attachmentsToUpload = commentForm.attachments.map(a => a.file);
-    
+
     post(route('tickets.comments.store', props.ticket.id), {
         comment_text: commentForm.comment_text,
         status: commentForm.status,
         is_internal: commentForm.is_internal,
         action_taken: commentForm.action_taken,
         root_cause_analysis: commentForm.root_cause_analysis,
-        attachments: attachmentsToUpload
+        attachments: attachmentsToUpload,
+        redirect_to_index: redirectToIndex,
     }, {
         forceFormData: true,
         onSuccess: () => {
@@ -1813,6 +1840,7 @@ const addComment = () => {
                 if (a.preview) URL.revokeObjectURL(a.preview);
             });
             commentForm.reset();
+            responseExpanded.value = false;
             if (commentFileInput.value) commentFileInput.value.value = '';
         },
         onError: (errors) => {
@@ -3160,11 +3188,17 @@ const linkify = (text) => {
                                     </div>
                                 </div>
                                 <div class="flex-grow">
-                                    <div class="ticket-response-composer bg-white border-2 border-blue-100 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all duration-200 dark:!border-slate-700 dark:!bg-slate-900 dark:focus-within:!border-blue-500 dark:focus-within:ring-blue-500/40">
-                                        <textarea 
-                                            v-model="commentForm.comment_text" 
-                                            rows="2" 
-                                            class="ticket-response-textarea block w-full border-0 focus:ring-0 resize-y bg-white p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400 transition-all duration-300 ease-in-out focus:min-h-[50vh] dark:!bg-slate-900 dark:!text-slate-100 dark:placeholder-slate-400 dark:focus:!bg-slate-900" 
+                                    <div
+                                        ref="responseComposerRef"
+                                        class="ticket-response-composer bg-white border-2 border-blue-100 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all duration-200 dark:!border-slate-700 dark:!bg-slate-900 dark:focus-within:!border-blue-500 dark:focus-within:ring-blue-500/40"
+                                        @focusin="responseExpanded = true"
+                                        @focusout="onComposerFocusOut"
+                                    >
+                                        <textarea
+                                            v-model="commentForm.comment_text"
+                                            rows="2"
+                                            class="ticket-response-textarea block w-full border-0 focus:ring-0 resize-y bg-white p-3 text-sm sm:text-base text-gray-700 placeholder-gray-400 transition-all duration-300 ease-in-out dark:!bg-slate-900 dark:!text-slate-100 dark:placeholder-slate-400 dark:focus:!bg-slate-900"
+                                            :class="{ 'min-h-[50vh]': responseExpanded }"
                                             placeholder="Write your response..."
                                             @paste="handlePaste"
                                         ></textarea>
@@ -3647,7 +3681,7 @@ const linkify = (text) => {
         </Modal>
 
         <!-- Resolution Details Modal -->
-        <Modal :show="showResolutionModal" max-width="2xl" @close="showResolutionModal = false">
+        <Modal :show="showResolutionModal" max-width="2xl" @close="closeResolutionModal">
             <div class="p-4 sm:p-6">
                 <div class="flex justify-between items-center mb-6">
                     <div>
@@ -3656,7 +3690,7 @@ const linkify = (text) => {
                         </h3>
                         <p class="text-xs text-gray-500 mt-1 dark:text-gray-300">Please provide the details of the resolution.</p>
                     </div>
-                    <button @click="showResolutionModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
+                    <button @click="closeResolutionModal" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
                     </button>
                 </div>
@@ -3705,7 +3739,7 @@ const linkify = (text) => {
                     </div>
 
                     <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t">
-                        <button type="button" @click="showResolutionModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+                        <button type="button" @click="closeResolutionModal" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
                         <button 
