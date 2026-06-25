@@ -724,14 +724,18 @@ class ProjectTaskBoardSyncService
     }
 
     /**
-     * Delete all project tasks linked to any checklist item on the given card, then
-     * recalculate the project status. Call this before archiving or deleting a card.
+     * Delete all project tasks linked to the given card. Archive uses soft delete so
+     * restore can re-sync; permanent card deletion force-deletes any remaining tasks.
      */
-    public function deleteProjectTasksForCard(TaskCard $card): void
+    public function deleteProjectTasksForCard(TaskCard $card, string $mode = 'soft'): void
     {
         $card->loadMissing(['checklists.items.children']);
 
         $taskIds = collect();
+
+        if ($card->project_task_id) {
+            $taskIds->push((int) $card->project_task_id);
+        }
 
         foreach ($card->checklists as $checklist) {
             foreach ($checklist->items as $item) {
@@ -746,14 +750,38 @@ class ProjectTaskBoardSyncService
             }
         }
 
+        $taskIds = $taskIds->filter()->unique()->values();
+
         if ($taskIds->isEmpty()) {
             return;
         }
 
-        $project = ProjectTask::whereIn('id', $taskIds->all())->first()?->project;
+        do {
+            $descendantIds = ProjectTask::withTrashed()
+                ->whereIn('parent_task_id', $taskIds->all())
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id);
 
-        ProjectTask::whereIn('id', $taskIds->all())->whereNotNull('parent_task_id')->delete();
-        ProjectTask::whereIn('id', $taskIds->all())->whereNull('parent_task_id')->delete();
+            $nextTaskIds = $taskIds->merge($descendantIds)->unique()->values();
+            $changed = $nextTaskIds->count() !== $taskIds->count();
+            $taskIds = $nextTaskIds;
+        } while ($changed);
+
+        $force = $mode === 'force';
+        $project = ProjectTask::withTrashed()->whereIn('id', $taskIds->all())->first()?->project;
+
+        if ($force) {
+            $card->forceFill(['project_task_id' => null])->saveQuietly();
+            TaskCard::whereIn('project_task_id', $taskIds->all())->update(['project_task_id' => null]);
+            TaskChecklistItem::whereIn('project_task_id', $taskIds->all())->update(['project_task_id' => null]);
+            DB::table('project_assets')->whereIn('project_task_id', $taskIds->all())->update(['project_task_id' => null]);
+
+            ProjectTask::withTrashed()->whereIn('id', $taskIds->all())->whereNotNull('parent_task_id')->forceDelete();
+            ProjectTask::withTrashed()->whereIn('id', $taskIds->all())->whereNull('parent_task_id')->forceDelete();
+        } else {
+            ProjectTask::whereIn('id', $taskIds->all())->whereNotNull('parent_task_id')->delete();
+            ProjectTask::whereIn('id', $taskIds->all())->whereNull('parent_task_id')->delete();
+        }
 
         $project?->fresh()?->recalculateStatus();
     }

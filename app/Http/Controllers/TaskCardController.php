@@ -317,7 +317,7 @@ class TaskCardController extends Controller implements HasMiddleware
 
         // Remove any project tasks mirrored from this card's checklist structure.
         if ($taskCard->board->project_id) {
-            $this->projectTaskBoards->deleteProjectTasksForCard($taskCard);
+            $this->projectTaskBoards->deleteProjectTasksForCard($taskCard, 'soft');
         }
 
         $taskCard->update(['archived_at' => now()]);
@@ -351,7 +351,7 @@ class TaskCardController extends Controller implements HasMiddleware
 
         // Guard: clean up any remaining project tasks (in case archive was done before this feature).
         if ($taskCard->board->project_id) {
-            $this->projectTaskBoards->deleteProjectTasksForCard($taskCard);
+            $this->projectTaskBoards->deleteProjectTasksForCard($taskCard, 'force');
         }
 
         $taskCard->delete();
@@ -785,7 +785,11 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $card = $taskCardAttachment->card;
 
-        if (Storage::disk('public')->exists($taskCardAttachment->file_storage_path)) {
+        $sharedPathCount = TaskCardAttachment::where('file_storage_path', $taskCardAttachment->file_storage_path)
+            ->where('id', '!=', $taskCardAttachment->id)
+            ->count();
+
+        if ($sharedPathCount === 0 && Storage::disk('public')->exists($taskCardAttachment->file_storage_path)) {
             Storage::disk('public')->delete($taskCardAttachment->file_storage_path);
         }
 

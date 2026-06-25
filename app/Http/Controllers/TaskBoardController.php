@@ -33,7 +33,7 @@ class TaskBoardController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:task_boards.view', only: ['index', 'show', 'toggleStar', 'toggleWatch', 'openProjectBoard', 'syncProject']),
-            new Middleware('can:task_boards.create', only: ['store', 'generateMonthly']),
+            new Middleware('can:task_boards.create', only: ['store', 'generateMonthly', 'duplicate']),
             new Middleware('can:task_boards.edit', only: ['update']),
             new Middleware('can:task_boards.delete', only: ['destroy', 'restore']),
             new Middleware('can:task_boards.manage_members', only: ['storeMember', 'updateMember', 'destroyMember']),
@@ -237,6 +237,180 @@ class TaskBoardController extends Controller implements HasMiddleware
         });
 
         return redirect()->route('task-boards.show', $board)->with('success', 'Task board created successfully.');
+    }
+
+    public function duplicate(Request $request, TaskBoard $taskBoard)
+    {
+        $this->ensureBoardAccess($taskBoard, $request->user());
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'copy_members' => 'required|boolean',
+        ]);
+
+        $copy = DB::transaction(function () use ($request, $taskBoard, $validated) {
+            $taskBoard->loadMissing([
+                'memberRecords',
+                'watchers:id',
+                'columns',
+                'labels',
+                'cards.assignees:id',
+                'cards.labels',
+                'cards.watchers:id',
+                'cards.checklists.items.children',
+                'cards.comments',
+                'cards.attachments',
+            ]);
+
+            $copy = TaskBoard::create([
+                'project_id' => null,
+                'board_source' => 'manual',
+                'department' => null,
+                'sub_unit' => null,
+                'board_month' => null,
+                'board_year' => null,
+                'monthly_key' => null,
+                'title' => $validated['title'],
+                'description' => $taskBoard->description,
+                'background_type' => $taskBoard->background_type ?: 'color',
+                'background_value' => $taskBoard->background_value ?: '#0f766e',
+                'created_by' => $request->user()->id,
+                'closed_at' => null,
+            ]);
+
+            $memberRows = $validated['copy_members']
+                ? $taskBoard->memberRecords->map(fn (TaskBoardMember $member) => [
+                    'user_id' => $member->user_id,
+                    'role' => (int) $member->user_id === (int) $request->user()->id ? 'admin' : $member->role,
+                ])
+                : collect();
+
+            $memberRows = $memberRows
+                ->reject(fn (array $member) => (int) $member['user_id'] === (int) $request->user()->id)
+                ->push([
+                    'user_id' => $request->user()->id,
+                    'role' => 'admin',
+                ])
+                ->unique('user_id')
+                ->values();
+
+            foreach ($memberRows as $member) {
+                $copy->memberRecords()->create([
+                    'user_id' => $member['user_id'],
+                    'role' => $member['role'],
+                    'starred' => false,
+                    'last_opened_at' => null,
+                ]);
+            }
+
+            $copy->watchers()->sync($taskBoard->watchers->pluck('id')->push($request->user()->id)->unique()->values()->all());
+
+            $columnIdMap = [];
+            foreach ($taskBoard->columns as $column) {
+                $newColumn = $copy->columns()->create([
+                    'name' => $column->name,
+                    'color' => $column->color,
+                    'role' => $column->role,
+                    'sort_order' => $column->sort_order,
+                ]);
+                $columnIdMap[$column->id] = $newColumn->id;
+            }
+
+            $labelIdMap = [];
+            foreach ($taskBoard->labels as $label) {
+                $newLabel = $copy->labels()->create([
+                    'name' => $label->name,
+                    'color' => $label->color,
+                    'sort_order' => $label->sort_order,
+                ]);
+                $labelIdMap[$label->id] = $newLabel->id;
+            }
+
+            foreach ($taskBoard->cards as $card) {
+                $newCard = $copy->cards()->create([
+                    'task_board_column_id' => $columnIdMap[$card->task_board_column_id] ?? null,
+                    'project_id' => null,
+                    'project_task_id' => null,
+                    'title' => $card->title,
+                    'description' => $card->description,
+                    'status' => $card->status,
+                    'sort_order' => $card->sort_order,
+                    'start_at' => $card->start_at,
+                    'due_at' => $card->due_at,
+                    'due_reminder_minutes' => $card->due_reminder_minutes,
+                    'due_complete' => $card->due_complete,
+                    'cover_type' => $card->cover_type,
+                    'cover_value' => $card->cover_value,
+                    'weight_basis' => $card->weight_basis,
+                    'created_by' => $request->user()->id,
+                    'archived_at' => $card->archived_at,
+                ]);
+
+                $newCard->assignees()->sync($card->assignees->pluck('id')->all());
+                $newCard->watchers()->sync($card->watchers->pluck('id')->all());
+                $newCard->labels()->sync($card->labels
+                    ->map(fn ($label) => $labelIdMap[$label->id] ?? null)
+                    ->filter()
+                    ->values()
+                    ->all());
+
+                foreach ($card->checklists as $checklist) {
+                    $newChecklist = $newCard->checklists()->create([
+                        'title' => $checklist->title,
+                        'weight' => $checklist->weight,
+                        'sort_order' => $checklist->sort_order,
+                    ]);
+
+                    foreach ($checklist->items as $item) {
+                        $newItem = $newChecklist->allItems()->create([
+                            'title' => $item->title,
+                            'is_complete' => $item->is_complete,
+                            'weight' => $item->weight,
+                            'assigned_to' => $item->assigned_to,
+                            'due_at' => $item->due_at,
+                            'sort_order' => $item->sort_order,
+                            'project_task_id' => null,
+                        ]);
+
+                        foreach ($item->children as $child) {
+                            $newChecklist->allItems()->create([
+                                'title' => $child->title,
+                                'is_complete' => $child->is_complete,
+                                'weight' => $child->weight,
+                                'assigned_to' => $child->assigned_to,
+                                'due_at' => $child->due_at,
+                                'sort_order' => $child->sort_order,
+                                'parent_item_id' => $newItem->id,
+                                'project_task_id' => null,
+                            ]);
+                        }
+                    }
+                }
+
+                foreach ($card->comments as $comment) {
+                    $newCard->comments()->create([
+                        'user_id' => $comment->user_id,
+                        'comment_text' => $comment->comment_text,
+                    ]);
+                }
+
+                foreach ($card->attachments as $attachment) {
+                    $newCard->attachments()->create([
+                        'user_id' => $attachment->user_id,
+                        'file_name' => $attachment->file_name,
+                        'file_storage_path' => $attachment->file_storage_path,
+                        'file_size_bytes' => $attachment->file_size_bytes,
+                        'mime_type' => $attachment->mime_type,
+                    ]);
+                }
+            }
+
+            $this->recordActivity($copy, null, $request->user()->id, 'board.duplicated', 'duplicated from board #' . $taskBoard->id);
+
+            return $copy;
+        });
+
+        return redirect()->route('task-boards.show', $copy)->with('success', 'Task board duplicated successfully.');
     }
 
     public function generateMonthly(Request $request)

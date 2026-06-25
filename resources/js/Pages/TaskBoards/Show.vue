@@ -51,10 +51,12 @@ const selectedCardId = ref(null);
 const showBoardMenu = ref(false);
 const showMemberModal = ref(false);
 const showLabelModal = ref(false);
+const showDuplicateBoardModal = ref(false);
 const activeCardComposer = ref('');
 const draggedCardId = ref(null);
 const dragOverStatus = ref(null);
 const isSaving = ref(false);
+const isDuplicatingBoard = ref(false);
 const isCreatingCard = ref(false);
 const isCreatingSubTask = ref(false);
 const isSyncingProject = ref(false);
@@ -101,6 +103,13 @@ const boardForm = reactive({
     description: localBoard.value.description || '',
     background_type: localBoard.value.background_type || 'color',
     background_value: localBoard.value.background_value || '#0f766e',
+});
+
+const defaultDuplicateBoardTitle = () => `Copy of ${localBoard.value.title || 'Task Board'}`.slice(0, 255);
+
+const duplicateBoardForm = reactive({
+    title: defaultDuplicateBoardTitle(),
+    copy_members: true,
 });
 
 const cardDraft = reactive({
@@ -206,6 +215,8 @@ const canDeleteBoard = computed(() => {
     return hasPermission('task_boards.delete') &&
         localBoard.value.my_role === 'admin';
 });
+
+const canDuplicateBoard = computed(() => hasPermission('task_boards.create'));
 
 const selectedCard = computed(() => {
     return (localBoard.value.cards || []).find((card) => card.id === selectedCardId.value) || null;
@@ -1577,6 +1588,36 @@ const toggleBoardWatch = async () => {
     }
 };
 
+const openDuplicateBoardModal = () => {
+    if (!canDuplicateBoard.value) return;
+
+    duplicateBoardForm.title = defaultDuplicateBoardTitle();
+    duplicateBoardForm.copy_members = true;
+    showBoardMenu.value = false;
+    showDuplicateBoardModal.value = true;
+};
+
+const closeDuplicateBoardModal = () => {
+    if (isDuplicatingBoard.value) return;
+    showDuplicateBoardModal.value = false;
+};
+
+const duplicateBoard = () => {
+    const title = duplicateBoardForm.title.trim();
+    if (!title || !canDuplicateBoard.value || isDuplicatingBoard.value) return;
+
+    router.post(route('task-boards.duplicate', localBoard.value.id), {
+        title,
+        copy_members: duplicateBoardForm.copy_members,
+    }, {
+        onStart: () => { isDuplicatingBoard.value = true; },
+        onError: (errors) => {
+            showError(Object.values(errors)[0] || 'Unable to duplicate board');
+        },
+        onFinish: () => { isDuplicatingBoard.value = false; },
+    });
+};
+
 const addBoardMember = async () => {
     if (!memberForm.user_ids.length || !canManageMembers.value) return;
 
@@ -2126,6 +2167,14 @@ onUnmounted(() => {
                 </button>
             </div>
             <div class="custom-scrollbar flex-1 space-y-6 overflow-y-auto p-4">
+                <section v-if="canDuplicateBoard" class="space-y-3">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Board Actions</h3>
+                    <button type="button" @click="openDuplicateBoardModal" class="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700">
+                        <DocumentDuplicateIcon class="h-4 w-4" />
+                        Duplicate Board
+                    </button>
+                </section>
+
                 <section v-if="isProjectBoard" class="space-y-3">
                     <h3 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Project</h3>
                     <div class="rounded-lg border border-blue-100 bg-blue-50 p-3">
@@ -2194,6 +2243,47 @@ onUnmounted(() => {
                 </section>
             </div>
         </aside>
+
+        <Modal :show="showDuplicateBoardModal" @close="closeDuplicateBoardModal" maxWidth="lg">
+            <form class="rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800" @submit.prevent="duplicateBoard">
+                <div class="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-black text-gray-900 dark:text-gray-100">Duplicate Board</h2>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">Create an independent manual copy of this board.</p>
+                    </div>
+                    <button type="button" :disabled="isDuplicatingBoard" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700" @click="closeDuplicateBoardModal">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <label class="block">
+                        <span class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">New board title</span>
+                        <input v-model="duplicateBoardForm.title" type="text" required maxlength="255" class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
+                    </label>
+
+                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm font-semibold text-gray-700 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
+                        <input v-model="duplicateBoardForm.copy_members" type="checkbox" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
+                        <span>
+                            <span class="block text-gray-900 dark:text-gray-100">Copy board members and roles</span>
+                            <span class="mt-1 block text-xs font-medium text-gray-500 dark:text-gray-300">You will be an admin on the copied board either way.</span>
+                        </span>
+                    </label>
+
+                    <p class="rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+                        Cards, columns, labels, checklists, comments, archived state, and attachment references will be copied. Project and monthly sync links will be removed.
+                    </p>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3">
+                    <button type="button" :disabled="isDuplicatingBoard" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600" @click="closeDuplicateBoardModal">Cancel</button>
+                    <button type="submit" :disabled="isDuplicatingBoard || !duplicateBoardForm.title.trim()" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
+                        <DocumentDuplicateIcon class="h-4 w-4" />
+                        {{ isDuplicatingBoard ? 'Duplicating...' : 'Duplicate Board' }}
+                    </button>
+                </div>
+            </form>
+        </Modal>
 
         <Modal :show="!!selectedCard" @close="closeSelectedCardModal" maxWidth="4xl">
             <div v-if="selectedCard" class="max-h-[90vh] overflow-hidden rounded-lg bg-gray-50 dark:bg-gray-900/50">
