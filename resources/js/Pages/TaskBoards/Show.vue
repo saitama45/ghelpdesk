@@ -1118,10 +1118,16 @@ const deleteColumn = async (column) => {
 };
 
 const startColumnDrag = (event, column) => {
-    if (!canEditBoard.value || editingColumnId.value === column.id) return;
+    if (!column || !canEditBoard.value || editingColumnId.value === column.id) return;
     draggedColumnId.value = column.id;
+    activeColumnMenu.value = null;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', `column:${column.id}`);
+};
+
+const dragColumnOver = (column) => {
+    if (!draggedColumnId.value || !column) return;
+    dragOverColumnId.value = column.id;
 };
 
 const endColumnDrag = () => {
@@ -1130,7 +1136,7 @@ const endColumnDrag = () => {
 };
 
 const dropColumn = async (targetColumn) => {
-    if (!draggedColumnId.value || draggedColumnId.value === targetColumn.id) {
+    if (!targetColumn || !draggedColumnId.value || draggedColumnId.value === targetColumn.id) {
         endColumnDrag();
         return;
     }
@@ -1868,22 +1874,25 @@ onUnmounted(() => {
             <main class="flex-1 overflow-x-auto overflow-y-hidden px-4 py-4">
                 <div class="flex h-full gap-4">
                     <section
-                        v-for="status in columnNames"
-                        :key="columnFor(status)?.id ?? status"
+                        v-for="column in boardColumns"
+                        :key="column.id"
                         class="flex h-full w-[19rem] shrink-0 flex-col rounded-lg bg-gray-100 shadow-xl ring-1 ring-black/10 dark:bg-gray-800"
-                        :class="dragOverColumnId === columnFor(status)?.id ? 'ring-2 ring-blue-400' : ''"
-                        @dragover.prevent="dragOverStatus = status"
-                        @dragleave="dragOverStatus = null"
-                        @drop.prevent="moveDraggedCard(status)"
+                        :class="[
+                            dragOverColumnId === column.id ? 'ring-2 ring-blue-400' : '',
+                            draggedColumnId === column.id ? 'opacity-60' : '',
+                        ]"
+                        @dragover.prevent="draggedColumnId ? dragColumnOver(column) : (dragOverStatus = column.name)"
+                        @dragleave="draggedColumnId ? null : (dragOverStatus = null)"
+                        @drop.prevent="draggedColumnId ? dropColumn(column) : moveDraggedCard(column.name)"
                     >
                         <div
                             class="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 dark:border-gray-700"
-                            @dragover.prevent="draggedColumnId ? (dragOverColumnId = columnFor(status)?.id) : null"
-                            @drop.prevent="draggedColumnId ? dropColumn(columnFor(status)) : null"
+                            @dragover.prevent="draggedColumnId ? dragColumnOver(column) : (dragOverStatus = column.name)"
+                            @drop.prevent.stop="draggedColumnId ? dropColumn(column) : moveDraggedCard(column.name)"
                         >
-                            <form v-if="editingColumnId === columnFor(status)?.id" class="w-full space-y-2" @submit.prevent="saveColumn(columnFor(status))">
+                            <form v-if="editingColumnId === column.id" class="w-full space-y-2" @submit.prevent="saveColumn(column)">
                                 <input
-                                    :ref="(el) => { const col = columnFor(status); if (col) setColumnNameInput(col.id, el); }"
+                                    :ref="(el) => setColumnNameInput(column.id, el)"
                                     v-model="columnForm.name"
                                     type="text"
                                     maxlength="60"
@@ -1902,7 +1911,7 @@ onUnmounted(() => {
                                         ></button>
                                     </div>
                                     <div class="flex shrink-0 items-center gap-1">
-                                        <button type="button" :disabled="isSavingColumn" class="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50" title="Save" @click="saveColumn(columnFor(status))">
+                                        <button type="button" :disabled="isSavingColumn" class="rounded-md p-1.5 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50" title="Save" @click="saveColumn(column)">
                                             <CheckIcon class="h-4 w-4" />
                                         </button>
                                         <button type="button" class="rounded-md p-1.5 text-gray-400 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700" title="Cancel" @click="cancelEditingColumn">
@@ -1913,29 +1922,35 @@ onUnmounted(() => {
                             </form>
                             <template v-else>
                                 <div class="flex min-w-0 items-center gap-2">
-                                    <span
-                                        class="truncate rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider"
-                                        :class="canEditBoard ? 'cursor-move' : ''"
-                                        :style="columnHeaderStyle(columnFor(status))"
-                                        :draggable="canEditBoard"
-                                        :title="canEditBoard ? 'Drag to reorder' : ''"
-                                        @dragstart="startColumnDrag($event, columnFor(status))"
+                                    <button
+                                        v-if="canEditBoard"
+                                        type="button"
+                                        class="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700"
+                                        draggable="true"
+                                        title="Drag to reorder column"
+                                        @dragstart="startColumnDrag($event, column)"
                                         @dragend="endColumnDrag"
                                     >
-                                        {{ status }}
+                                        <Bars3Icon class="h-4 w-4" />
+                                    </button>
+                                    <span
+                                        class="truncate rounded-full border px-2 py-1 text-[10px] font-black uppercase tracking-wider"
+                                        :style="columnHeaderStyle(column)"
+                                    >
+                                        {{ column.name }}
                                     </span>
-                                    <span class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ visibleCardsForStatus(status).length }}</span>
+                                    <span class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ visibleCardsForStatus(column.name).length }}</span>
                                 </div>
                                 <div v-if="canEditBoard" class="relative shrink-0">
-                                    <button type="button" class="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700" title="Column options" @click.stop="toggleColumnMenu(columnFor(status).id)">
+                                    <button type="button" class="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700" title="Column options" @click.stop="toggleColumnMenu(column.id)">
                                         <EllipsisHorizontalIcon class="h-4 w-4" />
                                     </button>
-                                    <div v-if="activeColumnMenu === columnFor(status)?.id" class="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:bg-gray-800 dark:border-gray-700" @click.stop>
-                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700" @click="startEditingColumn(columnFor(status))">
+                                    <div v-if="activeColumnMenu === column.id" class="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:bg-gray-800 dark:border-gray-700" @click.stop>
+                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700" @click="startEditingColumn(column)">
                                             <PencilSquareIcon class="h-4 w-4" />
                                             Rename
                                         </button>
-                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50" @click="deleteColumn(columnFor(status))">
+                                        <button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50" @click="deleteColumn(column)">
                                             <TrashIcon class="h-4 w-4" />
                                             Delete
                                         </button>
@@ -1944,9 +1959,9 @@ onUnmounted(() => {
                             </template>
                         </div>
 
-                        <div class="custom-scrollbar flex-1 space-y-2 overflow-y-auto p-2" :class="dragOverStatus === status ? 'bg-blue-50/70' : ''">
+                        <div class="custom-scrollbar flex-1 space-y-2 overflow-y-auto p-2" :class="dragOverStatus === column.name ? 'bg-blue-50/70' : ''">
                             <article
-                                v-for="card in visibleCardsForStatus(status)"
+                                v-for="card in visibleCardsForStatus(column.name)"
                                 :key="card.id"
                                 draggable="true"
                                 class="group relative cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition hover:border-blue-200 hover:shadow-md dark:bg-gray-800 dark:border-gray-700"
@@ -1955,7 +1970,7 @@ onUnmounted(() => {
                                 @dragstart="startDrag($event, card)"
                                 @dragend="endDrag"
                                 @dragover.prevent
-                                @drop.prevent.stop="moveDraggedCard(status, card)"
+                                @drop.prevent.stop="draggedColumnId ? dropColumn(column) : moveDraggedCard(column.name, card)"
                             >
                                 <div v-if="card.cover_type" class="h-20" :style="coverStyle(card)"></div>
                                 <div class="p-3">
@@ -2183,12 +2198,12 @@ onUnmounted(() => {
         <Modal :show="!!selectedCard" @close="closeSelectedCardModal" maxWidth="4xl">
             <div v-if="selectedCard" class="max-h-[90vh] overflow-hidden rounded-lg bg-gray-50 dark:bg-gray-900/50">
                 <div v-if="selectedCard.cover_type" class="h-36" :style="coverStyle(selectedCard)"></div>
-                <div class="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4 dark:bg-gray-800 dark:border-gray-700">
-                    <div class="min-w-0">
+                <div class="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-5 py-4 dark:bg-gray-800 dark:border-gray-700">
+                    <div class="min-w-0 flex-1">
                         <input v-model="cardDraft.title" :disabled="!canEditBoard" class="w-full border-0 bg-transparent p-0 text-xl font-black text-gray-900 focus:ring-0 dark:text-gray-100">
                         <p class="mt-1 text-xs font-bold text-gray-500 dark:text-gray-300">in {{ cardDraft.status || selectedCard.status }}</p>
                     </div>
-                    <button type="button" @click="closeSelectedCardModal" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
+                    <button type="button" @click="closeSelectedCardModal" class="shrink-0 rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                         <XMarkIcon class="h-5 w-5" />
                     </button>
                 </div>
