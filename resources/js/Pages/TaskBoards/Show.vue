@@ -162,7 +162,7 @@ const showSubTaskInput = ref(false);
 const showChecklistItemInputs = reactive({});
 const showSubtaskItemInputs = reactive({});
 const newChecklistItems = reactive({});
-const newCardTitles = reactive(Object.fromEntries((localBoard.value.columns || []).map((column) => [column.name, ''])));
+const newCardTitles = reactive(Object.fromEntries((localBoard.value.columns || []).map((column) => [column.id, ''])));
 
 const collapsedChecklists = reactive({});
 const activitySectionOpen = ref(true);
@@ -582,39 +582,39 @@ const setCardComposerInput = (status, el) => {
     }
 };
 
-const openCardComposer = async (status) => {
+const openCardComposer = async (column) => {
     if (!canEditBoard.value) return;
 
-    activeCardComposer.value = status;
-    newCardTitles[status] = newCardTitles[status] || '';
+    activeCardComposer.value = column.id;
+    newCardTitles[column.id] = newCardTitles[column.id] || '';
 
     await nextTick();
-    cardComposerInputs.value[status]?.focus();
+    cardComposerInputs.value[column.id]?.focus();
 };
 
-const closeCardComposer = (status) => {
-    if (status && activeCardComposer.value !== status) return;
+const closeCardComposer = (columnId) => {
+    if (columnId && activeCardComposer.value !== columnId) return;
 
     activeCardComposer.value = '';
-    if (status) {
-        newCardTitles[status] = '';
+    if (columnId) {
+        newCardTitles[columnId] = '';
     }
 };
 
-const createCard = async (status) => {
-    const title = newCardTitles[status]?.trim();
+const createCard = async (column) => {
+    const title = newCardTitles[column.id]?.trim();
     if (!canEditBoard.value || isCreatingCard.value) return;
 
     if (!title) {
         showError('Enter a card title first.');
-        await openCardComposer(status);
+        await openCardComposer(column);
         return;
     }
 
     isCreatingCard.value = true;
 
     try {
-        const payload = { title, status };
+        const payload = { title, status: column.name };
 
         if (isProjectBoard.value) {
             payload.category = filters.milestone || projectMilestones.value[0] || 'General';
@@ -623,7 +623,7 @@ const createCard = async (status) => {
         const response = await axios.post(route('task-boards.cards.store', localBoard.value.id), payload);
         const card = response.data.card;
         replaceCard(card);
-        newCardTitles[status] = '';
+        newCardTitles[column.id] = '';
         activeCardComposer.value = '';
     } catch (error) {
         handleApiError(error, 'Unable to create card');
@@ -2082,31 +2082,31 @@ onUnmounted(() => {
 
                         <div v-if="canEditBoard" class="border-t border-gray-200 p-2 dark:border-gray-700">
                             <button
-                                v-if="activeCardComposer !== status"
+                                v-if="activeCardComposer !== column.id"
                                 type="button"
                                 class="inline-flex w-full items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700"
-                                @click="openCardComposer(status)"
+                                @click="openCardComposer(column)"
                             >
                                 <PlusIcon class="h-4 w-4" />
                                 Add Card
                             </button>
-                            <form v-else class="space-y-2" @submit.prevent="createCard(status)">
+                            <form v-else class="space-y-2" @submit.prevent="createCard(column)">
                                 <textarea
-                                    :ref="(el) => setCardComposerInput(status, el)"
-                                    v-model="newCardTitles[status]"
+                                    :ref="(el) => setCardComposerInput(column.id, el)"
+                                    v-model="newCardTitles[column.id]"
                                     rows="3"
                                     class="w-full resize-none rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
                                     placeholder="Enter a title for this card..."
-                                    @keydown.esc.prevent="closeCardComposer(status)"
-                                    @keydown.ctrl.enter.prevent="createCard(status)"
-                                    @keydown.meta.enter.prevent="createCard(status)"
+                                    @keydown.esc.prevent="closeCardComposer(column.id)"
+                                    @keydown.ctrl.enter.prevent="createCard(column)"
+                                    @keydown.meta.enter.prevent="createCard(column)"
                                 ></textarea>
                                 <div class="flex items-center gap-2">
-                                    <button type="button" :disabled="isCreatingCard" class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50" @click="createCard(status)">
+                                    <button type="button" :disabled="isCreatingCard" class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50" @click="createCard(column)">
                                         <PlusIcon class="h-4 w-4" />
                                         {{ isCreatingCard ? 'Creating...' : 'Create' }}
                                     </button>
-                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="closeCardComposer(status)">
+                                    <button type="button" class="rounded-lg p-2 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="closeCardComposer(column.id)">
                                         <XMarkIcon class="h-5 w-5" />
                                     </button>
                                 </div>
