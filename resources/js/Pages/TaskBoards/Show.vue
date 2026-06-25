@@ -1875,34 +1875,34 @@ onUnmounted(() => {
                 </div>
 
                 <div class="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
-                    <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-gray-800 shadow-sm dark:text-gray-200">
+                    <div class="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/95 px-3 py-2 text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
                         <FunnelIcon class="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-400" />
-                        <input ref="filterInput" v-model="filters.keyword" type="search" class="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 text-sm focus:ring-0" placeholder="Filter cards...">
+                        <input ref="filterInput" v-model="filters.keyword" type="search" class="h-8 min-w-0 flex-1 border-0 bg-transparent py-0 pl-2 pr-0 text-sm focus:ring-0" placeholder="Filter cards...">
                     </div>
-                    <select v-model="filters.assignee_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
+                    <select v-model="filters.assignee_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
                         <option value="">All members</option>
                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                     </select>
-                    <select v-model="filters.label_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
+                    <select v-model="filters.label_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
                         <option value="">All labels</option>
                         <option v-for="label in localBoard.labels" :key="label.id" :value="label.id">{{ label.name || label.color }}</option>
                     </select>
-                    <select v-if="isProjectBoard" v-model="filters.milestone" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
+                    <select v-if="isProjectBoard" v-model="filters.milestone" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
                         <option value="">All milestones</option>
                         <option v-for="milestone in projectMilestones" :key="milestone" :value="milestone">{{ milestone }}</option>
                     </select>
-                    <select v-model="filters.due" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:text-gray-200">
+                    <select v-model="filters.due" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
                         <option value="">All due dates</option>
                         <option value="overdue">Overdue</option>
                         <option value="soon">Due soon</option>
                         <option value="complete">Complete</option>
                         <option value="none">No due date</option>
                     </select>
-                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm dark:text-gray-300">
+                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm dark:bg-gray-800/95 dark:text-gray-300">
                         <input v-model="filters.mine" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                         My cards
                     </label>
-                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm dark:text-gray-300">
+                    <label class="inline-flex h-10 items-center gap-2 rounded-lg bg-white/95 px-3 text-sm font-semibold text-gray-700 shadow-sm dark:bg-gray-800/95 dark:text-gray-300">
                         <input v-model="filters.showArchived" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                         Archived
                     </label>
