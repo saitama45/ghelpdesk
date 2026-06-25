@@ -173,6 +173,12 @@ class TicketController extends Controller
             $query->whereIn('store_id', $storeFilters->all());
         }
 
+        // Apply SubCategory filter
+        $subCategoryFilters = $normalizeFilterValues($request->input('sub_category_id'));
+        if ($subCategoryFilters->isNotEmpty()) {
+            $query->whereIn('sub_category_id', $subCategoryFilters->map(fn ($id) => (int) $id)->all());
+        }
+
         // Apply Date Range filter
         if ($request->filled('start_date') && $request->filled('end_date')) {
             $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
@@ -375,6 +381,7 @@ class TicketController extends Controller
         })->select('id', 'name', 'email', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $subCategories = \App\Models\SubCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
@@ -386,6 +393,7 @@ class TicketController extends Controller
             'staff' => $staff,
             'companies' => $companies,
             'stores' => $stores,
+            'subCategories' => $subCategories,
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
             'departments' => $departments,
@@ -399,6 +407,8 @@ class TicketController extends Controller
                 'department_node_id' => $filterNodeId,
                 'assigned_department_only' => $assignedDepartmentOnly,
                 'assignee_id' => $assigneeFilters->all(),
+                'store_id' => $storeFilters->all(),
+                'sub_category_id' => $subCategoryFilters->first(),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,
                 'year' => $request->year,
@@ -1805,11 +1815,12 @@ class TicketController extends Controller
             'category_id'     => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'item_id'         => 'nullable|exists:items,id',
+            'department'      => 'nullable|string|max:255',
             'assignee_id'     => 'nullable|exists:users,id',
             'status'          => 'nullable|string',
         ]);
 
-        $fields  = ['store_id', 'category_id', 'sub_category_id', 'item_id', 'assignee_id', 'status'];
+        $fields  = ['store_id', 'category_id', 'sub_category_id', 'item_id', 'department', 'assignee_id', 'status'];
         $updates = collect($fields)
             ->filter(fn($k) => $request->has($k))
             ->mapWithKeys(fn($k) => [$k => $validated[$k]])

@@ -38,6 +38,7 @@ const emit = defineEmits(['update:modelValue']);
 const isOpen = ref(false);
 const searchQuery = ref('');
 const containerRef = ref(null);
+const dropdownRef = ref(null);
 const inputRef = ref(null);
 const uniqueId = Math.random().toString(36).substr(2, 9);
 
@@ -106,12 +107,16 @@ const openDropdown = async () => {
     isOpen.value = true;
     await nextTick();
     updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
     inputRef.value?.focus({ preventScroll: true });
 };
 
 const closeDropdown = () => {
     isOpen.value = false;
     searchQuery.value = '';
+    window.removeEventListener('scroll', updatePosition, true);
+    window.removeEventListener('resize', updatePosition);
 };
 
 const select = (option) => {
@@ -127,7 +132,9 @@ const handleSearchInput = () => {
 };
 
 const handleClickOutside = (event) => {
-    if (containerRef.value && !containerRef.value.contains(event.target)) {
+    const inContainer = containerRef.value && containerRef.value.contains(event.target);
+    const inDropdown = dropdownRef.value && dropdownRef.value.contains(event.target);
+    if (!inContainer && !inDropdown) {
         closeDropdown();
     }
 };
@@ -138,6 +145,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     document.removeEventListener('mousedown', handleClickOutside);
+    window.removeEventListener('scroll', updatePosition, true);
+    window.removeEventListener('resize', updatePosition);
 });
 
 // Sync searchQuery when selectedOption changes if dropdown is closed
@@ -185,6 +194,7 @@ watch(selectedOption, (newVal) => {
             </span>
         </div>
 
+        <Teleport to="body">
         <transition
             leave-active-class="transition ease-in duration-100"
             leave-from-class="opacity-100"
@@ -192,6 +202,7 @@ watch(selectedOption, (newVal) => {
         >
             <div
                 v-if="isOpen"
+                ref="dropdownRef"
                 :style="dropdownStyle"
                 class="fixed z-[200] bg-white shadow-2xl border border-gray-200 rounded-lg overflow-hidden flex flex-col dark:bg-gray-800 dark:border-gray-700"
             >
@@ -221,6 +232,7 @@ watch(selectedOption, (newVal) => {
                 </div>
             </div>
         </transition>
+        </Teleport>
     </div>
 </template>
 

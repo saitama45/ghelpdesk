@@ -20,6 +20,7 @@ const props = defineProps({
     staff: Array,
     companies: Array,
     stores: Array,
+    subCategories: { type: Array, default: () => [] },
     vendors: Array,
     cannedMessages: Array,
     filters: Object,
@@ -129,6 +130,8 @@ onMounted(() => {
                     if (savedFilters.status !== undefined) filterStatus.value = savedFilters.status;
                     if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
                     if (savedFilters.assignee_id !== undefined) filterAssignee.value = savedFilters.assignee_id;
+                    if (savedFilters.store_id !== undefined) filterStore.value = savedFilters.store_id;
+                    if (savedFilters.sub_category_id !== undefined) filterSubCategory.value = savedFilters.sub_category_id;
                     if (savedFilters.start_date !== undefined) filterStartDate.value = savedFilters.start_date;
                     if (savedFilters.end_date !== undefined) filterEndDate.value = savedFilters.end_date;
                     if (savedFilters.dashboard_filter !== undefined) activeDashboardFilter.value = savedFilters.dashboard_filter;
@@ -279,6 +282,7 @@ const filterNodeId = ref(
 )
 const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [], normalizeAssigneeFilterValue));
 const filterStore = ref(normalizeFilterValues(props.filters?.store_id, [], normalizeStoreFilterValue));
+const filterSubCategory = ref(props.filters?.sub_category_id ?? '');
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
@@ -307,6 +311,16 @@ const hierarchicalOptions = computed(() =>
         id: `dept-${dept.id}`,
         children: dept.nodes || []
     }))
+)
+
+const bulkDepartmentNodes = computed(() =>
+    (props.hierarchicalDepartments || [])
+        .filter(dept => dept?.name && dept?.is_active !== false)
+        .map(dept => ({
+            id: dept.name,
+            name: dept.name,
+            code: dept.code,
+        }))
 )
 
 const assigneeSectorByNodeId = computed(() => {
@@ -353,11 +367,17 @@ const assigneeOptions = computed(() => {
     return (props.staff || []).map(s => ({ id: s.id, name: s.name }));
 });
 
+const subCategoryOptions = computed(() => [
+    { id: '', name: 'All SubCategories' },
+    ...(props.subCategories || []),
+]);
+
 const ticketFilterParams = () => ({
     status: filterStatus.value,
     ...deptFilterParams.value,
     assignee_id: filterAssignee.value,
     store_id: filterStore.value,
+    sub_category_id: filterSubCategory.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
     dashboard_filter: activeDashboardFilter.value,
@@ -486,6 +506,11 @@ const handleStoreFilterChange = (value) => {
     applyFilter();
 };
 
+const handleSubCategoryFilterChange = (value) => {
+    filterSubCategory.value = value ?? '';
+    applyFilter();
+};
+
 const handleTicketScopeChange = () => {
     selectedIds.value = [];
     applyFilter();
@@ -532,6 +557,7 @@ const clearFilters = () => {
     filterNodeId.value = '';
     filterAssignee.value = [];
     filterStore.value = [];
+    filterSubCategory.value = '';
     filterStartDate.value = '';
     filterEndDate.value = '';
     activeDashboardFilter.value = 'all';
@@ -703,7 +729,7 @@ const storesWithLabel = computed(() =>
 
 // ── Bulk Form ─────────────────────────────────────────────────────────────
 const bulkForm = reactive({
-    store_id: '', item_id: '', assignee_id: '', status: ''
+    store_id: '', item_id: '', department: '', assignee_id: '', status: ''
 })
 const isBulkSubmitting = ref(false)
 const isBulkArchiving = ref(false)
@@ -981,6 +1007,7 @@ const submitBulk = () => {
     const payload = { ticket_ids: selectedIds.value }
     if (bulkForm.store_id)        payload.store_id        = bulkForm.store_id
     if (bulkForm.item_id)         payload.item_id         = bulkForm.item_id
+    if (bulkForm.department)      payload.department      = bulkForm.department
     if (bulkForm.assignee_id)     payload.assignee_id     = bulkForm.assignee_id
     if (bulkForm.status)          payload.status          = bulkForm.status
 
@@ -1483,6 +1510,10 @@ const activeFilterBadges = computed(() => {
     if (filterStore.value.length) {
         badges.push(`Location: ${formatFilterBadgeValues(filterStore.value, getStoreFilterLabel)}`);
     }
+    if (filterSubCategory.value) {
+        const sub = (props.subCategories || []).find(s => String(s.id) === String(filterSubCategory.value));
+        badges.push(`SubCategory: ${sub?.name ?? filterSubCategory.value}`);
+    }
     if (filterStartDate.value) {
         badges.push(`From: ${filterStartDate.value}`);
     }
@@ -1789,7 +1820,7 @@ const requesterTabs = computed(() => {
             <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/30 dark:supports-[backdrop-filter]:bg-slate-900/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
-                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-7">
+                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-8">
                             <div class="flex flex-col gap-1.5">
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Status</label>
                                 <MultiAutocomplete
@@ -1849,6 +1880,19 @@ const requesterTabs = computed(() => {
                                     placeholder="Location..."
                                     :limit="1"
                                     @update:modelValue="handleStoreFilterChange"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">SubCategory</label>
+                                <Autocomplete
+                                    :model-value="filterSubCategory"
+                                    :options="subCategoryOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="SubCategory..."
+                                    size="sm"
+                                    @update:modelValue="handleSubCategoryFilterChange"
                                 />
                             </div>
 
@@ -1935,9 +1979,9 @@ const requesterTabs = computed(() => {
                                 <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for response, update, split, merge, child creation, or archive.</div>
                             </div>
 
-                            <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-5">
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Store</label>
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Location</label>
                                     <Autocomplete
                                         v-model="bulkForm.store_id"
                                         :options="storesWithLabel"
@@ -1956,6 +2000,15 @@ const requesterTabs = computed(() => {
                                         value-key="id"
                                         placeholder="Unchanged..."
                                         size="sm"
+                                    />
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Department</label>
+                                    <HierarchySelector
+                                        v-model="bulkForm.department"
+                                        :nodes="bulkDepartmentNodes"
+                                        placeholder="Unchanged..."
                                     />
                                 </div>
 
