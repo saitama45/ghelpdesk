@@ -25,6 +25,7 @@ const props = defineProps({
     cannedMessages: Array,
     filters: Object,
     departments: Array,
+    departmentReferences: { type: Array, default: () => [] },
     hierarchicalDepartments: Array,
     summaryStats: Object,
     summaryStatsByDept: { type: Object, default: () => ({}) },
@@ -578,6 +579,58 @@ const acceptForm = useForm({
     item_id: '',
     department: '',
 });
+
+const isAcceptSubmitting = ref(false);
+
+const acceptDepartmentNodes = computed(() => {
+    const references = (props.departmentReferences || [])
+        .filter(department => department?.name && department?.is_active !== false)
+        .map(department => ({
+            id: department.name,
+            name: department.name,
+            code: department.code,
+        }));
+
+    const fallbackDepartments = (props.departments || [])
+        .filter(Boolean)
+        .map(department => ({
+            id: department,
+            name: department,
+        }));
+
+    const nodes = references.length ? references : fallbackDepartments;
+    const currentDepartment = acceptForm.department || acceptingTicket.value?.department || '';
+    const hasCurrentDepartment = nodes.some(department => department.id === currentDepartment);
+
+    if (currentDepartment && !hasCurrentDepartment) {
+        return [
+            {
+                id: currentDepartment,
+                name: `${currentDepartment} (Legacy)`,
+            },
+            ...nodes,
+        ];
+    }
+
+    return nodes;
+});
+
+const hasCompleteAcceptForm = computed(() =>
+    !!acceptForm.company_id
+    && !!acceptForm.store_id
+    && !!acceptForm.item_id
+    && !!acceptForm.department
+);
+
+const canSubmitAcceptTicket = computed(() => hasCompleteAcceptForm.value && !isAcceptSubmitting.value);
+
+const replaceAccumulatedTicket = (updatedTicket) => {
+    if (!updatedTicket?.id) return;
+
+    accumulatedTickets.value = accumulatedTickets.value.map(ticket =>
+        ticket.id === updatedTicket.id ? updatedTicket : ticket
+    );
+};
 
 const createForm = useForm({
     company_id: '',
@@ -1151,37 +1204,40 @@ const acceptTicket = (ticket) => {
 };
 
 const submitAcceptTicket = () => {
-    if (!acceptingTicket.value) return;
+    if (!acceptingTicket.value || isAcceptSubmitting.value) return;
+
+    if (!hasCompleteAcceptForm.value) {
+        showError('Please complete company, store, item, and department before accepting the ticket.');
+        return;
+    }
+
+    isAcceptSubmitting.value = true;
     const ticket = acceptingTicket.value;
 
-    const item = items.value.find(i => i.id == acceptForm.item_id);
-    const priority = item ? item.priority.toLowerCase() : (ticket.priority || 'medium');
-
-    put(route('tickets.update', ticket.id), {
+    axios.post(route('tickets.accept', ticket.id), {
         company_id: acceptForm.company_id,
         store_id: acceptForm.store_id,
-        category_id: ticket.category_id,
-        sub_category_id: ticket.sub_category_id,
         item_id: acceptForm.item_id,
-        title: ticket.title,
-        description: ticket.description,
-        type: ticket.type,
-        priority: priority,
-        status: ticket.status,
-        severity: ticket.severity,
-        assignee_id: page.props.auth.user.id,
         department: acceptForm.department,
-    }, {
-        onSuccess: () => {
+    })
+        .then(({ data }) => {
+            replaceAccumulatedTicket(data.ticket);
             showAcceptModal.value = false;
             acceptingTicket.value = null;
             acceptForm.reset();
-        },
-        onError: (errors) => {
-            const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot accept ticket';
-            showError(errorMessage);
-        }
-    });
+            showSuccess(data.message || 'Ticket accepted successfully.');
+        })
+        .catch((error) => {
+            const errors = error.response?.data?.errors;
+            const message = errors
+                ? Object.values(errors).flat().join(', ')
+                : (error.response?.data?.message || 'Cannot accept ticket');
+
+            showError(message);
+        })
+        .finally(() => {
+            isAcceptSubmitting.value = false;
+        });
 };
 
 
@@ -2609,30 +2665,24 @@ const requesterTabs = computed(() => {
                             />
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Department</label>
-                            <input
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Department <span class="text-red-500">*</span></label>
+                            <HierarchySelector
                                 v-model="acceptForm.department"
-                                type="text"
-                                list="accept-ticket-departments-list"
-                                maxlength="255"
-                                class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
-                                placeholder="Department"
-                            >
-                            <datalist id="accept-ticket-departments-list">
-                                <option v-for="dept in departments" :key="dept" :value="dept" />
-                            </datalist>
+                                :nodes="acceptDepartmentNodes"
+                                placeholder="Select Department"
+                            />
                         </div>
                     </div>
 
                     <div class="flex justify-end space-x-3 pt-5 border-t mt-5">
-                        <button type="button" @click="showAcceptModal = false" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
+                        <button type="button" @click="showAcceptModal = false" :disabled="isAcceptSubmitting" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
                         <button
                             type="button"
                             @click="submitAcceptTicket"
-                            :disabled="!acceptForm.company_id || !acceptForm.store_id || !acceptForm.item_id"
+                            :disabled="!canSubmitAcceptTicket"
                             class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 transition-all"
                         >
-                            Accept Ticket
+                            {{ isAcceptSubmitting ? 'Accepting...' : 'Accept Ticket' }}
                         </button>
                     </div>
                 </div>

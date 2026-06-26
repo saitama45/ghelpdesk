@@ -397,6 +397,7 @@ class TicketController extends Controller
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
             'departments' => $departments,
+            'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'summaryStats' => $summaryStats,
             'summaryStatsByDept' => $summaryStatsByDept,
@@ -993,45 +994,9 @@ class TicketController extends Controller
         $ticket->fill($validated);
         
         if ($ticket->isDirty()) {
-            $userId = auth()->id();
             $dirty = $ticket->getDirty();
-            $assigneeChanged = false;
-            
-            foreach ($dirty as $column => $newValue) {
-                if ($column === 'assignee_id') $assigneeChanged = true;
-                if ($column === 'updated_at') continue;
-                
-                $oldValue = $ticket->getOriginal($column);
-                
-                if ($column === 'company_id') {
-                    $oldValue = Company::find($oldValue)?->name ?? $oldValue;
-                    $newValue = Company::find($newValue)?->name ?? $newValue;
-                } elseif ($column === 'store_id') {
-                    $oldValue = Store::find($oldValue)?->name ?? $oldValue;
-                    $newValue = Store::find($newValue)?->name ?? $newValue;
-                } elseif (in_array($column, ['assignee_id', 'reporter_id'])) {
-                    $oldValue = User::find($oldValue)?->name ?? $oldValue;
-                    $newValue = User::find($newValue)?->name ?? $newValue;
-                } elseif ($column === 'category_id') {
-                    $oldValue = \App\Models\Category::find($oldValue)?->name ?? $oldValue;
-                    $newValue = \App\Models\Category::find($newValue)?->name ?? $newValue;
-                } elseif ($column === 'sub_category_id') {
-                    $oldValue = \App\Models\SubCategory::find($oldValue)?->name ?? $oldValue;
-                    $newValue = \App\Models\SubCategory::find($newValue)?->name ?? $newValue;
-                } elseif ($column === 'item_id') {
-                    $oldValue = \App\Models\Item::find($oldValue)?->name ?? $oldValue;
-                    $newValue = \App\Models\Item::find($newValue)?->name ?? $newValue;
-                }
-                
-                \App\Models\TicketHistory::create([
-                    'ticket_id' => $ticket->id,
-                    'user_id' => $userId,
-                    'column_changed' => $column,
-                    'old_value' => (string) $oldValue,
-                    'new_value' => (string) $newValue,
-                    'changed_at' => now('Asia/Manila'),
-                ]);
-            }
+            $assigneeChanged = array_key_exists('assignee_id', $dirty);
+            $this->recordTicketHistory($ticket, $dirty);
             
             $statusChanged = $ticket->isDirty('status');
             $oldStatus = $ticket->getOriginal('status');
@@ -1095,6 +1060,111 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Ticket updated successfully.');
+    }
+
+    public function accept(Request $request, Ticket $ticket)
+    {
+        abort_unless($request->user()->can('tickets.assign'), 403);
+
+        $validated = $request->validate([
+            'company_id' => ['required', 'exists:companies,id'],
+            'store_id' => ['required', 'exists:stores,id'],
+            'item_id' => ['required', 'exists:items,id'],
+            'department' => ['required', 'string', 'max:255'],
+        ]);
+
+        $acceptedTicket = DB::transaction(function () use ($ticket, $validated, $request) {
+            $lockedTicket = Ticket::whereKey($ticket->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedTicket->assignee_id && (int) $lockedTicket->assignee_id !== (int) $request->user()->id) {
+                abort(409, 'This ticket was already accepted by another user.');
+            }
+
+            $item = \App\Models\Item::findOrFail($validated['item_id']);
+
+            $lockedTicket->fill([
+                'company_id' => $validated['company_id'],
+                'store_id' => $validated['store_id'],
+                'item_id' => $item->id,
+                'category_id' => $item->category_id,
+                'sub_category_id' => $item->sub_category_id,
+                'priority' => strtolower((string) $item->priority),
+                'assignee_id' => $request->user()->id,
+                'department' => $validated['department'],
+            ]);
+
+            if ($lockedTicket->isDirty()) {
+                $this->recordTicketHistory($lockedTicket, $lockedTicket->getDirty());
+                $lockedTicket->save();
+            }
+
+            return $lockedTicket;
+        });
+
+        return response()->json([
+            'ticket' => $this->ticketIndexPayload($acceptedTicket),
+            'message' => 'Ticket accepted successfully.',
+        ]);
+    }
+
+    private function recordTicketHistory(Ticket $ticket, array $dirty): void
+    {
+        $userId = auth()->id();
+
+        foreach ($dirty as $column => $newValue) {
+            if ($column === 'updated_at') continue;
+
+            $oldValue = $ticket->getOriginal($column);
+
+            if ($column === 'company_id') {
+                $oldValue = Company::find($oldValue)?->name ?? $oldValue;
+                $newValue = Company::find($newValue)?->name ?? $newValue;
+            } elseif ($column === 'store_id') {
+                $oldValue = Store::find($oldValue)?->name ?? $oldValue;
+                $newValue = Store::find($newValue)?->name ?? $newValue;
+            } elseif (in_array($column, ['assignee_id', 'reporter_id'])) {
+                $oldValue = User::find($oldValue)?->name ?? $oldValue;
+                $newValue = User::find($newValue)?->name ?? $newValue;
+            } elseif ($column === 'category_id') {
+                $oldValue = \App\Models\Category::find($oldValue)?->name ?? $oldValue;
+                $newValue = \App\Models\Category::find($newValue)?->name ?? $newValue;
+            } elseif ($column === 'sub_category_id') {
+                $oldValue = \App\Models\SubCategory::find($oldValue)?->name ?? $oldValue;
+                $newValue = \App\Models\SubCategory::find($newValue)?->name ?? $newValue;
+            } elseif ($column === 'item_id') {
+                $oldValue = \App\Models\Item::find($oldValue)?->name ?? $oldValue;
+                $newValue = \App\Models\Item::find($newValue)?->name ?? $newValue;
+            }
+
+            \App\Models\TicketHistory::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $userId,
+                'column_changed' => $column,
+                'old_value' => (string) $oldValue,
+                'new_value' => (string) $newValue,
+                'changed_at' => now('Asia/Manila'),
+            ]);
+        }
+    }
+
+    private function ticketIndexPayload(Ticket $ticket): Ticket
+    {
+        return $ticket->fresh([
+            'reporter:id,name,profile_photo',
+            'assignee:id,name,profile_photo,department_node_id',
+            'company:id,name',
+            'store:id,name',
+            'item:id,name,priority,category_id,sub_category_id',
+            'item.category:id,name',
+            'item.subCategory:id,name',
+            'slaMetric',
+            'survey:ticket_id,rating,feedback',
+            'parent:id,ticket_key,title',
+            'children' => function ($q) {
+                $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'status')
+                    ->with('assignee:id,name,profile_photo');
+            },
+        ]);
     }
 
     /**

@@ -256,6 +256,7 @@ Route::middleware('auth')->group(function () {
     Route::post('tickets/bulk-child', [\App\Http\Controllers\TicketController::class, 'bulkStoreChild'])->name('tickets.bulk-child');
     Route::post('tickets/merge', [\App\Http\Controllers\TicketController::class, 'merge'])->name('tickets.merge');
     Route::get('tickets/export', [\App\Http\Controllers\TicketController::class, 'export'])->name('tickets.export');
+    Route::post('tickets/{ticket}/accept', [\App\Http\Controllers\TicketController::class, 'accept'])->name('tickets.accept');
     Route::resource('tickets', \App\Http\Controllers\TicketController::class);
     Route::post('tickets/{ticket}/split', [\App\Http\Controllers\TicketController::class, 'split'])->name('tickets.split');
     Route::post('tickets/{ticket}/child', [\App\Http\Controllers\TicketController::class, 'storeChild'])->name('tickets.store-child');
