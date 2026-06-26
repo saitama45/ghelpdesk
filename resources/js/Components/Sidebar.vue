@@ -96,7 +96,7 @@ onMounted(() => {
     if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*') || route().current('mall-hookups.*')) {
         openMenus.value.monitoring = true;
     }
-    if (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
+    if (route().current('tickets.*') || route().current('queue.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
         openMenus.value.services = true;
     }
     if (route().current('stock-ins.*') || route().current('reports.inventory') || route().current('assets.*') || route().current('stock-transfers.*') || route().current('stock-receivings.*')) {
@@ -139,6 +139,7 @@ const canSeeMonitoring = computed(() => {
 
 const canSeeServices = computed(() => {
     return hasPermission('tickets.view') ||
+           hasPermission('queue.view') ||
            hasPermission('task_boards.view') ||
            hasPermission('pos_requests.view') ||
            hasPermission('sap_requests.view') ||
@@ -267,7 +268,7 @@ const canSeeSettings = computed(() => {
                         @click="toggleMenu('services')"
                         :class="[
                             'w-full flex items-center p-3 rounded-lg transition-all duration-200 group relative',
-                            (route().current('tickets.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) && (isCollapsed || !openMenus.services)
+                            (route().current('tickets.*') || route().current('queue.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) && (isCollapsed || !openMenus.services)
                                 ? 'bg-gray-800 text-blue-400'
                                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         ]"
@@ -285,6 +286,9 @@ const canSeeSettings = computed(() => {
                         <div class="p-2 flex flex-col gap-0.5">
                             <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
                                 <Link :href="route('tickets.index')" :class="collapsedFlyoutLinkClass(route().current('tickets.*'))">{{ getChildLabel('services', 'tickets') }}</Link>
+                            </div>
+                            <div v-if="hasPermission('queue.view')" :style="co('services', 'queue')">
+                                <Link :href="route('queue.index')" :class="collapsedFlyoutLinkClass(route().current('queue.*'))">{{ getChildLabel('services', 'queue') }}</Link>
                             </div>
                             <div v-if="hasPermission('task_boards.view')" :style="co('services', 'task-boards')">
                                 <Link :href="route('task-boards.index')" :class="collapsedFlyoutLinkClass(route().current('task-boards.*'))">{{ getChildLabel('services', 'task-boards') }}</Link>
@@ -307,6 +311,9 @@ const canSeeSettings = computed(() => {
                     <div v-if="!isCollapsed && openMenus.services" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
                         <div v-if="hasPermission('tickets.view')" :style="co('services', 'tickets')">
                             <Link :href="route('tickets.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('tickets.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'tickets') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('queue.view')" :style="co('services', 'queue')">
+                            <Link :href="route('queue.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('queue.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'queue') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('task_boards.view')" :style="co('services', 'task-boards')">
                             <Link :href="route('task-boards.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('task-boards.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('services', 'task-boards') }}</span></Link>

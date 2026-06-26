@@ -9,6 +9,7 @@ export const roleLandingPageOptions = [
         group: 'Services',
         options: [
             { label: 'Tickets', value: 'tickets.index' },
+            { label: 'Queue Monitor', value: 'queue.index' },
             { label: 'POS Requests', value: 'pos-requests.index' },
             { label: 'SAP Requests', value: 'sap-requests.index' },
             { label: 'Loyalty Stamps', value: 'stamps.index' },

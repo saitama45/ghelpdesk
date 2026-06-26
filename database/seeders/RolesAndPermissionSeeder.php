@@ -34,6 +34,10 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.canned_messages' => 'Use canned messages',
             'tickets.internal_notes' => 'Use internal notes',
 
+            // Queue Management
+            'queue.view' => 'View the queue board',
+            'queue.operate' => 'Call next / serve from the queue',
+
             // Task Board
             'task_boards.view' => 'View task boards',
             'task_boards.create' => 'Create task boards',
@@ -282,6 +286,7 @@ class RolesAndPermissionSeeder extends Seeder
         $techSupport->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.resolve', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
+            'queue.view', 'queue.operate',
             'task_boards.view', 'task_boards.create', 'task_boards.edit', 'task_boards.manage_members',
             'attendance.view', 'attendance.logs', 'attendance.create',
             'users.view',

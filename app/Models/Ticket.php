@@ -37,6 +37,10 @@ class Ticket extends Model
         'source_message_id',
         'email_body_hash',
         'survey_token',
+        'channel',
+        'queue_track_token',
+        'called_at',
+        'queue_called_lane',
         'is_deleted',
     ];
 
@@ -153,8 +157,24 @@ class Ticket extends Model
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
         'deleted_at' => 'datetime:Y-m-d H:i:s',
+        'called_at' => 'datetime:Y-m-d H:i:s',
         'is_deleted' => 'boolean',
     ];
+
+    /**
+     * Lazily assign and persist a stable token for the public "Track my ticket"
+     * queue page, then return it. Existing tickets (created before the queue
+     * feature) get one the first time a track link is built for them.
+     */
+    public function ensureTrackToken(): string
+    {
+        if (empty($this->queue_track_token)) {
+            $this->queue_track_token = \Illuminate\Support\Str::random(40);
+            $this->saveQuietly();
+        }
+
+        return $this->queue_track_token;
+    }
 
     /**
      * Prepare a date for array / JSON serialization.

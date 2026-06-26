@@ -25,6 +25,23 @@ class TicketObserver
                 $ticket->ticket_key = $this->nextTicketKey($company->code);
             }
         }
+
+        // Stable token for the public "Track my ticket" queue page.
+        // Guarded so ticket creation still works before the queue migration runs.
+        if (self::ticketsHaveQueueToken() && empty($ticket->queue_track_token)) {
+            $ticket->queue_track_token = \Illuminate\Support\Str::random(40);
+        }
+    }
+
+    private static ?bool $hasQueueToken = null;
+
+    private static function ticketsHaveQueueToken(): bool
+    {
+        if (self::$hasQueueToken === null) {
+            self::$hasQueueToken = \Illuminate\Support\Facades\Schema::hasColumn('tickets', 'queue_track_token');
+        }
+
+        return self::$hasQueueToken;
     }
 
     /**

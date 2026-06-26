@@ -248,7 +248,7 @@ watch(() => props.show, (show) => {
 })
 
 const permissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Task Board', 'Pos_requests', 'Sap_requests', 'Loyalty Stamps']
+    const servicesCategories = ['Tickets', 'Queue', 'Task Board', 'Pos_requests', 'Sap_requests', 'Loyalty Stamps']
 
     ;(props.dynamicForms || []).forEach(form => {
         servicesCategories.push(form.name)

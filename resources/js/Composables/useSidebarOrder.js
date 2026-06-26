@@ -20,7 +20,7 @@ export const DEFAULT_SECTION_ORDER = [
 export const DEFAULT_CHILD_ORDER = {
     dashboard: [],
     projectTracker: [],
-    services: ['tickets', 'task-boards', 'pos-requests', 'sap-requests', 'stamps'],
+    services: ['tickets', 'queue', 'task-boards', 'pos-requests', 'sap-requests', 'stamps'],
     inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
     monitoring: ['npc-status', 'cctv-monitoring', 'wigs', 'payments', 'mall-hookups'],
     adminTask: ['dtr', 'attendance-logs', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles'],
@@ -33,6 +33,7 @@ export const DEFAULT_CHILD_ORDER = {
 export const CHILD_LABELS = {
     services: {
         'tickets': 'Tickets',
+        'queue': 'Queue Monitor',
         'task-boards': 'Task Board',
         'pos-requests': 'POS Requests',
         'sap-requests': 'SAP Requests',

@@ -2245,6 +2245,13 @@ const requesterTabs = computed(() => {
                                     <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize" :class="getStatusColor(ticket.status)">
                                         {{ getStatusLabel(ticket.status) }}
                                     </span>
+                                    <a v-if="ticket.queue_track_token && !['resolved','closed'].includes(ticket.status)"
+                                       :href="route('public.queue.track', ticket.queue_track_token)" target="_blank" @click.stop
+                                       title="Track this ticket's live position in the queue"
+                                       class="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+                                        Queue
+                                    </a>
                                 </div>
 
                                 <div class="space-y-1.5">

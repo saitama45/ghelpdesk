@@ -270,7 +270,13 @@ Route::middleware('auth')->group(function () {
     Route::put('tickets/{ticket}/assets/{ticketAsset}', [\App\Http\Controllers\TicketAssetController::class, 'update'])->name('tickets.assets.update');
     Route::delete('tickets/{ticket}/assets/{ticketAsset}', [\App\Http\Controllers\TicketAssetController::class, 'destroy'])->name('tickets.assets.destroy');
     Route::get('attachments/{attachment}/download', [\App\Http\Controllers\TicketController::class, 'downloadAttachment'])->name('tickets.attachments.download');
-    
+
+    // Queue Management (internal board + agent console)
+    Route::get('queue', [\App\Http\Controllers\QueueController::class, 'index'])->middleware('can:queue.view')->name('queue.index');
+    Route::get('queue/data', [\App\Http\Controllers\QueueController::class, 'data'])->middleware('can:queue.view')->name('queue.data');
+    Route::post('queue/call-next', [\App\Http\Controllers\QueueController::class, 'callNext'])->middleware('can:queue.operate')->name('queue.call-next');
+    Route::post('queue/regenerate-token', [\App\Http\Controllers\QueueController::class, 'regenerateToken'])->middleware('can:settings.edit')->name('queue.regenerate-token');
+
     Route::get('settings', [\App\Http\Controllers\SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [\App\Http\Controllers\SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/test-imap', [\App\Http\Controllers\SettingsController::class, 'testImap'])->name('settings.test-imap');
@@ -441,6 +447,14 @@ Route::get('/public/tickets/{ticket}/close', [App\Http\Controllers\PublicTicketC
 Route::get('/public/ticket-attachments/{attachment}/download', [App\Http\Controllers\PublicTicketController::class, 'downloadAttachment'])->name('public.tickets.attachments.download');
 Route::get('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'showSurvey'])->name('public.survey');
 Route::post('/public/survey/{token}', [App\Http\Controllers\PublicTicketController::class, 'submitSurvey'])->name('public.survey.submit');
+
+// Queue Management — public, token-guarded (lobby board, requester tracking, walk-in kiosk)
+Route::get('/public/queue/board/{token}', [App\Http\Controllers\PublicQueueController::class, 'board'])->name('public.queue.board');
+Route::get('/public/queue/board/{token}/data', [App\Http\Controllers\PublicQueueController::class, 'boardData'])->name('public.queue.board.data');
+Route::get('/public/queue/track/{token}', [App\Http\Controllers\PublicQueueController::class, 'track'])->name('public.queue.track');
+Route::get('/public/queue/track/{token}/data', [App\Http\Controllers\PublicQueueController::class, 'trackData'])->name('public.queue.track.data');
+Route::get('/public/queue/kiosk/{token}', [App\Http\Controllers\PublicQueueController::class, 'kiosk'])->name('public.queue.kiosk');
+Route::post('/public/queue/kiosk/{token}', [App\Http\Controllers\PublicQueueController::class, 'kioskStore'])->middleware('throttle:10,1')->name('public.queue.kiosk.store');
 Route::get('/public/survey-thank-you', function () {
     return Inertia::render('Public/SurveyThankYou');
 })->name('public.survey.thankyou');

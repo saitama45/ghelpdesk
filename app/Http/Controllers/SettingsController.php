@@ -68,12 +68,22 @@ class SettingsController extends Controller implements HasMiddleware
                 $group = 'sla_targets';
             } elseif (str_starts_with($key, 'auto_assignee_')) {
                 $group = 'auto_assignee';
+            } elseif (str_starts_with($key, 'queue_')) {
+                $group = 'queue';
             }
 
             if ($key === 'ticket_retention_value') {
                 $value = max(1, (int) $value);
             } elseif ($key === 'ticket_retention_unit' && !in_array($value, ['months', 'years'], true)) {
                 $value = 'months';
+            } elseif ($key === 'queue_refresh_seconds') {
+                $value = max(3, (int) $value);
+            } elseif ($key === 'queue_walkin_priority_floor' && !in_array($value, ['low', 'medium', 'high', 'urgent'], true)) {
+                $value = 'medium';
+            } elseif ($key === 'queue_lane_nodes') {
+                $value = is_array($value)
+                    ? array_values(array_filter(array_map(fn ($code) => trim((string) $code), $value)))
+                    : array_values(array_filter(array_map('trim', explode(',', (string) $value))));
             }
 
             // Handle array values (like working_days)

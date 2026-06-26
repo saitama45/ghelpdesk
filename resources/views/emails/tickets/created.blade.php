@@ -131,6 +131,15 @@
                     View Ticket Details
                 </a>
             </div>
+
+            @if($ticket->queue_track_token)
+            <div style="text-align: center; margin-top: 16px;">
+                <a href="{{ route('public.queue.track', $ticket->queue_track_token) }}" class="action-button" style="background-color: #059669;">
+                    Track your place in the queue
+                </a>
+                <p style="font-size: 12px; color: #9ca3af; margin-top: 8px;">See your live position and expected time — no login needed.</p>
+            </div>
+            @endif
         </div>
 
         <!-- Footer -->

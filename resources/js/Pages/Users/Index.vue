@@ -313,7 +313,7 @@ const submitRoleForm = () => {
 };
 
 const rolePermissionGroups = computed(() => {
-    const servicesCategories = ['Tickets', 'Task Board', 'Pos_requests', 'Sap_requests'];
+    const servicesCategories = ['Tickets', 'Queue', 'Task Board', 'Pos_requests', 'Sap_requests'];
     (props.dynamicForms || []).forEach(f => servicesCategories.push(f.name));
     return [
         { name: 'Dashboard', categories: ['Dashboard'] },

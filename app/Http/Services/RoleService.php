@@ -57,6 +57,7 @@ class RoleService
             'dashboard',
             'projects',
             'tickets',
+            'queue',
             'task board',
             'pos_requests',
             'sap_requests',
