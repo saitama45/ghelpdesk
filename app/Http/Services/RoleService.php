@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class RoleService
 {
-    protected const ACTION_ORDER = ['view', 'show', 'create', 'edit', 'assign', 'resolve', 'close', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
+    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'assign', 'resolve', 'close', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
 
     /**
      * Get all roles with their permissions
@@ -34,7 +34,7 @@ class RoleService
     {
         $permissions = Permission::all()->pluck('name')->toArray();
 
-        foreach (['tickets.resolve'] as $permissionName) {
+        foreach (['tickets.resolve', 'queue.view', 'queue.operate'] as $permissionName) {
             if (!in_array($permissionName, $permissions, true)) {
                 $permissions[] = $permissionName;
             }
@@ -57,7 +57,7 @@ class RoleService
             'dashboard',
             'projects',
             'tickets',
-            'queue',
+            'queue monitor',
             'task board',
             'pos_requests',
             'sap_requests',
@@ -132,6 +132,8 @@ class RoleService
                 $categoryDisplay = 'Leadership Points';
             } elseif ($category === 'reference_options') {
                 $categoryDisplay = 'Project Type & Store Class';
+            } elseif ($category === 'queue') {
+                $categoryDisplay = 'Queue Monitor';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 
