@@ -34,6 +34,10 @@ class QueueService
 
     public const TRIAGE_KEY = 'triage';
 
+    public const ASSIGNED_NO_DEPARTMENT_KEY = 'assigned:no-department';
+
+    private const DYNAMIC_NODE_PREFIX = 'node:';
+
     /**
      * DepartmentNode codes that act as queue lanes (configurable).
      *
@@ -48,15 +52,17 @@ class QueueService
     }
 
     /**
-     * Lane definitions keyed by lane key. Always appends a synthetic "triage"
-     * lane for active tickets that have no (resolvable) department yet.
+     * Lane definitions keyed by lane key. Configured lanes are followed by
+     * direct department-node lanes needed by active tickets and fallback lanes.
      */
-    public function lanes(): Collection
+    public function lanes(?int $companyId = null, bool $directDepartmentLanes = false): Collection
     {
-        $nodes = DepartmentNode::whereIn('code', $this->laneCodes())
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get();
+        $nodes = $directDepartmentLanes
+            ? collect()
+            : DepartmentNode::whereIn('code', $this->laneCodes())
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get();
 
         $lanes = collect();
 
@@ -69,8 +75,83 @@ class QueueService
                 'node_id' => $node->id,
                 'node_ids' => $ids,
                 'is_triage' => false,
+                'is_no_department' => false,
+                'is_root' => $node->parent_id === null,
             ]);
         }
+
+        $configuredNodeIds = $lanes
+            ->pluck('node_ids')
+            ->flatten()
+            ->unique()
+            ->values()
+            ->all();
+        $configuredNodeMap = array_fill_keys($configuredNodeIds, true);
+        $dynamicNodeIds = [];
+
+        $activeTickets = $this->activeTicketQuery($companyId)
+            ->whereNull('deleted_at')
+            ->whereIn('status', array_merge(
+                self::WAITING_STATUSES,
+                self::SERVING_STATUSES,
+                self::HOLD_STATUSES
+            ))
+            ->whereNotNull('assignee_id')
+            ->with('assignee:id,department_node_id')
+            ->get(['id', 'assignee_id', 'status', 'queue_called_lane']);
+
+        foreach ($activeTickets as $ticket) {
+            $calledNodeId = $this->dynamicNodeIdFromLaneKey($ticket->queue_called_lane);
+            if ($calledNodeId) {
+                $dynamicNodeIds[$calledNodeId] = true;
+            }
+
+            $nodeId = $ticket->assignee?->department_node_id;
+            if (!$nodeId || isset($configuredNodeMap[$nodeId])) {
+                continue;
+            }
+
+            $dynamicNodeIds[(int) $nodeId] = true;
+        }
+
+        $dynamicNodes = DepartmentNode::whereIn('id', array_keys($dynamicNodeIds))
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        foreach ($dynamicNodes as $node) {
+            $key = self::DYNAMIC_NODE_PREFIX . $node->id;
+            $ids = array_values(array_diff(
+                [$node->id],
+                $configuredNodeIds
+            ));
+
+            if (empty($ids)) {
+                continue;
+            }
+
+            $lanes->put($key, [
+                'key' => $key,
+                'name' => $node->name,
+                'code' => $node->code,
+                'node_id' => $node->id,
+                'node_ids' => $ids,
+                'is_triage' => false,
+                'is_no_department' => false,
+                'is_root' => $node->parent_id === null,
+            ]);
+        }
+
+        $lanes->put(self::ASSIGNED_NO_DEPARTMENT_KEY, [
+            'key' => self::ASSIGNED_NO_DEPARTMENT_KEY,
+            'name' => 'Assigned / No Department',
+            'code' => null,
+            'node_id' => null,
+            'node_ids' => [],
+            'is_triage' => false,
+            'is_no_department' => true,
+            'is_root' => false,
+        ]);
 
         $lanes->put(self::TRIAGE_KEY, [
             'key' => self::TRIAGE_KEY,
@@ -79,6 +160,8 @@ class QueueService
             'node_id' => null,
             'node_ids' => [],
             'is_triage' => true,
+            'is_no_department' => false,
+            'is_root' => false,
         ]);
 
         return $lanes;
@@ -90,17 +173,22 @@ class QueueService
         $map = [];
         foreach ($lanes as $lane) {
             foreach ($lane['node_ids'] as $id) {
-                $map[$id] = $lane['key'];
+                $map[$id] ??= $lane['key'];
             }
         }
 
         return $map;
     }
 
-    public function laneKeyForTicket(Ticket $ticket, array $nodeLaneMap): string
+    public function laneKeyForTicket(
+        Ticket $ticket,
+        array $nodeLaneMap,
+        bool $preserveCalledLane = true
+    ): string
     {
         if (
-            in_array($ticket->status, self::SERVING_STATUSES, true)
+            $preserveCalledLane
+            && in_array($ticket->status, self::SERVING_STATUSES, true)
             && $ticket->queue_called_lane
         ) {
             return (string) $ticket->queue_called_lane;
@@ -108,8 +196,12 @@ class QueueService
 
         $nodeId = $ticket->assignee?->department_node_id;
 
-        return ($nodeId && isset($nodeLaneMap[$nodeId]))
-            ? $nodeLaneMap[$nodeId]
+        if ($nodeId && isset($nodeLaneMap[$nodeId])) {
+            return $nodeLaneMap[$nodeId];
+        }
+
+        return $ticket->assignee_id
+            ? self::ASSIGNED_NO_DEPARTMENT_KEY
             : self::TRIAGE_KEY;
     }
 
@@ -117,9 +209,9 @@ class QueueService
      * Build the full board: each lane with now-serving, waiting (positioned),
      * on-hold and summary counts.
      */
-    public function board(?int $companyId = null): array
+    public function board(?int $companyId = null, bool $directDepartmentLanes = false): array
     {
-        $lanes = $this->lanes();
+        $lanes = $this->lanes($companyId, $directDepartmentLanes);
         $nodeLaneMap = $this->nodeLaneMap($lanes);
 
         $tickets = $this->activeTicketQuery($companyId)
@@ -140,8 +232,14 @@ class QueueService
 
         foreach ($tickets as $ticket) {
             $laneKey = $this->laneKeyForTicket($ticket, $nodeLaneMap);
+            if ($directDepartmentLanes && !isset($buckets[$laneKey])) {
+                $laneKey = $this->laneKeyForTicket($ticket, $nodeLaneMap, preserveCalledLane: false);
+            }
+
             if (!isset($buckets[$laneKey])) {
-                $laneKey = self::TRIAGE_KEY;
+                $laneKey = $ticket->assignee_id
+                    ? self::ASSIGNED_NO_DEPARTMENT_KEY
+                    : self::TRIAGE_KEY;
             }
 
             if (in_array($ticket->status, self::SERVING_STATUSES, true)) {
@@ -169,6 +267,7 @@ class QueueService
                 'name' => $lane['name'],
                 'code' => $lane['code'],
                 'is_triage' => $lane['is_triage'],
+                'is_root' => $lane['is_root'],
                 'now_serving' => $serving->map(fn ($t) => $this->serialize($t))->all(),
                 'waiting' => $waitingCards,
                 'on_hold' => $hold->map(fn ($t) => $this->serialize($t))->all(),
@@ -193,10 +292,31 @@ class QueueService
     }
 
     /**
+     * Board view using each assignee's exact non-root department node.
+     */
+    public function directDepartmentBoard(?int $companyId = null): array
+    {
+        $board = $this->board($companyId, directDepartmentLanes: true);
+        $board['lanes'] = array_values(array_filter(
+            $board['lanes'],
+            fn (array $lane) => !$lane['is_triage']
+                && $lane['key'] !== self::ASSIGNED_NO_DEPARTMENT_KEY
+                && !$lane['is_root']
+                && ($lane['counts']['waiting'] > 0 || $lane['counts']['serving'] > 0)
+        ));
+
+        return $board;
+    }
+
+    /**
      * Position / status info for a single ticket — for the public "Track my
      * ticket" page and the in-app requester list.
      */
-    public function positionInfoFor(Ticket $ticket, ?int $companyId = null): array
+    public function positionInfoFor(
+        Ticket $ticket,
+        ?int $companyId = null,
+        bool $directDepartmentLanes = false
+    ): array
     {
         $ticket->loadMissing('assignee:id,name,department_node_id', 'slaMetric');
 
@@ -218,8 +338,13 @@ class QueueService
             ]);
         }
 
-        $lanes = $this->lanes();
-        $laneKey = $this->laneKeyForTicket($ticket, $this->nodeLaneMap($lanes));
+        $lanes = $this->lanes($companyId, $directDepartmentLanes);
+        $nodeLaneMap = $this->nodeLaneMap($lanes);
+        $laneKey = $this->laneKeyForTicket($ticket, $nodeLaneMap);
+        if ($directDepartmentLanes && !$lanes->has($laneKey)) {
+            $laneKey = $this->laneKeyForTicket($ticket, $nodeLaneMap, preserveCalledLane: false);
+        }
+
         $lane = $lanes->get($laneKey) ?? $lanes->get(self::TRIAGE_KEY);
 
         $state = 'waiting';
@@ -265,9 +390,13 @@ class QueueService
     /**
      * Atomically claim the next open ticket in a lane for the current agent.
      */
-    public function claimNextWaitingTicket(string $laneKey, User $agent): ?Ticket
+    public function claimNextWaitingTicket(
+        string $laneKey,
+        User $agent,
+        bool $directDepartmentLanes = false
+    ): ?Ticket
     {
-        $lanes = $this->lanes();
+        $lanes = $this->lanes(directDepartmentLanes: $directDepartmentLanes);
         $lane = $lanes->get($laneKey);
         if (!$lane) {
             return null;
@@ -345,23 +474,28 @@ class QueueService
             ->with(['slaMetric', 'assignee:id,name,department_node_id']);
 
         if ($lane['is_triage']) {
+            $query->whereNull('assignee_id');
+        } elseif ($lane['is_no_department']) {
             $laneNodeIds = collect($lanes)
                 ->where('is_triage', false)
+                ->where('is_no_department', false)
                 ->pluck('node_ids')
                 ->flatten()
                 ->unique()
                 ->values()
                 ->all();
 
-            if (!empty($laneNodeIds)) {
-                $query->where(function ($outer) use ($laneNodeIds) {
-                    $outer->whereNull('assignee_id')
-                        ->orWhereHas('assignee', function ($a) use ($laneNodeIds) {
-                            $a->whereNull('department_node_id')
-                                ->orWhereNotIn('department_node_id', $laneNodeIds);
+            $query->whereNotNull('assignee_id')
+                ->where(function ($outer) use ($laneNodeIds) {
+                    $outer->whereDoesntHave('assignee')
+                        ->orWhereHas('assignee', function ($assignee) use ($laneNodeIds) {
+                            $assignee->whereNull('department_node_id');
+
+                            if (!empty($laneNodeIds)) {
+                                $assignee->orWhereNotIn('department_node_id', $laneNodeIds);
+                            }
                         });
-                    });
-            }
+                });
         } else {
             $query->whereHas('assignee', fn ($a) => $a->whereIn('department_node_id', $lane['node_ids']));
         }
@@ -379,6 +513,17 @@ class QueueService
         }
 
         return $query;
+    }
+
+    private function dynamicNodeIdFromLaneKey(?string $laneKey): ?int
+    {
+        if (!$laneKey || !str_starts_with($laneKey, self::DYNAMIC_NODE_PREFIX)) {
+            return null;
+        }
+
+        $nodeId = substr($laneKey, strlen(self::DYNAMIC_NODE_PREFIX));
+
+        return ctype_digit($nodeId) ? (int) $nodeId : null;
     }
 
     private function sortBySla(Collection $tickets): Collection

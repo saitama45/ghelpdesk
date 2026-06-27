@@ -17,11 +17,11 @@ let pollTimer = null
 const state = computed(() => info.value?.state || 'waiting')
 
 const theme = computed(() => ({
-    waiting: { ring: 'ring-blue-200', dot: 'bg-blue-500', text: 'text-blue-700', soft: 'bg-blue-50' },
-    serving: { ring: 'ring-emerald-200', dot: 'bg-emerald-500', text: 'text-emerald-700', soft: 'bg-emerald-50' },
-    hold: { ring: 'ring-amber-200', dot: 'bg-amber-500', text: 'text-amber-700', soft: 'bg-amber-50' },
-    done: { ring: 'ring-gray-200', dot: 'bg-gray-400', text: 'text-gray-700', soft: 'bg-gray-50' },
-}[state.value] || { ring: 'ring-blue-200', dot: 'bg-blue-500', text: 'text-blue-700', soft: 'bg-blue-50' }))
+    waiting: { ring: 'ring-blue-200', dot: 'bg-blue-500', text: 'text-blue-700 dark:text-blue-300', soft: 'bg-blue-50 dark:bg-blue-950/40' },
+    serving: { ring: 'ring-emerald-200', dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300', soft: 'bg-emerald-50 dark:bg-emerald-950/40' },
+    hold: { ring: 'ring-amber-200', dot: 'bg-amber-500', text: 'text-amber-700 dark:text-amber-300', soft: 'bg-amber-50 dark:bg-amber-950/40' },
+    done: { ring: 'ring-gray-200', dot: 'bg-gray-400', text: 'text-gray-700 dark:text-gray-300', soft: 'bg-gray-50 dark:bg-gray-800' },
+}[state.value] || { ring: 'ring-blue-200', dot: 'bg-blue-500', text: 'text-blue-700 dark:text-blue-300', soft: 'bg-blue-50 dark:bg-blue-950/40' }))
 
 const headline = computed(() => ({
     waiting: 'You are in the queue',
@@ -54,7 +54,9 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
         <div class="max-w-md w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
             <!-- Header -->
             <div class="p-6 text-center border-b border-gray-50 dark:border-gray-700" :class="theme.soft">
-                <img src="/images/company_logo.png" alt="Logo" class="h-12 mx-auto mb-4 object-contain">
+                <div class="mx-auto mb-4 flex h-16 w-fit items-center justify-center rounded-lg px-3 py-2 shadow-sm" style="background-color: #fff !important;">
+                    <img src="/images/company_logo.png" alt="Logo" class="h-12 max-w-full object-contain" style="background-color: #fff !important;">
+                </div>
                 <p class="text-xs uppercase tracking-widest text-gray-500 dark:text-gray-300">Your ticket number</p>
                 <p class="font-mono font-black text-4xl text-gray-900 mt-1 dark:text-gray-100">{{ ticketKey }}</p>
             </div>
@@ -79,7 +81,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
                 </div>
 
                 <div v-else-if="state === 'serving'" class="py-2">
-                    <p class="text-lg font-semibold text-emerald-600">Please proceed — a team member is handling your request.</p>
+                    <p class="text-lg font-semibold text-emerald-600">A team member is handling your request.</p>
                 </div>
 
                 <!-- ETA -->

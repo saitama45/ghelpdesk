@@ -652,6 +652,39 @@ const createForm = useForm({
     notify_requester: true,
 });
 
+const createDepartmentNodes = computed(() => {
+    const references = (props.departmentReferences || [])
+        .filter(department => department?.name && department?.is_active !== false)
+        .map(department => ({
+            id: department.name,
+            name: department.name,
+            code: department.code,
+        }));
+
+    const fallbackDepartments = (props.departments || [])
+        .filter(Boolean)
+        .map(department => ({
+            id: department,
+            name: department,
+        }));
+
+    const nodes = references.length ? references : fallbackDepartments;
+    const currentDepartment = createForm.department || '';
+    const hasCurrentDepartment = nodes.some(department => department.id === currentDepartment);
+
+    if (currentDepartment && !hasCurrentDepartment) {
+        return [
+            {
+                id: currentDepartment,
+                name: `${currentDepartment} (Legacy)`,
+            },
+            ...nodes,
+        ];
+    }
+
+    return nodes;
+});
+
 const items = ref([]);
 
 const fetchItems = async () => {
@@ -2503,19 +2536,12 @@ const requesterTabs = computed(() => {
 
                             <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
                                 <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Department</label>
-                                <input
+                                <HierarchySelector
                                     v-model="createForm.department"
-                                    type="text"
-                                    list="ticket-departments-list"
-                                    maxlength="255"
-                                    :readonly="createForm.is_self_requester"
-                                    :class="createForm.is_self_requester ? 'bg-gray-100 cursor-not-allowed' : ''"
-                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"
-                                    placeholder="Department"
-                                >
-                                <datalist id="ticket-departments-list">
-                                    <option v-for="dept in departments" :key="dept" :value="dept" />
-                                </datalist>
+                                    :nodes="createDepartmentNodes"
+                                    placeholder="Select Department"
+                                    :disabled="createForm.is_self_requester"
+                                />
                             </div>
 
                             <div v-if="!isUserRole" class="pt-2">

@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Head, router, useForm } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import { useConfirm } from '@/Composables/useConfirm'
 
 const props = defineProps({
     board: { type: Object, required: true },
@@ -17,6 +18,7 @@ const route = window.route
 const board = ref(props.board)
 const lastUpdated = ref(props.board?.generated_at || null)
 const callingLane = ref(null)
+const { confirm } = useConfirm()
 let pollTimer = null
 
 // --- chime on new "now serving" -------------------------------------------
@@ -94,8 +96,19 @@ const restartPolling = () => {
     pollTimer = setInterval(fetchBoard, refreshMs.value)
 }
 
-const callNext = (lane) => {
+const callNext = async (lane) => {
     if (!props.canOperate || callingLane.value) return
+
+    const confirmed = await confirm({
+        title: 'Call Next Ticket',
+        message: `Call the next waiting ticket for ${lane.name}? The ticket will be assigned to you and marked as Now Serving.`,
+        confirmLabel: 'Call Next',
+        cancelLabel: 'Cancel',
+        variant: 'info',
+    })
+
+    if (!confirmed || callingLane.value) return
+
     callingLane.value = lane.key
     router.post(route('queue.call-next'), { lane: lane.key }, {
         preserveScroll: true,

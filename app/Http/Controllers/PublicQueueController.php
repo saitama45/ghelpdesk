@@ -51,17 +51,17 @@ class PublicQueueController extends Controller
      */
     private function maskedBoard(int $companyId): array
     {
-        $board = $this->queue->board($companyId);
+        $board = $this->queue->directDepartmentBoard($companyId);
         $hidden = $this->maskFields();
 
-        $board['lanes'] = array_map(function ($lane) use ($hidden) {
+        $board['lanes'] = array_values(array_map(function ($lane) use ($hidden) {
             $lane['now_serving'] = array_map(fn ($c) => $this->maskCard($c, $hidden), $lane['now_serving']);
             $lane['waiting'] = array_map(fn ($c) => $this->maskCard($c, $hidden), $lane['waiting']);
             // On-hold is shown as a count only on the public board.
             unset($lane['on_hold']);
 
             return $lane;
-        }, $board['lanes']);
+        }, $board['lanes']));
 
         return $board;
     }
@@ -97,7 +97,11 @@ class PublicQueueController extends Controller
         return Inertia::render('Public/QueueTrack', [
             'token' => $token,
             'ticketKey' => $ticket->ticket_key,
-            'info' => $this->queue->positionInfoFor($ticket, $ticket->company_id),
+            'info' => $this->queue->positionInfoFor(
+                $ticket,
+                $ticket->company_id,
+                directDepartmentLanes: true
+            ),
             'refreshSeconds' => (int) Setting::get('queue_refresh_seconds', 7),
         ]);
     }
@@ -108,7 +112,11 @@ class PublicQueueController extends Controller
 
         return response()->json([
             'ticketKey' => $ticket->ticket_key,
-            'info' => $this->queue->positionInfoFor($ticket, $ticket->company_id),
+            'info' => $this->queue->positionInfoFor(
+                $ticket,
+                $ticket->company_id,
+                directDepartmentLanes: true
+            ),
         ]);
     }
 

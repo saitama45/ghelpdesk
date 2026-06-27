@@ -24,7 +24,7 @@ class QueueController extends Controller
         $canManage = $request->user()->can('settings.edit');
 
         return Inertia::render('Queue/Index', [
-            'board' => $this->queue->board(),
+            'board' => $this->queue->directDepartmentBoard(),
             'config' => $this->config($companyId),
             'canOperate' => $request->user()->can('queue.operate'),
             'canManage' => $canManage,
@@ -40,7 +40,7 @@ class QueueController extends Controller
      */
     public function data()
     {
-        return response()->json($this->queue->board());
+        return response()->json($this->queue->directDepartmentBoard());
     }
 
     /**
@@ -53,7 +53,11 @@ class QueueController extends Controller
             'lane' => 'required|string|max:50',
         ]);
 
-        $ticket = $this->queue->claimNextWaitingTicket($validated['lane'], $request->user());
+        $ticket = $this->queue->claimNextWaitingTicket(
+            $validated['lane'],
+            $request->user(),
+            directDepartmentLanes: true
+        );
 
         if (!$ticket) {
             return redirect()->back()->with('info', 'No one is waiting in this lane.');
