@@ -1951,9 +1951,30 @@ const storeOptions = computed(() => {
 
 const optionalScheduleLocationStatuses = new Set(['SL', 'VL', 'Restday', 'Holiday', 'Offset', 'N/A'])
 
+// The "Home" store represents a work-from-home location and is only relevant
+// for the WFH duty status.
+const homeStoreId = computed(() => {
+    const home = (props.stores ?? []).find(s =>
+        String(s.code).toLowerCase() === 'home' || String(s.name).toLowerCase() === 'home'
+    )
+    return home ? home.id : null
+})
+
 // For the store repeater inside the form (no "All Stores" entry)
 const storeSelectOptions = computed(() => {
-    const storeChoices = (props.stores ?? []).map(s => ({ id: s.id, name: `${s.code} - ${s.name}` }))
+    const homeId = homeStoreId.value
+
+    // WFH is home-based — only "Home" can be selected.
+    if (form.status === 'WFH') {
+        const home = (props.stores ?? []).find(s => s.id === homeId)
+        return home ? [{ id: home.id, name: `${home.code} - ${home.name}` }] : []
+    }
+
+    // Every other status uses real store locations; "Home" is excluded.
+    const storeChoices = (props.stores ?? [])
+        .filter(s => s.id !== homeId)
+        .map(s => ({ id: s.id, name: `${s.code} - ${s.name}` }))
+
     return isLocationRequired.value ? storeChoices : [{ id: null, name: 'No location' }, ...storeChoices]
 })
 
