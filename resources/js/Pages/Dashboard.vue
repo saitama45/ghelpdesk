@@ -938,11 +938,15 @@ const exportToExcel = (type) => {
                                             <span>Age {{ ticket.age || '-' }}</span>
                                             <span>{{ ticket.updated_at }}</span>
                                         </div>
-                                        <div v-if="ticket.status === 'closed' && ticket.survey" class="mt-2 border-t border-gray-100 pt-2 dark:border-gray-700">
-                                            <button @click.prevent="openSurveyModal(ticket)" class="w-full py-1 px-2 flex items-center justify-center gap-1 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded-md text-[10px] font-bold transition-colors">
+                                        <div v-if="ticket.status === 'closed'" class="mt-2 border-t border-gray-100 pt-2 dark:border-gray-700">
+                                            <button v-if="ticket.survey" @click.prevent="openSurveyModal(ticket)" class="w-full py-1 px-2 flex items-center justify-center gap-1 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded-md text-[10px] font-bold transition-colors dark:bg-yellow-500/10 dark:text-yellow-300 dark:hover:bg-yellow-500/20">
                                                 <span>⭐ {{ ticket.survey.rating }}/4 Rating</span>
                                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                                             </button>
+                                            <div v-else class="w-full py-1 px-2 flex items-center justify-center gap-1 bg-gray-50 text-gray-400 rounded-md text-[10px] font-bold dark:bg-gray-900/50 dark:text-gray-500">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                                                <span>No feedback yet</span>
+                                            </div>
                                         </div>
                                     </Link>
 
