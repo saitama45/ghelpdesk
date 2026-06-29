@@ -3,10 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\DepartmentNode;
-use App\Models\Company;
 use App\Models\Item;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Services\StoreReportService;
 use App\Services\OrganizationReferenceService;
+use App\Support\CompanyContext;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHistory;
@@ -137,7 +138,15 @@ class DashboardController extends Controller
             )
             ->first();
 
-        $brandCounts = (clone $chartQuery)
+        $accessibleBrandCompanies = CompanyContext::accessibleCompanies($user);
+        $accessibleBrandIds = $accessibleBrandCompanies->pluck('id');
+        $brandChartQuery = $applyDashboardChartFilters(
+            (clone $filteredQuery)
+                ->withoutGlobalScope(ActiveEntityScope::class)
+                ->whereIn('company_id', $accessibleBrandIds)
+        );
+
+        $brandCounts = (clone $brandChartQuery)
             ->selectRaw(
                 "company_id, " .
                 "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
@@ -145,23 +154,19 @@ class DashboardController extends Controller
             )
             ->whereNotNull('company_id')
             ->groupBy('company_id')
-            ->get();
+            ->get()
+            ->keyBy('company_id');
 
-        $companiesById = Company::query()
-            ->whereIn('id', $brandCounts->pluck('company_id')->filter()->values())
-            ->get(['id', 'name', 'code'])
-            ->keyBy('id');
-
-        $brandChartRows = $brandCounts
-            ->map(function ($row) use ($companiesById) {
-                $company = $companiesById[(int) $row->company_id] ?? null;
+        $brandChartRows = $accessibleBrandCompanies
+            ->map(function ($company) use ($brandCounts) {
+                $row = $brandCounts->get($company->id);
 
                 return [
-                    'id' => (int) $row->company_id,
-                    'name' => $company?->name ?? 'Unknown Brand',
-                    'code' => $company?->code,
-                    'open' => (int) $row->open_count,
-                    'closed' => (int) $row->closed_count,
+                    'id' => (int) $company->id,
+                    'name' => $company->name,
+                    'code' => $company->code,
+                    'open' => (int) ($row->open_count ?? 0),
+                    'closed' => (int) ($row->closed_count ?? 0),
                 ];
             })
             ->sortBy('name')

@@ -34,7 +34,8 @@ class TicketController extends Controller
     public function __construct(
         private \App\Services\OrganizationReferenceService $organizationReferences,
         private TicketKnowledgeBaseService $ticketKnowledgeBaseService,
-        private \App\Services\AutoAssigneeService $autoAssignee
+        private \App\Services\AutoAssigneeService $autoAssignee,
+        private \App\Services\NotificationService $notifications
     ) {}
 
     private function normalizeTicketScope(Request $request): string
@@ -1003,6 +1004,30 @@ class TicketController extends Controller
             $newStatus = $ticket->status;
             $ticket->save();
 
+            // In-app (bell) notifications — independent of email opt-outs.
+            $actorId = auth()->id();
+            if ($assigneeChanged && $ticket->assignee_id) {
+                $ticket->loadMissing('assignee');
+                $this->notifications->notifyTicket(
+                    $ticket,
+                    'assignment',
+                    'Ticket assigned',
+                    "{$ticket->ticket_key} was assigned to " . ($ticket->assignee?->name ?? 'someone'),
+                    $actorId
+                );
+            }
+            if ($statusChanged) {
+                $this->notifications->notifyTicket(
+                    $ticket,
+                    'status',
+                    'Ticket status changed',
+                    "{$ticket->ticket_key}: " . str_replace('_', ' ', (string) $oldStatus) . ' → ' . str_replace('_', ' ', (string) $newStatus),
+                    $actorId,
+                    [],
+                    $newStatus === 'resolved' || $newStatus === 'closed' ? 'success' : 'info'
+                );
+            }
+
             $alreadyNotified = [];
 
             // Skip notifications if specifically requested
@@ -1698,7 +1723,11 @@ class TicketController extends Controller
             'root_cause_analysis' => [Rule::requiredIf($isTerminalStatusChange && $requiresRcaOnResolve), 'nullable', 'string'],
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
+            'mentions' => 'nullable|array',
+            'mentions.*' => 'integer|exists:users,id',
         ]);
+
+        $mentionIds = array_map('intval', (array) $request->input('mentions', []));
 
         $commentText = trim((string) $request->comment_text);
         $actionTaken = trim((string) $request->input('action_taken'));
@@ -1744,6 +1773,17 @@ class TicketController extends Controller
                     'changed_at' => now('Asia/Manila'),
                 ]);
 
+                // In-app (bell) notification for the status change made via the reply box.
+                $this->notifications->notifyTicket(
+                    $ticket,
+                    'status',
+                    'Ticket status changed',
+                    "{$ticket->ticket_key}: " . str_replace('_', ' ', (string) $oldStatus) . ' → ' . str_replace('_', ' ', (string) $newStatus),
+                    auth()->id(),
+                    [],
+                    $newStatus === 'resolved' || $newStatus === 'closed' ? 'success' : 'info'
+                );
+
                 // SYNC TO PARENT IF APPLICABLE
                 if ($ticket->parent_id) {
                     $this->syncParentStatus($ticket->parent_id, $newStatus);
@@ -1761,12 +1801,34 @@ class TicketController extends Controller
         // Skip all notifications if it's an internal note
         if ($comment->is_internal) {
             $this->storeCommentAttachments($request, $ticket, $comment);
+            // Internal notes notify staff only (assignee + CC'd users) — never the requester.
+            $staffIds = collect([$ticket->assignee_id])
+                ->merge($ticket->effectiveCcs()->pluck('user_id'))
+                ->filter()->unique()->all();
+            $this->notifications->dispatch($staffIds, auth()->id(), [
+                'domain' => 'ticket',
+                'event' => 'comment',
+                'title' => 'Internal note added',
+                'message' => "{$ticket->ticket_key}: " . \Illuminate\Support\Str::limit($comment->comment_text, 100),
+                'subject' => 'ticket:' . $ticket->id,
+                'url' => route('tickets.edit', $ticket->id, false),
+            ]);
             return redirect()->back()->with('success', 'Internal note added.');
         }
 
         $attachments = $this->storeCommentAttachments($request, $ticket, $comment);
         $comment->setRelation('attachments', $attachments);
         $this->notifyTicketCommentRecipients($ticket, $comment, $attachments);
+
+        // In-app (bell) notification for staff + requester following this ticket.
+        $this->notifications->notifyTicket(
+            $ticket,
+            'comment',
+            'New comment',
+            "{$ticket->ticket_key}: " . \Illuminate\Support\Str::limit($comment->comment_text, 100),
+            auth()->id(),
+            $mentionIds
+        );
 
         $successMessage = $this->commentSuccessMessage($kbGenerationStatus);
 

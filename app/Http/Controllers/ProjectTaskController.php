@@ -12,7 +12,10 @@ use Illuminate\Validation\ValidationException;
 
 class ProjectTaskController extends Controller
 {
-    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
+    public function __construct(
+        private ProjectTaskBoardSyncService $projectTaskBoards,
+        private \App\Services\NotificationService $notifications
+    )
     {
     }
 
@@ -245,6 +248,16 @@ class ProjectTaskController extends Controller
         $this->projectTaskBoards->syncProject($task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($task->project);
 
+        // Notify the assignee + project team that a new activity/sub-task was added.
+        $kind = $task->parent_task_id ? 'sub-task' : 'activity';
+        $this->notifications->notifyProjectTask(
+            $task,
+            'created',
+            'New ' . $kind . ' added',
+            ($task->project?->name ? $task->project->name . ': ' : '') . "new {$kind} \"" . \Illuminate\Support\Str::limit($task->name, 50) . '"',
+            $request->user()->id
+        );
+
         return redirect()->back()->with('success', 'Task added successfully.');
     }
 
@@ -316,9 +329,48 @@ class ProjectTaskController extends Controller
             }
         }
 
+        $oldStatus = $projects_task->status;
+        $oldProgress = (int) $projects_task->progress;
+        $oldAssignee = $projects_task->assigned_to;
+
         $projects_task->update($validated);
         $this->projectTaskBoards->syncProject($projects_task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($projects_task->project);
+
+        // ── In-app (bell) notifications ──
+        $actorId = $request->user()->id;
+        $taskLabel = \Illuminate\Support\Str::limit($projects_task->name, 50);
+
+        if (array_key_exists('status', $validated) && $oldStatus !== $projects_task->status) {
+            $this->notifications->notifyProjectTask(
+                $projects_task,
+                'status',
+                'Task status changed',
+                "{$taskLabel}: {$oldStatus} → {$projects_task->status}",
+                $actorId,
+                [],
+                $projects_task->status === 'Completed' ? 'success' : 'info'
+            );
+        } elseif (array_key_exists('progress', $validated) && $oldProgress !== (int) $projects_task->progress) {
+            $this->notifications->notifyProjectTask(
+                $projects_task,
+                'progress',
+                'Task progress updated',
+                "{$taskLabel}: {$oldProgress}% → {$projects_task->progress}%",
+                $actorId
+            );
+        }
+
+        if ($projects_task->assigned_to && (int) $projects_task->assigned_to !== (int) $oldAssignee) {
+            $this->notifications->dispatch([$projects_task->assigned_to], $actorId, [
+                'domain' => 'project_task',
+                'event' => 'assignment',
+                'title' => 'Assigned to a task',
+                'message' => 'You were assigned to ' . $taskLabel,
+                'subject' => 'project_task:' . $projects_task->id,
+                'url' => route('projects.show', $projects_task->project_id, false),
+            ]);
+        }
 
         if ($request->wantsJson()) {
             return response()->json(['success' => true, 'task' => $projects_task]);
@@ -407,6 +459,8 @@ class ProjectTaskController extends Controller
             'tasks.*.order' => 'nullable|integer|min:0',
         ]);
 
+        $progressChanges = [];
+
         foreach ($validated['tasks'] as $taskData) {
             $updates = [];
 
@@ -426,7 +480,22 @@ class ProjectTaskController extends Controller
                 $updates['order'] = $taskData['order'];
             }
 
-            if (!empty($updates)) {
+            if (empty($updates)) {
+                continue;
+            }
+
+            // Track progress changes (load the model only when % is part of the update)
+            // so we can notify the assignee/team without spamming on pure date/order drags.
+            if (array_key_exists('progress', $taskData)) {
+                $task = ProjectTask::find($taskData['id']);
+                if ($task) {
+                    $oldProgress = (int) $task->progress;
+                    $task->update($updates);
+                    if ((int) $task->progress !== $oldProgress) {
+                        $progressChanges[] = [$task, $oldProgress];
+                    }
+                }
+            } else {
                 ProjectTask::where('id', $taskData['id'])->update($updates);
             }
         }
@@ -436,6 +505,19 @@ class ProjectTaskController extends Controller
         $firstTask = ProjectTask::find(collect($validated['tasks'])->pluck('id')->first());
         if ($firstTask?->project) {
             $this->projectTaskBoards->syncLinkedBoardItemsFromProject($firstTask->project);
+        }
+
+        // Notify assignee + team for each task whose progress % actually changed.
+        foreach ($progressChanges as [$task, $oldProgress]) {
+            $this->notifications->notifyProjectTask(
+                $task,
+                'progress',
+                'Task progress updated',
+                \Illuminate\Support\Str::limit($task->name, 50) . ": {$oldProgress}% → {$task->progress}%",
+                $request->user()->id,
+                [],
+                (int) $task->progress >= 100 ? 'success' : 'info'
+            );
         }
 
         return response()->json(['success' => true]);

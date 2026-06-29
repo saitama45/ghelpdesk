@@ -358,6 +358,16 @@ class EmailTicketService
             // Merge any new To/CC recipients on this reply into the ticket CC list.
             $this->syncCcsFromEmail($ticket, $message, $senderEmail);
 
+            // In-app (bell) notification for staff following this ticket. The actor
+            // is the email sender (if matched to a user), so they won't self-notify.
+            app(\App\Services\NotificationService::class)->notifyTicket(
+                $ticket,
+                'comment',
+                'New email reply',
+                "{$ticket->ticket_key}: " . \Illuminate\Support\Str::limit((string) $cleanBody, 100),
+                $user?->id
+            );
+
             // Attachments
             $message->getAttachments()->each(function ($attachment) use ($ticket, $comment) {
                 $originalName = $this->decodeMimeHeader((string) $attachment->getName()) ?: 'attachment';

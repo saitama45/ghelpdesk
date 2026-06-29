@@ -23,7 +23,10 @@ use Illuminate\Validation\Rule;
 
 class TaskCardController extends Controller implements HasMiddleware
 {
-    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
+    public function __construct(
+        private ProjectTaskBoardSyncService $projectTaskBoards,
+        private \App\Services\NotificationService $notifications
+    )
     {
     }
 
@@ -88,6 +91,14 @@ class TaskCardController extends Controller implements HasMiddleware
             return $card;
         });
 
+        $this->notifications->notifyTaskCard(
+            $card,
+            'created',
+            'New card created',
+            \Illuminate\Support\Str::limit($card->title, 60),
+            $request->user()->id
+        );
+
         return response()->json(['card' => $this->freshCard($card)], 201);
     }
 
@@ -118,6 +129,9 @@ class TaskCardController extends Controller implements HasMiddleware
         $validated = $this->normalizeDateTimeFields($validated, ['start_at', 'due_at']);
 
         $syncedCard = null;
+        $oldAssigneeIds = array_key_exists('assignee_ids', $validated)
+            ? $taskCard->assignees()->pluck('users.id')->all()
+            : [];
 
         DB::transaction(function () use ($request, $taskCard, $validated, &$syncedCard) {
             $updates = [];
@@ -167,6 +181,25 @@ class TaskCardController extends Controller implements HasMiddleware
             $this->applyWeightedCompletion($taskCard, $request->user());
         });
 
+        // Notify only the newly added assignees that they were assigned to this card.
+        if (array_key_exists('assignee_ids', $validated)) {
+            $added = array_values(array_diff(
+                $taskCard->assignees()->pluck('users.id')->all(),
+                $oldAssigneeIds
+            ));
+
+            if (!empty($added)) {
+                $this->notifications->dispatch($added, $request->user()->id, [
+                    'domain' => 'task_card',
+                    'event' => 'assignment',
+                    'title' => 'Assigned to a card',
+                    'message' => 'You were assigned to ' . \Illuminate\Support\Str::limit($taskCard->title, 60),
+                    'subject' => 'task_card:' . $taskCard->id,
+                    'url' => route('task-boards.show', $taskCard->task_board_id, false) . '?card=' . $taskCard->id,
+                ]);
+            }
+        }
+
         return response()->json(['card' => $this->freshCard($syncedCard ?: $taskCard)]);
     }
 
@@ -181,6 +214,7 @@ class TaskCardController extends Controller implements HasMiddleware
         ]);
 
         $targetColumnId = $taskCard->board->columnForName($validated['status'])?->id;
+        $statusBeforeMove = $taskCard->status;
 
         DB::transaction(function () use ($request, $taskCard, $validated, $targetColumnId) {
             $oldStatus = $taskCard->status;
@@ -220,6 +254,16 @@ class TaskCardController extends Controller implements HasMiddleware
             $this->projectTaskBoards->syncProjectTaskFromCard($taskCard->fresh('projectTask'), [
                 'status' => $validated['status'],
             ], $request->user());
+        }
+
+        if ($statusBeforeMove !== $validated['status']) {
+            $this->notifications->notifyTaskCard(
+                $taskCard,
+                'movement',
+                'Card moved',
+                \Illuminate\Support\Str::limit($taskCard->title, 40) . ": {$statusBeforeMove} → {$validated['status']}",
+                $request->user()->id
+            );
         }
 
         return response()->json(['card' => $this->freshCard($taskCard)]);
@@ -527,6 +571,14 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $this->recordActivity($taskCard->board, $taskCard, $request->user()->id, 'checklist.created', 'added a checklist');
 
+        $this->notifications->notifyTaskCard(
+            $taskCard,
+            'checklist',
+            'Checklist added',
+            \Illuminate\Support\Str::limit($taskCard->title, 40) . ': added checklist "' . \Illuminate\Support\Str::limit($validated['title'], 40) . '"',
+            $request->user()->id
+        );
+
         return response()->json(['checklist' => $checklist, 'card' => $this->freshCard($taskCard)], 201);
     }
 
@@ -595,6 +647,16 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $this->projectTaskBoards->syncProjectStructureFromCard($taskChecklist->card, $request->user());
 
+        $kind = $parentItem ? 'subtask' : 'activity';
+        $this->notifications->notifyTaskCard(
+            $taskChecklist->card,
+            'item',
+            'New ' . $kind . ' added',
+            \Illuminate\Support\Str::limit($taskChecklist->card->title, 40) . ": new {$kind} \"" . \Illuminate\Support\Str::limit($validated['title'], 40) . '"',
+            $request->user()->id,
+            !empty($validated['assigned_to']) ? [(int) $validated['assigned_to']] : []
+        );
+
         return response()->json(['card' => $this->freshCard($taskChecklist->card)], 201);
     }
 
@@ -618,13 +680,42 @@ class TaskCardController extends Controller implements HasMiddleware
             $validated['weight'] = $validated['is_complete'] ? 100 : 0;
         }
 
+        $wasComplete = (bool) $taskChecklistItem->is_complete;
+        $oldWeight = (int) $taskChecklistItem->weight;
+
         $taskChecklistItem->update($validated);
 
         // Board → Project: mirror the rename/complete/structure onto the Gantt.
         $this->projectTaskBoards->syncProjectStructureFromCard($taskChecklistItem->checklist->card, $request->user());
         $this->applyWeightedCompletion($taskChecklistItem->checklist->card, $request->user());
 
-        return response()->json(['card' => $this->freshCard($taskChecklistItem->checklist->card)]);
+        // Notify board members when an item is checked/unchecked or its % changes.
+        $card = $taskChecklistItem->checklist->card;
+        $itemTitle = \Illuminate\Support\Str::limit($taskChecklistItem->title, 40);
+        $cardTitle = \Illuminate\Support\Str::limit($card->title, 40);
+
+        if (array_key_exists('is_complete', $validated) && (bool) $taskChecklistItem->is_complete !== $wasComplete) {
+            $done = (bool) $taskChecklistItem->is_complete;
+            $this->notifications->notifyTaskCard(
+                $card,
+                'item',
+                $done ? 'Item completed' : 'Item reopened',
+                "{$cardTitle}: " . ($done ? 'completed' : 'reopened') . " \"{$itemTitle}\"",
+                $request->user()->id,
+                [],
+                $done ? 'success' : 'info'
+            );
+        } elseif (array_key_exists('weight', $validated) && (int) $taskChecklistItem->weight !== $oldWeight) {
+            $this->notifications->notifyTaskCard(
+                $card,
+                'progress',
+                'Item progress updated',
+                "{$cardTitle}: \"{$itemTitle}\" {$oldWeight}% → " . (int) $taskChecklistItem->weight . '%',
+                $request->user()->id
+            );
+        }
+
+        return response()->json(['card' => $this->freshCard($card)]);
     }
 
     public function destroyChecklistItem(Request $request, TaskChecklistItem $taskChecklistItem)
@@ -720,6 +811,8 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $validated = $request->validate([
             'comment_text' => 'required|string|max:5000',
+            'mentions' => 'nullable|array',
+            'mentions.*' => 'integer|exists:users,id',
         ]);
 
         $comment = $taskCard->comments()->create([
@@ -728,6 +821,15 @@ class TaskCardController extends Controller implements HasMiddleware
         ]);
 
         $this->recordActivity($taskCard->board, $taskCard, $request->user()->id, 'comment.created', 'commented on this card');
+
+        $this->notifications->notifyTaskCard(
+            $taskCard,
+            'comment',
+            'New comment on card',
+            \Illuminate\Support\Str::limit($taskCard->title, 40) . ': ' . \Illuminate\Support\Str::limit($validated['comment_text'], 100),
+            $request->user()->id,
+            array_map('intval', (array) ($validated['mentions'] ?? []))
+        );
 
         return response()->json(['comment' => $comment->load('user:id,name,profile_photo'), 'card' => $this->freshCard($taskCard)], 201);
     }

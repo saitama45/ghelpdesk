@@ -17,3 +17,4 @@ Schedule::command('tickets:auto-close')->hourly();
 Schedule::command('tickets:process-scheduled')->everyMinute();
 Schedule::command('presence:update-stale')->everyMinute();
 Schedule::command('payments:send-due-reminders')->dailyAt('08:00');
+Schedule::command('notifications:due-soon')->dailyAt('07:30');

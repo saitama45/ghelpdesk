@@ -1117,7 +1117,7 @@ const exportToExcel = (type) => {
                 <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
                     <div>
                         <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed by selected company.</p>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across accessible brands.</p>
                     </div>
                     <select
                         v-model="selectedBrandId"
@@ -1430,7 +1430,7 @@ const exportToExcel = (type) => {
                 <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
                     <div>
                         <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed by selected company.</p>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across accessible brands.</p>
                     </div>
                     <select
                         v-model="selectedBrandId"

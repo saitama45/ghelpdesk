@@ -5,6 +5,7 @@ import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
+import MentionTextarea from '@/Components/MentionTextarea.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 import { useToast } from '@/Composables/useToast';
@@ -147,6 +148,7 @@ const editingLabelForm = reactive({
 });
 
 const newComment = ref('');
+const commentMentions = ref([]);
 const newChecklistTitle = ref('Checklist');
 const editingChecklistId = ref(null);
 const editingChecklistTitle = ref('');
@@ -1499,9 +1501,11 @@ const addComment = async () => {
     try {
         const response = await axios.post(route('task-cards.comments.store', selectedCard.value.id), {
             comment_text: newComment.value,
+            mentions: commentMentions.value,
         });
         replaceCard(response.data.card);
         newComment.value = '';
+        commentMentions.value = [];
     } catch (error) {
         handleApiError(error, 'Unable to add comment');
     }
@@ -2607,9 +2611,18 @@ onUnmounted(() => {
                                 <h3 class="text-sm font-black uppercase tracking-wider text-gray-700 dark:text-gray-300">Comments and Activity</h3>
                             </button>
                             <div v-show="activitySectionOpen">
-                            <form class="mb-4 flex gap-2" @submit.prevent="addComment">
-                                <input v-model="newComment" type="text" class="h-10 flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600" placeholder="Write a comment...">
-                                <button type="submit" class="rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Comment</button>
+                            <form class="mb-4 flex items-start gap-2" @submit.prevent="addComment">
+                                <div class="flex-1">
+                                    <MentionTextarea
+                                        v-model="newComment"
+                                        v-model:mentions="commentMentions"
+                                        :users="boardMembers"
+                                        :rows="1"
+                                        placeholder="Write a comment... use @ to mention"
+                                        input-class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                    />
+                                </div>
+                                <button type="submit" class="h-10 shrink-0 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">Comment</button>
                             </form>
                             <div class="space-y-4">
                                 <div v-for="comment in selectedCard.comments" :key="comment.id" class="flex gap-3">
