@@ -195,8 +195,8 @@ import { h } from 'vue';
         <!-- The Tree Content -->
         <div v-if="isOpen || inline" 
             :class="[
-                inline ? 'border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm' : 
-                'absolute z-[100] mt-2 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden'
+                inline ? 'border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm' :
+                'absolute z-[100] mt-2 w-full min-w-[18rem] max-w-[calc(100vw-2rem)] bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden'
             ]"
         >
             <div v-if="label" class="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex justify-between items-center dark:bg-gray-900/50 dark:border-gray-700">

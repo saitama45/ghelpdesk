@@ -306,11 +306,14 @@ const statusOptions = computed(() => {
     return filterOptions.map(opt => ({ id: opt.value, name: opt.label }));
 });
 
+// Department filter is restricted to the department level only (no sub-unit
+// drill-down) — same behaviour as Tickets/Edit.vue. Hence children are dropped
+// so every option is a directly selectable department.
 const hierarchicalOptions = computed(() =>
     (props.hierarchicalDepartments || []).map(dept => ({
         ...dept,
         id: `dept-${dept.id}`,
-        children: dept.nodes || []
+        children: []
     }))
 )
 
@@ -1797,43 +1800,23 @@ const requesterTabs = computed(() => {
         </template>
 
         <div class="space-y-6 min-w-fit">
-            <section class="hidden sm:block relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-5 py-6 text-white shadow-xl sm:px-6">
+            <section class="hidden sm:block relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-4 py-3.5 text-white shadow-lg sm:px-5">
                 <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
-                <div class="relative flex flex-col gap-6">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div class="max-w-3xl space-y-3">
-                            <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-blue-100">
-                                Ticket Monitoring Console
-                            </div>
-                            <div class="space-y-2">
-                                <h2 class="text-2xl font-black tracking-tight sm:text-3xl">Operate the queue around urgency, ownership, and SLA pressure.</h2>
-                                <p class="max-w-2xl text-sm leading-6 text-slate-200 sm:text-[15px]">
-                                    Use the controls below to isolate risk quickly, then act from the table without losing visibility of assignment gaps or approaching deadlines.
-                                </p>
-                            </div>
+                <div class="relative flex flex-col gap-3">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="inline-flex shrink-0 items-center rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100">
+                                Ticket Monitoring
+                            </span>
+                            <h2 class="text-base font-bold tracking-tight text-white sm:text-lg">Live queue triage — urgency, ownership &amp; SLA pressure.</h2>
                         </div>
-                        <div class="grid gap-3 text-sm text-slate-200 sm:grid-cols-2">
-                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md transition-colors hover:bg-white/10">
-                                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Monitoring Focus</div>
-                                <div class="mt-2 text-lg font-light text-white">Live queue triage</div>
-                                <div class="mt-1 text-xs text-slate-400">Prioritize breached, due soon, and unassigned.</div>
-                            </div>
-                            <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md transition-colors hover:bg-white/10">
-                                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Scope</div>
-                                <div class="mt-2 text-lg font-light text-white">{{ ticketsShowingText }}</div>
-                                <div class="mt-1 text-xs text-slate-400">Metrics below reflect all matching tickets.</div>
-                            </div>
+                        <div class="text-[11px] font-medium text-slate-400 sm:text-right">
+                            Scope: <span class="text-slate-200">{{ ticketsShowingText }}</span>
                         </div>
                     </div>
 
                     <!-- Department view selector + stat cards -->
-                    <div class="space-y-3">
-                        <!-- Dept tab label -->
-                        <div class="flex items-center gap-3">
-                            <span class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">View by Department</span>
-                            <span class="h-px flex-1 bg-white/10"></span>
-                        </div>
-
+                    <div class="space-y-2.5">
                         <!-- Dept tabs — 3 equal cards -->
                         <div class="grid grid-cols-3 gap-2">
                             <button
@@ -1841,64 +1824,51 @@ const requesterTabs = computed(() => {
                                 :key="tab.key"
                                 type="button"
                                 @click="selectDeptTab(tab.key)"
-                                class="relative overflow-hidden rounded-2xl border px-5 py-4 text-left transition-all duration-300 focus:outline-none"
+                                class="relative flex items-center gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-all duration-300 focus:outline-none"
                                 :class="statDeptTab === tab.key
-                                    ? 'border-white/20 bg-white/10 shadow-lg shadow-black/20 scale-[1.02] ring-1 ring-white/10'
-                                    : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/15 hover:scale-[1.01]'"
+                                    ? 'border-white/20 bg-white/10 shadow-md shadow-black/20 ring-1 ring-white/10'
+                                    : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/15'"
                             >
-                                <!-- Colored top accent stripe -->
-                                <div class="absolute inset-x-0 top-0 h-1.5 rounded-t-2xl opacity-80"
-                                    :class="{
-                                        'bg-gradient-to-r from-blue-400 to-indigo-500': tab.key === 'all' && statDeptTab === tab.key,
-                                        'bg-gradient-to-r from-blue-500 to-sky-400': tab.key === 'SO' && statDeptTab === tab.key,
-                                        'bg-gradient-to-r from-emerald-500 to-teal-400': tab.key === 'CS' && statDeptTab === tab.key,
-                                        'bg-transparent': statDeptTab !== tab.key,
-                                    }"
-                                ></div>
-
-                                <div class="text-[10px] font-bold uppercase tracking-widest"
-                                    :class="statDeptTab === tab.key ? 'text-slate-300' : 'text-slate-500'">
-                                    {{ tab.key === 'all' ? 'All Departments' : tab.key }}
-                                </div>
-                                <div class="mt-1 text-lg font-light leading-tight text-white">
-                                    {{ tab.label }}
-                                </div>
-                                <div class="mt-3 flex items-center gap-2">
-                                    <span class="h-1.5 w-1.5 rounded-full transition-all"
-                                        :class="statDeptTab === tab.key
-                                            ? (tab.key === 'SO' ? 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]' : tab.key === 'CS' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]')
-                                            : 'bg-white/20'"
-                                    ></span>
-                                    <span class="text-[10px] font-medium"
+                                <!-- Colored left accent dot -->
+                                <span class="h-1.5 w-1.5 shrink-0 rounded-full transition-all"
+                                    :class="statDeptTab === tab.key
+                                        ? (tab.key === 'CS' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]')
+                                        : 'bg-white/20'"
+                                ></span>
+                                <div class="min-w-0">
+                                    <div class="text-[9px] font-bold uppercase tracking-widest leading-none"
                                         :class="statDeptTab === tab.key ? 'text-slate-300' : 'text-slate-500'">
-                                        {{ statDeptTab === tab.key ? 'Currently viewing' : 'Click to view' }}
-                                    </span>
+                                        {{ tab.key === 'all' ? 'All Departments' : tab.key }}
+                                    </div>
+                                    <div class="mt-0.5 truncate text-sm font-light leading-tight text-white">
+                                        {{ tab.label }}
+                                    </div>
                                 </div>
                             </button>
                         </div>
 
                         <!-- Stat cards for the active dept -->
-                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" :class="statDeptTab === 'all' ? 'xl:grid-cols-5' : 'xl:grid-cols-5'">
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                             <button
                                 v-for="card in summaryCards"
                                 :key="card.key"
                                 type="button"
-                                class="rounded-2xl border px-4 py-4 text-left shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+                                class="rounded-xl border px-3 py-2.5 text-left shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
                                 :class="[
                                     card.shellClass,
                                     activeDashboardFilter === card.filterKey ? 'ring-1 ring-white/30 border-white/30 bg-white/10' : ''
                                 ]"
                                 @click="toggleDashboardFilter(card.filterKey)"
                             >
-                                <div class="flex items-start justify-between gap-3">
-                                    <div>
-                                        <div class="text-[10px] font-bold uppercase tracking-widest" :class="card.labelClass">{{ card.label }}</div>
-                                        <div class="mt-3 text-3xl font-light tracking-tight" :class="card.valueClass">{{ card.value }}</div>
-                                        <div class="mt-2 text-xs font-medium" :class="card.hintClass">
-                                            {{ activeDashboardFilter === card.filterKey ? 'Showing matching tickets below' : card.hint }}
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="text-[9px] font-bold uppercase tracking-widest" :class="card.labelClass">{{ card.label }}</div>
+                                        <div class="mt-1 text-2xl font-light leading-none tracking-tight" :class="card.valueClass">{{ card.value }}</div>
+                                        <div class="mt-1 truncate text-[11px] font-medium" :class="card.hintClass">
+                                            {{ activeDashboardFilter === card.filterKey ? 'Showing matches below' : card.hint }}
                                         </div>
                                     </div>
-                                    <span class="mt-1 h-2 w-2 rounded-full" :class="card.accentClass"></span>
+                                    <span class="mt-0.5 h-2 w-2 shrink-0 rounded-full" :class="card.accentClass"></span>
                                 </div>
                             </button>
                         </div>
@@ -1909,7 +1879,7 @@ const requesterTabs = computed(() => {
             <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/30 dark:supports-[backdrop-filter]:bg-slate-900/85">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
-                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-8">
+                        <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4 xl:grid-cols-4">
                             <div class="flex flex-col gap-1.5">
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Status</label>
                                 <MultiAutocomplete
