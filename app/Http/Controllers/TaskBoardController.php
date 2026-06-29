@@ -34,7 +34,7 @@ class TaskBoardController extends Controller implements HasMiddleware
         return [
             new Middleware('can:task_boards.view', only: ['index', 'show', 'toggleStar', 'toggleWatch', 'openProjectBoard', 'syncProject']),
             new Middleware('can:task_boards.create', only: ['store', 'generateMonthly', 'duplicate']),
-            new Middleware('can:task_boards.edit', only: ['update']),
+            new Middleware('can:task_boards.edit', only: ['update', 'reschedule']),
             new Middleware('can:task_boards.delete', only: ['destroy', 'restore']),
             new Middleware('can:task_boards.manage_members', only: ['storeMember', 'updateMember', 'destroyMember']),
         ];
@@ -611,6 +611,50 @@ class TaskBoardController extends Controller implements HasMiddleware
         $this->recordActivity($taskBoard, null, $request->user()->id, 'board.updated', 'updated board settings');
 
         return $this->jsonOrBack($request, ['board' => $this->boardSummary($taskBoard->fresh(['members']), $request->user())], 'Board updated successfully.');
+    }
+
+    public function reschedule(Request $request, TaskBoard $taskBoard)
+    {
+        $this->ensureBoardEditor($taskBoard, $request->user());
+
+        $validated = $request->validate([
+            'board_month' => 'required|integer|min:1|max:12',
+            'board_year' => 'required|integer|min:2000|max:2100',
+        ]);
+
+        $month = (int) $validated['board_month'];
+        $year = (int) $validated['board_year'];
+
+        if ((int) $taskBoard->board_month === $month && (int) $taskBoard->board_year === $year) {
+            return $this->jsonOrBack($request, ['board' => $this->boardSummary($taskBoard->fresh(['members']), $request->user())], 'No changes.');
+        }
+
+        $taskBoard->board_month = $month;
+        $taskBoard->board_year = $year;
+
+        // Keep monthly_key aligned with the new period so the monthly generator's
+        // duplicate detection tracks this board at its new month/year.
+        if ($taskBoard->monthly_key && $taskBoard->department && $taskBoard->sub_unit) {
+            $taskBoard->monthly_key = $this->monthlyBoardKey($taskBoard->department, $taskBoard->sub_unit, $month, $year);
+        }
+
+        $taskBoard->save();
+
+        $periodLabel = CarbonImmutable::create($year, $month, 1)->format('F Y');
+        $this->recordActivity(
+            $taskBoard,
+            null,
+            $request->user()->id,
+            'board.rescheduled',
+            'moved this board to ' . $periodLabel,
+            ['month' => $month, 'year' => $year]
+        );
+
+        return $this->jsonOrBack(
+            $request,
+            ['board' => $this->boardSummary($taskBoard->fresh(['members']), $request->user())],
+            'Board moved to ' . $periodLabel . '.'
+        );
     }
 
     public function destroy(Request $request, TaskBoard $taskBoard)

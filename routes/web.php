@@ -177,6 +177,7 @@ Route::middleware('auth')->group(function () {
     Route::post('task-boards/{taskBoard}/star', [\App\Http\Controllers\TaskBoardController::class, 'toggleStar'])->name('task-boards.star');
     Route::post('task-boards/{taskBoard}/watch', [\App\Http\Controllers\TaskBoardController::class, 'toggleWatch'])->name('task-boards.watch');
     Route::post('task-boards/{taskBoard}/duplicate', [\App\Http\Controllers\TaskBoardController::class, 'duplicate'])->name('task-boards.duplicate');
+    Route::patch('task-boards/{taskBoard}/reschedule', [\App\Http\Controllers\TaskBoardController::class, 'reschedule'])->name('task-boards.reschedule');
     Route::post('task-boards/{taskBoard}/sync-project', [\App\Http\Controllers\TaskBoardController::class, 'syncProject'])->name('task-boards.sync-project');
     Route::post('task-boards/{taskBoard}/link-to-project', [\App\Http\Controllers\TaskBoardController::class, 'linkToProject'])->name('task-boards.link-to-project');
     Route::post('task-boards/monthly-generate', [\App\Http\Controllers\TaskBoardController::class, 'generateMonthly'])->name('task-boards.monthly-generate');

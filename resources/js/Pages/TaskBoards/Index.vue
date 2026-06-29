@@ -1,10 +1,11 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
 import Modal from '@/Components/Modal.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
+import draggable from 'vuedraggable';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import {
@@ -304,14 +305,7 @@ const matrixRows = computed(() => {
 });
 
 const boardChipLabel = (board, column) => {
-    const year = Number(board.board_year);
-    const month = Number(board.board_month);
-    const rowKey = year === selectedMatrixYear.value && month >= 1 && month <= 12
-        ? month
-        : 'unscheduled';
-    const duplicates = matrixBoards.value[rowKey]?.[column.id] || [];
-
-    return duplicates.length > 1 ? (board.title || column.label) : column.label;
+    return board.title || column.label;
 };
 
 const userOptions = computed(() => {
@@ -552,6 +546,64 @@ const boardPeriodLabel = (board) => {
     return label && board.board_year ? `${label} ${board.board_year}` : '';
 };
 
+// ── Drag & drop: reschedule boards between month rows ─────────────────────────
+const canReschedule = computed(() => hasPermission('task_boards.edit'));
+
+// Mutable mirror of the matrix rows so vuedraggable can move chips between months.
+// Rebuilt whenever the underlying boards/filters change.
+const draggableRows = ref([]);
+watch(matrixRows, (rows) => {
+    draggableRows.value = (rows || []).map((row) => ({
+        value: row.value,
+        label: row.label,
+        items: [...row.boardItems],
+    }));
+}, { immediate: true });
+
+const isDraggingChip = ref(false);
+const onChipDragStart = () => { isDraggingChip.value = true; };
+// Suppress the click that fires right after a drag so it doesn't open the board.
+const onChipDragEnd = () => { setTimeout(() => { isDraggingChip.value = false; }, 50); };
+
+const openBoard = (boardId) => {
+    if (isDraggingChip.value) return;
+    router.visit(route('task-boards.show', boardId));
+};
+
+const rescheduleBoard = (board, targetMonth) => {
+    // The "No Date / Other Year" row is not a valid drop target — snap back.
+    if (targetMonth === 'unscheduled') {
+        router.reload({ only: ['boards'] });
+        return;
+    }
+
+    const month = Number(targetMonth);
+    const year = selectedMatrixYear.value;
+
+    if (Number(board.board_month) === month && Number(board.board_year) === year) {
+        return;
+    }
+
+    router.patch(route('task-boards.reschedule', board.id), {
+        board_month: month,
+        board_year: year,
+    }, {
+        preserveScroll: true,
+        preserveState: true,
+        only: ['boards'],
+        onError: (errors) => {
+            showError(Object.values(errors).flat().join(', ') || 'Unable to move board.');
+            router.reload({ only: ['boards'] });
+        },
+    });
+};
+
+const onMonthRowChange = (row, event) => {
+    if (event?.added) {
+        rescheduleBoard(event.added.element.board, row.value);
+    }
+};
+
 </script>
 
 <template>
@@ -668,23 +720,41 @@ const boardPeriodLabel = (board) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="row in matrixRows" :key="row.value" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700">
+                                <tr v-for="row in draggableRows" :key="row.value" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700">
                                     <th class="sticky left-0 z-10 bg-white px-4 py-4 text-sm font-black text-gray-800 dark:bg-gray-800 dark:text-gray-200">
                                         {{ row.label }}
                                     </th>
                                     <td class="h-16 min-w-96 border-l border-gray-100 px-3 py-3 align-top dark:border-gray-700">
-                                        <div v-if="row.boardItems.length" class="flex flex-wrap gap-2">
-                                            <Link
-                                                v-for="item in row.boardItems"
-                                                :key="item.board.id"
-                                                :href="route('task-boards.show', item.board.id)"
-                                                :title="item.board.title"
-                                                class="inline-flex min-w-20 max-w-full items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-black text-blue-700 transition-colors hover:border-blue-200 hover:bg-blue-100"
-                                            >
-                                                <StarIcon v-if="item.board.starred" class="h-3.5 w-3.5 shrink-0 text-yellow-500" />
-                                                <span class="truncate">{{ boardChipLabel(item.board, item.column) }}</span>
-                                            </Link>
-                                        </div>
+                                        <draggable
+                                            :list="row.items"
+                                            :item-key="(el) => el.board.id"
+                                            :group="{ name: 'task-board-months', pull: canReschedule, put: canReschedule && row.value !== 'unscheduled' }"
+                                            :disabled="!canReschedule"
+                                            :animation="150"
+                                            ghost-class="opacity-40"
+                                            class="flex min-h-[2.5rem] flex-wrap gap-2"
+                                            @start="onChipDragStart"
+                                            @end="onChipDragEnd"
+                                            @change="(event) => onMonthRowChange(row, event)"
+                                        >
+                                            <template #item="{ element }">
+                                                <button
+                                                    type="button"
+                                                    :title="element.board.title"
+                                                    class="inline-flex min-w-20 max-w-full items-center gap-1 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-xs font-black text-blue-700 transition-colors hover:border-blue-200 hover:bg-blue-100"
+                                                    :class="canReschedule ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'"
+                                                    @click="openBoard(element.board.id)"
+                                                >
+                                                    <StarIcon v-if="element.board.starred" class="h-3.5 w-3.5 shrink-0 text-yellow-500" />
+                                                    <span class="truncate">{{ boardChipLabel(element.board, element.column) }}</span>
+                                                </button>
+                                            </template>
+                                            <template #footer>
+                                                <span v-if="!row.items.length" class="select-none self-center text-xs font-semibold italic text-gray-300 dark:text-gray-600">
+                                                    {{ canReschedule && row.value !== 'unscheduled' ? 'Drop board here' : '—' }}
+                                                </span>
+                                            </template>
+                                        </draggable>
                                     </td>
                                 </tr>
                             </tbody>
