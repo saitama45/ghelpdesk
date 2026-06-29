@@ -42,6 +42,13 @@ const dropdownRef = ref(null);
 const inputRef = ref(null);
 const uniqueId = Math.random().toString(36).substr(2, 9);
 
+// When rendered inside a native <dialog> opened via showModal(), the dialog
+// lives in the browser's top layer and paints above anything teleported to
+// <body>. Teleport the panel into that dialog (which has no transform of its
+// own, so position:fixed still resolves against the viewport) so it stays
+// visible. Falls back to <body> when not inside a dialog.
+const teleportTarget = ref('body');
+
 const dropdownStyle = reactive({
     top: '0px',
     left: '0px',
@@ -103,6 +110,7 @@ const updatePosition = () => {
 
 const openDropdown = async () => {
     if (props.disabled) return;
+    teleportTarget.value = containerRef.value?.closest('dialog') ?? 'body';
     searchQuery.value = props.allowCustom && props.modelValue ? String(props.modelValue) : '';
     isOpen.value = true;
     await nextTick();
@@ -194,7 +202,7 @@ watch(selectedOption, (newVal) => {
             </span>
         </div>
 
-        <Teleport to="body">
+        <Teleport :to="teleportTarget">
         <transition
             leave-active-class="transition ease-in duration-100"
             leave-from-class="opacity-100"

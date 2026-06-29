@@ -199,6 +199,13 @@ async function submitApproval() {
 
 const isChecklistWorkflow = computed(() => props.form?.workflow_type === 'checklist')
 
+// Approvers are granted the per-form approve permission ("{slug}.approve",
+// e.g. "entech-work-tools.approve"). Form-builder admins (form_builder.edit)
+// retain access too.
+const canApprovePermission = computed(() =>
+    hasPermission(`${props.form?.slug}.approve`) || hasPermission('form_builder.edit')
+)
+
 const canApprove = computed(() => {
     const s = props.record.status ?? ''
     const currentLevel = Number(props.record.current_approval_level)
@@ -224,7 +231,7 @@ const canApprove = computed(() => {
         assignedApprovers.some(user => Number(user.id) === Number(authUserId.value))
 
     return (s === 'Open' || s.startsWith('Approved Level')) &&
-        hasPermission('form_builder.edit') &&
+        canApprovePermission.value &&
         currentLevel > 0 &&
         isAssignedApprover &&
         !alreadyApprovedCurrentLevel
