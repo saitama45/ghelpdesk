@@ -62,32 +62,41 @@ class DashboardLeaderboardTest extends TestCase
         $this->scoredTicket($company, $store, $agentC, 'late_resolution', -5, 90, 240, '2026-05-08 10:00:00');
         $this->scoredTicket($company, $otherStore, $otherStoreAgent, 'fast_resolution', 100, 5, 30, '2026-05-09 10:00:00');
 
-        $this->actingAs($viewer)
-            ->get(route('dashboard', ['year' => 2026, 'month' => 5, 'store_id' => $store->id]))
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('Dashboard')
-                ->has('leaderboard.rankings', 3)
-                ->has('leaderboard.top3', 3)
-                ->where('leaderboard.rankings.0.name', 'Alice Tech')
-                ->where('leaderboard.rankings.0.total_points', 20)
-                ->where('leaderboard.rankings.0.ticket_count', 2)
-                ->where('leaderboard.rankings.0.avg_response_min', 30)
-                ->where('leaderboard.rankings.0.avg_resolution_min', 150)
-                ->where('leaderboard.rankings.0.point_breakdown.0.label', 'Fast Resolution')
-                ->where('leaderboard.rankings.1.name', 'Bert Tech')
-                ->where('leaderboard.rankings.2.name', 'Cara Tech')
-            );
+        // leaderboard is a lazy (Inertia optional) prop — request it the way the
+        // dashboard's "Top Techs / Trophies" tab does (partial reload).
+        $partial = [
+            'X-Inertia' => 'true',
+            'X-Inertia-Partial-Component' => 'Dashboard',
+            'X-Inertia-Partial-Data' => 'leaderboard',
+            'X-Inertia-Version' => app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request()),
+        ];
 
-        $this->actingAs($viewer)
+        $response = $this->actingAs($viewer)
+            ->withHeaders($partial)
+            ->get(route('dashboard', ['year' => 2026, 'month' => 5, 'store_id' => $store->id]))
+            ->assertOk();
+
+        $rankings = $response->json('props.leaderboard.rankings');
+        $this->assertCount(3, $rankings);
+        $this->assertCount(3, $response->json('props.leaderboard.top3'));
+        $this->assertSame('Alice Tech', $rankings[0]['name']);
+        $this->assertSame(20, $rankings[0]['total_points']);
+        $this->assertSame(2, $rankings[0]['ticket_count']);
+        $this->assertSame(30, $rankings[0]['avg_response_min']);
+        $this->assertSame(150, $rankings[0]['avg_resolution_min']);
+        $this->assertSame('Fast Resolution', $rankings[0]['point_breakdown'][0]['label']);
+        $this->assertSame('Bert Tech', $rankings[1]['name']);
+        $this->assertSame('Cara Tech', $rankings[2]['name']);
+
+        $filtered = $this->actingAs($viewer)
+            ->withHeaders($partial)
             ->get(route('dashboard', ['year' => 2026, 'month' => 5, 'store_id' => $store->id, 'user_id' => $agentB->id]))
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('Dashboard')
-                ->has('leaderboard.rankings', 1)
-                ->where('leaderboard.rankings.0.name', 'Bert Tech')
-                ->where('leaderboard.rankings.0.total_points', 15)
-            );
+            ->assertOk();
+
+        $filteredRankings = $filtered->json('props.leaderboard.rankings');
+        $this->assertCount(1, $filteredRankings);
+        $this->assertSame('Bert Tech', $filteredRankings[0]['name']);
+        $this->assertSame(15, $filteredRankings[0]['total_points']);
     }
 
     private function tech(string $name, Role $role): User

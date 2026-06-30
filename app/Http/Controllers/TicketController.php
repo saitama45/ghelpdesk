@@ -62,8 +62,17 @@ class TicketController extends Controller
     {
         $user = $request->user();
         $ticketScope = $this->normalizeTicketScope($request);
-        $query = Ticket::with([
-            'reporter:id,name,profile_photo', 
+
+        // Entity/Company filter. Defaults to the active sidebar entity; permitted
+        // users can widen it to a subset of their accessible entities. We bypass
+        // the active-entity global scope and drive scoping explicitly so a
+        // multi-entity selection works.
+        $canEntityFilter = $user->can('tickets.filter_entity');
+        $selectedEntityIds = (array) $request->input('entity_ids', []);
+        $effectiveCompanyIds = \App\Support\CompanyContext::effectiveEntityIds($user, $selectedEntityIds, $canEntityFilter);
+
+        $query = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)->with([
+            'reporter:id,name,profile_photo',
             'assignee:id,name,profile_photo,department_node_id',
             'company:id,name',
             'store:id,name', 
@@ -86,27 +95,12 @@ class TicketController extends Controller
         if ($user->hasRole('User')) {
             $query->where('reporter_id', $user->id);
         } else {
-            // Filter by user's company access for all other roles
-            $user->load('roles.companies');
-            $allowedCompanyIds = collect();
-
-            foreach ($user->roles as $role) {
-                if ($role->companies) {
-                    $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
-                }
-            }
-
-            // Also include direct company assignment
-            if ($user->company_id) {
-                $allowedCompanyIds->push($user->company_id);
-            }
-
-            $allowedCompanyIds = $allowedCompanyIds->unique();
-
-            if ($allowedCompanyIds->isEmpty()) {
+            // Restrict to the effective entities (selection ∩ accessible, or the
+            // active entity by default). Always a subset of accessible companies.
+            if (empty($effectiveCompanyIds)) {
                 $query->whereRaw('1 = 0');
             } else {
-                $query->whereIn('company_id', $allowedCompanyIds);
+                $query->whereIn('company_id', $effectiveCompanyIds);
             }
         }
 
@@ -418,6 +412,14 @@ class TicketController extends Controller
                 'month' => $request->month,
                 'dashboard_filter' => $request->input('dashboard_filter', 'all'),
                 'ticket_scope' => $ticketScope,
+                'entity_ids' => array_map('intval', $effectiveCompanyIds),
+            ],
+            'entityFilter' => [
+                'enabled' => $canEntityFilter,
+                'options' => \App\Support\CompanyContext::accessibleCompanies($user)
+                    ->map(fn ($c) => ['id' => (int) $c->id, 'name' => $c->name, 'code' => $c->code])
+                    ->values(),
+                'selected' => array_values($effectiveCompanyIds),
             ],
         ]);
     }
@@ -427,26 +429,20 @@ class TicketController extends Controller
         $user = $request->user();
         $ticketScope = $this->normalizeTicketScope($request);
 
-        $query = Ticket::query();
+        // Mirror the index Entity/Company filter so the export matches the view.
+        $canEntityFilter = $user->can('tickets.filter_entity');
+        $selectedEntityIds = (array) $request->input('entity_ids', []);
+        $effectiveCompanyIds = \App\Support\CompanyContext::effectiveEntityIds($user, $selectedEntityIds, $canEntityFilter);
+
+        $query = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class);
         $this->applyTicketScope($query, $ticketScope);
 
         if ($user->hasRole('User')) {
             $query->where('reporter_id', $user->id);
+        } elseif (empty($effectiveCompanyIds)) {
+            $query->whereRaw('1 = 0');
         } else {
-            $user->load('roles.companies');
-            $allowedCompanyIds = collect();
-            foreach ($user->roles as $role) {
-                if ($role->companies) {
-                    $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
-                }
-            }
-            if ($user->company_id) $allowedCompanyIds->push($user->company_id);
-            $allowedCompanyIds = $allowedCompanyIds->unique();
-            if ($allowedCompanyIds->isEmpty()) {
-                $query->whereRaw('1 = 0');
-            } else {
-                $query->whereIn('company_id', $allowedCompanyIds);
-            }
+            $query->whereIn('company_id', $effectiveCompanyIds);
         }
 
         $normalizeFilterValues = fn ($value) => collect(is_array($value) ? $value : [$value])

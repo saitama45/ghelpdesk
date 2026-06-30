@@ -174,6 +174,55 @@ class CompanyContext
         return (int) $accessible->first()->id;
     }
 
+    /** The accessible company ids for a user as a plain int array. */
+    public static function accessibleCompanyIds($user): array
+    {
+        return static::accessibleCompanies($user)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Resolve the company ids an "Entity/Company" filter selection maps to.
+     *
+     * - When the user is permitted AND made a non-empty selection, returns the
+     *   selection intersected with the entities they can actually access.
+     * - Otherwise falls back to the single active entity (the sidebar selection),
+     *   or all accessible entities when there is no active entity.
+     *
+     * Always a subset of the user's accessible entities, so callers can safely
+     * apply it without a separate access check.
+     *
+     * @param  array<int|string>|null  $selected
+     * @return int[]
+     */
+    public static function effectiveEntityIds($user, ?array $selected, bool $hasPermission): array
+    {
+        $accessible = static::accessibleCompanyIds($user);
+
+        if ($hasPermission && !empty($selected)) {
+            $picked = collect($selected)
+                ->map(fn ($id) => (int) $id)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $intersection = array_values(array_intersect($picked, $accessible));
+            if (!empty($intersection)) {
+                return $intersection;
+            }
+        }
+
+        $activeId = static::resolveActiveId($user);
+        if ($activeId) {
+            return [$activeId];
+        }
+
+        return $accessible;
+    }
+
     /** Per-request memo of the resolved active id, keyed by user id. */
     private static array $activeIdMemo = [];
 

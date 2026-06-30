@@ -39,7 +39,6 @@ class DashboardController extends Controller
         $departmentNodeIdFilter = $request->input('department_node_id');
         $userIdFilter = $request->input('user_id', 'all');
         $storeIdFilter = $request->input('store_id', 'all');
-        $hierarchicalDepartments = $this->organizationReferenceService->tree(true);
         $selectedSubUnitLabel = 'all';
 
         if (
@@ -55,50 +54,30 @@ class DashboardController extends Controller
             $selectedSubUnitLabel = $this->organizationReferenceService->payloadFromNodeId((int) $departmentNodeIdFilter)['org_path'] ?? 'all';
         }
 
-        // Store Health Data
-        $storeHealth = $this->reportService->getStoreHealthData([
-            'as_of_date' => Carbon::now()->format('Y-m-d'),
-            'sub_unit' => $selectedSubUnitLabel,
-            'department_id' => $departmentIdFilter,
-            'department_node_id' => $departmentNodeIdFilter,
-            'user_id' => $userIdFilter,
-            'store_id' => $storeIdFilter,
-        ]);
+        // Entity/Company filter. Defaults to the active sidebar entity; permitted
+        // users can widen it to any subset of their accessible entities. Resolved
+        // early so every widget (incl. store health) shares the same entity scope.
+        $canEntityFilter = $user->can('dashboard.filter_entity');
+        $selectedEntityIds = (array) $request->input('entity_ids', []);
+        $effectiveCompanyIds = CompanyContext::effectiveEntityIds($user, $selectedEntityIds, $canEntityFilter);
 
-        // Dropdown Data for Filters
-        $allUsers = \App\Models\User::active()->whereHas('roles', function($q) {
-            $q->where('is_assignable', true);
-        })->select('id', 'name', 'org_path', 'department_id', 'department_node_id')->orderBy('name')->get();
+        // We take explicit control of entity scoping (bypassing the active-entity
+        // global scope) so the multi-entity selection works across every widget.
+        $allowedCompanyIds = collect($effectiveCompanyIds);
 
-        $allStores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
-        $subUnits = \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path');
-        
-        // Define base query based on role
+        // Base query (Ticket Flow Board + every lazy tab derive from this).
         $query = Ticket::query()
+            ->withoutGlobalScope(ActiveEntityScope::class)
             ->whereNull('parent_id');
-        
+
         if ($user->hasRole('User')) {
             $query->where('reporter_id', $user->id);
-        }
-
-        // Company Filtering
-        $user->load('roles.companies');
-        $allowedCompanyIds = collect();
-        foreach ($user->roles as $role) {
-            if ($role->companies) {
-                $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
-            }
-        }
-        if ($user->company_id) $allowedCompanyIds->push($user->company_id);
-        $allowedCompanyIds = $allowedCompanyIds->unique();
-        
-        if ($allowedCompanyIds->isEmpty()) {
-             $query->whereRaw('1 = 0');
+        } elseif ($allowedCompanyIds->isEmpty()) {
+            $query->whereRaw('1 = 0');
         } else {
-             $query->whereIn('company_id', $allowedCompanyIds);
+            $query->whereIn('company_id', $allowedCompanyIds);
         }
 
-        // Apply Time Filters to the base query for Stats and Recent Tickets
         $filteredQuery = clone $query;
         if ($year) {
             $filteredQuery->whereYear('created_at', $year);
@@ -107,6 +86,96 @@ class DashboardController extends Controller
             $filteredQuery->whereMonth('created_at', $month);
         }
 
+        $currentYear = date('Y');
+        $years = range($currentYear, $currentYear - 3);
+        $months = [
+            ['id' => 1, 'name' => 'January'], ['id' => 2, 'name' => 'February'],
+            ['id' => 3, 'name' => 'March'], ['id' => 4, 'name' => 'April'],
+            ['id' => 5, 'name' => 'May'], ['id' => 6, 'name' => 'June'],
+            ['id' => 7, 'name' => 'July'], ['id' => 8, 'name' => 'August'],
+            ['id' => 9, 'name' => 'September'], ['id' => 10, 'name' => 'October'],
+            ['id' => 11, 'name' => 'November'], ['id' => 12, 'name' => 'December'],
+        ];
+
+        // Memoize multi-prop builders so a partial reload that requests several
+        // keys at once (e.g. the whole Overview tab) computes them only once.
+        $kanban = null;
+        $kanbanData = function () use (&$kanban, $filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter) {
+            return $kanban ??= $this->buildKanban($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter);
+        };
+        $overview = null;
+        $overviewData = function () use (&$overview, $query, $filteredQuery, $user, $allowedCompanyIds) {
+            return $overview ??= $this->buildOverview($query, $filteredQuery, $user, $allowedCompanyIds);
+        };
+
+        return Inertia::render('Dashboard', [
+            // Filter-bar data — eager closures: present on first paint, skipped on
+            // tab-only partial reloads.
+            'users' => fn () => \App\Models\User::active()->whereHas('roles', fn ($q) => $q->where('is_assignable', true))
+                ->select('id', 'name', 'org_path', 'department_id', 'department_node_id')->orderBy('name')->get(),
+            'stores' => fn () => \App\Models\Store::where('is_active', true)->orderBy('name')->get(),
+            'subUnits' => fn () => \App\Models\User::whereNotNull('org_path')->distinct()->pluck('org_path'),
+            'hierarchicalDepartments' => fn () => $this->organizationReferenceService->tree(true),
+            'years' => $years,
+            'months' => $months,
+            'filters' => [
+                'year' => (int)$year ?: null,
+                'month' => (int)$month ?: null,
+                'department_id' => $departmentIdFilter ? (int) $departmentIdFilter : null,
+                'department_node_id' => $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
+                'user_id' => $userIdFilter,
+                'store_id' => $storeIdFilter,
+            ],
+            'entityFilter' => fn () => [
+                'enabled' => $canEntityFilter,
+                'options' => CompanyContext::accessibleCompanies($user)
+                    ->map(fn ($c) => ['id' => (int) $c->id, 'name' => $c->name, 'code' => $c->code])
+                    ->values(),
+                'selected' => array_values($effectiveCompanyIds),
+            ],
+
+            // Default tab — Ticket Flow Board (loads on first paint; fetchable via partial).
+            'kanbanReport' => fn () => $kanbanData()['report'],
+            'kanbanProjects' => fn () => $kanbanData()['projects'],
+
+            // Lazy tabs — excluded from the initial load, fetched on first tab click.
+            'storeHealth' => Inertia::optional(fn () => $this->buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
+            'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
+            'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
+            'stats' => Inertia::optional(fn () => $overviewData()['stats']),
+            'recentTickets' => Inertia::optional(fn () => $overviewData()['recentTickets']),
+            'myTickets' => Inertia::optional(fn () => $overviewData()['myTickets']),
+            'recentActivity' => Inertia::optional(fn () => $overviewData()['recentActivity']),
+            'alarmedWaitingTickets' => Inertia::optional(fn () => $overviewData()['alarmedWaitingTickets']),
+            'urgentTickets' => Inertia::optional(fn () => $overviewData()['urgentTickets']),
+            'totalTicketsList' => Inertia::optional(fn () => $overviewData()['totalTicketsList']),
+            'openTicketsList' => Inertia::optional(fn () => $overviewData()['openTicketsList']),
+            'newTicketsList' => Inertia::optional(fn () => $overviewData()['newTicketsList']),
+            'closedTicketsList' => Inertia::optional(fn () => $overviewData()['closedTicketsList']),
+        ]);
+    }
+
+    /**
+     * Live Store Health data (lazy dashboard tab).
+     */
+    private function buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, array $effectiveCompanyIds)
+    {
+        return $this->reportService->getStoreHealthData([
+            'as_of_date' => Carbon::now()->format('Y-m-d'),
+            'sub_unit' => $selectedSubUnitLabel,
+            'department_id' => $departmentIdFilter,
+            'department_node_id' => $departmentNodeIdFilter,
+            'user_id' => $userIdFilter,
+            'store_id' => $storeIdFilter,
+            'company_ids' => $effectiveCompanyIds,
+        ]);
+    }
+
+    /**
+     * Overall Open vs Closed + Per Brand + Concern Type charts (lazy dashboard tab).
+     */
+    private function buildTicketCharts($filteredQuery, $user, array $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
+    {
         $applyDashboardChartFilters = function ($chartQuery) use ($departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter) {
             if ($departmentIdFilter) {
                 $chartQuery->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
@@ -129,7 +198,6 @@ class DashboardController extends Controller
         };
 
         $chartQuery = $applyDashboardChartFilters(clone $filteredQuery);
-        $terminalStatuses = ['resolved', 'closed'];
 
         $overallChartRow = (clone $chartQuery)
             ->selectRaw(
@@ -138,13 +206,12 @@ class DashboardController extends Controller
             )
             ->first();
 
-        $accessibleBrandCompanies = CompanyContext::accessibleCompanies($user);
-        $accessibleBrandIds = $accessibleBrandCompanies->pluck('id');
-        $brandChartQuery = $applyDashboardChartFilters(
-            (clone $filteredQuery)
-                ->withoutGlobalScope(ActiveEntityScope::class)
-                ->whereIn('company_id', $accessibleBrandIds)
-        );
+        // Per Brand: relies solely on the Entity/Company filter; $filteredQuery is
+        // already restricted to the effective entities, so we just group by company.
+        $brandCompanies = CompanyContext::accessibleCompanies($user)
+            ->whereIn('id', $effectiveCompanyIds)
+            ->values();
+        $brandChartQuery = $applyDashboardChartFilters(clone $filteredQuery);
 
         $brandCounts = (clone $brandChartQuery)
             ->selectRaw(
@@ -157,7 +224,7 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('company_id');
 
-        $brandChartRows = $accessibleBrandCompanies
+        $brandChartRows = $brandCompanies
             ->map(function ($company) use ($brandCounts) {
                 $row = $brandCounts->get($company->id);
 
@@ -200,7 +267,7 @@ class DashboardController extends Controller
                 return $counts;
             }, []);
 
-        $ticketCharts = [
+        return [
             'overall' => [
                 'open' => (int) ($overallChartRow->open_count ?? 0),
                 'closed' => (int) ($overallChartRow->closed_count ?? 0),
@@ -216,75 +283,15 @@ class DashboardController extends Controller
                 ])
                 ->values(),
         ];
+    }
 
-        // Waiting Aging Alarm Logic
-        $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
-        $alarmDate = Carbon::now('Asia/Manila')->subDays($agingDays);
-        
-        $alarmedWaitingQuery = (clone $query)
-            ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
-            ->where('updated_at', '<=', $alarmDate);
-            
-        $alarmedWaitingTickets = (clone $alarmedWaitingQuery)
-            ->with(['assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
-            ->select('id', 'ticket_key', 'title', 'status', 'updated_at', 'assignee_id', 'company_id', 'parent_id')
-            ->get()
-            ->map(function($ticket) {
-                $updatedAt = Carbon::parse($ticket->updated_at);
-                $now = Carbon::now('Asia/Manila');
-                // Calculate precise days as float and round to 1 decimal
-                $agingDays = round($updatedAt->diffInMinutes($now) / (60 * 24), 1);
-
-                return [
-                    'id' => $ticket->id,
-                    'key' => $ticket->ticket_key,
-                    'title' => $ticket->title,
-                    'status' => $ticket->status,
-                    'aging_days' => $agingDays,
-                    'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
-                    'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
-                    'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
-                    'parent_key' => $ticket->parent?->ticket_key,
-                ];
-            });
-
-        // Urgent (P1) Tickets Logic
-        $urgentTicketsQuery = (clone $query)
-            ->where(function($q) {
-                $q->where('priority', 'urgent')
-                  ->orWhereHas('item', function($iq) {
-                      $iq->where('priority', 'Urgent');
-                  });
-            })
-            ->where('status', '!=', 'closed');
-            
-        $urgentTickets = (clone $urgentTicketsQuery)
-            ->with(['item', 'assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
-            ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'item_id', 'priority', 'assignee_id', 'company_id', 'parent_id')
-            ->get()
-            ->map(function($ticket) {
-                return [
-                    'id' => $ticket->id,
-                    'key' => $ticket->ticket_key,
-                    'title' => $ticket->title,
-                    'status' => $ticket->status,
-                    'priority' => $ticket->priority,
-                    'item_priority' => $ticket->item?->priority,
-                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
-                    'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
-                    'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
-                    'parent_key' => $ticket->parent?->ticket_key,
-                ];
-            });
-
-        // New Tickets Logic
-        $newTicketsQuery = (clone $filteredQuery)
-            ->where('status', 'open')
-            ->whereNull('category_id')
-            ->whereNull('sub_category_id')
-            ->whereNull('item_id')
-            ->whereNull('assignee_id');
-
+    /**
+     * Ticket Flow Board + Projects Board (default dashboard tab).
+     *
+     * @return array{report: array, projects: array}
+     */
+    private function buildKanban($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
+    {
         $kanbanColumns = [
             ['key' => 'backlogs', 'label' => 'Backlogs', 'statuses' => ['open', 'for_schedule']],
             ['key' => 'in_progress', 'label' => 'In Progress', 'statuses' => ['in_progress', 'waiting_service_provider', 'waiting_client_feedback']],
@@ -571,11 +578,88 @@ class DashboardController extends Controller
             $s => $allProjects->where('status', $s)->count(),
         ])->merge(['all' => $allProjects->count()])->all();
 
-        $kanbanProjects = [
-            'columns' => $projectColumns,
-            'groups'  => $projectGroups,
-            'totals'  => $projectTotals,
+        return [
+            'report' => $kanbanReport,
+            'projects' => [
+                'columns' => $projectColumns,
+                'groups'  => $projectGroups,
+                'totals'  => $projectTotals,
+            ],
         ];
+    }
+
+    /**
+     * Overview Performance tab: KPI stats, modal lists, recent/my tickets, activity.
+     */
+    private function buildOverview($query, $filteredQuery, $user, $allowedCompanyIds): array
+    {
+        // Waiting Aging Alarm Logic
+        $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
+        $alarmDate = Carbon::now('Asia/Manila')->subDays($agingDays);
+
+        $alarmedWaitingQuery = (clone $query)
+            ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+            ->where('updated_at', '<=', $alarmDate);
+
+        $alarmedWaitingTickets = (clone $alarmedWaitingQuery)
+            ->with(['assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
+            ->select('id', 'ticket_key', 'title', 'status', 'updated_at', 'assignee_id', 'company_id', 'parent_id')
+            ->get()
+            ->map(function($ticket) {
+                $updatedAt = Carbon::parse($ticket->updated_at);
+                $now = Carbon::now('Asia/Manila');
+                // Calculate precise days as float and round to 1 decimal
+                $agingDays = round($updatedAt->diffInMinutes($now) / (60 * 24), 1);
+
+                return [
+                    'id' => $ticket->id,
+                    'key' => $ticket->ticket_key,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'aging_days' => $agingDays,
+                    'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
+                    'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
+                    'updated_at' => $ticket->updated_at->format('Y-m-d H:i:s'),
+                    'parent_key' => $ticket->parent?->ticket_key,
+                ];
+            });
+
+        // Urgent (P1) Tickets Logic
+        $urgentTicketsQuery = (clone $query)
+            ->where(function($q) {
+                $q->where('priority', 'urgent')
+                  ->orWhereHas('item', function($iq) {
+                      $iq->where('priority', 'Urgent');
+                  });
+            })
+            ->where('status', '!=', 'closed');
+
+        $urgentTickets = (clone $urgentTicketsQuery)
+            ->with(['item', 'assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
+            ->select('id', 'ticket_key', 'title', 'status', 'created_at', 'item_id', 'priority', 'assignee_id', 'company_id', 'parent_id')
+            ->get()
+            ->map(function($ticket) {
+                return [
+                    'id' => $ticket->id,
+                    'key' => $ticket->ticket_key,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'priority' => $ticket->priority,
+                    'item_priority' => $ticket->item?->priority,
+                    'created_at' => $ticket->created_at->format('Y-m-d H:i:s'),
+                    'assignee' => $ticket->assignee ? $ticket->assignee->name : 'Unassigned',
+                    'company_name' => $ticket->company ? $ticket->company->name : 'N/A',
+                    'parent_key' => $ticket->parent?->ticket_key,
+                ];
+            });
+
+        // New Tickets Logic
+        $newTicketsQuery = (clone $filteredQuery)
+            ->where('status', 'open')
+            ->whereNull('category_id')
+            ->whereNull('sub_category_id')
+            ->whereNull('item_id')
+            ->whereNull('assignee_id');
 
         // Modal Lists (limited to 100 to prevent performance issues)
         $listWithDetails = function($q) {
@@ -584,18 +668,18 @@ class DashboardController extends Controller
                 ->latest()
                 ->take(100)
                 ->get()
-                ->map(function($t) { 
+                ->map(function($t) {
                     return [
-                        'id' => $t->id, 
-                        'key' => $t->ticket_key, 
-                        'title' => $t->title, 
-                        'status' => $t->status, 
-                        'priority' => $t->priority, 
+                        'id' => $t->id,
+                        'key' => $t->ticket_key,
+                        'title' => $t->title,
+                        'status' => $t->status,
+                        'priority' => $t->priority,
                         'created_at' => $t->created_at->format('Y-m-d H:i:s'),
                         'assignee' => $t->assignee ? $t->assignee->name : 'Unassigned',
                         'company_name' => $t->company ? $t->company->name : 'N/A',
                         'parent_key' => $t->parent?->ticket_key,
-                    ]; 
+                    ];
                 });
         };
 
@@ -616,7 +700,7 @@ class DashboardController extends Controller
             'urgent' => $urgentTickets->count(),
             'unassigned' => (clone $filteredQuery)->whereNull('assignee_id')->count(),
         ];
-        
+
         // Recent/Filtered Tickets
         $recentTickets = (clone $filteredQuery)
             ->with(['reporter:id,name', 'assignee:id,name', 'company:id,name', 'parent:id,ticket_key'])
@@ -668,9 +752,13 @@ class DashboardController extends Controller
         $histories = TicketHistory::query()
             ->with(['user:id,name,profile_photo', 'ticket:id,ticket_key,title'])
             ->whereHas('ticket', function ($q) use ($user, $allowedCompanyIds) {
-                if ($user->hasRole('User')) $q->where('reporter_id', $user->id);
-                if ($allowedCompanyIds->isEmpty()) $q->whereRaw('1 = 0');
-                else $q->whereIn('company_id', $allowedCompanyIds);
+                if ($user->hasRole('User')) {
+                    $q->where('reporter_id', $user->id);
+                } elseif ($allowedCompanyIds->isEmpty()) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->whereIn('company_id', $allowedCompanyIds);
+                }
             })
             ->latest('changed_at')->take(10)->get()
             ->map(function ($history) {
@@ -690,9 +778,13 @@ class DashboardController extends Controller
         $comments = TicketComment::query()
             ->with(['user:id,name,profile_photo', 'ticket:id,ticket_key,title'])
             ->whereHas('ticket', function ($q) use ($user, $allowedCompanyIds) {
-                if ($user->hasRole('User')) $q->where('reporter_id', $user->id);
-                if ($allowedCompanyIds->isEmpty()) $q->whereRaw('1 = 0');
-                else $q->whereIn('company_id', $allowedCompanyIds);
+                if ($user->hasRole('User')) {
+                    $q->where('reporter_id', $user->id);
+                } elseif ($allowedCompanyIds->isEmpty()) {
+                    $q->whereRaw('1 = 0');
+                } else {
+                    $q->whereIn('company_id', $allowedCompanyIds);
+                }
             })
             ->latest()->take(10)->get()
             ->map(function ($comment) {
@@ -717,59 +809,18 @@ class DashboardController extends Controller
 
         $activities = $histories->concat($comments)->sortByDesc('timestamp')->take(10)->values();
 
-        // Leadership Leaderboard (top 3 agents this month by points)
-        $leaderboard = $this->buildLeaderboard(
-            $year ? (int) $year : null,
-            $month ? (int) $month : null,
-            $departmentIdFilter,
-            $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
-            $userIdFilter,
-            $storeIdFilter
-        );
-
-        // Dropdown Data
-        $currentYear = date('Y');
-        $years = range($currentYear, $currentYear - 3);
-        $months = [
-            ['id' => 1, 'name' => 'January'], ['id' => 2, 'name' => 'February'],
-            ['id' => 3, 'name' => 'March'], ['id' => 4, 'name' => 'April'],
-            ['id' => 5, 'name' => 'May'], ['id' => 6, 'name' => 'June'],
-            ['id' => 7, 'name' => 'July'], ['id' => 8, 'name' => 'August'],
-            ['id' => 9, 'name' => 'September'], ['id' => 10, 'name' => 'October'],
-            ['id' => 11, 'name' => 'November'], ['id' => 12, 'name' => 'December'],
-        ];
-
-        return Inertia::render('Dashboard', [
-            'storeHealth' => $storeHealth,
-            'kanbanReport' => $kanbanReport,
-            'kanbanProjects' => $kanbanProjects,
-            'ticketCharts' => $ticketCharts,
+        return [
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'myTickets' => $myTickets,
+            'recentActivity' => $activities,
             'alarmedWaitingTickets' => $alarmedWaitingTickets,
             'urgentTickets' => $urgentTickets,
             'totalTicketsList' => $totalTicketsList,
             'openTicketsList' => $openTicketsList,
             'newTicketsList' => $newTicketsList,
             'closedTicketsList' => $closedTicketsList,
-            'recentActivity' => $activities,
-            'users' => $allUsers,
-            'stores' => $allStores,
-            'subUnits' => $subUnits,
-            'hierarchicalDepartments' => $hierarchicalDepartments,
-            'filters' => [
-                'year' => (int)$year ?: null,
-                'month' => (int)$month ?: null,
-                'department_id' => $departmentIdFilter ? (int) $departmentIdFilter : null,
-                'department_node_id' => $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
-                'user_id' => $userIdFilter,
-                'store_id' => $storeIdFilter,
-            ],
-            'years' => $years,
-            'months' => $months,
-            'leaderboard' => $leaderboard,
-        ]);
+        ];
     }
 
     private function resolveKanbanSectorContext(?int $departmentId, ?int $selectedDepartmentNodeId): array
@@ -823,7 +874,8 @@ class DashboardController extends Controller
         ?string $departmentIdFilter = null,
         ?int $departmentNodeIdFilter = null,
         string|int|null $userIdFilter = 'all',
-        string|int|null $storeIdFilter = 'all'
+        string|int|null $storeIdFilter = 'all',
+        array $companyIds = []
     ): array
     {
         $now = \Carbon\Carbon::now();
@@ -854,6 +906,12 @@ class DashboardController extends Controller
             ->whereYear('agent_point_transactions.awarded_at', $filterYear)
             ->whereMonth('agent_point_transactions.awarded_at', $filterMonth)
             ->whereIn('agent_point_transactions.agent_id', $eligibleAgentIds);
+
+        // Entity/Company scope: only count points earned on tickets of the
+        // selected entities (the joined ticket carries the company_id).
+        if (!empty($companyIds)) {
+            $pointBaseQuery->whereIn('pt.company_id', $companyIds);
+        }
 
         if ($storeIdFilter && $storeIdFilter !== 'all') {
             $pointBaseQuery->where('pt.store_id', $storeIdFilter);
@@ -931,7 +989,8 @@ class DashboardController extends Controller
             $departmentIdFilter,
             $departmentNodeIdFilter,
             $userIdFilter,
-            $storeIdFilter
+            $storeIdFilter,
+            $companyIds
         );
 
         return [
@@ -946,7 +1005,8 @@ class DashboardController extends Controller
         ?string $departmentIdFilter = null,
         ?int $departmentNodeIdFilter = null,
         string|int|null $userIdFilter = 'all',
-        string|int|null $storeIdFilter = 'all'
+        string|int|null $storeIdFilter = 'all',
+        array $companyIds = []
     ): array
     {
         $allowedAgentIds = null;
@@ -971,7 +1031,7 @@ class DashboardController extends Controller
             $allowedAgentIds = $userQuery->pluck('id')->toArray();
         }
 
-        $byType = function (array $types) use ($now, $allowedAgentIds, $storeIdFilter) {
+        $byType = function (array $types) use ($now, $allowedAgentIds, $storeIdFilter, $companyIds) {
             $query = \App\Models\AgentPointTransaction::query()
                 ->leftJoin('tickets as pt', 'pt.id', '=', 'agent_point_transactions.ticket_id')
                 ->whereYear('agent_point_transactions.awarded_at', $now->year)
@@ -980,6 +1040,10 @@ class DashboardController extends Controller
 
             if ($allowedAgentIds !== null) {
                 $query->whereIn('agent_point_transactions.agent_id', $allowedAgentIds);
+            }
+
+            if (!empty($companyIds)) {
+                $query->whereIn('pt.company_id', $companyIds);
             }
 
             if ($storeIdFilter && $storeIdFilter !== 'all') {

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DepartmentNode;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\User;
@@ -18,11 +19,21 @@ class StoreReportService
         $departmentId = $filters['department_id'] ?? null;
         $departmentNodeId = $filters['department_node_id'] ?? null;
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
+        // Optional explicit entity scope (Entity/Company filter). When provided we
+        // bypass the active-entity global scope and use exactly these companies.
+        $companyIds = $filters['company_ids'] ?? null;
         $isCtMode = $this->isCorporateTechnologyFilter($departmentNodeId, $subUnit);
 
         // Query active tickets. Sector summaries intentionally stay based on
         // the ticket's configured store sector, not the assignee hierarchy.
-        $baseTicketsQuery = Ticket::whereNotIn('tickets.status', ['resolved', 'closed']);
+        $baseTicketsQuery = Ticket::query();
+
+        if (is_array($companyIds)) {
+            $baseTicketsQuery->withoutGlobalScope(ActiveEntityScope::class)
+                ->whereIn('tickets.company_id', $companyIds);
+        }
+
+        $baseTicketsQuery->whereNotIn('tickets.status', ['resolved', 'closed']);
 
         if ($asOfDate) {
             $baseTicketsQuery->whereDate('tickets.created_at', '<=', $asOfDate);

@@ -34,7 +34,7 @@ class RoleService
     {
         $permissions = Permission::all()->pluck('name')->toArray();
 
-        foreach (['tickets.resolve', 'queue.view', 'queue.operate'] as $permissionName) {
+        foreach (['tickets.resolve', 'queue.view', 'queue.operate', 'tickets.filter_entity', 'dashboard.filter_entity'] as $permissionName) {
             if (!in_array($permissionName, $permissions, true)) {
                 $permissions[] = $permissionName;
             }

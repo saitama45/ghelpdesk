@@ -6,6 +6,7 @@ import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import axios from 'axios';
 import { usePermission } from '@/Composables/usePermission.js';
 
@@ -32,6 +33,7 @@ const props = defineProps({
     subUnits: Array,
     hierarchicalDepartments: Array,
     leaderboard: Object,
+    entityFilter: { type: Object, default: () => ({ enabled: false, options: [], selected: [] }) },
 });
 
 const { hasPermission } = usePermission();
@@ -59,6 +61,28 @@ const filterForm = reactive({
     user_id: props.filters.user_id || 'all',
     store_id: props.filters.store_id || 'all',
 });
+
+// Entity/Company filter — defaults to the active sidebar entity (server-seeded).
+const entityFilterEnabled = computed(() => !!props.entityFilter?.enabled);
+const entityFilterOptions = computed(() => props.entityFilter?.options || []);
+// "All" is a sentinel meaning every accessible entity; expanded to real ids on send.
+const entityFilterOptionsWithAll = computed(() => [{ id: 'all', name: 'All Entities' }, ...entityFilterOptions.value]);
+const filterEntities = ref([...(props.entityFilter?.selected || [])]);
+const resolvedEntityIds = () => filterEntities.value.includes('all')
+    ? entityFilterOptions.value.map(o => o.id)
+    : filterEntities.value;
+const handleEntityFilterChange = (value) => {
+    let next = Array.isArray(value) ? value : [];
+    const hadAll = filterEntities.value.includes('all');
+    const hasAll = next.includes('all');
+    if (hasAll && !hadAll) {
+        next = ['all']; // just picked "All" → collapse to it
+    } else if (hasAll && next.length > 1) {
+        next = next.filter(v => v !== 'all'); // picked a specific entity → drop "All"
+    }
+    filterEntities.value = next.map(v => (v === 'all' ? 'all' : parseInt(v, 10))).filter(v => v === 'all' || v);
+    applyFilters();
+};
 
 const hierarchicalOptions = computed(() =>
     (props.hierarchicalDepartments || []).map(dept => ({
@@ -108,6 +132,44 @@ const deptFilterParams = computed(() => {
     return { department_node_id: nodeId };
 });
 
+// --- Lazy tabs ---------------------------------------------------------------
+// Each tab maps to the Inertia props it needs. Only the default Ticket Flow Board
+// loads on first paint; other tabs fetch their data the first time they're opened
+// (cached until a filter changes), so the dashboard loads in milliseconds.
+const TAB_PROPS = {
+    flow: ['kanbanReport', 'kanbanProjects'],
+    charts: ['ticketCharts'],
+    health: ['storeHealth'],
+    leaders: ['leaderboard'],
+    overview: ['stats', 'recentTickets', 'myTickets', 'recentActivity', 'alarmedWaitingTickets', 'urgentTickets', 'totalTicketsList', 'openTicketsList', 'newTicketsList', 'closedTicketsList'],
+};
+const TABS = [
+    { key: 'flow', label: 'Ticket Flow Board' },
+    { key: 'charts', label: 'Open vs Closed / Per Brand' },
+    { key: 'health', label: 'Live Store Health' },
+    { key: 'leaders', label: 'Top Techs / Trophies' },
+    { key: 'overview', label: 'Overview Performance' },
+];
+const activeTab = ref('flow');
+// Ticket Flow Board data is present on the initial full load.
+const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false });
+const tabLoading = ref(false);
+
+const fetchTab = (tab) => {
+    if (loaded[tab]) return;
+    tabLoading.value = true;
+    router.reload({
+        only: TAB_PROPS[tab],
+        onSuccess: () => { loaded[tab] = true; },
+        onFinish: () => { tabLoading.value = false; },
+    });
+};
+
+const switchTab = (tab) => {
+    activeTab.value = tab;
+    if (!loaded[tab]) fetchTab(tab);
+};
+
 const applyFilters = () => {
     router.get(route('dashboard'), {
         year: filterForm.year,
@@ -115,11 +177,19 @@ const applyFilters = () => {
         user_id: filterForm.user_id,
         store_id: filterForm.store_id,
         ...deptFilterParams.value,
+        ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
         ...(skipDefaultDepartment.value ? { skip_default_department: 1 } : {}),
     }, {
+        // Refresh only the active tab; invalidate the rest so they reload on open.
+        only: TAB_PROPS[activeTab.value],
         preserveState: true,
         preserveScroll: true,
-        replace: true
+        replace: true,
+        onStart: () => { tabLoading.value = true; },
+        onFinish: () => { tabLoading.value = false; },
+        onSuccess: () => {
+            Object.keys(loaded).forEach((k) => { loaded[k] = (k === activeTab.value); });
+        },
     });
 
     skipDefaultDepartment.value = false;
@@ -209,7 +279,6 @@ const monthsWithLabel = computed(() => {
 });
 
 const activeTicketCount = computed(() => (Number(props.stats?.open || 0) + Number(props.stats?.in_progress || 0)));
-const selectedBrandId = ref('all');
 
 const chartNumber = (value) => Number(value || 0);
 
@@ -219,30 +288,6 @@ const overallChartData = computed(() => ({
 }));
 
 const brandChartRows = computed(() => props.ticketCharts?.perBrand || []);
-
-watch(brandChartRows, (brands) => {
-    if (!brands.length) {
-        selectedBrandId.value = 'all';
-        return;
-    }
-
-    if (selectedBrandId.value !== 'all' && !brands.some(brand => String(brand.id) === String(selectedBrandId.value))) {
-        selectedBrandId.value = 'all';
-    }
-}, { immediate: true });
-
-const selectedBrandChart = computed(() => {
-    if (selectedBrandId.value === 'all') {
-        return null;
-    }
-
-    return brandChartRows.value.find(brand => String(brand.id) === String(selectedBrandId.value)) || null;
-});
-
-const selectedBrandPieData = computed(() => ({
-    open: chartNumber(selectedBrandChart.value?.open),
-    closed: chartNumber(selectedBrandChart.value?.closed),
-}));
 
 const brandPieData = (brand) => ({
     open: chartNumber(brand?.open),
@@ -551,6 +596,17 @@ const exportToExcel = (type) => {
                 </button>
             </div>
             <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                <div v-if="entityFilterEnabled" class="sm:col-span-2 xl:col-span-5">
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Entity/Company</label>
+                    <MultiAutocomplete
+                        :model-value="filterEntities"
+                        :options="entityFilterOptionsWithAll"
+                        label-key="name"
+                        value-key="id"
+                        placeholder="Defaults to your active entity — pick All or add more to compare..."
+                        @update:modelValue="handleEntityFilterChange"
+                    />
+                </div>
                 <div>
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Department</label>
                     <HierarchySelector
@@ -602,6 +658,26 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        <!-- Dashboard Tabs -->
+        <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+            <nav class="-mb-px flex flex-wrap gap-1 sm:gap-2" aria-label="Dashboard tabs">
+                <button
+                    v-for="tab in TABS"
+                    :key="tab.key"
+                    @click="switchTab(tab.key)"
+                    class="relative px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors whitespace-nowrap"
+                    :class="activeTab === tab.key
+                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                        : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'"
+                >
+                    {{ tab.label }}
+                    <span v-if="tabLoading && activeTab === tab.key" class="ml-2 inline-block w-3 h-3 align-middle border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                </button>
+            </nav>
+        </div>
+
+        <!-- ============ Ticket Flow Board tab ============ -->
+        <div v-show="activeTab === 'flow'">
         <!-- Static Kanban Report -->
         <div class="mb-8">
             <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-4">
@@ -816,6 +892,14 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        </div><!-- /flow tab -->
+
+        <!-- ============ Open vs Closed / Per Brand tab ============ -->
+        <div v-show="activeTab === 'charts'">
+        <div v-if="!loaded.charts" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+            <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+        </div>
+        <template v-else>
         <!-- Ticket Charts -->
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
@@ -907,24 +991,12 @@ const exportToExcel = (type) => {
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
-                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
-                    <div>
-                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across accessible brands.</p>
-                    </div>
-                    <select
-                        v-model="selectedBrandId"
-                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold dark:border-gray-600"
-                        :disabled="brandChartRows.length === 0"
-                    >
-                        <option value="all">All</option>
-                        <option v-for="brand in brandChartRows" :key="brand.id" :value="brand.id">
-                            {{ brand.code ? `[${brand.code}] ` : '' }}{{ brand.name }}
-                        </option>
-                    </select>
+                <div class="mb-6">
+                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
+                    <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across the selected entities.</p>
                 </div>
 
-                <div v-if="selectedBrandId === 'all' && brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                <div v-if="brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
                     <div
                         v-for="brand in brandChartRows"
                         :key="brand.id"
@@ -964,49 +1036,21 @@ const exportToExcel = (type) => {
                     </div>
                 </div>
 
-                <div v-else-if="selectedBrandChart" class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
-                    <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(selectedBrandPieData)">
-                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner dark:bg-gray-800">
-                            <span class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ totalChartCount(selectedBrandPieData) }}</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Tickets</span>
-                        </div>
-                    </div>
-                    <div class="space-y-4">
-                        <div>
-                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Brand</p>
-                            <p class="text-lg font-black text-gray-900 mt-0.5 dark:text-gray-100">{{ selectedBrandChart.name }}</p>
-                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ selectedBrandChart.code }}</p>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="h-3 w-3 rounded-full bg-blue-600"></span>
-                                    <span class="text-sm font-bold text-blue-900">Open</span>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-sm font-black text-blue-900">{{ selectedBrandPieData.open }}</div>
-                                    <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(selectedBrandPieData.open, totalChartCount(selectedBrandPieData)) }}%</div>
-                                </div>
-                            </div>
-                            <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="h-3 w-3 rounded-full bg-green-600"></span>
-                                    <span class="text-sm font-bold text-green-900">Closed</span>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-sm font-black text-green-900">{{ selectedBrandPieData.closed }}</div>
-                                    <div class="text-[10px] font-bold text-green-600">{{ chartPercent(selectedBrandPieData.closed, totalChartCount(selectedBrandPieData)) }}%</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                     No brand data available.
                 </div>
             </div>
         </div>
 
+        </template>
+        </div><!-- /charts tab -->
+
+        <!-- ============ Live Store Health tab ============ -->
+        <div v-show="activeTab === 'health'">
+        <div v-if="!loaded.health" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+            <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+        </div>
+        <template v-else>
         <!-- Store Health Section -->
         <div v-if="hasPermission('reports.store_health')" class="mb-8">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
@@ -1026,8 +1070,17 @@ const exportToExcel = (type) => {
             />
         </div>
 
+        </template>
+        </div><!-- /health tab -->
+
+        <!-- ============ Top Techs / Trophies tab ============ -->
+        <div v-show="activeTab === 'leaders'">
+        <div v-if="!loaded.leaders" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+            <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+        </div>
+        <template v-else-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)">
         <!-- Leadership Leaderboard -->
-        <div v-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)" class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-8">
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-8">
             <!-- Top 3 Agents -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 xl:col-span-2 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -1237,6 +1290,18 @@ const exportToExcel = (type) => {
             </div>
         </Modal>
 
+        </template>
+        <div v-else-if="loaded.leaders" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400 dark:text-gray-400">
+            No leaderboard data for this period.
+        </div>
+        </div><!-- /leaders tab -->
+
+        <!-- ============ Overview Performance tab ============ -->
+        <div v-show="activeTab === 'overview'">
+        <div v-if="!loaded.overview" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+            <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+        </div>
+        <template v-else>
         <!-- Filters Section -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center dark:text-gray-400">
@@ -1431,24 +1496,12 @@ const exportToExcel = (type) => {
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
-                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
-                    <div>
-                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across accessible brands.</p>
-                    </div>
-                    <select
-                        v-model="selectedBrandId"
-                        class="w-full sm:w-56 border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold dark:border-gray-600"
-                        :disabled="brandChartRows.length === 0"
-                    >
-                        <option value="all">All</option>
-                        <option v-for="brand in brandChartRows" :key="brand.id" :value="brand.id">
-                            {{ brand.code ? `[${brand.code}] ` : '' }}{{ brand.name }}
-                        </option>
-                    </select>
+                <div class="mb-6">
+                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
+                    <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across the selected entities.</p>
                 </div>
 
-                <div v-if="selectedBrandId === 'all' && brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                <div v-if="brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
                     <div
                         v-for="brand in brandChartRows"
                         :key="brand.id"
@@ -1488,43 +1541,6 @@ const exportToExcel = (type) => {
                     </div>
                 </div>
 
-                <div v-else-if="selectedBrandChart" class="grid grid-cols-1 sm:grid-cols-[180px,1fr] gap-6 items-center">
-                    <div class="relative mx-auto h-40 w-40 rounded-full" :style="pieChartStyle(selectedBrandPieData)">
-                        <div class="absolute inset-8 rounded-full bg-white flex flex-col items-center justify-center shadow-inner dark:bg-gray-800">
-                            <span class="text-2xl font-black text-gray-900 dark:text-gray-100">{{ totalChartCount(selectedBrandPieData) }}</span>
-                            <span class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Tickets</span>
-                        </div>
-                    </div>
-                    <div class="space-y-4">
-                        <div>
-                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Brand</p>
-                            <p class="text-lg font-black text-gray-900 mt-0.5 dark:text-gray-100">{{ selectedBrandChart.name }}</p>
-                            <p v-if="selectedBrandChart.code" class="text-xs font-bold text-gray-500 dark:text-gray-300">{{ selectedBrandChart.code }}</p>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="h-3 w-3 rounded-full bg-blue-600"></span>
-                                    <span class="text-sm font-bold text-blue-900">Open</span>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-sm font-black text-blue-900">{{ selectedBrandPieData.open }}</div>
-                                    <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(selectedBrandPieData.open, totalChartCount(selectedBrandPieData)) }}%</div>
-                                </div>
-                            </div>
-                            <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="h-3 w-3 rounded-full bg-green-600"></span>
-                                    <span class="text-sm font-bold text-green-900">Closed</span>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-sm font-black text-green-900">{{ selectedBrandPieData.closed }}</div>
-                                    <div class="text-[10px] font-bold text-green-600">{{ chartPercent(selectedBrandPieData.closed, totalChartCount(selectedBrandPieData)) }}%</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                     No brand data available.
                 </div>
@@ -2071,6 +2087,8 @@ const exportToExcel = (type) => {
                 </div>
             </div>
         </Modal>
+        </template>
+        </div><!-- /overview tab -->
     </AppLayout>
 
     <!-- Survey Modal -->

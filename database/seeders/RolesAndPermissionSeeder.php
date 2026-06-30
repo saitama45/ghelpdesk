@@ -22,9 +22,11 @@ class RolesAndPermissionSeeder extends Seeder
         $permissions = [
             // Dashboard
             'dashboard.view' => 'View dashboard',
+            'dashboard.filter_entity' => 'Filter the dashboard by entity/company',
 
             // Tickets
             'tickets.view' => 'View tickets',
+            'tickets.filter_entity' => 'Filter tickets by entity/company',
             'tickets.create' => 'Create tickets',
             'tickets.edit' => 'Edit tickets',
             'tickets.assign' => 'Assign tickets',

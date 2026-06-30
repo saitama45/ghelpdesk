@@ -29,6 +29,7 @@ const props = defineProps({
     hierarchicalDepartments: Array,
     summaryStats: Object,
     summaryStatsByDept: { type: Object, default: () => ({}) },
+    entityFilter: { type: Object, default: () => ({ enabled: false, options: [], selected: [] }) },
 });
 
 const page = usePage();
@@ -127,6 +128,8 @@ onMounted(() => {
                     search: pagination.search.value
                 };
                 
+                // Entity selection is never restored from storage (resets each visit).
+                delete savedFilters.entity_ids;
                 if (JSON.stringify(savedFilters) !== JSON.stringify(currentParams)) {
                     if (savedFilters.status !== undefined) filterStatus.value = savedFilters.status;
                     if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
@@ -153,7 +156,8 @@ onMounted(() => {
             ...ticketFilterParams(),
             search: pagination.search.value
         };
-        localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(params));
+        const { entity_ids, ...persistedParams } = params;
+        localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
     }
 
     const savedCols = localStorage.getItem('ghelpdesk_ticket_columns');
@@ -288,6 +292,15 @@ const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
 const filterTicketScope = ref(normalizeTicketScope(props.filters?.ticket_scope || defaultTicketScope));
+// Entity/Company filter — defaults to the active sidebar entity (server-seeded).
+const entityFilterEnabled = computed(() => !!props.entityFilter?.enabled);
+const entityFilterOptions = computed(() => props.entityFilter?.options || []);
+// "All" is a sentinel meaning every accessible entity; expanded to real ids on send.
+const entityFilterOptionsWithAll = computed(() => [{ id: 'all', name: 'All Entities' }, ...entityFilterOptions.value]);
+const filterEntities = ref([...(props.entityFilter?.selected || [])]);
+const resolvedEntityIds = () => filterEntities.value.includes('all')
+    ? entityFilterOptions.value.map(o => o.id)
+    : filterEntities.value;
 
 const filterOptions = [
     { value: 'all', label: 'All' },
@@ -387,6 +400,7 @@ const ticketFilterParams = () => ({
     dashboard_filter: activeDashboardFilter.value,
     assigned_department_only: assignedDepartmentOnly.value ? 1 : undefined,
     ticket_scope: filterTicketScope.value,
+    entity_ids: entityFilterEnabled.value ? resolvedEntityIds() : undefined,
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
@@ -471,8 +485,11 @@ const applyFilter = () => {
         ...ticketFilterParams(),
         search: pagination.search.value
     };
-    
-    localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(params));
+
+    // Entity/Company selection is intentionally NOT persisted — each visit
+    // resets to the active sidebar entity (server-seeded default).
+    const { entity_ids, ...persistedParams } = params;
+    localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
 
     router.get(route('tickets.index'), params, {
         preserveState: true,
@@ -507,6 +524,19 @@ const handleAssigneeFilterChange = (value) => {
 
 const handleStoreFilterChange = (value) => {
     filterStore.value = normalizeFilterValues(value, [], normalizeStoreFilterValue);
+    applyFilter();
+};
+
+const handleEntityFilterChange = (value) => {
+    let next = Array.isArray(value) ? value : [];
+    const hadAll = filterEntities.value.includes('all');
+    const hasAll = next.includes('all');
+    if (hasAll && !hadAll) {
+        next = ['all']; // just picked "All" → collapse to it
+    } else if (hasAll && next.length > 1) {
+        next = next.filter(v => v !== 'all'); // picked a specific entity → drop "All"
+    }
+    filterEntities.value = next.map(v => (v === 'all' ? 'all' : parseInt(v, 10))).filter(v => v === 'all' || v);
     applyFilter();
 };
 
@@ -1926,6 +1956,19 @@ const requesterTabs = computed(() => {
                                     placeholder="Assignee..."
                                     :limit="1"
                                     @update:modelValue="handleAssigneeFilterChange"
+                                />
+                            </div>
+
+                            <div v-if="entityFilterEnabled" class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Entity/Company</label>
+                                <MultiAutocomplete
+                                    :model-value="filterEntities"
+                                    :options="entityFilterOptionsWithAll"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Entity/Company..."
+                                    :limit="1"
+                                    @update:modelValue="handleEntityFilterChange"
                                 />
                             </div>
 
