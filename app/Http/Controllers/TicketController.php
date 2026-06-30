@@ -9,6 +9,7 @@ use App\Mail\TicketMergedNotification;
 use App\Mail\TicketAssigned;
 use App\Mail\TicketCommentAdded;
 use App\Mail\TicketStatusChanged;
+use App\Mail\VendorEscalationMail;
 use App\Models\Ticket;
 use App\Models\TicketCc;
 use App\Models\TicketComment;
@@ -841,8 +842,8 @@ class TicketController extends Controller
         $users = User::active()->orderBy('name')->get();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
-        $vendors = collect([['id' => null, 'name' => 'None']])
-            ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
+        $vendors = collect([['id' => null, 'name' => 'None', 'email' => null, 'contact_person' => null]])
+            ->concat(Vendor::active()->orderBy('name')->get(['id', 'name', 'email', 'contact_person']));
 
         $assignee = $ticket->assignee;
         $subUnit = $assignee?->org_path;
@@ -1296,8 +1297,14 @@ class TicketController extends Controller
     public function storeChild(Request $request, Ticket $ticket)
     {
         // Allow additional child tickets after the parent moves to For Schedule.
-        if (!in_array($ticket->status, ['open', 'in_progress', 'for_schedule'], true)) {
-            return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open, In Progress, or For Schedule tickets.']);
+        if (!in_array($ticket->status, ['open', 'in_progress', 'for_schedule', 'waiting_service_provider'], true)) {
+            return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open, In Progress, For Schedule, or Waiting tickets.']);
+        }
+
+        // Vendor escalation: the child is handled by an external vendor (no internal
+        // technician schedule). Branch to a dedicated flow that also emails the vendor.
+        if ($request->boolean('escalate_to_vendor')) {
+            return $this->escalateChildToVendor($request, $ticket);
         }
 
         $validated = $request->validate([
@@ -1421,6 +1428,178 @@ class TicketController extends Controller
         });
 
         return redirect()->back()->with('success', 'Child ticket and schedule created successfully.');
+    }
+
+    /**
+     * Create a child ticket assigned to an external vendor and email the vendor.
+     *
+     * The child carries its own stable thread Message-ID (derived from the child
+     * key) so every vendor reply threads back into THIS child — not the parent —
+     * for SLA tracking. The parent moves to "Waiting for Service Provider" while
+     * the vendor works. Parent CCs are inherited onto the vendor thread.
+     */
+    private function escalateChildToVendor(Request $request, Ticket $ticket)
+    {
+        if (!auth()->user()?->can('tickets.edit')) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'vendor_id' => 'required|exists:vendors,id',
+            'escalation_reason' => 'required|string|max:5000',
+            'vendor_message' => 'required|string|max:20000',
+            'store_id' => 'nullable|exists:stores,id',
+            'attach_parent_files' => 'sometimes|boolean',
+        ]);
+
+        $vendor = Vendor::find($validated['vendor_id']);
+        if (!$vendor || !$vendor->is_active) {
+            return redirect()->back()->withErrors(['vendor_id' => 'Selected vendor is not available.']);
+        }
+        if (empty($vendor->email)) {
+            return redirect()->back()->withErrors(['vendor_id' => "Vendor \"{$vendor->name}\" has no email address on file. Add one before escalating."]);
+        }
+
+        $ticket->loadMissing('company');
+        if (!$ticket->company) {
+            return redirect()->back()->withErrors(['error' => 'Parent ticket has no company; cannot generate a child ticket key.']);
+        }
+
+        [$childTicket, $threadMessageId] = DB::transaction(function () use ($validated, $ticket, $vendor) {
+            $companyCode = $ticket->company->code;
+
+            $maxNumber = Ticket::withTrashed()
+                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->where('ticket_key', 'LIKE', "{$companyCode}-%")
+                ->selectRaw(
+                    'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
+                    [$companyCode]
+                )
+                ->value('max_num');
+
+            $childKey = "{$companyCode}-" . (($maxNumber ?? 0) + 1);
+            $threadMessageId = $this->vendorThreadMessageId($childKey);
+            $normalizedThreadId = mb_substr(strtolower(trim($threadMessageId, " \t\n\r\0\x0B<>")), 0, 255);
+
+            $child = Ticket::create([
+                'ticket_key' => $childKey,
+                'title' => "Vendor Escalation: {$ticket->title}",
+                'description' => "Escalated to vendor {$vendor->name} from {$ticket->ticket_key}.\n\nReason: {$validated['escalation_reason']}",
+                'type' => $ticket->type,
+                'status' => 'open',
+                'priority' => $ticket->priority,
+                'severity' => $ticket->severity,
+                'reporter_id' => auth()->id(),
+                // No internal assignee — the vendor (vendor_id) is the responsible
+                // party so this child tracks the vendor's SLA, not a user's.
+                'assignee_id' => null,
+                'company_id' => $ticket->company_id,
+                'store_id' => $validated['store_id'] ?? $ticket->store_id,
+                'category_id' => $ticket->category_id,
+                'sub_category_id' => $ticket->sub_category_id,
+                'item_id' => $ticket->item_id,
+                'department' => $ticket->department,
+                'vendor_id' => $vendor->id,
+                'parent_id' => $ticket->id,
+                // Pin the thread identity so vendor replies land on THIS child.
+                'message_id' => $normalizedThreadId,
+                'source_message_id' => mb_substr($this->formatThreadMessageId($threadMessageId), 0, 255),
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            // Record the outbound escalation message as a comment so it appears in
+            // the child's conversation thread alongside future vendor replies.
+            TicketComment::create([
+                'ticket_id' => $child->id,
+                'comment_text' => $validated['vendor_message'],
+                'user_id' => auth()->id(),
+                'created_at' => now('Asia/Manila'),
+            ]);
+
+            \App\Models\TicketHistory::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => auth()->id(),
+                'column_changed' => 'status',
+                'old_value' => $ticket->status,
+                'new_value' => 'waiting_service_provider',
+                'changed_at' => now('Asia/Manila'),
+                'remarks' => "Escalated to vendor {$vendor->name} (child {$childKey}).",
+            ]);
+
+            // Parent waits on the external provider while the vendor works the child.
+            $ticket->update(['status' => 'waiting_service_provider']);
+
+            return [$child, $threadMessageId];
+        });
+
+        // Send the vendor email outside the transaction so an SMTP failure does not
+        // roll back the escalation — the record stands and we surface a warning.
+        $supportEmail = \App\Models\Setting::get('imap_username');
+        $attachments = $request->boolean('attach_parent_files', true)
+            ? $ticket->attachments()->whereNull('comment_id')->get()
+            : collect();
+
+        try {
+            $mail = new VendorEscalationMail(
+                $childTicket,
+                $vendor->contact_person ?: $vendor->name,
+                $validated['vendor_message'],
+                $validated['escalation_reason'],
+                $threadMessageId,
+                $attachments
+            );
+
+            if ($supportEmail) {
+                $mail->replyTo($supportEmail);
+            }
+
+            $pending = Mail::to($vendor->email);
+
+            // Inherit the parent ticket's CC list onto the vendor thread.
+            $ccEmails = $this->attachTicketCcs($pending, $childTicket, [strtolower($vendor->email)]);
+
+            $pending->send($mail);
+
+            \Illuminate\Support\Facades\Log::info(
+                "VendorEscalation: emailed vendor {$vendor->email} for child {$childTicket->ticket_key}"
+                . (empty($ccEmails) ? '' : ' (cc: ' . implode(', ', $ccEmails) . ')')
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("VendorEscalation: failed to email vendor for child {$childTicket->ticket_key}: " . $e->getMessage());
+
+            return redirect()->back()->with('warning', "Child ticket {$childTicket->ticket_key} created, but the vendor email could not be sent: {$e->getMessage()}");
+        }
+
+        // In-app (bell) notification for staff following the parent ticket.
+        $this->notifications->notifyTicket(
+            $ticket,
+            'status',
+            'Escalated to vendor',
+            "{$ticket->ticket_key}: escalated to {$vendor->name} as {$childTicket->ticket_key}.",
+            auth()->id()
+        );
+
+        return redirect()->back()->with('success', "Escalated to vendor {$vendor->name}. Child ticket {$childTicket->ticket_key} created and emailed.");
+    }
+
+    /**
+     * Stable, child-ticket-derived Message-ID used to anchor the vendor email
+     * thread. Mirrors ThreadsTicketMail::makeTicketMessageId so the pinned
+     * outgoing Message-ID and the value stored on the child stay in lockstep.
+     */
+    private function vendorThreadMessageId(string $childKey): string
+    {
+        $host = parse_url((string) config('app.url'), PHP_URL_HOST)
+            ?: (Str::slug((string) config('app.name', 'ghelpdesk')) . '.local');
+
+        return 'ticket-' . Str::slug($childKey, '-') . '@' . $host;
+    }
+
+    private function formatThreadMessageId(string $id): string
+    {
+        $id = trim($id);
+
+        return (str_starts_with($id, '<') && str_ends_with($id, '>')) ? $id : "<{$id}>";
     }
 
     /**
@@ -2321,7 +2500,7 @@ class TicketController extends Controller
 
     private function notifyTicketCommentRecipients(Ticket $ticket, TicketComment $comment, $attachments = null): void
     {
-        $ticket->load(['reporter:id,name,email', 'assignee:id,name,email']);
+        $ticket->load(['reporter:id,name,email', 'assignee:id,name,email', 'vendor:id,name,email,contact_person']);
         $comment->loadMissing('user');
         $commenterId = auth()->id();
         $recipients = collect();
@@ -2332,6 +2511,17 @@ class TicketController extends Controller
                 'name' => $ticket->assignee->name,
                 'id' => $ticket->assignee->id,
                 'role' => 'assignee',
+            ]);
+        }
+
+        // Vendor-escalation children are handled by the vendor — make sure the
+        // vendor receives staff replies so the conversation stays on this thread.
+        if ($ticket->vendor && $ticket->vendor->email) {
+            $recipients->push([
+                'email' => strtolower($ticket->vendor->email),
+                'name' => $ticket->vendor->contact_person ?: $ticket->vendor->name,
+                'id' => null,
+                'role' => 'vendor',
             ]);
         }
 

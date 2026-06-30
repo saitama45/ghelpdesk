@@ -231,8 +231,48 @@ const childForm = useForm({
     pickup_end: '',
     backlogs_start: '',
     backlogs_end: '',
-    remarks: ''
+    remarks: '',
+    // Vendor escalation mode
+    escalate_to_vendor: false,
+    vendor_id: null,
+    escalation_reason: '',
+    vendor_message: '',
+    attach_parent_files: true,
 });
+
+// Vendors that can be escalated to (exclude the "None" placeholder + any without email).
+const escalationVendors = computed(() =>
+    (props.vendors || []).filter(v => v && v.id)
+);
+const selectedEscalationVendor = computed(() =>
+    escalationVendors.value.find(v => v.id === childForm.vendor_id) || null
+);
+
+const buildVendorMessageTemplate = () => {
+    const t = props.ticket;
+    const storeName = t.store?.name || '';
+    const company = t.company?.name || '';
+    const location = [company, storeName].filter(Boolean).join(' - ');
+    const lines = [
+        'Good day,',
+        '',
+        'We would like to escalate the following concern for your action:',
+        '',
+        `Reference: ${t.ticket_key}`,
+        `Subject: ${t.title || ''}`,
+    ];
+    if (location) lines.push(`Location: ${location}`);
+    if (t.priority) lines.push(`Priority: ${t.priority}`);
+    lines.push('', 'Details:', (t.description || '').trim());
+    lines.push('', 'Kindly revert with your update on this thread. Thank you.');
+    return lines.join('\n');
+};
+
+const toggleVendorEscalation = () => {
+    if (childForm.escalate_to_vendor && !childForm.vendor_message.trim()) {
+        childForm.vendor_message = buildVendorMessageTemplate();
+    }
+};
 
 const scheduleStatuses = [
     'On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday'
@@ -305,7 +345,24 @@ const openChildModal = () => {
 };
 
 const submitChildTicket = () => {
-    if (isChildLocationRequired.value && !childForm.store_id) {
+    if (childForm.escalate_to_vendor) {
+        if (!childForm.vendor_id) {
+            showError('Please select a vendor to escalate to.');
+            return;
+        }
+        if (!selectedEscalationVendor.value?.email) {
+            showError('The selected vendor has no email address on file. Add one in the Vendors module first.');
+            return;
+        }
+        if (!childForm.escalation_reason.trim()) {
+            showError('Please provide an escalation reason.');
+            return;
+        }
+        if (!childForm.vendor_message.trim()) {
+            showError('The email message to the vendor cannot be empty.');
+            return;
+        }
+    } else if (isChildLocationRequired.value && !childForm.store_id) {
         showError('Store is required before creating a child ticket.');
         return;
     }
@@ -327,7 +384,17 @@ const hasSchedule = computed(() => {
     const ss = props.ticket.schedule_store || props.ticket.scheduleStore;
     return !!(ss && ss.schedule);
 });
-const canAssignSchedule = computed(() => !!props.ticket.parent_id && !hasSchedule.value && isManager.value);
+// Vendor-escalated children are handled by an external vendor and never get an
+// internal technician schedule, so the "assign schedule" prompt does not apply.
+const isVendorEscalationChild = computed(() => !!props.ticket.parent_id && !!props.ticket.vendor_id);
+const escalatedVendorName = computed(() => {
+    const id = props.ticket.vendor_id;
+    if (!id) return 'Vendor';
+    return props.ticket.vendor?.name
+        || (props.vendors || []).find(v => v && v.id === id)?.name
+        || 'Vendor';
+});
+const canAssignSchedule = computed(() => !!props.ticket.parent_id && !hasSchedule.value && !isVendorEscalationChild.value && isManager.value);
 const canEditSchedule = computed(() => !!props.ticket.parent_id && hasSchedule.value && isManager.value);
 
 const assignScheduleMode = ref('assign'); // 'assign' | 'edit'
@@ -2386,7 +2453,18 @@ const linkify = (text) => {
                             </div>
                         </div>
 
-                        <div v-if="hasPermission('tickets.assign')">
+                        <!-- Vendor-escalation child: responsibility (and SLA) sits with the
+                             vendor, not an internal user — show the vendor instead of an assignee selector. -->
+                        <div v-if="isVendorEscalationChild">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Assignee</label>
+                            <div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+                                <svg class="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-2a4 4 0 014-4h4M16 11l2 2 4-4M9 7a4 4 0 108 0 4 4 0 00-8 0z" /></svg>
+                                <span class="text-sm font-bold text-gray-800 dark:text-gray-200">Vendor — {{ escalatedVendorName }}</span>
+                            </div>
+                            <p class="text-[9px] text-gray-500 mt-1 dark:text-gray-400">Handled by the external vendor; not tracked against a user's SLA.</p>
+                        </div>
+
+                        <div v-else-if="hasPermission('tickets.assign')">
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Assignee</label>
                             <p v-if="!isClassificationComplete" class="text-[9px] text-amber-600 font-black uppercase mb-2 bg-amber-50 p-1.5 rounded border border-amber-100 flex items-center">
                                 <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -3442,7 +3520,7 @@ const linkify = (text) => {
             <div class="p-4 sm:p-6">
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest dark:text-gray-100">
-                        Create Child Ticket
+                        {{ childForm.escalate_to_vendor ? 'Escalate to Vendor' : 'Create Child Ticket' }}
                     </h3>
                     <button @click="showChildModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
@@ -3450,80 +3528,140 @@ const linkify = (text) => {
                 </div>
 
                 <form @submit.prevent="submitChildTicket" class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Assigned User</label>
-                            <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Location{{ isChildLocationRequired ? '' : ' (Optional)' }}</label>
-                            <Autocomplete
-                                v-model="childForm.store_id"
-                                :options="childStoreOptions"
-                                label-key="display_name"
-                                value-key="id"
-                                :placeholder="isChildLocationRequired ? 'Select store...' : 'Select store if needed...'"
-                            />
-                        </div>
-                    </div>
+                    <!-- Mode toggle: internal technician child vs external vendor escalation -->
+                    <label
+                        class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors"
+                        :class="childForm.escalate_to_vendor ? 'border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700' : 'border-gray-200 dark:border-gray-700'"
+                    >
+                        <input v-model="childForm.escalate_to_vendor" @change="toggleVendorEscalation" type="checkbox" class="mt-0.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600">
+                        <span>
+                            <span class="block text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-200">Escalate to Vendor</span>
+                            <span class="block text-[10px] text-gray-500 mt-0.5 dark:text-gray-400">Assign this child directly to an external vendor and email them. Replies stay on the child ticket thread for SLA tracking.</span>
+                        </span>
+                    </label>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Schedule Status</label>
-                            <select v-model="childForm.status" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
-                                <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
-                            </select>
-                        </div>
-                        <div class="md:col-span-2">
-                            <label class="inline-flex items-center gap-2 cursor-pointer">
-                                <input v-model="childForm.set_schedule" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
-                                <span class="text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-300">Set schedule times</span>
-                            </label>
-                            <p class="text-[10px] text-gray-500 mt-1 dark:text-gray-300">Uncheck to create the child ticket without a fixed schedule (can be scheduled later).</p>
-                        </div>
-                        <div v-if="childForm.set_schedule">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Start Time</label>
-                            <input v-model="childForm.start_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
-                        </div>
-                        <div v-if="childForm.set_schedule">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">End Time</label>
-                            <input v-model="childForm.end_time" type="datetime-local" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
-                        </div>
-                    </div>
-
-                    <div v-if="childForm.set_schedule" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
-                        <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Additional Times</h4>
+                    <!-- INTERNAL TECHNICIAN MODE -->
+                    <template v-if="!childForm.escalate_to_vendor">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="space-y-2">
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Pickup Time (From - To)</label>
-                                <div class="flex items-center space-x-2">
-                                    <input v-model="childForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
-                                    <span class="text-gray-400 dark:text-gray-400">-</span>
-                                    <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
-                                </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Assigned User</label>
+                                <Autocomplete v-model="childForm.user_id" :options="staff" label-key="name" value-key="id" placeholder="Select user..." />
                             </div>
-                            <div class="space-y-2">
-                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Backlogs Time (From - To)</label>
-                                <div class="flex items-center space-x-2">
-                                    <input v-model="childForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
-                                    <span class="text-gray-400 dark:text-gray-400">-</span>
-                                    <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Location{{ isChildLocationRequired ? '' : ' (Optional)' }}</label>
+                                <Autocomplete
+                                    v-model="childForm.store_id"
+                                    :options="childStoreOptions"
+                                    label-key="display_name"
+                                    value-key="id"
+                                    :placeholder="isChildLocationRequired ? 'Select store...' : 'Select store if needed...'"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Schedule Status</label>
+                                <select v-model="childForm.status" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    <option v-for="status in scheduleStatuses" :key="status" :value="status">{{ status }}</option>
+                                </select>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="inline-flex items-center gap-2 cursor-pointer">
+                                    <input v-model="childForm.set_schedule" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
+                                    <span class="text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-300">Set schedule times</span>
+                                </label>
+                                <p class="text-[10px] text-gray-500 mt-1 dark:text-gray-300">Uncheck to create the child ticket without a fixed schedule (can be scheduled later).</p>
+                            </div>
+                            <div v-if="childForm.set_schedule">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Start Time</label>
+                                <input v-model="childForm.start_time" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                            </div>
+                            <div v-if="childForm.set_schedule">
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">End Time</label>
+                                <input v-model="childForm.end_time" type="datetime-local" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                            </div>
+                        </div>
+
+                        <div v-if="childForm.set_schedule" class="p-4 bg-gray-50 rounded-xl space-y-4 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Additional Times</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Pickup Time (From - To)</label>
+                                    <div class="flex items-center space-x-2">
+                                        <input v-model="childForm.pickup_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                        <span class="text-gray-400 dark:text-gray-400">-</span>
+                                        <input v-model="childForm.pickup_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    </div>
+                                </div>
+                                <div class="space-y-2">
+                                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Backlogs Time (From - To)</label>
+                                    <div class="flex items-center space-x-2">
+                                        <input v-model="childForm.backlogs_start" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                        <span class="text-gray-400 dark:text-gray-400">-</span>
+                                        <input v-model="childForm.backlogs_end" type="time" class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm dark:border-gray-600">
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Remarks</label>
-                        <textarea v-model="childForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Activity details..."></textarea>
-                    </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Remarks</label>
+                            <textarea v-model="childForm.remarks" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Activity details..."></textarea>
+                        </div>
+                    </template>
+
+                    <!-- VENDOR ESCALATION MODE -->
+                    <template v-else>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Vendor Escalation <span class="text-red-500">*</span></label>
+                                <Autocomplete v-model="childForm.vendor_id" :options="escalationVendors" label-key="name" value-key="id" placeholder="Select vendor..." />
+                                <p v-if="selectedEscalationVendor" class="text-[10px] mt-1 dark:text-gray-300">
+                                    <template v-if="selectedEscalationVendor.email">Will email: <span class="font-bold text-gray-700 dark:text-gray-200">{{ selectedEscalationVendor.email }}</span></template>
+                                    <span v-else class="text-red-500 font-bold">No email on file for this vendor — add one in the Vendors module first.</span>
+                                </p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Location (Optional)</label>
+                                <Autocomplete
+                                    v-model="childForm.store_id"
+                                    :options="childStoreOptions"
+                                    label-key="display_name"
+                                    value-key="id"
+                                    placeholder="Defaults to parent location..."
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Escalation Reason <span class="text-red-500">*</span></label>
+                            <textarea v-model="childForm.escalation_reason" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Why is this being escalated to the vendor?"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email Message to Vendor <span class="text-red-500">*</span></label>
+                            <textarea v-model="childForm.vendor_message" rows="8" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono dark:border-gray-600" placeholder="Message body sent to the vendor..."></textarea>
+                            <p class="text-[10px] text-gray-500 mt-1 dark:text-gray-400">Pre-filled from this ticket — edit as needed. This exact text is emailed to the vendor; their replies are recorded on the child ticket.</p>
+                        </div>
+
+                        <label class="inline-flex items-center gap-2 cursor-pointer">
+                            <input v-model="childForm.attach_parent_files" type="checkbox" class="rounded border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600">
+                            <span class="text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-300">Attach parent ticket files</span>
+                        </label>
+                    </template>
 
                     <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
                         <button type="button" @click="showChildModal = false" class="px-4 py-2 text-sm font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors uppercase tracking-widest dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Cancel
                         </button>
-                        <button type="submit" class="px-6 py-2 text-sm font-black text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-md transition-all active:scale-95 uppercase tracking-widest">
-                            Create Ticket
+                        <button
+                            type="submit"
+                            :disabled="childForm.processing"
+                            class="px-6 py-2 text-sm font-black text-white rounded-lg shadow-md transition-all active:scale-95 uppercase tracking-widest disabled:opacity-60"
+                            :class="childForm.escalate_to_vendor ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'"
+                        >
+                            {{ childForm.escalate_to_vendor ? 'Escalate & Send' : 'Create Ticket' }}
                         </button>
                     </div>
                 </form>

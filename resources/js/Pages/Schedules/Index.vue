@@ -1158,7 +1158,7 @@
                             </div>
                             <div>
                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 dark:text-gray-400">Duty Status</label>
-                                <select v-model="form.status" required :disabled="isViewingOnly"
+                                <select v-model="form.status" required :disabled="isViewingOnly" @change="onStatusChange"
                                         class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all disabled:bg-gray-50 disabled:text-gray-400 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                     <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
                                 </select>
@@ -2480,6 +2480,19 @@ const modalAudit = computed(() => {
 })
 
 const isLocationRequired = computed(() => !optionalScheduleLocationStatuses.has(form.status))
+
+// React to the user changing the duty status: WFH locks every entry to "Home",
+// any other status clears a previously defaulted "Home" so a real location is picked.
+const onStatusChange = () => {
+    const homeId = homeStoreId.value
+    if (form.status === 'WFH') {
+        if (homeId != null) form.stores.forEach(entry => { entry.store_id = homeId })
+    } else if (homeId != null) {
+        form.stores.forEach(entry => {
+            if (Number(entry.store_id) === Number(homeId)) entry.store_id = null
+        })
+    }
+}
 const canRequestScheduleChange = computed(() => {
     return Boolean(
         isEditing.value
@@ -2763,7 +2776,8 @@ const addStore = () => {
     const last = form.stores[form.stores.length - 1]
     const first = form.stores[0]
     form.stores.push({
-        store_id: null,
+        // WFH entries are always "Home"; everything else starts unset.
+        store_id: form.status === 'WFH' ? homeStoreId.value : null,
         ticket_id: null,
         start_time: last?.end_time || '',
         end_time: first?.end_time || '',
